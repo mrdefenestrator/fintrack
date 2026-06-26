@@ -25,4 +25,4 @@ EXPOSE 5002
 
 ENV SPENDING_DB=/app/data/spending.db
 
-CMD [".venv/bin/flask", "--app", "web/app.py", "run", "--host", "0.0.0.0", "--port", "5002"]
+CMD ["sh", "-c", "mkdir -p /app/data && .venv/bin/alembic upgrade head && .venv/bin/flask --app web/app.py run --host 0.0.0.0 --port 5002"]

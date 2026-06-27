@@ -135,11 +135,6 @@ document.addEventListener('change', function (e) {
     if (e.target.name === 'account_id') updateImportButton();
 });
 
-function navigateToTransactions(year, month, category) {
-    const url = '/transactions?year=' + year + '&month=' + month + '&category=' + encodeURIComponent(category);
-    htmx.ajax('GET', url, { target: '#content', swap: 'innerHTML', pushUrl: true });
-}
-
 function toggleTrendDetail(rowId, category, period) {
     const detailRow = document.getElementById('trend-detail-' + rowId);
     const arrow = document.getElementById('arrow-' + rowId);

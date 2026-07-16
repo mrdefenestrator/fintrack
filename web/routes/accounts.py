@@ -5,6 +5,7 @@ from datetime import date
 from flask import Blueprint, abort, current_app, render_template, request
 
 from fintrack import finances_compat as finances
+from fintrack.accounts.balance_history import get_balance_history
 from fintrack.core.loader import load_finances_from_db
 from fintrack.accounts import repository as repo_accounts
 
@@ -23,6 +24,44 @@ from .crud import (
 accounts_bp = Blueprint("accounts", __name__, url_prefix="/s")
 
 ACCOUNT_TYPES = finances.ACCOUNT_TYPES
+
+_SPARK_W, _SPARK_H = 72, 16
+
+
+def _history_meta(conn, accs: list) -> dict:
+    """Per-account sparkline points, as-of staleness, and reconciliation note."""
+    today = date.today()
+    out: dict = {}
+    for acc in accs:
+        points = get_balance_history(conn, acc["id"], limit=12)
+        if not points:
+            out[acc["id"]] = None
+            continue
+        values = [float(p["balance"]) for p in points]
+        if len(values) == 1:
+            values = values * 2
+        lo, hi = min(values), max(values)
+        span = (hi - lo) or 1.0
+        step = _SPARK_W / (len(values) - 1)
+        svg_points = " ".join(
+            f"{i * step:.1f},{_SPARK_H - 1 - ((v - lo) / span) * (_SPARK_H - 2):.1f}"
+            for i, v in enumerate(values)
+        )
+        last = points[-1]
+        age = (today - last["as_of"]).days
+        color = (
+            "text-emerald-500"
+            if age <= 35
+            else ("text-amber-500" if age <= 95 else "text-red-500")
+        )
+        out[acc["id"]] = {
+            "points": svg_points,
+            "as_of": last["as_of"],
+            "age": age,
+            "color": color,
+            "note": last.get("note"),
+        }
+    return out
 
 
 def _render_tbody(
@@ -54,11 +93,14 @@ def _render_tbody(
         for acc in accs
         if finances._ACCOUNT_TYPE_TO_CALCULATION.get(acc.get("type")) == "liquid"
     }
-    rows[-1] += ["-", "-"]
+    with engine.connect() as conn:
+        history_by_id = _history_meta(conn, accs)
+    rows[-1] += ["-", "-", "-"]
     edit_rows = list(zip(accs, rows))
 
     return render_template(
         "partials/accounts_tbody.html",
+        history_by_id=history_by_id,
         filename=filename,
         edit_mode=edit_mode,
         edit_rows=edit_rows,
@@ -108,8 +150,11 @@ def accounts_view(filename: str):
         for acc in all_accounts
         if finances._ACCOUNT_TYPE_TO_CALCULATION.get(acc.get("type")) == "liquid"
     }
-    ctx["headers"] += ["Reserve", "Funding Needed"]
-    ctx["rows"][-1] += ["-", "-"]
+    ctx["headers"] += ["Reserve", "Funding Needed", "History"]
+    ctx["rows"][-1] += ["-", "-", "-"]
+    engine = current_app.config["engine"]
+    with engine.connect() as conn:
+        ctx["history_by_id"] = _history_meta(conn, accs)
 
     return render_template("accounts.html", **ctx)
 

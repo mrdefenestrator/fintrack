@@ -291,8 +291,13 @@ def test_budget_when_monthly_day_edit(page, flask_server):
 
     # Change to day 5
     day_input.fill("5")
-    page.keyboard.press("Enter")
-    page.wait_for_timeout(500)
+    # Wait for the HTMX POST to land before re-checking (a fixed timeout
+    # races the save under full-suite load)
+    with page.expect_response(
+        lambda r: "/budget/" in r.url and r.request.method == "POST",
+        timeout=5000,
+    ):
+        page.keyboard.press("Enter")
 
     # Verify display shows 5th
     page.goto(f"{flask_server}/s/test_finances/budget")

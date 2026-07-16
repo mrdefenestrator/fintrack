@@ -1,0 +1,21 @@
+<tr id="merchant-row-{{ merchant.id }}" class="border-b dark:border-gray-600 bg-blue-50 dark:bg-gray-700">
+    <td colspan="6" class="px-4 py-3">
+        <form hx-post="/merchants/{{ merchant.id }}/category"
+              hx-target="#merchant-row-{{ merchant.id }}"
+              hx-swap="outerHTML"
+              class="flex items-center gap-3">
+            <input type="hidden" name="merchant_name" value="{{ merchant.merchant_name }}">
+            <span class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ merchant.merchant_name }}</span>
+            <select name="category" class="border dark:border-gray-600 rounded px-2 py-1.5 text-sm bg-white dark:bg-gray-600 dark:text-gray-100">
+                {% for c in categories %}
+                <option value="{{ c }}" {{ 'selected' if merchant.category == c }}>{{ c }}</option>
+                {% endfor %}
+            </select>
+            <button type="submit" class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-sm">Save</button>
+            <button type="button" class="text-gray-500 dark:text-gray-400 text-sm"
+                    hx-get="/merchants/{{ merchant.id }}/row"
+                    hx-target="#merchant-row-{{ merchant.id }}"
+                    hx-swap="outerHTML">Cancel</button>
+        </form>
+    </td>
+</tr>

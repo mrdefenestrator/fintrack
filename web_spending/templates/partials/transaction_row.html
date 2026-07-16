@@ -1,0 +1,19 @@
+<tr id="txn-row-{{ txn.id }}" class="border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700">
+    <td class="px-4 py-3 text-sm">{{ txn.date }}</td>
+    <td class="px-4 py-3 text-sm">{{ txn.merchant }}</td>
+    <td class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">{{ txn.raw_description }}</td>
+    <td class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">{{ txn.account_name or '—' }}</td>
+    <td class="px-4 py-3 text-sm">{{ txn.category }}</td>
+    <td class="px-4 py-3 text-right {{ 'text-red-600 dark:text-red-400' if txn.amount < 0 else 'text-green-600 dark:text-green-400' }}">
+        {{ '-$' if txn.amount < 0 else '+$' }}{{ txn.amount|abs|money }}
+    </td>
+    <td class="px-4 py-3">
+        <button class="text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 p-1 rounded"
+                hx-get="/transactions/{{ txn.id }}/edit-category"
+                hx-target="closest tr"
+                hx-swap="afterend"
+                hx-trigger="click[!document.getElementById('edit-{{ txn.id }}')]">
+            {% include "partials/edit_icon.html" %}
+        </button>
+    </td>
+</tr>

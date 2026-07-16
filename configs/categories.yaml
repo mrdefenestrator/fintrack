@@ -1,0 +1,33 @@
+categories:
+  - name: Groceries
+    sort_order: 1
+  - name: Dining
+    sort_order: 2
+  - name: Transport
+    sort_order: 3
+  - name: Housing
+    sort_order: 4
+  - name: Utilities
+    sort_order: 5
+  - name: Subscriptions
+    sort_order: 6
+  - name: Healthcare
+    sort_order: 7
+  - name: Entertainment
+    sort_order: 8
+  - name: Shopping
+    sort_order: 9
+  - name: Travel
+    sort_order: 10
+  - name: Income
+    sort_order: 11
+  - name: Transfer
+    sort_order: 12
+  - name: Insurance
+    sort_order: 13
+  - name: Fees
+    sort_order: 14
+  - name: Taxes
+    sort_order: 14
+  - name: Other
+    sort_order: 15

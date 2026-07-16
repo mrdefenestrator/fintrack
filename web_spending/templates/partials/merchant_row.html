@@ -1,0 +1,20 @@
+{% set source_labels = {"api": "Auto", "manual": "Manual"} %}
+<tr id="merchant-row-{{ m.id }}" class="border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700">
+    <td class="px-4 py-3 font-medium text-sm">
+        <a class="text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
+           hx-get="/transactions?search={{ m.merchant_name | urlencode }}"
+           hx-target="#content" hx-push-url="true">{{ m.merchant_name }}</a>
+    </td>
+    <td class="px-4 py-3 text-sm">{{ m.category }}</td>
+    <td class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">{{ source_labels.get(m.source, m.source) }}</td>
+    <td class="px-4 py-3 text-right text-sm">{{ m.txn_count }}</td>
+    <td class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">{{ m.last_seen or '—' }}</td>
+    <td class="px-4 py-3">
+        <button class="text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 p-1 rounded"
+                hx-get="/merchants/{{ m.id }}/edit"
+                hx-target="#merchant-row-{{ m.id }}"
+                hx-swap="outerHTML">
+            {% include "partials/edit_icon.html" %}
+        </button>
+    </td>
+</tr>

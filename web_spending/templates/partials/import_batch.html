@@ -1,0 +1,22 @@
+<table class="w-full text-sm">
+    <thead>
+        <tr class="text-left text-gray-500 dark:text-gray-400">
+            <th class="py-1">Date</th>
+            <th class="py-1">Merchant</th>
+            <th class="py-1">Category</th>
+            <th class="py-1 text-right">Amount</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for txn in transactions %}
+        <tr class="border-t border-gray-100 dark:border-gray-700">
+            <td class="py-1">{{ txn.date }}</td>
+            <td class="py-1">{{ txn.merchant }}</td>
+            <td class="py-1 text-gray-500 dark:text-gray-400">{{ txn.category }}</td>
+            <td class="py-1 text-right {{ 'text-red-600' if txn.amount < 0 else 'text-green-600' }}">
+                {{ '-$' if txn.amount < 0 else '+$' }}{{ txn.amount|abs|money }}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>

@@ -1,0 +1,21 @@
+{% from "partials/macros.html" import sort_th with context %}
+<table class="w-full bg-white dark:bg-gray-800 rounded-lg shadow-sm">
+    <thead>
+        <tr class="border-b dark:border-gray-700 text-left text-sm text-gray-500 dark:text-gray-400">
+            <th class="px-4 py-3 whitespace-nowrap">
+                Date{% if not sort %}<span class="ml-1 text-xs">↓</span>{% endif %}
+            </th>
+            {{ sort_th("/transactions", "merchant", "Merchant") }}
+            {{ sort_th("/transactions", "description", "Description") }}
+            {{ sort_th("/transactions", "account", "Account") }}
+            {{ sort_th("/transactions", "category", "Category") }}
+            {{ sort_th("/transactions", "amount", "Amount", first_dir="desc", extra_class="text-right") }}
+            <th class="px-4 py-3 w-10"></th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for txn in transactions %}
+        {% include "partials/transaction_row.html" %}
+        {% endfor %}
+    </tbody>
+</table>

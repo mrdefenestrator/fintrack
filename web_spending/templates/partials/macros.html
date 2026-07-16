@@ -1,0 +1,23 @@
+{% macro sort_th(base_url, col, label, first_dir="asc", extra_class="", is_default=False) %}
+  {# Reads `sort` and `dir` from calling template context via `with context` import #}
+  {% set active = (sort == col) or (not sort and is_default) %}
+  {% set active_dir = dir if sort else ("asc" if is_default else "") %}
+  {% if active %}
+    {% if active_dir == first_dir %}
+      {% set next_url = base_url ~ "?sort=" ~ col ~ "&dir=" ~ ("desc" if first_dir == "asc" else "asc") %}
+    {% else %}
+      {% set next_url = base_url ~ "?sort=&dir=" %}
+    {% endif %}
+  {% else %}
+    {% set next_url = base_url ~ "?sort=" ~ col ~ "&dir=" ~ first_dir %}
+  {% endif %}
+  <th class="px-4 py-3 cursor-pointer select-none whitespace-nowrap group hover:bg-gray-50 dark:hover:bg-gray-700 {{ extra_class }}"
+      hx-get="{{ next_url }}" hx-target="#content" hx-include="[name]" hx-push-url="true">
+    {{- label -}}
+    {% if active %}
+      <span class="ml-1 text-xs">{{ "↑" if active_dir == "asc" else "↓" }}</span>
+    {% else %}
+      <span class="ml-1 text-xs text-gray-300 opacity-0 group-hover:opacity-100">↕</span>
+    {% endif %}
+  </th>
+{% endmacro %}

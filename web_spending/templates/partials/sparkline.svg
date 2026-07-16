@@ -1,0 +1,17 @@
+{# Jinja2 macro: render inline SVG sparkline from a list of values #}
+{% macro sparkline(values, width=80, height=20, color="#3B82F6") %}
+{% if values and values|length > 1 %}
+{% set max_val = values|map('abs')|max %}
+{% set min_val = values|map('abs')|min %}
+{% set range_val = max_val - min_val if max_val != min_val else 1 %}
+{% set step = width / (values|length - 1) %}
+<svg width="{{ width }}" height="{{ height }}" class="inline-block align-middle">
+    <polyline
+        fill="none"
+        stroke="{{ color }}"
+        stroke-width="1.5"
+        points="{% for v in values %}{{ loop.index0 * step }},{{ height - ((v|abs - min_val) / range_val * (height - 4) + 2) }}{% if not loop.last %} {% endif %}{% endfor %}"
+    />
+</svg>
+{% endif %}
+{% endmacro %}

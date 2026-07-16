@@ -1,0 +1,19 @@
+name: Venmo
+institution: Venmo
+header_row: 2
+date_column: "Datetime"
+date_format: "%Y-%m-%dT%H:%M:%S"
+amount_column: "Amount (total)"
+amount_format: signed_dollar
+description_column: "Note"
+type_column: "Type"
+debit_party_column: "To"
+credit_party_column: "From"
+account_name: null
+header_pattern:
+  - "ID"
+  - "Datetime"
+  - "Amount (total)"
+  - "From"
+beginning_balance_column: "Beginning Balance"
+ending_balance_column: "Ending Balance"

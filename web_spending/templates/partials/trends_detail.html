@@ -1,0 +1,21 @@
+<div class="px-6 py-5">
+    <div class="flex items-end gap-2" style="height: 110px;">
+        {% for i in range(values|length) %}
+        {% set abs_val = values[i]|abs %}
+        {% set bar_px = ((abs_val / max_abs) * 80)|round|int if max_abs > 0 and abs_val > 0 else 0 %}
+        <div class="flex flex-col items-center flex-1 justify-end h-full">
+            <span class="text-xs text-gray-600 dark:text-gray-200 mb-1 leading-none">
+                {% if abs_val == 0 %}
+                —
+                {% else %}
+                ${{ abs_val|money(0) }}
+                {% endif %}
+            </span>
+            <div class="w-full rounded-t {{ 'bg-gray-200 dark:bg-gray-600' if values[i] == 0 else '' }}"
+                 style="height: {{ bar_px }}px; min-height: {{ '2' if abs_val > 0 else '0' }}px;
+                        {% if values[i] < 0 %}background-color: rgba(239,68,68,0.60){% elif values[i] > 0 %}background-color: rgba(34,197,94,0.60){% endif %}"></div>
+            <span class="text-xs text-gray-500 dark:text-gray-400 mt-1.5 leading-none">{{ month_labels[i] }}</span>
+        </div>
+        {% endfor %}
+    </div>
+</div>

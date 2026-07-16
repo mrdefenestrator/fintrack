@@ -25,10 +25,19 @@ mise run serve      # web app on http://localhost:5003
 
 ## CLI
 
+One Click tree over both domains; snapshot-scoped commands default to the sole
+snapshot, or take `--snapshot <name>`:
+
 ```bash
-uv run python fintrack.py migrate-legacy --help   # one-time legacy DB import
-uv run python spending.py --help                  # ledger CLI (until consolidation)
-uv run python finances.py --help                  # net-worth CLI (until consolidation)
+uv run python fintrack.py --help
+uv run python fintrack.py status
+uv run python fintrack.py accounts list
+uv run python fintrack.py import statements/ --account "Chase Checking"
+uv run python fintrack.py staging list        # then: staging confirm <id>
+uv run python fintrack.py balance set "Wallet" 42.50
+uv run python fintrack.py report monthly
+uv run python fintrack.py budget
+uv run python fintrack.py funding
 ```
 
 ## Migrating from the legacy apps

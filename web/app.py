@@ -19,7 +19,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from fintrack import finances_compat as finances
+from fintrack.core import formatting
 from fintrack.core.config import CATEGORIES_CONFIG
 from fintrack.core.db import get_engine, init_db
 from fintrack.ledger.repository.categories import seed_categories
@@ -56,16 +56,16 @@ def _fmt_money_header(x):
 
 def _register_filters(app: Flask) -> None:
     app.jinja_env.filters["fmt_money"] = lambda x: (
-        finances.fmt_money(x) if x is not None else "-"
+        formatting.fmt_money(x) if x is not None else "-"
     )
     app.jinja_env.filters["fmt_money_header"] = _fmt_money_header
-    app.jinja_env.filters["fmt_qty"] = finances.fmt_qty
+    app.jinja_env.filters["fmt_qty"] = formatting.fmt_qty
     app.jinja_env.filters["display_is_negative"] = lambda x: _display_is_negative(x)
-    app.jinja_env.filters["format_type"] = lambda x: finances.fmt_type_display(x)
+    app.jinja_env.filters["format_type"] = lambda x: formatting.fmt_type_display(x)
     app.jinja_env.filters["format_recurrence"] = lambda x: (
-        finances.fmt_recurrence_display(x)
+        formatting.fmt_recurrence_display(x)
     )
-    app.jinja_env.filters["format_month"] = lambda x: finances.fmt_month_short(x)
+    app.jinja_env.filters["format_month"] = lambda x: formatting.fmt_month_short(x)
 
     @app.template_filter("money")
     def money_filter(value, decimals=2):

@@ -5,7 +5,8 @@ from datetime import date
 
 from flask import abort, current_app, g
 
-from fintrack import finances_compat as finances
+from fintrack.core import tables
+from fintrack.networth import calculations
 from fintrack.core.loader import load_finances_from_db
 from fintrack.snapshots.repository import get_snapshot_id, list_snapshots
 
@@ -72,10 +73,10 @@ def get_common_context(snapshot_id: int, filename: str, edit_mode: bool):
     today = date.today()
     year, month, day = today.year, today.month, today.day
 
-    n2 = finances.liquid_minus_cc(accs)
-    n3 = finances.projected_change_to_eom(budget, year, month, day)
-    n6 = finances.net_nonliquid_total(assets)
-    account_display = finances._account_display_by_id(accs)
+    n2 = calculations.liquid_minus_cc(accs)
+    n3 = calculations.projected_change_to_eom(budget, year, month, day)
+    n6 = calculations.net_nonliquid_total(assets)
+    account_display = tables._account_display_by_id(accs)
 
     return {
         "snapshot_id": snapshot_id,

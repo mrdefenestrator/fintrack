@@ -2,7 +2,8 @@
 
 from flask import Blueprint, abort, current_app, render_template, request
 
-from fintrack import finances_compat as finances
+from fintrack.core import filters, tables
+from fintrack.networth import calculations
 from fintrack.core.loader import load_finances_from_db
 from fintrack.networth import repository as repo_assets
 
@@ -16,7 +17,7 @@ from .crud import (
 
 assets_bp = Blueprint("assets", __name__, url_prefix="/s")
 
-ASSETS_KINDS = finances.ASSETS_KINDS
+ASSETS_KINDS = calculations.ASSETS_KINDS
 
 
 def _render_tbody(
@@ -32,7 +33,7 @@ def _render_tbody(
     ctx = get_common_context(snapshot_id, filename, edit_mode)
     asset_list = ctx["assets"]
 
-    headers, rows = finances._build_net_worth_table(asset_list)
+    headers, rows = tables._build_net_worth_table(asset_list)
     rows = drop_separator_rows(rows)
 
     data_rows = rows[: len(asset_list)] if rows else []
@@ -75,9 +76,9 @@ def assets_view(filename: str):
         request.args.getlist("include_kind") or request.args.getlist("kind") or []
     )
     all_assets = ctx["assets"]
-    filtered = finances.filter_assets_by_kind(all_assets, include_kinds or None)
+    filtered = filters.filter_assets_by_kind(all_assets, include_kinds or None)
     include_kinds_set = set(k.lower() for k in include_kinds)
-    ctx["headers"], ctx["rows"] = finances._build_net_worth_table(filtered)
+    ctx["headers"], ctx["rows"] = tables._build_net_worth_table(filtered)
     ctx["rows"] = drop_separator_rows(ctx["rows"])
     global_indices = [all_assets.index(e) for e in filtered] if filtered else []
     data_rows = ctx["rows"][: len(filtered)] if ctx["rows"] else []

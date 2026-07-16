@@ -4,22 +4,26 @@ from datetime import date
 from pathlib import Path
 from unittest.mock import patch
 
-from fintrack.finances_compat import (
+from fintrack.core.filters import (
     apply_budget_filters,
     filter_accounts_by_type,
     filter_assets_by_kind,
+)
+from fintrack.core.formatting import (
     fmt_day_ordinal,
     fmt_money,
     fmt_month_short,
     fmt_qty,
     fmt_recurrence_display,
     fmt_type_display,
+)
+from fintrack.networth.calculations import (
+    credit_card_total,
     liquid_minus_cc,
     liquid_total,
-    credit_card_total,
-    projected_change_to_eom,
     net_nonliquid_paired,
     net_nonliquid_total,
+    projected_change_to_eom,
 )
 
 
@@ -427,11 +431,10 @@ def test_projected_change_to_eom_day_none_other_month_uses_zero():
 
 def test_status_command_exits_zero(tmp_path):
     """Status command runs and exits 0 (smoke test)."""
-    import sys
-
+    from click.testing import CliRunner
     from sqlalchemy import create_engine
 
-    from fintrack.finances_compat import main
+    from fintrack.cli import cli
     from fintrack.core.db import init_db
     from fintrack.migrate.yaml_import import import_yaml
 
@@ -442,9 +445,8 @@ def test_status_command_exits_zero(tmp_path):
     with engine.connect() as conn:
         import_yaml(conn, fixture, name="test_finances")
 
-    orig_argv = sys.argv
-    try:
-        sys.argv = ["finances.py", "--db", str(db_path), "test_finances", "status"]
-        assert main() == 0
-    finally:
-        sys.argv = orig_argv
+    result = CliRunner().invoke(
+        cli, ["--db", str(db_path), "--snapshot", "test_finances", "status"]
+    )
+    assert result.exit_code == 0, result.output
+    assert "Accounts" in result.output

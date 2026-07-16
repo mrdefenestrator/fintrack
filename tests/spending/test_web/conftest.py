@@ -1,6 +1,6 @@
 import pytest
 
-from web_spending.app import create_app
+from web.app import create_app
 
 
 @pytest.fixture
@@ -8,6 +8,11 @@ def app(tmp_path):
     db_path = tmp_path / "test.db"
     application = create_app(db_path=str(db_path))
     application.config["TESTING"] = True
+    engine = application.config["engine"]
+    from fintrack.snapshots.repository import create_snapshot
+
+    with engine.connect() as connection:
+        create_snapshot(connection, "ledger")
     return application
 
 

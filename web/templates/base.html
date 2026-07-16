@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#1e40af">
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+    <title>{% block title %}fintrack{% endblock %}</title>
+
+    <!-- Tailwind CSS via CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>tailwind.config = { darkMode: 'class' }</script>
+
+    <!-- Theme: apply dark class before first paint to prevent flash -->
+    <script>
+        (function() {
+            var t = localStorage.getItem('theme') || 'system';
+            if (t === 'dark' || (t === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                document.documentElement.classList.add('dark');
+            }
+        })();
+    </script>
+
+    <!-- Alpine.js -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
+    <!-- HTMX -->
+    <script src="{{ url_for('static', filename='htmx.min.js') }}"></script>
+    <script>
+        htmx.config.historyCacheSize = 0;
+        htmx.config.refreshOnHistoryMiss = false;
+        htmx.config.defaultSwapStyle = 'innerHTML';
+    </script>
+    <style>
+        /* Hide Alpine-controlled elements until Alpine initializes (prevents flash) */
+        [x-cloak] { display: none !important; }
+
+        /* Consistent row height for all tables (accounts, budget, assets) */
+        table {
+            font-size: 0.875rem;
+        }
+
+        table tbody tr {
+            height: 1.75rem;
+        }
+
+        table tbody td {
+            vertical-align: middle;
+        }
+
+        /* Per-cell inputs/selects must not stretch row height */
+        table tbody td input,
+        table tbody td select {
+            height: 1.25rem;
+            min-height: 0;
+            max-height: 1.25rem;
+            box-sizing: border-box;
+            margin: 0;
+            line-height: 1.25;
+            vertical-align: middle;
+        }
+
+        /* Inline-edit inputs: no margin, border, or padding; blend into cell like a spreadsheet */
+        .table-cell-input,
+        .table-cell-select {
+            width: 100%;
+            min-width: 0;
+            height: 1.25rem;
+            max-height: 1.25rem;
+            margin: 0;
+            padding: 0;
+            border: none;
+            outline: none;
+            font-size: inherit;
+            font-family: inherit;
+            line-height: 1.25;
+            color: inherit;
+            background: transparent;
+            border-radius: 0;
+            box-sizing: border-box;
+            vertical-align: middle;
+        }
+
+        .table-cell-input:focus,
+        .table-cell-select:focus,
+        .table-cell-input:focus-visible,
+        .table-cell-select:focus-visible {
+            outline: none !important;
+            box-shadow: none !important;
+            border: none !important;
+            background: transparent;
+        }
+
+        .table-cell-input.error,
+        .table-cell-select.error {
+            color: rgb(239 68 68);
+        }
+
+        .table-cell-input.text-right,
+        .table-cell-select.text-right {
+            text-align: right;
+        }
+
+        /* Selected cell: blue border only while the input/select inside has focus (spreadsheet-style) */
+        td.cell-editing:has(.table-cell-input:focus),
+        td.cell-editing:has(.table-cell-select:focus) {
+            box-shadow: inset 0 0 0 2px rgb(59 130 246);
+        }
+
+        /* Dark mode overrides for custom CSS */
+        .dark .table-cell-input.error,
+        .dark .table-cell-select.error {
+            color: rgb(252 165 165); /* red-300 */
+        }
+
+        .dark td.cell-editing:has(.table-cell-input:focus),
+        .dark td.cell-editing:has(.table-cell-select:focus) {
+            box-shadow: inset 0 0 0 2px rgb(96 165 250); /* blue-400 */
+        }
+
+        table tbody td form {
+            margin: 0;
+            display: inline;
+            min-height: 0;
+        }
+
+        /* Action column: small iconic buttons so row height is not stretched */
+        table tbody td .table-action-btn {
+            width: 1.25rem;
+            height: 1.25rem;
+            min-width: 1.25rem;
+            min-height: 1.25rem;
+            padding: 0;
+            margin: 0;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            border-radius: 0.25rem;
+        }
+
+        table tbody td .table-action-btn svg {
+            width: 1rem;
+            height: 1rem;
+        }
+
+        /* Show reorder buttons only when no column sort is applied */
+        table[data-sort-dir="asc"] .reorder-buttons,
+        table[data-sort-dir="desc"] .reorder-buttons {
+            display: none;
+        }
+
+        /* Action column: no wrap, no overflow, fixed width for icon row */
+        table .table-actions-cell {
+            width: 1%;
+            min-width: 5.5rem;
+            max-width: 5.5rem;
+            white-space: nowrap;
+            overflow: hidden;
+            padding-left: 0.25rem;
+            padding-right: 0.25rem;
+        }
+
+        table .table-actions-cell .table-actions-inner {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex-wrap: nowrap;
+            gap: 0;
+        }
+
+        table.editable-table thead th,
+        table.editable-table tbody td {
+            white-space: nowrap;
+        }
+
+        /* Actions column: fixed width to stay compact */
+        table.editable-table .table-actions-cell,
+        table.editable-table thead th.table-actions-cell {
+            width: 5.5rem;
+            min-width: 5.5rem;
+        }
+
+        /* Scrollable table container: data rows scroll, header/footer rows stick */
+        .table-scroll-container {
+            overflow: auto;
+            flex: 1 1 0;
+            min-height: 0;
+        }
+
+        .table-scroll-container thead {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        /* Add row sticks one row-height above the bottom edge */
+        .table-scroll-container tbody tr[data-add-row] {
+            position: sticky;
+            bottom: 1.75rem;
+            z-index: 5;
+        }
+
+        /* Total row sticks to the bottom edge */
+        .table-scroll-container tbody tr.total-row {
+            position: sticky;
+            bottom: 0;
+            z-index: 5;
+        }
+        /* File picker row: reveal action buttons on hover */
+        .file-row-actions { opacity: 0; pointer-events: none; transition: opacity 0.1s ease; }
+        .file-row:hover .file-row-actions { opacity: 1; pointer-events: auto; }
+    </style>
+</head>
+
+<body class="h-full flex flex-col overflow-hidden bg-gray-50 dark:bg-gray-900 dark:text-gray-100">
+    <header id="main-header" class="bg-blue-800 text-white shadow sticky top-0 z-50">
+        <!-- Row 1: title + controls -->
+        <div class="flex items-center px-4">
+            {% if filename %}
+            <a href="{{ url_for('accounts.accounts_view', filename=filename, edit=1 if edit_mode else none) }}"
+                class="font-semibold text-lg text-white hover:text-blue-100 py-2 pr-6 shrink-0 whitespace-nowrap">
+                fintrack{% if n2 is not none and n3 is not none and n6 is not none %}{% set _total = n2 + n3 + n6 %}<span class="ml-1 text-sm font-normal tabular-nums {% if _total | display_is_negative %}text-red-300{% else %}opacity-75{% endif %}">{{ _total | fmt_money_header }}</span>{% endif %}
+            </a>
+            {% else %}
+            <a href="{{ url_for('status.status_view') }}"
+                class="font-semibold text-lg text-white hover:text-blue-100 py-2 pr-6 shrink-0 whitespace-nowrap">
+                fintrack
+            </a>
+            {% endif %}
+
+            <div class="flex items-center ml-auto gap-2 shrink-0">
+            <!-- Lock/Unlock edit mode -->
+            {% if filename %}
+            <form method="POST" action="{{ url_for('edit_mode.toggle') }}" class="flex items-center py-2">
+                {% if edit_mode %}
+                <button type="submit" title="Exit edit mode"
+                    class="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium bg-amber-400 text-amber-900 hover:bg-amber-300 transition-colors">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M8 11V7a4 4 0 018 0M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z"/>
+                    </svg>
+                    <span class="hidden sm:inline">Editing</span>
+                </button>
+                {% else %}
+                <button type="submit" title="Enter edit mode"
+                    class="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium text-blue-200 hover:text-white hover:bg-blue-700 transition-colors">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                    </svg>
+                    <span class="hidden sm:inline">Locked</span>
+                </button>
+                {% endif %}
+            </form>
+            {% endif %}
+
+            <!-- Theme toggle -->
+            <div x-data="{
+                theme: localStorage.getItem('theme') || 'system',
+                cycle() {
+                    const order = ['light', 'dark', 'system'];
+                    this.theme = order[(order.indexOf(this.theme) + 1) % 3];
+                    localStorage.setItem('theme', this.theme);
+                    const isDark = this.theme === 'dark' ||
+                        (this.theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+                    document.documentElement.classList.toggle('dark', isDark);
+                }
+            }" x-cloak class="flex items-center py-2 mr-1 shrink-0">
+                <button @click="cycle()" :title="'Theme: ' + theme + ' — click to cycle'"
+                    class="flex items-center gap-1 px-2 py-1 rounded text-xs text-blue-100 hover:text-white hover:bg-blue-700 transition-colors">
+                    <svg x-show="theme === 'light'" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707M17.657 17.657l-.707-.707M6.343 6.343l-.707-.707M12 8a4 4 0 100 8 4 4 0 000-8z"/>
+                    </svg>
+                    <svg x-show="theme === 'dark'" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
+                    </svg>
+                    <svg x-show="theme === 'system'" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+                    </svg>
+                    <span x-text="theme" class="hidden sm:inline capitalize"></span>
+                </button>
+            </div>
+
+            <!-- File picker dropdown (right side) -->
+            <div x-data="{
+                open: {{ 'true' if not filename else 'false' }},
+                mode: 'list',
+                inputName: '',
+                resetMode() { this.mode = 'list'; this.inputName = ''; }
+            }" class="relative py-3 shrink-0">
+                <button @click.stop="open = !open; if(open) resetMode()" data-file-picker
+                    class="flex items-center gap-1 text-sm text-blue-100 hover:text-white transition-colors">
+                    <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
+                    </svg>
+                    {% if filename %}<span class="hidden sm:inline truncate max-w-[10rem]">{{ filename }}</span>{% endif %}
+                    <svg class="w-3 h-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                    </svg>
+                </button>
+
+                <div x-init="$el.style.removeProperty('display')" :class="open ? '' : 'opacity-0 pointer-events-none'" style="display:none" @click.outside="open = false" data-file-picker-dropdown
+                    class="absolute right-0 top-full mt-1 w-64 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-[60] text-sm overflow-hidden transition-opacity duration-100">
+
+                    <!-- File list mode -->
+                    <template x-if="mode === 'list'">
+                        <div class="p-2">
+                            <div class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide px-1 mb-1">Files</div>
+                            {% for f in available_files %}
+                            <div class="flex items-center file-row">
+                                {% if f == filename %}
+                                <div class="flex-1 px-2 py-1 rounded bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-medium flex items-center justify-between min-w-0" data-active-file>
+                                    <span class="truncate">{{ f }}</span>
+                                    <div class="flex items-center gap-0.5 shrink-0 ml-1">
+                                        <button @click="mode = 'rename'; inputName = '{{ filename }}'; $nextTick(() => { $refs.nameInput.focus(); $refs.nameInput.select(); })"
+                                            title="Rename" aria-label="Rename"
+                                            class="p-1 text-blue-400 hover:text-blue-600 dark:hover:text-blue-200">
+                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                    d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                                            </svg>
+                                        </button>
+                                        <button @click="mode = 'copy'; inputName = '{{ filename }}-copy'; $nextTick(() => { $refs.nameInput.focus(); $refs.nameInput.select(); })"
+                                            title="Duplicate" aria-label="Duplicate"
+                                            class="p-1 text-blue-400 hover:text-blue-600 dark:hover:text-blue-200">
+                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                    d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                                            </svg>
+                                        </button>
+                                    </div>
+                                </div>
+                                {% else %}
+                                <a href="{% if active_tab is defined and active_tab == 'budget' %}{{ url_for('budget.budget_view', filename=f, edit=1 if edit_mode else none) }}{% elif active_tab is defined and active_tab == 'assets' %}{{ url_for('assets.assets_view', filename=f, edit=1 if edit_mode else none) }}{% else %}{{ url_for('accounts.accounts_view', filename=f, edit=1 if edit_mode else none) }}{% endif %}"
+                                    class="flex-1 px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 truncate text-gray-700 dark:text-gray-200">
+                                    {{ f }}
+                                </a>
+                                <form method="POST" action="{{ url_for('files.delete') }}"
+                                    class="shrink-0 file-row-actions">
+                                    <input type="hidden" name="name" value="{{ f }}">
+                                    <button type="submit" title="Delete {{ f }}.yaml"
+                                        class="p-1 text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400"
+                                        onclick="return confirm('Delete {{ f }}?')">
+                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                        </svg>
+                                    </button>
+                                </form>
+                                {% endif %}
+                            </div>
+                            {% endfor %}
+                            <button @click="mode = 'new'; $nextTick(() => $refs.nameInput.focus())"
+                                class="w-full text-left px-2 py-1 mt-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2 text-gray-500 dark:text-gray-400">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                                </svg>
+                                New file
+                            </button>
+                        </div>
+                    </template>
+
+                    <!-- New / Copy / Rename input mode -->
+                    <template x-if="mode === 'new' || mode === 'copy' || mode === 'rename'">
+                        <div class="p-3">
+                            <div class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2"
+                                x-text="mode === 'new' ? 'New File' : mode === 'copy' ? 'Duplicate File' : 'Rename File'"></div>
+                            <form :action="mode === 'new' ? '{{ url_for('files.new') }}'
+                                         : mode === 'copy' ? '{{ url_for('files.copy') }}'
+                                         : '{{ url_for('files.rename') }}'"
+                                  method="POST">
+                                <!-- Copy: hidden source field -->
+                                <template x-if="mode === 'copy'">
+                                    <input type="hidden" name="source" value="{{ filename }}">
+                                </template>
+                                <!-- Rename: hidden old_name field -->
+                                <template x-if="mode === 'rename'">
+                                    <input type="hidden" name="old_name" value="{{ filename }}">
+                                </template>
+                                <div class="flex gap-2">
+                                    <input x-ref="nameInput" x-model="inputName"
+                                        :name="mode === 'rename' ? 'new_name' : 'name'"
+                                        type="text" placeholder="filename"
+                                        @keydown.escape="resetMode()"
+                                        class="flex-1 min-w-0 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-sm bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100 focus:outline-none focus:border-blue-500 dark:focus:border-blue-400">
+                                    <button type="submit"
+                                        class="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
+                                        x-text="mode === 'rename' ? 'Save' : 'Create'"></button>
+                                </div>
+                                <button type="button" @click="resetMode()"
+                                    class="mt-2 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">Cancel</button>
+                            </form>
+                        </div>
+                    </template>
+                </div>
+            </div>
+            </div><!-- end right controls -->
+        </div><!-- end row 1 -->
+
+        <!-- Row 2: nav tabs (full width) -->
+        {% if filename %}
+        {% set _tab_active = 'border-white text-white' %}
+        {% set _tab_idle = 'border-transparent text-blue-100 hover:text-white hover:border-blue-400' %}
+        <nav class="flex border-t border-blue-700">
+            <a href="{{ url_for('status.snapshot_status', filename=filename, edit=1 if edit_mode else none) }}"
+                class="flex-1 py-2 flex flex-col items-center text-sm font-medium border-b-2 transition-colors {% if active_tab is defined and active_tab == 'status' %}{{ _tab_active }}{% else %}{{ _tab_idle }}{% endif %}">
+                <span>Status</span>
+            </a>
+            <a href="{{ url_for('accounts.accounts_view', filename=filename, edit=1 if edit_mode else none) }}"
+                class="flex-1 py-2 flex flex-col items-center text-sm font-medium border-b-2 transition-colors {% if active_tab is defined and active_tab == 'accounts' %}{{ _tab_active }}{% else %}{{ _tab_idle }}{% endif %}">
+                <span>Accounts</span>
+                {% if n2 is not none %}<span class="text-xs font-normal tabular-nums {% if n2 | display_is_negative %}text-red-300{% else %}opacity-75{% endif %}">{{ n2 | fmt_money_header }}</span>{% endif %}
+            </a>
+            <a href="/s/{{ filename }}/transactions"
+                class="flex-1 py-2 flex flex-col items-center text-sm font-medium border-b-2 transition-colors {% if active_tab is defined and active_tab == 'transactions' %}{{ _tab_active }}{% else %}{{ _tab_idle }}{% endif %}">
+                <span>Transactions</span>
+            </a>
+            <a href="/s/{{ filename }}/trends"
+                class="flex-1 py-2 flex flex-col items-center text-sm font-medium border-b-2 transition-colors {% if active_tab is defined and active_tab == 'trends' %}{{ _tab_active }}{% else %}{{ _tab_idle }}{% endif %}">
+                <span>Trends</span>
+            </a>
+            <a href="{{ url_for('budget.budget_view', filename=filename, edit=1 if edit_mode else none) }}"
+                class="flex-1 py-2 flex flex-col items-center text-sm font-medium border-b-2 transition-colors {% if active_tab is defined and active_tab == 'budget' %}{{ _tab_active }}{% else %}{{ _tab_idle }}{% endif %}">
+                <span>Budget</span>
+                {% if n3 is not none %}<span class="text-xs font-normal tabular-nums {% if n3 | display_is_negative %}text-red-300{% else %}opacity-75{% endif %}">{{ n3 | fmt_money_header }}</span>{% endif %}
+            </a>
+            <a href="{{ url_for('assets.assets_view', filename=filename, edit=1 if edit_mode else none) }}"
+                class="flex-1 py-2 flex flex-col items-center text-sm font-medium border-b-2 transition-colors {% if active_tab is defined and active_tab == 'assets' %}{{ _tab_active }}{% else %}{{ _tab_idle }}{% endif %}">
+                <span>Assets</span>
+                {% if n6 is not none %}<span class="text-xs font-normal tabular-nums {% if n6 | display_is_negative %}text-red-300{% else %}opacity-75{% endif %}">{{ n6 | fmt_money_header }}</span>{% endif %}
+            </a>
+            <a href="/s/{{ filename }}/import"
+                class="flex-1 py-2 flex flex-col items-center text-sm font-medium border-b-2 transition-colors {% if active_tab is defined and active_tab == 'import' %}{{ _tab_active }}{% else %}{{ _tab_idle }}{% endif %}">
+                <span>Import</span>
+            </a>
+            <a href="/s/{{ filename }}/merchants"
+                class="flex-1 py-2 flex flex-col items-center text-sm font-medium border-b-2 transition-colors {% if active_tab is defined and active_tab == 'merchants' %}{{ _tab_active }}{% else %}{{ _tab_idle }}{% endif %}">
+                <span>Merchants</span>
+            </a>
+        </nav>
+        {% endif %}
+    </header>
+
+    <main class="flex-1 min-h-0 flex flex-col px-4 py-4">
+        {% block content %}{% endblock %}
+    </main>
+
+    <script src="{{ url_for('static', filename='js/sortable.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/ledger.js') }}"></script>
+</body>
+
+</html>

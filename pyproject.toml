@@ -1,0 +1,48 @@
+[project]
+name = "fintrack"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "Flask>=3.0",
+    "SQLAlchemy>=2.0",
+    "alembic>=1.13",
+    "ofxparse>=0.21",
+    "anthropic>=0.40",
+    "click>=8.1",
+    "PyYAML>=6.0",
+    "tabulate>=0.9",
+    "jsonschema>=4.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=7.0",
+    "ruff>=0.8",
+    "playwright>=1.40",
+    "pytest-playwright>=0.4",
+]
+
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["spending*", "finances*", "web_spending*", "web_finances*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+markers = [
+    "e2e: end-to-end browser tests (deselect with '-m not e2e')",
+]
+filterwarnings = [
+    "ignore::bs4.XMLParsedAsHTMLWarning",
+    "ignore::DeprecationWarning:ofxparse",
+]
+
+[tool.ruff]
+line-length = 88
+
+[tool.ruff.lint]
+ignore = ["E501"]

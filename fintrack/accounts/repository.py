@@ -88,13 +88,24 @@ def _derive_cc_balance(row: dict[str, Any]) -> None:
 
 
 def add_account(conn: Connection, snapshot_id: int, account: dict[str, Any]) -> int:
+    from fintrack.accounts.balance_history import record_balance
+
     sort_order = _next_sort_order(conn, snapshot_id)
     row = _account_dict_to_row(account, snapshot_id, sort_order)
     if row.get("balance") is None:
         _derive_cc_balance(row)
     result = conn.execute(insert(accounts).values(**row))
     conn.commit()
-    return result.inserted_primary_key[0]
+    account_id = result.inserted_primary_key[0]
+    if row.get("balance") is not None:
+        record_balance(
+            conn,
+            account_id=account_id,
+            balance=row["balance"],
+            as_of=row.get("as_of_date"),
+            source="manual",
+        )
+    return account_id
 
 
 def update_account(
@@ -125,6 +136,21 @@ def update_account(
         .values(**{k: merged[k] for k in merged if k not in ("id", "snapshot_id")})
     )
     conn.commit()
+    # A balance change (direct edit, or derived from a CC available/limit
+    # edit) is a new manual point in the account's balance history.
+    if (
+        {"balance", "available", "limit"} & updates.keys()
+        and merged.get("balance") is not None
+        and merged["balance"] != row["balance"]
+    ):
+        from fintrack.accounts.balance_history import record_balance
+
+        record_balance(
+            conn,
+            account_id=account_id,
+            balance=merged["balance"],
+            source="manual",
+        )
 
 
 def delete_account(conn: Connection, snapshot_id: int, account_id: int) -> None:

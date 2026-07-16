@@ -51,5 +51,6 @@
         {{ _fr.reserve | fmt_money if _fr and _fr.reserve > 0 else '—' }}</td>
     <td class="px-1.5 py-px border-r border-gray-100 dark:border-gray-700 last:border-r-0 text-right tabular-nums text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-gray-700">
         {{ _fr.funding_needed | fmt_money if _fr and _fr.funding_needed > 0 else '—' }}</td>
+    {% include "partials/accounts_history_cell.html" %}
     {% with account_id=account.id, edit_mode=true %}{% include "partials/accounts_delete_icon.html" %}{% endwith %}
 </tr>

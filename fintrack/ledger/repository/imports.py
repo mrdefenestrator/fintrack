@@ -125,10 +125,42 @@ def get_staging_imports(conn: Connection, snapshot_id: int | None = None) -> lis
 
 
 def confirm_import(conn: Connection, import_id: int) -> None:
+    """Confirm a staged import; captured statement balances land in
+    balance_history (with an informational reconciliation note) and the
+    account re-syncs to its latest point."""
+    from fintrack.accounts.balance_history import (
+        reconciliation_note,
+        record_balance,
+    )
+
     conn.execute(
         update(imports).where(imports.c.id == import_id).values(status="confirmed")
     )
-    conn.commit()
+    row = (
+        conn.execute(select(imports).where(imports.c.id == import_id)).mappings().one()
+    )
+    if row["ledger_balance"] is None:
+        conn.commit()
+        return
+    as_of = row["ledger_balance_date"] or (
+        row["imported_at"].date() if row["imported_at"] else date.today()
+    )
+    note = reconciliation_note(
+        conn,
+        account_id=row["account_id"],
+        statement_balance=row["ledger_balance"],
+        as_of=as_of,
+    )
+    record_balance(
+        conn,
+        account_id=row["account_id"],
+        balance=row["ledger_balance"],
+        as_of=as_of,
+        source="statement",
+        available=row["available_balance"],
+        import_id=import_id,
+        note=note,
+    )
 
 
 def reject_import(conn: Connection, import_id: int) -> None:

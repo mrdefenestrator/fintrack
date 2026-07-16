@@ -1,0 +1,7 @@
+{# Accounts delete icon - delegates to shared template #}
+{% with
+delete_confirm_url=url_for('accounts.delete_confirm', filename=filename, account_id=account_id),
+move_url=url_for('accounts.move', filename=filename, account_id=account_id)
+%}
+{% include "partials/editable_table_delete_icon.html" %}
+{% endwith %}

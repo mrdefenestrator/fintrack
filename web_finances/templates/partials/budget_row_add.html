@@ -1,0 +1,77 @@
+{# Add row for budget - one row with kind selector #}
+<tr id="budget-add-row" class="border-b border-dashed border-gray-300 dark:border-gray-600 bg-blue-50 dark:bg-blue-950" data-add-row
+    x-data="{ kind: 'income' }"
+    x-effect="
+        let ts = document.getElementById('budget-add-type');
+        if (ts) {
+            Array.from(ts.options).forEach(o => {
+                let ok = o.getAttribute('data-kind');
+                o.hidden = ok && ok !== kind;
+            });
+            let cur = ts.options[ts.selectedIndex];
+            if (cur && cur.hidden) ts.value = '';
+        }
+    ">
+    <td class="cell-editing px-1.5 py-0.5 border-r border-gray-100 dark:border-gray-700">
+        <select name="kind" id="budget-add-kind" class="table-cell-select" x-model="kind"
+            form="budget-add-form">
+            <option value="income">Income</option>
+            <option value="expense">Expense</option>
+        </select>
+    </td>
+    <td class="cell-editing px-1.5 py-0.5 border-r border-gray-100 dark:border-gray-700">
+        <select name="type" id="budget-add-type" class="table-cell-select" form="budget-add-form">
+            <option value="">—</option>
+            {% for t in budget_income_types %}
+            <option value="{{ t }}" data-kind="income">{{ t | format_type }}</option>
+            {% endfor %}
+            {% for t in budget_expense_types %}
+            <option value="{{ t }}" data-kind="expense">{{ t | format_type }}</option>
+            {% endfor %}
+        </select>
+    </td>
+    <td class="cell-editing px-1.5 py-0.5 border-r border-gray-100 dark:border-gray-700">
+        <input type="text" name="description" placeholder="(click to add)" class="table-cell-input"
+            form="budget-add-form" />
+    </td>
+    <td class="cell-editing px-1.5 py-0.5 border-r border-gray-100 dark:border-gray-700 text-right tabular-nums">
+        <input type="number" step="any" name="amount" placeholder="0" class="table-cell-input text-right"
+            form="budget-add-form" />
+    </td>
+    <td class="cell-editing px-1.5 py-0.5 border-r border-gray-100 dark:border-gray-700">
+        <select name="recurrence" class="table-cell-select" form="budget-add-form">
+            <option value="">—</option>
+            {% for r in recurrence_options %}
+            <option value="{{ r }}">{{ r | format_recurrence }}</option>
+            {% endfor %}
+        </select>
+    </td>
+    <td class="cell-editing px-1.5 py-0.5 border-r border-gray-100 dark:border-gray-700 text-right tabular-nums">
+        <input type="number" min="1" max="31" name="dayOfMonth" placeholder="—" class="table-cell-input text-right"
+            form="budget-add-form" />
+    </td>
+    <td class="px-1.5 py-0.5 border-r border-gray-100 dark:border-gray-700 text-right tabular-nums text-gray-400">—</td>
+    <td class="px-1.5 py-0.5 border-r border-gray-100 dark:border-gray-700 text-right tabular-nums text-gray-400">—</td>
+    <td class="px-1.5 py-0.5 border-r border-gray-100 dark:border-gray-700 text-right tabular-nums text-gray-400">—</td>
+    <td class="cell-editing px-1.5 py-0.5 border-r border-gray-100 dark:border-gray-700">
+        <select name="autoAccountRef" class="table-cell-select" form="budget-add-form">
+            <option value="">—</option>
+            {% for aid, name in account_display_by_id.items() %}
+            <option value="{{ aid }}">{{ name }}</option>
+            {% endfor %}
+        </select>
+    </td>
+    <td class="table-actions-cell px-1.5 py-0.5 text-center">
+        <form id="budget-add-form"
+            @submit.prevent="
+                fetch('{{ url_for('budget.add', filename=filename) }}', {
+                    method: 'POST',
+                    body: new FormData($el)
+                }).then(r => { if (r.ok) { $el.reset(); location.reload(); } })
+            ">
+            <button type="submit"
+                class="table-action-btn text-blue-700 dark:text-blue-300 bg-white dark:bg-gray-700 hover:bg-blue-100 dark:hover:bg-blue-800 border border-blue-300 dark:border-blue-600 rounded px-2 font-bold text-sm"
+                title="Add">+</button>
+        </form>
+    </td>
+</tr>

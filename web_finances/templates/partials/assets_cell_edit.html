@@ -1,0 +1,32 @@
+{# Single assets cell in edit mode: form with input; save on blur/Enter. Cell border emphasized like spreadsheet. #}
+<td class="cell-editing px-1.5 py-0.5 border-r border-gray-100 dark:border-gray-700 last:border-r-0 {% if right_align %}text-right tabular-nums{% endif %} {% if error %}bg-red-50 dark:bg-red-900/20 border-l-4 border-l-red-500{% endif %}"
+    data-kind="{{ kind }}" data-index="{{ index }}" data-field="{{ field }}">
+    <form method="post" action="{{ url_for('assets.update', filename=filename, index=index) }}" class="inline"
+        hx-get="{{ url_for('assets.cell_edit', filename=filename, index=index, field=field, display=1) }}"
+        hx-trigger="focusout from:input delay:150ms, focusout from:select delay:150ms" hx-swap="innerHTML"
+        hx-target="#assets-tbody"
+        onkeydown="if (event.keyCode === 13 || event.keyCode === 9 || event.keyCode === 27) event.preventDefault();">
+        <input type="hidden" name="field" value="{{ field }}" />
+        <input type="hidden" name="focus_direction" value="" />
+        {% if kind == 'debt' and field == 'assetRef' %}
+        <select name="value" class="table-cell-select {% if right_align %}text-right{% endif %}" style="min-width:0"
+            hx-post="{{ url_for('assets.update', filename=filename, index=index) }}"
+            hx-trigger="focusout changed, change, keydown[keyCode==9], keydown[keyCode==9][shiftKey], keydown[keyCode==13], keydown[keyCode==13][shiftKey], keydown[keyCode==27]"
+            hx-include="closest form" hx-swap="innerHTML" hx-target="#assets-tbody" autofocus>
+            <option value="">—</option>
+            {% for aid, a in asset_by_id.items() %}
+            <option value="{{ aid }}" {% if value==aid or value==aid | string %}selected{% endif %}>{{ a.get('name',
+                '-') }}</option>
+            {% endfor %}
+        </select>
+        {% else %}
+        <input type="text" name="value" value="{{ value }}"
+            class="table-cell-input {% if right_align %}text-right tabular-nums{% endif %} {% if error %}error{% endif %}"
+            style="min-width:0" {% if field in ['value', 'quantity' , 'balance' , 'interestRate' ] %}inputmode="decimal"
+            {% endif %} hx-post="{{ url_for('assets.update', filename=filename, index=index) }}"
+            hx-trigger="focusout changed, keydown[keyCode==9], keydown[keyCode==9][shiftKey], keydown[keyCode==13], keydown[keyCode==13][shiftKey], keydown[keyCode==27]"
+            hx-include="closest form" hx-swap="innerHTML" hx-target="#assets-tbody" autofocus />
+        {% endif %}
+        {% if error %}<span class="block text-xs text-red-600 dark:text-red-400 mt-0.5">{{ error }}</span>{% endif %}
+    </form>
+</td>

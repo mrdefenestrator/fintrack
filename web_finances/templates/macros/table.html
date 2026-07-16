@@ -1,0 +1,79 @@
+{# Shared table macros for accounts, budget, and assets tables. #}
+
+{# --- Total row: final summary row with right-aligned columns --- #}
+{% macro total_row(cells, right_align_cols) %}
+<tr class="total-row bg-gray-100 dark:bg-gray-700 border-t-2 border-gray-300 dark:border-gray-600 font-medium">
+    {% for cell in cells %}
+    <td class="px-1.5 py-px border-r border-gray-100 dark:border-gray-700 last:border-r-0 {% if loop.index0 in right_align_cols %}text-right tabular-nums{% endif %}{% if cell | display_is_negative %} text-red-600 dark:text-red-400{% endif %}">
+        {{ cell }}</td>
+    {% endfor %}
+    <td class="table-actions-cell px-1.5 py-px"></td>
+</tr>
+{% endmacro %}
+
+{# --- View-mode data cell --- #}
+{% macro cell_view(cell_value, right_align, is_negative) %}
+<td class="px-1.5 py-px border-r border-gray-100 dark:border-gray-700 last:border-r-0 {% if right_align %}text-right tabular-nums{% endif %} {% if is_negative %}text-red-600 dark:text-red-400{% endif %}">
+    {{ cell_value }}</td>
+{% endmacro %}
+
+{# --- Display cell (editable, clickable to open edit) --- #}
+{% macro cell_display(cell_value, right_align, is_negative, cell_edit_url, tbody_id, is_updated) %}
+<td class="px-1.5 py-px border-r border-gray-100 dark:border-gray-700 last:border-r-0 {% if right_align %}text-right tabular-nums{% endif %} {% if is_negative %}text-red-600 dark:text-red-400{% endif %} cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/20"
+    hx-get="{{ cell_edit_url }}" hx-trigger="click" hx-swap="innerHTML" hx-target="#{{ tbody_id }}" role="button" tabindex="0">
+    {{ cell_value }}</td>
+{% endmacro %}
+
+{# --- Non-editable cell (greyed out) --- #}
+{% macro cell_non_editable(cell_value, right_align, is_negative) %}
+<td class="px-1.5 py-px border-r border-gray-100 dark:border-gray-700 last:border-r-0 {% if right_align %}text-right tabular-nums{% endif %} {% if is_negative %}text-red-400 dark:text-red-500 bg-gray-100 dark:bg-gray-700{% else %}text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-gray-700{% endif %}">
+    {{ cell_value }}</td>
+{% endmacro %}
+
+{# --- Edit cell: text input --- #}
+{% macro cell_edit_input(field, editing_value, right_align, update_url, display_url, tbody_id, inputmode, input_type='text') %}
+<td class="cell-editing px-1.5 py-px border-r border-gray-100 dark:border-gray-700 last:border-r-0 {% if right_align %}text-right tabular-nums{% endif %}">
+    <form method="post" action="{{ update_url }}" class="inline"
+        hx-get="{{ display_url }}"
+        hx-trigger="focusout from:input delay:150ms" hx-swap="innerHTML"
+        hx-target="#{{ tbody_id }}"
+        onkeydown="if(event.keyCode===13) event.preventDefault();">
+        <input type="hidden" name="field" value="{{ field }}" />
+        <input type="{{ input_type }}" name="value" value="{{ editing_value }}"
+            class="table-cell-input {% if right_align %}text-right tabular-nums{% endif %}" style="min-width:0"
+            {% if inputmode %}inputmode="{{ inputmode }}"{% endif %}
+            hx-post="{{ update_url }}"
+            hx-trigger="focusout changed, keydown[keyCode==13]"
+            hx-include="closest form" hx-swap="innerHTML" hx-target="#{{ tbody_id }}" autofocus />
+    </form>
+</td>
+{% endmacro %}
+
+{# --- Edit cell: select dropdown --- #}
+{% macro cell_edit_select(field, editing_value, right_align, update_url, display_url, tbody_id, options, format_fn) %}
+<td class="cell-editing px-1.5 py-px border-r border-gray-100 dark:border-gray-700 last:border-r-0 {% if right_align %}text-right tabular-nums{% endif %}">
+    <form method="post" action="{{ update_url }}" class="inline"
+        hx-get="{{ display_url }}"
+        hx-trigger="focusout from:select delay:150ms" hx-swap="innerHTML"
+        hx-target="#{{ tbody_id }}">
+        <input type="hidden" name="field" value="{{ field }}" />
+        <select name="value" class="table-cell-select {% if right_align %}text-right{% endif %}" style="min-width:0"
+            hx-post="{{ update_url }}"
+            hx-trigger="focusout changed, change"
+            hx-include="closest form" hx-swap="innerHTML" hx-target="#{{ tbody_id }}" autofocus>
+            {{ caller() }}
+        </select>
+    </form>
+</td>
+{% endmacro %}
+
+{# --- View-mode row (no editing, just display cells + action icons) --- #}
+{% macro view_row(row_id, row_cells, right_align_cols, delete_icon_html) %}
+<tr class="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50" id="{{ row_id }}">
+    {% for cell in row_cells %}
+    <td class="px-1.5 py-px border-r border-gray-100 dark:border-gray-700 last:border-r-0 {% if loop.index0 in right_align_cols %}text-right tabular-nums{% endif %}{% if cell | display_is_negative %} text-red-600 dark:text-red-400{% endif %}">
+        {{ cell }}</td>
+    {% endfor %}
+    {{ delete_icon_html }}
+</tr>
+{% endmacro %}

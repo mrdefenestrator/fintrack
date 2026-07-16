@@ -1,0 +1,24 @@
+{# Assets table tbody - used for full tbody swap after cell edit #}
+{% from "macros/table.html" import total_row %}
+{% if edit_mode %}
+{% for kind, index, row_cells in assets_edit_rows %}
+{% include "partials/assets_row_display.html" %}
+{% endfor %}
+{% include "partials/assets_row_add.html" %}
+{% if rows %}
+{{ total_row(rows[-1], [3, 4, 5, 7]) }}
+{% endif %}
+{% else %}
+{% for kind, index, row_cells in assets_edit_rows %}
+<tr class="border-b border-gray-200 dark:border-b-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 border-l-4 {{ 'border-l-emerald-400' if kind == 'asset' else 'border-l-rose-400' }}" id="assets-row-{{ index }}">
+    {% for cell in row_cells %}
+    <td class="px-1.5 py-0.5 border-r border-gray-100 dark:border-gray-700 last:border-r-0 {% if loop.index0 in [3, 4, 5, 7] %}text-right tabular-nums{% endif %}{% if cell | display_is_negative %} text-red-600 dark:text-red-400{% endif %}">
+        {{ cell }}</td>
+    {% endfor %}
+    {% with edit_mode=false %}{% include "partials/assets_delete_icon.html" %}{% endwith %}
+</tr>
+{% endfor %}
+{% if rows %}
+{{ total_row(rows[-1], [3, 4, 5, 7]) }}
+{% endif %}
+{% endif %}

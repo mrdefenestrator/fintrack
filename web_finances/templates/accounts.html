@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}Accounts — Finances{% endblock %}
+{% block content %}
+{% set _active_count = (include_types | length) if (include_types and include_types | length < account_types | length) else 0 %}
+<form id="accounts-filter-form" method="get" action="{{ url_for('accounts.accounts_view', filename=filename) }}" class="shrink-0 relative z-20" x-data="{ open: false }">
+    {% if edit_mode %}<input type="hidden" name="edit" value="1">{% endif %}
+    <div class="bg-white dark:bg-gray-800 rounded-t-lg border border-gray-300 dark:border-gray-600 text-sm text-gray-600 dark:text-gray-300">
+
+        <!-- Mobile: compact trigger row -->
+        <div class="sm:hidden flex items-center">
+            <button type="button" @click="open = !open"
+                class="flex-1 flex items-center gap-2 px-2 py-2 text-left min-w-0">
+                <svg class="w-4 h-4 shrink-0 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M7 12h10M10 18h4" />
+                </svg>
+                <span class="font-medium text-gray-700 dark:text-gray-200">Filters</span>
+                {% if _active_count > 0 %}
+                <span class="bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 text-xs font-medium rounded-full px-1.5 py-0.5 tabular-nums">{{ _active_count }}</span>
+                {% endif %}
+                <svg class="w-4 h-4 ml-auto shrink-0 transition-transform duration-150 text-gray-400 dark:text-gray-500"
+                    :class="{ 'rotate-180': open }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                </svg>
+            </button>
+            <a href="{{ url_for('accounts.accounts_view', filename=filename, edit=1 if edit_mode else none) }}"
+                class="shrink-0 px-2 py-2 border-l border-gray-200 dark:border-gray-700 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">Reset</a>
+        </div>
+
+        <!-- Mobile: filter panel -->
+        <div x-show="open" style="display:none" class="sm:hidden border-t border-gray-200 dark:border-gray-700 px-2 py-2">
+            <div class="flex flex-wrap items-center gap-1.5">
+                <div class="relative" x-data="{ open: false }">
+                    <button type="button"
+                        class="filter-dropdown-trigger inline-flex items-center bg-gray-50 dark:bg-gray-700 px-2 py-1 rounded border border-gray-200 dark:border-gray-600 text-xs hover:bg-gray-100 dark:hover:bg-gray-600"
+                        @click="open = !open">
+                        Type
+                        <svg class="w-4 h-4 ml-1.5 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                        </svg>
+                    </button>
+                    <div x-show="open" style="display:none" @click.outside="open = false"
+                        class="absolute z-10 mt-1 w-48 max-h-[min(16rem,60vh)] overflow-y-auto bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-2 left-0">
+                        {% for t in account_types %}
+                        <label class="flex items-center px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer">
+                            <input type="checkbox" name="include_type" value="{{ t }}" {% if t in include_types %}checked{% endif %}
+                                :disabled="!open"
+                                onchange="document.getElementById('accounts-filter-form').submit()"
+                                class="mr-2 rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500">
+                            <span class="text-sm">{{ t | format_type }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% if include_types and include_types | length < account_types | length %}
+                    {% for t in include_types %}
+                    {% set _rem = include_types | reject('equalto', t) | list %}
+                    <span class="inline-flex items-center bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700 text-blue-700 dark:text-blue-300 text-xs rounded-full pl-2 pr-1 py-0.5">
+                        {{ t | format_type }}<a href="{{ url_for('accounts.accounts_view', filename=filename, include_type=_rem or none, edit=1 if edit_mode else none) }}" class="ml-1 font-bold hover:text-blue-900 dark:hover:text-blue-100 no-underline leading-none" title="Remove">×</a>
+                    </span>
+                    {% endfor %}
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Desktop: full inline bar -->
+        <div class="hidden sm:flex flex-wrap items-center gap-1.5 p-2">
+            <span class="font-medium text-gray-700 dark:text-gray-200">Include only:</span>
+            <div class="relative" x-data="{ open: false }">
+                <button type="button"
+                    class="filter-dropdown-trigger inline-flex items-center bg-gray-50 dark:bg-gray-700 px-2 py-1 rounded border border-gray-200 dark:border-gray-600 text-xs hover:bg-gray-100 dark:hover:bg-gray-600"
+                    @click="open = !open">
+                    Type
+                    <svg class="w-4 h-4 ml-1.5 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                    </svg>
+                </button>
+                <div x-show="open" style="display:none" @click.outside="open = false"
+                    class="absolute z-10 mt-1 w-48 max-h-[min(16rem,60vh)] overflow-y-auto bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-2 left-0">
+                    {% for t in account_types %}
+                    <label class="flex items-center px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer">
+                        <input type="checkbox" name="include_type" value="{{ t }}" {% if t in include_types %}checked{% endif %}
+                            onchange="document.getElementById('accounts-filter-form').submit()"
+                            class="mr-2 rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500">
+                        <span class="text-sm">{{ t | format_type }}</span>
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+            {% if include_types and include_types | length < account_types | length %}
+                {% for t in include_types %}
+                {% set _rem = include_types | reject('equalto', t) | list %}
+                <span class="inline-flex items-center bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700 text-blue-700 dark:text-blue-300 text-xs rounded-full pl-2 pr-1 py-0.5">
+                    {{ t | format_type }}<a href="{{ url_for('accounts.accounts_view', filename=filename, include_type=_rem or none, edit=1 if edit_mode else none) }}" class="ml-1 font-bold hover:text-blue-900 dark:hover:text-blue-100 no-underline leading-none" title="Remove">×</a>
+                </span>
+                {% endfor %}
+            {% endif %}
+            <a href="{{ url_for('accounts.accounts_view', filename=filename, edit=1 if edit_mode else none) }}"
+                class="ml-auto px-2 py-1 rounded border border-gray-200 dark:border-gray-600 text-xs bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200">Reset</a>
+        </div>
+
+    </div>
+</form>
+<div class="table-scroll-container rounded-b-lg border-l border-b border-r border-gray-300 dark:border-gray-600 shadow-sm">
+<table class="editable-table sortable w-full text-sm border-collapse bg-white dark:bg-gray-800" {% if
+    sort_col %}data-sort-col="{{ sort_col }}" {% endif %} {% if sort_dir %}data-sort-dir="{{ sort_dir }}" {% endif %}>
+{% with headers=headers, right_align_cols=[3, 4, 5, 6, 7, 8, 10, 11] %}{% include "partials/editable_table_thead.html" %}{% endwith %}
+    <tbody id="accounts-tbody">
+        {% include "partials/accounts_tbody.html" %}
+    </tbody>
+</table>
+</div>
+{% endblock %}

@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Not found — Finances{% endblock %}
+{% block content %}
+<div class="py-8">
+    <h1 class="text-xl font-semibold text-gray-800">Not found</h1>
+    <p class="mt-2 text-gray-600">{{ message }}</p>
+    <a href="{{ url_for('status.status_view') }}" class="mt-4 inline-block text-blue-600 hover:text-blue-800">Back to
+        Status</a>
+</div>
+{% endblock %}

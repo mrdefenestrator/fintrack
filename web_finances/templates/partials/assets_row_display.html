@@ -1,0 +1,40 @@
+{# One assets row in edit mode: cells clickable (display), last cell is delete. #}
+{% from "macros/table.html" import cell_display, cell_non_editable, cell_edit_input, cell_edit_select %}
+<tr class="border-b border-gray-200 dark:border-b-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 border-l-4 {{ 'border-l-emerald-400' if kind == 'asset' else 'border-l-rose-400' }}" id="assets-row-{{ index }}">
+    {% set fields_asset = [None, 'institution', 'name', 'value', 'quantity', None, 'source', None] %}
+    {% set fields_debt = [None, 'institution', 'name', 'balance', 'quantity', None, 'assetRef', 'interestRate'] %}
+    {% for col_index in range(8) %}
+    {% set field = fields_asset[col_index] if kind == 'asset' else fields_debt[col_index] %}
+    {% set cell_value = row_cells[col_index] if col_index < row_cells | length else '' %}
+    {% set right_align = col_index in [3, 4, 5, 7] %}
+    {% set is_negative = cell_value is not none and cell_value | display_is_negative %}
+    {% set is_updated_cell = (updated_index is defined and updated_index==index and updated_field is defined and updated_field==field) %}
+    {% set is_editing_cell = (editing_index is defined and editing_index==index and editing_field is defined and editing_field==field) %}
+    {% if is_editing_cell and field %}
+        {% if kind == 'debt' and field == 'assetRef' %}
+            {% call(caller) cell_edit_select(field, editing_value, right_align,
+                url_for('assets.update', filename=filename, index=index),
+                url_for('assets.cell_edit', filename=filename, index=index, field=field, display=1),
+                'assets-tbody', none, none) %}
+                <option value="">—</option>
+                {% for aid, a in asset_by_id.items() %}
+                <option value="{{ aid }}" {% if editing_value==aid or editing_value==aid | string %}selected{% endif %}>{{ a.get('name', '-') }}</option>
+                {% endfor %}
+            {% endcall %}
+        {% else %}
+            {% set inputmode = 'decimal' if field in ['value', 'quantity', 'balance', 'interestRate'] else none %}
+            {{ cell_edit_input(field, editing_value, right_align,
+                url_for('assets.update', filename=filename, index=index),
+                url_for('assets.cell_edit', filename=filename, index=index, field=field, display=1),
+                'assets-tbody', inputmode) }}
+        {% endif %}
+    {% elif field %}
+        {{ cell_display(cell_value, right_align, is_negative,
+            url_for('assets.cell_edit', filename=filename, index=index, field=field),
+            'assets-tbody', is_updated_cell) }}
+    {% else %}
+        {{ cell_non_editable(cell_value, right_align, is_negative) }}
+    {% endif %}
+    {% endfor %}
+    {% with edit_mode=true %}{% include "partials/assets_delete_icon.html" %}{% endwith %}
+</tr>

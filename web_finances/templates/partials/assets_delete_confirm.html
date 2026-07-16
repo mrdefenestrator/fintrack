@@ -1,0 +1,7 @@
+{# Assets delete confirm - delegates to shared template #}
+{% with
+delete_url=url_for('assets.delete', filename=filename, index=index),
+cancel_url=url_for('assets.delete_btn', filename=filename, index=index)
+%}
+{% include "partials/editable_table_delete_confirm.html" %}
+{% endwith %}

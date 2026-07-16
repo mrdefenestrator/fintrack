@@ -1,0 +1,60 @@
+{# Add row for assets - one row with kind selector that controls editability #}
+<tr id="assets-add-row" class="border-b border-dashed border-gray-300 dark:border-gray-600 bg-blue-50 dark:bg-blue-950" data-add-row
+    x-data="{ kind: 'asset' }"
+    x-effect="
+        let refInput = $el.querySelector('[data-field=reference] input');
+        if (refInput) {
+            refInput.name = kind === 'asset' ? 'source' : 'assetRef';
+            refInput.type = kind === 'asset' ? 'text' : 'number';
+        }
+        let valInput = $el.querySelector('[data-field=value] input');
+        if (valInput) { valInput.name = kind === 'asset' ? 'value' : 'balance'; }
+    ">
+    <td class="cell-editing px-1.5 py-0.5 border-r border-gray-100 dark:border-gray-700">
+        <select name="kind" id="assets-add-kind" class="w-full table-cell-select" x-model="kind"
+            form="assets-add-form">
+            <option value="asset">Asset</option>
+            <option value="debt">Debt</option>
+        </select>
+    </td>
+    <td class="cell-editing px-1.5 py-0.5 border-r border-gray-100 dark:border-gray-700" data-field="institution">
+        <input type="text" name="institution" placeholder="—" class="table-cell-input"
+            form="assets-add-form" />
+    </td>
+    <td class="cell-editing px-1.5 py-0.5 border-r border-gray-100 dark:border-gray-700">
+        <input type="text" name="name" placeholder="(click to add)" class="table-cell-input" form="assets-add-form" />
+    </td>
+    <td class="cell-editing px-1.5 py-0.5 border-r border-gray-100 dark:border-gray-700 text-right tabular-nums" data-field="value">
+        <input type="number" step="any" name="value" placeholder="0" class="table-cell-input text-right"
+            form="assets-add-form" />
+    </td>
+    <td class="cell-editing px-1.5 py-0.5 border-r border-gray-100 dark:border-gray-700 text-right tabular-nums" data-field="quantity">
+        <input type="number" step="any" name="quantity" placeholder="—" class="table-cell-input text-right"
+            form="assets-add-form" />
+    </td>
+    <td class="px-1.5 py-0.5 border-r border-gray-100 dark:border-gray-700 text-right tabular-nums text-gray-400">—</td>
+    <td class="cell-editing px-1.5 py-0.5 border-r border-gray-100 dark:border-gray-700" data-field="reference">
+        <input type="text" name="source" placeholder="—" class="table-cell-input"
+            form="assets-add-form" />
+    </td>
+    <td class="cell-editing px-1.5 py-0.5 border-r border-gray-100 dark:border-gray-700 text-right tabular-nums"
+        data-field="interest"
+        :class="{ 'text-gray-400': kind === 'asset' }">
+        <input type="text" name="interestRate" placeholder="—" class="table-cell-input text-right"
+            :disabled="kind === 'asset'"
+            form="assets-add-form" />
+    </td>
+    <td class="table-actions-cell px-1.5 py-0.5 text-center">
+        <form id="assets-add-form"
+            @submit.prevent="
+                fetch('{{ url_for('assets.add', filename=filename) }}', {
+                    method: 'POST',
+                    body: new FormData($el)
+                }).then(r => { if (r.ok) { $el.reset(); location.reload(); } })
+            ">
+            <button type="submit"
+                class="table-action-btn text-blue-700 dark:text-blue-300 bg-white dark:bg-gray-700 hover:bg-blue-100 dark:hover:bg-blue-800 border border-blue-300 dark:border-blue-600 rounded px-2 font-bold text-sm"
+                title="Add">+</button>
+        </form>
+    </td>
+</tr>

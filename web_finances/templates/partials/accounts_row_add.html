@@ -1,0 +1,86 @@
+{# Add row for accounts - respects editability rules based on type #}
+<tr id="accounts-add-row" class="border-b border-dashed border-gray-300 dark:border-gray-600 bg-blue-50 dark:bg-blue-950" data-add-row
+    x-data="{ accType: 'checking' }" x-init="$watch('accType', () => { })">
+    <td class="cell-editing px-1.5 py-0.5 border-r border-gray-100 dark:border-gray-700">
+        <input type="text" name="institution" placeholder="—" class="table-cell-input" form="accounts-add-form" />
+    </td>
+    <td class="cell-editing px-1.5 py-0.5 border-r border-gray-100 dark:border-gray-700">
+        <select name="type" id="accounts-add-type" class="table-cell-select" x-model="accType"
+            form="accounts-add-form">
+            {% for t in account_types %}
+            <option value="{{ t }}">{{ t | format_type }}</option>
+            {% endfor %}
+        </select>
+    </td>
+    <td class="cell-editing px-1.5 py-0.5 border-r border-gray-100 dark:border-gray-700">
+        <input type="text" name="name" placeholder="(click to add)" class="table-cell-input" form="accounts-add-form" />
+    </td>
+    <td class="cell-editing px-1.5 py-0.5 border-r border-gray-100 dark:border-gray-700 text-right tabular-nums" data-field="balance"
+        :class="{ 'text-gray-400': accType === 'credit_card' }">
+        <input type="number" step="any" name="balance" class="table-cell-input text-right"
+            :placeholder="accType === 'credit_card' ? '—' : '0'"
+            :disabled="accType === 'credit_card'"
+            form="accounts-add-form" />
+    </td>
+    <td class="cell-editing px-1.5 py-0.5 border-r border-gray-100 dark:border-gray-700 text-right tabular-nums"
+        data-field="limit"
+        :class="{ 'text-gray-400': accType !== 'credit_card' }">
+        <input type="number" step="any" name="limit" class="table-cell-input text-right"
+            :placeholder="accType === 'credit_card' ? '0' : '—'"
+            :disabled="accType !== 'credit_card'"
+            form="accounts-add-form" />
+    </td>
+    <td class="cell-editing px-1.5 py-0.5 border-r border-gray-100 dark:border-gray-700 text-right tabular-nums"
+        data-field="available"
+        :class="{ 'text-gray-400': accType !== 'credit_card' }">
+        <input type="number" step="any" name="available" class="table-cell-input text-right"
+            :placeholder="accType === 'credit_card' ? '0' : '—'"
+            :disabled="accType !== 'credit_card'"
+            form="accounts-add-form" />
+    </td>
+    <td class="cell-editing px-1.5 py-0.5 border-r border-gray-100 dark:border-gray-700 text-right tabular-nums"
+        data-field="rewards_balance"
+        :class="{ 'text-gray-400': accType !== 'credit_card' }">
+        <input type="number" step="any" name="rewards_balance" placeholder="—" class="table-cell-input text-right"
+            :disabled="accType !== 'credit_card'"
+            form="accounts-add-form" />
+    </td>
+    <td class="cell-editing px-1.5 py-0.5 border-r border-gray-100 dark:border-gray-700 text-right tabular-nums"
+        data-field="statement_balance"
+        :class="{ 'text-gray-400': accType !== 'credit_card' }">
+        <input type="number" step="any" name="statement_balance" placeholder="—" class="table-cell-input text-right"
+            :disabled="accType !== 'credit_card'"
+            form="accounts-add-form" />
+    </td>
+    <td class="cell-editing px-1.5 py-0.5 border-r border-gray-100 dark:border-gray-700 text-right tabular-nums"
+        data-field="statement_due_day_of_month"
+        :class="{ 'text-gray-400': accType !== 'credit_card' }">
+        <input type="number" min="1" max="31" name="statement_due_day_of_month" placeholder="—"
+            class="table-cell-input text-right"
+            :disabled="accType !== 'credit_card'"
+            form="accounts-add-form" />
+    </td>
+    <td class="cell-editing px-1.5 py-0.5 border-r border-gray-100 dark:border-gray-700"
+        data-field="paymentAccountRef"
+        :class="{ 'text-gray-400': accType !== 'credit_card' }">
+        <select name="paymentAccountRef" class="table-cell-select"
+            :disabled="accType !== 'credit_card'"
+            form="accounts-add-form">
+            <option value="">—</option>
+            {% for aid, aname in account_display_by_id.items() %}
+            <option value="{{ aid }}">{{ aname }}</option>
+            {% endfor %}
+        </select>
+    </td>
+    <td class="px-1.5 py-0.5 border-r border-gray-100 dark:border-gray-700 text-right tabular-nums text-gray-400">—</td>
+    <td class="px-1.5 py-0.5 border-r border-gray-100 dark:border-gray-700 text-right tabular-nums text-gray-400">—</td>
+    <td class="table-actions-cell px-1.5 py-0.5 text-center">
+        <form id="accounts-add-form" hx-post="{{ url_for('accounts.add', filename=filename) }}" hx-target="#accounts-add-row"
+            hx-swap="beforebegin"
+            hx-on::after-request="if(event.detail.successful) { this.reset(); }">
+            <button type="submit"
+                class="table-action-btn text-blue-700 dark:text-blue-300 bg-white dark:bg-gray-700 hover:bg-blue-100 dark:hover:bg-blue-800 border border-blue-300 dark:border-blue-600 rounded px-2 font-bold text-sm"
+                title="Add">+</button>
+        </form>
+    </td>
+</tr>

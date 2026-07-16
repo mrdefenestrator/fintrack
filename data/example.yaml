@@ -1,0 +1,283 @@
+$schema: ../schema.yaml
+
+accounts:
+  # Liquid accounts
+  - id: 1
+    name: Main Checking
+    type: checking
+    balance: 4218.43
+    minimum_balance: 1000.0
+    institution: Chase
+    partial_account_number: "7842"
+    asOfDate: "2026-03-06"
+
+  - id: 2
+    name: High-Yield Savings
+    type: savings
+    balance: 18540.00
+    institution: Marcus by Goldman Sachs
+    partial_account_number: "3391"
+    asOfDate: "2026-03-06"
+
+  - id: 3
+    name: Venmo
+    type: digital_wallet
+    balance: 45.00
+
+  - id: 4
+    name: Amazon Gift Card
+    type: gift_card
+    balance: 23.41
+
+  # Credit cards (balance = limit - available; treated as spent)
+  - id: 5
+    name: Chase Sapphire
+    type: credit_card
+    limit: 15000.0
+    available: 12318.52
+    rewards_balance: 87.50
+    statement_balance: 1847.61
+    statement_due_day_of_month: 22
+    paymentAccountRef: 1
+    institution: Chase
+    partial_account_number: "4491"
+    asOfDate: "2026-03-06"
+
+  - id: 6
+    name: Amex Gold
+    type: credit_card
+    limit: 20000.0
+    available: 17682.15
+    rewards_balance: 2340.00
+    statement_balance: 1954.32
+    statement_due_day_of_month: 5
+    paymentAccountRef: 1
+    institution: American Express
+    partial_account_number: "1003"
+    asOfDate: "2026-03-06"
+
+budget:
+  # --- Income ---
+  - kind: income
+    description: Salary
+    type: salary
+    amount: 4200.00
+    recurrence: biweekly
+    autoAccountRef: 1
+
+  - kind: income
+    description: Freelance Consulting
+    type: bonus
+    amount: 800.00
+    recurrence: monthly
+    dayOfMonth: 20
+
+  - kind: income
+    description: Annual Bonus
+    type: bonus
+    amount: 5000.00
+    recurrence: annual
+    month: 2
+    dayOfYear: 15
+    autoAccountRef: 1
+
+  - kind: income
+    description: Tax Refund
+    type: refund
+    amount: 2400.00
+    recurrence: one_time
+    date: "2026-03-20"
+    autoAccountRef: 1
+
+  # --- Fixed monthly expenses ---
+  - kind: expense
+    description: Mortgage
+    type: housing
+    amount: 2150.00
+    recurrence: monthly
+    dayOfMonth: 1
+    autoAccountRef: 1
+
+  - kind: expense
+    description: Car Loan
+    type: transport
+    amount: 385.00
+    recurrence: monthly
+    dayOfMonth: 18
+    autoAccountRef: 1
+
+  - kind: expense
+    description: Health Insurance
+    type: insurance
+    amount: 280.00
+    recurrence: monthly
+    dayOfMonth: 1
+    autoAccountRef: 1
+
+  - kind: expense
+    description: Electricity
+    type: utility
+    amount: 85.00
+    recurrence: monthly
+    dayOfMonth: 15
+
+  - kind: expense
+    description: Water & Trash
+    type: utility
+    amount: 55.00
+    recurrence: monthly
+    dayOfMonth: 20
+
+  - kind: expense
+    description: Internet
+    type: service
+    amount: 65.00
+    recurrence: monthly
+    dayOfMonth: 20
+
+  - kind: expense
+    description: Phone
+    type: service
+    amount: 85.00
+    recurrence: monthly
+    dayOfMonth: 10
+
+  - kind: expense
+    description: Netflix
+    type: service
+    amount: 22.99
+    recurrence: monthly
+    dayOfMonth: 8
+
+  - kind: expense
+    description: Spotify
+    type: service
+    amount: 10.99
+    recurrence: monthly
+    dayOfMonth: 12
+
+  - kind: expense
+    description: Gym Membership
+    type: service
+    amount: 45.00
+    recurrence: monthly
+    dayOfMonth: 15
+
+  # --- Continuous monthly expenses (prorated to EOM) ---
+  - kind: expense
+    description: Groceries
+    type: food
+    amount: 650.00
+    recurrence: monthly
+    continuous: true
+
+  - kind: expense
+    description: Gas
+    type: transport
+    amount: 120.00
+    recurrence: monthly
+    continuous: true
+
+  - kind: expense
+    description: Dining Out
+    type: food
+    amount: 300.00
+    recurrence: monthly
+    continuous: true
+
+  # --- Periodic / annual expenses ---
+  - kind: expense
+    description: Car Insurance
+    type: insurance
+    amount: 680.00
+    recurrence: semiannual
+    month: 3
+    dayOfMonth: 15
+    autoAccountRef: 1
+
+  - kind: expense
+    description: Car Registration
+    type: transport
+    amount: 180.00
+    recurrence: annual
+    month: 4
+    dayOfYear: 10
+    autoAccountRef: 1
+
+  - kind: expense
+    description: Amazon Prime
+    type: service
+    amount: 139.00
+    recurrence: annual
+    month: 7
+    dayOfYear: 23
+
+  - kind: expense
+    description: Dentist (2× year)
+    type: service
+    amount: 200.00
+    recurrence: semiannual
+    month: 2
+    dayOfMonth: 14
+
+  # --- One-time ---
+  - kind: expense
+    description: New Laptop
+    type: product
+    amount: 1299.00
+    recurrence: one_time
+    date: "2026-03-15"
+
+assets:
+  # --- Real assets ---
+  - kind: asset
+    id: 1
+    name: Primary Residence
+    value: 485000.00
+    institution: Personal
+    source: Zillow
+    asOfDate: "2026-02-01"
+
+  - kind: asset
+    id: 2
+    name: 2022 Toyota Camry
+    value: 24500.00
+    institution: Personal
+    source: KBB
+    asOfDate: "2026-03-01"
+
+  # --- Investment / retirement accounts ---
+  - kind: asset
+    id: 3
+    name: 401(k)
+    value: 87400.00
+    institution: Fidelity
+    source: Manual
+    asOfDate: "2026-03-01"
+
+  - kind: asset
+    id: 4
+    name: HSA
+    value: 3200.00
+    institution: HealthEquity
+    source: Manual
+    asOfDate: "2026-03-01"
+
+  # --- Debts secured by assets ---
+  - kind: debt
+    name: Mortgage
+    balance: 342150.00
+    institution: Chase Home Lending
+    assetRef: 1
+    interestRate: 0.0675
+    nextDueDate: "2026-04-01"
+    asOfDate: "2026-03-01"
+
+  - kind: debt
+    name: Car Loan
+    balance: 18245.00
+    institution: Toyota Financial Services
+    assetRef: 2
+    interestRate: 0.049
+    nextDueDate: "2026-03-18"
+    asOfDate: "2026-03-01"

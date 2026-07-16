@@ -1,0 +1,7 @@
+{# Accounts delete confirm - delegates to shared template #}
+{% with
+delete_url=url_for('accounts.delete', filename=filename, account_id=account_id),
+cancel_url=url_for('accounts.delete_btn', filename=filename, account_id=account_id)
+%}
+{% include "partials/editable_table_delete_confirm.html" %}
+{% endwith %}

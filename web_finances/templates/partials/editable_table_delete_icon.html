@@ -1,0 +1,57 @@
+{# Shared actions cell: up/down reorder buttons, delete button. No wrap/overflow.
+Parameters:
+- delete_confirm_url: URL for delete confirmation (hx-get)
+- move_url: URL for move action (hx-post, with ?direction=up|down appended)
+- edit_mode: boolean, whether in edit mode (enables buttons)
+#}
+<td class="table-actions-cell px-1.5 py-0.5 border-r border-gray-100 dark:border-gray-700 text-center align-middle">
+    <span class="table-actions-inner">
+        <span class="reorder-buttons inline-flex items-center gap-px shrink-0">
+            {% if edit_mode %}
+            <button type="button" class="table-action-btn text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700"
+                title="Move up" hx-post="{{ move_url }}?direction=up" hx-trigger="click" hx-swap="none">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
+                </svg>
+            </button>
+            <button type="button" class="table-action-btn text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700"
+                title="Move down" hx-post="{{ move_url }}?direction=down" hx-trigger="click" hx-swap="none">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                </svg>
+            </button>
+            {% else %}
+            <span class="table-action-btn text-gray-300 dark:text-gray-600 cursor-default shrink-0"
+                title="Move up (switch to Edit to reorder)" aria-hidden="true">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
+                </svg>
+            </span>
+            <span class="table-action-btn text-gray-300 dark:text-gray-600 cursor-default shrink-0"
+                title="Move down (switch to Edit to reorder)" aria-hidden="true">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                </svg>
+            </span>
+            {% endif %}
+        </span>
+        {% if edit_mode %}
+        <button type="button" class="table-action-btn text-red-600 dark:text-red-400 shrink-0 hover:text-red-800 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/30"
+            title="Delete" hx-get="{{ delete_confirm_url }}" hx-trigger="click" hx-swap="outerHTML"
+            hx-target="closest td">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+        </button>
+        {% else %}
+        <span class="table-action-btn text-gray-300 dark:text-gray-600 cursor-default shrink-0" title="Delete (switch to Edit to remove)"
+            aria-hidden="true">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+        </span>
+        {% endif %}
+    </span>
+</td>

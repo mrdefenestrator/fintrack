@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Status — Finances{% endblock %}
+{% block content %}
+<section class="mb-6">
+    <table class="sortable w-full max-w-sm text-sm border-collapse border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 shadow-sm" {% if
+        sort_col %}data-sort-col="{{ sort_col }}" {% endif %} {% if sort_dir %}data-sort-dir="{{ sort_dir }}" {% endif
+        %}>
+        <thead>
+            <tr class="bg-gray-100 dark:bg-gray-700 border-b border-gray-300 dark:border-gray-600">
+                <th class="sortable-th px-1.5 py-1 text-left font-medium text-gray-800 dark:text-gray-100 cursor-pointer select-none hover:bg-gray-200 dark:hover:bg-gray-600"
+                    data-col="0" role="button" tabindex="0" title="Sort by this column">Kind <span
+                        class="sort-indicator"></span></th>
+                <th class="sortable-th px-1.5 py-1 text-right font-medium text-gray-800 dark:text-gray-100 tabular-nums cursor-pointer select-none hover:bg-gray-200 dark:hover:bg-gray-600"
+                    data-col="1" role="button" tabindex="0" title="Sort by this column">Amount <span
+                        class="sort-indicator"></span></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for label, amount in status_rows %}
+            {% set is_total_row = loop.last %}
+            <tr
+                class="{% if is_total_row %}bg-gray-100 dark:bg-gray-700 border-t-2 border-gray-300 dark:border-gray-600 font-medium{% else %}border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50{% endif %}">
+                <td class="px-1.5 {% if is_total_row %}py-1 text-gray-800 dark:text-gray-100{% else %}py-0.5{% endif %}">{{ label }}</td>
+                <td
+                    class="px-1.5 {% if is_total_row %}py-1 text-gray-800 dark:text-gray-100{% else %}py-0.5{% endif %} text-right tabular-nums{% if amount | display_is_negative %} text-red-600 dark:text-red-400{% endif %}">
+                    {{ amount | fmt_money }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>
+{% endblock %}

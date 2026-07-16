@@ -1,0 +1,28 @@
+{# Renders a table from headers and rows. right_align: list of column indices (0-based) to right-align. Sortable by
+column. sort_col/sort_dir: optional initial sort state from URL. #}
+<table class="sortable w-full text-sm border-collapse border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 shadow-sm" {% if sort_col
+    %}data-sort-col="{{ sort_col }}" {% endif %} {% if sort_dir %}data-sort-dir="{{ sort_dir }}" {% endif %}>
+    <thead>
+        <tr class="bg-gray-100 dark:bg-gray-700 border-b border-gray-300 dark:border-gray-600">
+            {% for h in headers %}
+            <th class="sortable-th px-1.5 py-1 text-left font-medium text-gray-800 dark:text-gray-100 border-r border-gray-200 dark:border-gray-600 last:border-r-0 cursor-pointer select-none hover:bg-gray-200 dark:hover:bg-gray-600"
+                data-col="{{ loop.index0 }}" role="button" tabindex="0" title="Sort by this column">{{ h }} <span
+                    class="sort-indicator"></span></th>
+            {% endfor %}
+        </tr>
+    </thead>
+    <tbody>
+        {% for row in rows %}
+        {% set is_total_row = loop.last %}
+        <tr
+            class="{% if is_total_row %}bg-gray-100 dark:bg-gray-700 border-t-2 border-gray-300 dark:border-gray-600 font-medium{% else %}border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50{% endif %}">
+            {% for cell in row %}
+            <td
+                class="px-1.5 {% if is_total_row %}py-1 text-gray-800 dark:text-gray-100{% else %}py-0.5{% endif %} border-r border-gray-100 dark:border-gray-700 last:border-r-0 {% if right_align is defined and loop.index0 in right_align %}text-right tabular-nums{% endif %}{% if cell | display_is_negative %} text-red-600 dark:text-red-400{% endif %}">
+                {{ cell }}
+            </td>
+            {% endfor %}
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>

@@ -1,0 +1,55 @@
+{# One data row in edit mode: cells are clickable when editable for account type. #}
+{% from "macros/table.html" import cell_display, cell_non_editable, cell_edit_input, cell_edit_select %}
+{% set _acc_border = 'border-l-rose-400' if account.type == 'credit_card' else ('border-l-slate-300' if account.type in ('loan', 'other') else 'border-l-emerald-400') %}
+<tr class="border-b border-gray-200 dark:border-b-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 border-l-4 {{ _acc_border }}" id="account-row-{{ account.id }}">
+    {% set is_cc = (account.type == 'credit_card') %}
+    {% set fields = ['institution','type','name','balance','limit','available','rewards_balance','statement_balance','statement_due_day_of_month','paymentAccountRef'] %}
+    {% for col_index in range(10) %}
+    {% set field = fields[col_index] %}
+    {% set cell_editable = (col_index <= 2) or (col_index==3 and not is_cc) or (col_index >= 4 and col_index <= 8 and is_cc) or (col_index == 9 and is_cc) %}
+    {% set cell_value = row_cells[col_index] if col_index < row_cells | length else '' %}
+    {% set right_align = col_index in (3, 4, 5, 6, 7, 8) %}
+    {% set is_negative = cell_value is not none and cell_value | display_is_negative %}
+    {% set is_updated_cell = (updated_account_id is defined and updated_account_id==account.id and updated_field is defined and updated_field==field) %}
+    {% set is_editing_cell = (editing_account_id is defined and editing_account_id==account.id and editing_field is defined and editing_field==field) %}
+    {% if is_editing_cell and cell_editable %}
+        {% if field == 'type' %}
+            {% call(caller) cell_edit_select(field, editing_value, right_align,
+                url_for('accounts.update', filename=filename, account_id=account.id),
+                url_for('accounts.cell_edit', filename=filename, account_id=account.id, field=field, display=1),
+                'accounts-tbody', none, none) %}
+                {% for t in account_types %}
+                <option value="{{ t }}" {% if editing_value==t %}selected{% endif %}>{{ t | format_type }}</option>
+                {% endfor %}
+            {% endcall %}
+        {% elif field == 'paymentAccountRef' %}
+            {% call(caller) cell_edit_select(field, editing_value, right_align,
+                url_for('accounts.update', filename=filename, account_id=account.id),
+                url_for('accounts.cell_edit', filename=filename, account_id=account.id, field=field, display=1),
+                'accounts-tbody', none, none) %}
+                <option value="">—</option>
+                {% for aid, aname in account_display_by_id.items() %}
+                <option value="{{ aid }}" {% if editing_value==aid or editing_value==aid | string %}selected{% endif %}>{{ aname }}</option>
+                {% endfor %}
+            {% endcall %}
+        {% else %}
+            {{ cell_edit_input(field, editing_value, right_align,
+                url_for('accounts.update', filename=filename, account_id=account.id),
+                url_for('accounts.cell_edit', filename=filename, account_id=account.id, field=field, display=1),
+                'accounts-tbody', none) }}
+        {% endif %}
+    {% elif cell_editable %}
+        {{ cell_display(cell_value, right_align, is_negative,
+            url_for('accounts.cell_edit', filename=filename, account_id=account.id, field=field),
+            'accounts-tbody', is_updated_cell) }}
+    {% else %}
+        {{ cell_non_editable(cell_value, right_align, is_negative) }}
+    {% endif %}
+    {% endfor %}
+    {% set _fr = funding_by_id.get(account.id) if funding_by_id is defined else none %}
+    <td class="px-1.5 py-px border-r border-gray-100 dark:border-gray-700 text-right tabular-nums text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-gray-700">
+        {{ _fr.reserve | fmt_money if _fr and _fr.reserve > 0 else '—' }}</td>
+    <td class="px-1.5 py-px border-r border-gray-100 dark:border-gray-700 last:border-r-0 text-right tabular-nums text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-gray-700">
+        {{ _fr.funding_needed | fmt_money if _fr and _fr.funding_needed > 0 else '—' }}</td>
+    {% with account_id=account.id, edit_mode=true %}{% include "partials/accounts_delete_icon.html" %}{% endwith %}
+</tr>

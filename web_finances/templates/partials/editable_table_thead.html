@@ -1,0 +1,12 @@
+{# Shared thead for editable tables (accounts, budget, assets). headers = list of column names; no "Actions" label.
+#}
+<thead>
+    <tr class="bg-gray-100 dark:bg-gray-700 border-b border-gray-300 dark:border-gray-600">
+        {% for h in headers %}
+        <th class="sortable-th px-1.5 py-0.5 {% if loop.index0 in (right_align_cols | default([])) %}text-right{% else %}text-left{% endif %} font-medium text-gray-800 dark:text-gray-100 border-r border-gray-200 dark:border-gray-600 last:border-r-0 cursor-pointer select-none hover:bg-gray-200 dark:hover:bg-gray-600"
+            data-col="{{ loop.index0 }}" role="button" tabindex="0" title="Sort by this column">{{ h }} <span
+                class="sort-indicator"></span></th>
+        {% endfor %}
+        <th class="table-actions-cell px-1.5 py-0.5 border-r border-gray-200 dark:border-gray-600" aria-label="Actions"></th>
+    </tr>
+</thead>

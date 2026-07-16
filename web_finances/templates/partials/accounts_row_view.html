@@ -1,0 +1,16 @@
+{# One data row in view mode: plain cells + greyed-out delete icon (always visible, not clickable). #}
+{% set _acc_border = 'border-l-rose-400' if account.type == 'credit_card' else ('border-l-slate-300' if account.type in ('loan', 'other') else 'border-l-emerald-400') %}
+<tr class="border-b border-gray-200 dark:border-b-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 border-l-4 {{ _acc_border }}" id="account-row-{{ account.id }}">
+    {% for col_index in range(10) %}
+    {% set right_align = col_index in (3, 4, 5, 6, 7, 8) %}
+    {% set cell_value = row_cells[col_index] if col_index < row_cells | length else '' %} <td
+        class="px-1.5 py-0.5 border-r border-gray-100 dark:border-gray-700 last:border-r-0 {% if right_align %}text-right tabular-nums{% endif %} {% if cell_value is not none and cell_value | display_is_negative %}text-red-600 dark:text-red-400{% endif %}">
+        {{ cell_value }}</td>
+        {% endfor %}
+        {% set _fr = funding_by_id.get(account.id) if funding_by_id is defined else none %}
+        <td class="px-1.5 py-0.5 border-r border-gray-100 dark:border-gray-700 last:border-r-0 text-right tabular-nums">
+            {{ _fr.reserve | fmt_money if _fr and _fr.reserve > 0 else '—' }}</td>
+        <td class="px-1.5 py-0.5 border-r border-gray-100 dark:border-gray-700 last:border-r-0 text-right tabular-nums font-medium {% if _fr and _fr.funding_needed > 0 %}text-red-600 dark:text-red-400{% endif %}">
+            {{ _fr.funding_needed | fmt_money if _fr and _fr.funding_needed > 0 else '—' }}</td>
+        {% with account_id=account.id, edit_mode=false %}{% include "partials/accounts_delete_icon.html" %}{% endwith %}
+</tr>

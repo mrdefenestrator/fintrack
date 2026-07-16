@@ -1,0 +1,18 @@
+{# Shared delete confirmation cell: Yes/No buttons.
+Parameters:
+- delete_url: URL for delete action (hx-post)
+- cancel_url: URL to restore delete button (hx-get)
+#}
+<td class="table-actions-cell px-1.5 py-0.5 border-r border-gray-100 dark:border-gray-700 text-center align-middle bg-red-50 dark:bg-red-900/20">
+    <span class="table-actions-inner">
+        <form class="inline" hx-post="{{ delete_url }}" hx-target="closest tr" hx-swap="outerHTML">
+            <button type="submit"
+                class="table-action-btn text-red-700 dark:text-red-400 bg-white dark:bg-gray-700 hover:bg-red-100 dark:hover:bg-red-800 border border-red-300 dark:border-red-700 rounded shrink-0 font-bold text-sm px-1.5"
+                title="Confirm delete">✓</button>
+        </form>
+        <button type="button"
+            class="table-action-btn text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 border border-gray-300 dark:border-gray-600 rounded shrink-0 font-bold text-sm px-1.5"
+            hx-get="{{ cancel_url }}" hx-trigger="click" hx-swap="outerHTML" hx-target="closest td"
+            title="Cancel delete">✗</button>
+    </span>
+</td>

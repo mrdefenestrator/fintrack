@@ -2,9 +2,9 @@
 
 from flask import Blueprint, abort, current_app, render_template, request
 
-import finances
-from finances.loader import load_finances_from_db
-from finances.repository import budget as repo_budget
+from fintrack import finances_compat as finances
+from fintrack.core.loader import load_finances_from_db
+from fintrack.budget import repository as repo_budget
 
 from .common import drop_separator_rows, get_common_context, validate_snapshot
 from .crud import (

@@ -4,11 +4,11 @@ from pathlib import Path
 
 from flask import Blueprint, current_app, render_template, request
 
-from spending.classifier import classify_and_cache
-from spending.importer import run_import
-from spending.importer.ofx import extract_ofx_metadata
-from spending.repository.accounts import list_accounts
-from spending.repository.imports import (
+from fintrack.ledger.classifier import classify_and_cache
+from fintrack.ledger.importer import run_import
+from fintrack.ledger.importer.ofx import extract_ofx_metadata
+from fintrack.ledger.repository.accounts import list_accounts
+from fintrack.ledger.repository.imports import (
     confirm_import,
     get_staging_imports,
     get_staging_transactions,

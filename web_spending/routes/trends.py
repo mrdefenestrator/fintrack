@@ -3,7 +3,7 @@ from collections import defaultdict
 
 from flask import Blueprint, current_app, redirect, render_template, request, url_for
 
-from spending.repository.aggregations import get_monthly_totals_range
+from fintrack.ledger.repository.aggregations import get_monthly_totals_range
 
 bp = Blueprint("trends", __name__)
 

@@ -1,7 +1,7 @@
 import io
 from unittest.mock import patch
 
-from spending.repository.accounts import add_account
+from fintrack.ledger.repository.accounts import add_account
 
 _SIMPLE_OFX = b"""\
 <?xml version="1.0" encoding="UTF-8"?>

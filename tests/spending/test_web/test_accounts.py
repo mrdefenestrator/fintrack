@@ -1,4 +1,4 @@
-from spending.repository.accounts import add_account
+from fintrack.ledger.repository.accounts import add_account
 
 
 def test_create_account_success(client):

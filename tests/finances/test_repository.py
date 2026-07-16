@@ -4,29 +4,29 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.exc import IntegrityError
 
-from finances.db import init_db
-from finances.repository.accounts import (
+from fintrack.core.db import init_db
+from fintrack.accounts.repository import (
     add_account,
     delete_account,
     get_accounts,
     move_account,
     update_account,
 )
-from finances.repository.assets import (
+from fintrack.networth.repository import (
     add_asset_entry,
     delete_asset_entry,
     get_asset_entries,
     move_asset_entry,
     update_asset_entry,
 )
-from finances.repository.budget import (
+from fintrack.budget.repository import (
     add_budget_entry,
     delete_budget_entry,
     get_budget_entries,
     move_budget_entry,
     update_budget_entry,
 )
-from finances.repository.snapshots import (
+from fintrack.snapshots.repository import (
     copy_snapshot,
     create_snapshot,
     delete_snapshot,
@@ -34,7 +34,7 @@ from finances.repository.snapshots import (
     list_snapshots,
     rename_snapshot,
 )
-from finances.loader import load_finances_from_db
+from fintrack.core.loader import load_finances_from_db
 
 
 @pytest.fixture()

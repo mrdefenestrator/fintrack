@@ -3,7 +3,7 @@ from datetime import date
 from flask import Blueprint, current_app, render_template, request
 from sqlalchemy.exc import IntegrityError
 
-from spending.repository.accounts import (
+from fintrack.ledger.repository.accounts import (
     add_account,
     edit_account,
     get_account_by_id,

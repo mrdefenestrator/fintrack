@@ -3,7 +3,7 @@ from decimal import Decimal
 
 import pytest
 
-from spending.importer.csv_parser import (
+from fintrack.ledger.importer.csv_parser import (
     parse_csv,
     detect_institution_config,
     _parse_signed_dollar,

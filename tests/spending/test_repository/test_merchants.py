@@ -2,8 +2,9 @@ import datetime
 
 from sqlalchemy import insert
 
-from spending.models import accounts, imports, transactions
-from spending.repository.merchants import (
+from fintrack.core.models import accounts, imports, transactions
+from fintrack.snapshots.repository import ensure_default_snapshot
+from fintrack.ledger.repository.merchants import (
     get_cached_category,
     get_uncached_merchants,
     list_merchants,
@@ -53,9 +54,13 @@ def test_list_merchants_with_stats_no_transactions(conn):
 
 def test_list_merchants_with_stats_with_confirmed_transactions(conn):
     # Set up account, confirmed import, and transaction
+    snapshot_id = ensure_default_snapshot(conn)
     conn.execute(
         insert(accounts).values(
-            name="Chase", institution="Chase", account_type="checking"
+            snapshot_id=snapshot_id,
+            name="Chase",
+            institution="Chase",
+            account_type="checking",
         )
     )
     conn.commit()

@@ -4,7 +4,7 @@ from datetime import date
 from pathlib import Path
 from unittest.mock import patch
 
-from finances import (
+from fintrack.finances_compat import (
     apply_budget_filters,
     filter_accounts_by_type,
     filter_assets_by_kind,
@@ -399,7 +399,7 @@ def test_projected_change_to_eom_day_none_uses_today():
         }
     ]
     # Patch date.today() to 2025-02-14 so day=14 is used for Feb 2025
-    with patch("finances.calculations.date") as mock_date:
+    with patch("fintrack.networth.calculations.date") as mock_date:
         mock_date.today.return_value = date(2025, 2, 14)
         # Feb 2025 has 28 days; from day 14, 14 days remaining -> 900 * 14/28 = 450
         result = projected_change_to_eom(budget, 2025, 2)
@@ -418,7 +418,7 @@ def test_projected_change_to_eom_day_none_other_month_uses_zero():
         }
     ]
     # Patch date.today() to 2025-05-10; ask for March 2025 -> not current month -> day=0
-    with patch("finances.calculations.date") as mock_date:
+    with patch("fintrack.networth.calculations.date") as mock_date:
         mock_date.today.return_value = date(2025, 5, 10)
         result = projected_change_to_eom(budget, 2025, 3)
     # Full month in March
@@ -431,9 +431,9 @@ def test_status_command_exits_zero(tmp_path):
 
     from sqlalchemy import create_engine
 
-    from finances import main
-    from finances.db import init_db
-    from finances.yaml_import import import_yaml
+    from fintrack.finances_compat import main
+    from fintrack.core.db import init_db
+    from fintrack.migrate.yaml_import import import_yaml
 
     db_path = tmp_path / "test.db"
     engine = create_engine(f"sqlite:///{db_path}", future=True)

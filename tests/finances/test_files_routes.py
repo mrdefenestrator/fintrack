@@ -3,8 +3,8 @@
 import pytest
 from sqlalchemy import create_engine
 
-from finances.db import init_db
-from finances.repository.snapshots import create_snapshot, get_snapshot_id
+from fintrack.core.db import init_db
+from fintrack.snapshots.repository import create_snapshot, get_snapshot_id
 
 
 @pytest.fixture()

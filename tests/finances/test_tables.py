@@ -1,6 +1,6 @@
 """Tests for finances/tables.py — table builders for CLI and web."""
 
-from finances.tables import (
+from fintrack.core.tables import (
     _account_display_by_id,
     _build_accounts_table,
     _build_budget_table,

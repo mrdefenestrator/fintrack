@@ -2,7 +2,7 @@
 
 from flask import Blueprint, current_app, render_template
 
-from finances.repository.snapshots import list_snapshots
+from fintrack.snapshots.repository import list_snapshots
 
 status_bp = Blueprint("status", __name__)
 

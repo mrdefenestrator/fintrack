@@ -2,7 +2,7 @@
 
 from datetime import date
 
-from finances.calculations import (
+from fintrack.networth.calculations import (
     _amount_annual,
     _budget_entry_in_month,
     _credit_card_balance_owed,

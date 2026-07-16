@@ -1,7 +1,7 @@
 import pytest
 from sqlalchemy import create_engine
 
-from spending.models import metadata
+from fintrack.core.models import metadata
 
 
 @pytest.fixture

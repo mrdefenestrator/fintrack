@@ -12,8 +12,8 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import finances
-from finances.db import get_engine, init_db
+from fintrack import finances_compat as finances
+from fintrack.core.db import get_engine, init_db
 
 # Handle both direct execution (./web/app.py) and module import (from web.app import create_app)
 try:

@@ -116,9 +116,9 @@ def test_trends_ytd_grand_total_in_footer(page, confirmed_server):
     assert "132" in tfoot_text
 
 
-def test_trends_quarterly_shows_data_rows(page, confirmed_server):
+def test_trends_quarterly_shows_data_rows(page, current_quarter_server):
     """Quarterly view shows data rows when transactions exist in the quarter."""
-    page.goto(f"{confirmed_server}/trends?period=quarterly")
+    page.goto(f"{current_quarter_server}/trends?period=quarterly")
     rows = page.locator("table tbody tr")
     assert rows.count() >= 1
 

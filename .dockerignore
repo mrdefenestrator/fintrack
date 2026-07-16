@@ -1,0 +1,16 @@
+.venv/
+.git/
+.github/
+.pytest_cache/
+.ruff_cache/
+__pycache__/
+*.pyc
+*.db
+*.csv
+*.tsv
+*.ofx
+*.qfx
+tests/
+docs/
+data/
+.coverage

@@ -40,7 +40,7 @@ def ofx_with_meta_bytes():
 
 def test_detect_account_ofx_prefills_institution(client, ofx_with_meta_bytes):
     response = client.post(
-        "/import/detect-account",
+        "/s/ledger/import/detect-account",
         data={"files": (io.BytesIO(ofx_with_meta_bytes), "test.ofx")},
         content_type="multipart/form-data",
     )
@@ -53,7 +53,7 @@ def test_detect_account_ofx_no_accounts_shows_expanded_form(
     client, ofx_with_meta_bytes
 ):
     response = client.post(
-        "/import/detect-account",
+        "/s/ledger/import/detect-account",
         data={"files": (io.BytesIO(ofx_with_meta_bytes), "test.ofx")},
         content_type="multipart/form-data",
     )
@@ -65,7 +65,7 @@ def test_detect_account_ofx_no_accounts_shows_expanded_form(
 def test_detect_account_csv_returns_empty_form(client):
     csv_bytes = b"Transaction Date,Description,Amount\n01/15/2024,COFFEE,-5.00\n"
     response = client.post(
-        "/import/detect-account",
+        "/s/ledger/import/detect-account",
         data={"files": (io.BytesIO(csv_bytes), "test.csv")},
         content_type="multipart/form-data",
     )
@@ -76,7 +76,7 @@ def test_detect_account_csv_returns_empty_form(client):
 
 def test_detect_account_corrupt_file_degrades_gracefully(client):
     response = client.post(
-        "/import/detect-account",
+        "/s/ledger/import/detect-account",
         data={"files": (io.BytesIO(b"not valid ofx"), "test.ofx")},
         content_type="multipart/form-data",
     )

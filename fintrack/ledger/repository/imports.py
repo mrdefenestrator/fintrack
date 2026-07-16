@@ -6,7 +6,7 @@ from pathlib import Path
 from sqlalchemy import Connection, delete, func, insert, select, update
 from sqlalchemy.sql.functions import coalesce
 
-from fintrack.core.models import imports, merchant_cache, transactions
+from fintrack.core.models import accounts, imports, merchant_cache, transactions
 
 
 def compute_file_hash(file_path: str | Path) -> str:
@@ -109,15 +109,17 @@ def get_staging_transactions(conn: Connection, import_id: int) -> list[dict]:
     return [dict(row._mapping) for row in rows]
 
 
-def get_staging_imports(conn: Connection) -> list[dict]:
+def get_staging_imports(conn: Connection, snapshot_id: int | None = None) -> list[dict]:
     stmt = (
         select(imports, func.count(transactions.c.id).label("txn_count"))
-        .select_from(imports)
+        .select_from(imports.join(accounts, imports.c.account_id == accounts.c.id))
         .outerjoin(transactions, transactions.c.import_id == imports.c.id)
         .where(imports.c.status == "staging")
         .group_by(imports.c.id)
-        .order_by(imports.c.imported_at.desc())
     )
+    if snapshot_id is not None:
+        stmt = stmt.where(accounts.c.snapshot_id == snapshot_id)
+    stmt = stmt.order_by(imports.c.imported_at.desc())
     rows = conn.execute(stmt).fetchall()
     return [dict(row._mapping) for row in rows]
 

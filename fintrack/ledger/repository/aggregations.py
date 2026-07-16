@@ -29,12 +29,13 @@ def _resolved_merchant():
     ).label("merchant")
 
 
-def base_transaction_query():
+def base_transaction_query(snapshot_id: int | None = None):
     """Base query joining transactions with corrections and merchant cache.
 
-    Only includes confirmed imports.
+    Only includes confirmed imports; scoped to one snapshot when snapshot_id
+    is given.
     """
-    return (
+    stmt = (
         select(
             transactions.c.id,
             transactions.c.date,
@@ -65,17 +66,20 @@ def base_transaction_query():
         .outerjoin(accounts, transactions.c.account_id == accounts.c.id)
         .where(imports.c.status == "confirmed")
     )
+    if snapshot_id is not None:
+        stmt = stmt.where(accounts.c.snapshot_id == snapshot_id)
+    return stmt
 
 
 def get_monthly_category_totals(
-    conn: Connection, *, year: int, month: int
+    conn: Connection, *, year: int, month: int, snapshot_id: int | None = None
 ) -> list[dict]:
     start = date(year, month, 1)
     _, last_day = monthrange(year, month)
     end = date(year, month, last_day)
 
     subq = (
-        base_transaction_query()
+        base_transaction_query(snapshot_id)
         .where(
             transactions.c.date >= start,
             transactions.c.date <= end,
@@ -98,11 +102,15 @@ def get_monthly_category_totals(
 
 
 def get_monthly_totals_range(
-    conn: Connection, *, start_date: date, end_date: date
+    conn: Connection,
+    *,
+    start_date: date,
+    end_date: date,
+    snapshot_id: int | None = None,
 ) -> list[dict]:
     """Get category totals per month for a date range."""
     subq = (
-        base_transaction_query()
+        base_transaction_query(snapshot_id)
         .where(
             transactions.c.date >= start_date,
             transactions.c.date <= end_date,
@@ -134,7 +142,12 @@ def get_monthly_totals_range(
 
 
 def get_rolling_average(
-    conn: Connection, *, year: int, month: int, months_back: int = 3
+    conn: Connection,
+    *,
+    year: int,
+    month: int,
+    months_back: int = 3,
+    snapshot_id: int | None = None,
 ) -> dict[str, Decimal]:
     """Get trailing N-month average per category."""
     start_month = month - months_back
@@ -146,7 +159,7 @@ def get_rolling_average(
     start = date(start_year, start_month, 1)
 
     subq = (
-        base_transaction_query()
+        base_transaction_query(snapshot_id)
         .where(
             transactions.c.date >= start,
             transactions.c.date < date(year, month, 1),

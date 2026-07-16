@@ -18,6 +18,7 @@ def get_transactions(
     import_id: int | None = None,
     sort: str | None = None,
     sort_dir: str | None = None,
+    snapshot_id: int | None = None,
 ) -> list[dict]:
     """Get transactions with resolved category and merchant.
 
@@ -25,7 +26,7 @@ def get_transactions(
     """
     from fintrack.core.models import transactions
 
-    subq = base_transaction_query()
+    subq = base_transaction_query(snapshot_id)
 
     if year and month:
         start = date(year, month, 1)

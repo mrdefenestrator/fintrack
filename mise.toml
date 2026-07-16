@@ -6,19 +6,19 @@ run = "uv sync"
 description = "Install all dependencies into .venv"
 
 [tasks.format]
-run = "uv run ruff format fintrack/ web_spending/ web_finances/ tests/ spending.py finances.py"
+run = "uv run ruff format fintrack/ web/ tests/ spending.py finances.py"
 description = "Format code with ruff"
 
 [tasks.format-check]
-run = "uv run ruff format --check fintrack/ web_spending/ web_finances/ tests/ spending.py finances.py"
+run = "uv run ruff format --check fintrack/ web/ tests/ spending.py finances.py"
 description = "Check code formatting"
 
 [tasks.lint]
-run = "uv run ruff check fintrack/ web_spending/ web_finances/ tests/ spending.py finances.py"
+run = "uv run ruff check fintrack/ web/ tests/ spending.py finances.py"
 description = "Lint with ruff"
 
 [tasks.lint-fix]
-run = "uv run ruff check --fix fintrack/ web_spending/ web_finances/ tests/ spending.py finances.py"
+run = "uv run ruff check --fix fintrack/ web/ tests/ spending.py finances.py"
 description = "Fix lint issues with ruff"
 
 [tasks.test]
@@ -41,10 +41,6 @@ description = "Run e2e browser tests with Playwright (run playwright-install fir
 run = "uv run playwright install chromium"
 description = "Install Playwright browser binaries"
 
-[tasks.serve-spending]
-run = "uv run python -m web_spending.app"
-description = "Start the spending web server (port 5002)"
-
-[tasks.serve-finances]
-run = "uv run python web_finances/app.py"
-description = "Start the finances web server (port 5001)"
+[tasks.serve]
+run = "uv run python -m web.app"
+description = "Start the fintrack web server (port 5003)"

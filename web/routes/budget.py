@@ -2,7 +2,8 @@
 
 from flask import Blueprint, abort, current_app, render_template, request
 
-from fintrack import finances_compat as finances
+from fintrack.core import filters, tables
+from fintrack.networth import calculations
 from fintrack.core.loader import load_finances_from_db
 from fintrack.budget import repository as repo_budget
 
@@ -16,11 +17,11 @@ from .crud import (
 
 budget_bp = Blueprint("budget", __name__, url_prefix="/s")
 
-BUDGET_KINDS = finances.BUDGET_KINDS
-BUDGET_INCOME_TYPES = finances.BUDGET_INCOME_TYPES
-BUDGET_EXPENSE_TYPES = finances.BUDGET_EXPENSE_TYPES
-BUDGET_ALL_TYPES = finances.BUDGET_ALL_TYPES
-RECURRENCE_OPTIONS = finances.RECURRENCE_OPTIONS
+BUDGET_KINDS = calculations.BUDGET_KINDS
+BUDGET_INCOME_TYPES = calculations.BUDGET_INCOME_TYPES
+BUDGET_EXPENSE_TYPES = calculations.BUDGET_EXPENSE_TYPES
+BUDGET_ALL_TYPES = calculations.BUDGET_ALL_TYPES
+RECURRENCE_OPTIONS = calculations.RECURRENCE_OPTIONS
 
 
 def _render_tbody(
@@ -39,7 +40,7 @@ def _render_tbody(
 ):
     ctx = get_common_context(snapshot_id, filename, edit_mode)
     budget = ctx["budget"]
-    headers, rows = finances._build_budget_table(
+    headers, rows = tables._build_budget_table(
         budget,
         ctx["year"],
         ctx["month"],
@@ -93,14 +94,14 @@ def budget_view(filename: str):
         or request.args.getlist("recurrence")
         or []
     )
-    budget = finances.apply_budget_filters(
+    budget = filters.apply_budget_filters(
         ctx["budget"],
         include_kinds=include_kinds or None,
         include_types=include_types or None,
         include_recurrence=include_recurrence or None,
     )
     include_kinds_set = set(k.lower() for k in include_kinds)
-    ctx["headers"], ctx["rows"] = finances._build_budget_table(
+    ctx["headers"], ctx["rows"] = tables._build_budget_table(
         budget,
         ctx["year"],
         ctx["month"],

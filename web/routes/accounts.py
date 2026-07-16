@@ -4,7 +4,8 @@ from datetime import date
 
 from flask import Blueprint, abort, current_app, render_template, request
 
-from fintrack import finances_compat as finances
+from fintrack.core import filters, tables
+from fintrack.networth import calculations
 from fintrack.accounts.balance_history import get_balance_history
 from fintrack.core.loader import load_finances_from_db
 from fintrack.accounts import repository as repo_accounts
@@ -23,7 +24,7 @@ from .crud import (
 
 accounts_bp = Blueprint("accounts", __name__, url_prefix="/s")
 
-ACCOUNT_TYPES = finances.ACCOUNT_TYPES
+ACCOUNT_TYPES = calculations.ACCOUNT_TYPES
 
 _SPARK_W, _SPARK_H = 72, 16
 
@@ -80,18 +81,18 @@ def _render_tbody(
     accs = data.get("accounts") or []
     budget = data.get("budget") or []
     today = date.today()
-    n2 = finances.liquid_minus_cc(accs)
-    account_display_by_id = finances._account_display_by_id(accs)
-    headers, rows = finances._build_accounts_table(
+    n2 = calculations.liquid_minus_cc(accs)
+    account_display_by_id = tables._account_display_by_id(accs)
+    headers, rows = tables._build_accounts_table(
         accs, n2, account_display_by_id=account_display_by_id
     )
     rows = drop_separator_rows(rows)
     funding_by_id = {
-        acc["id"]: finances.account_funding_needed(
+        acc["id"]: calculations.account_funding_needed(
             acc, accs, budget, today, default_reserve=0
         )
         for acc in accs
-        if finances._ACCOUNT_TYPE_TO_CALCULATION.get(acc.get("type")) == "liquid"
+        if calculations._ACCOUNT_TYPE_TO_CALCULATION.get(acc.get("type")) == "liquid"
     }
     with engine.connect() as conn:
         history_by_id = _history_meta(conn, accs)
@@ -127,11 +128,11 @@ def accounts_view(filename: str):
     include_types = (
         request.args.getlist("include_type") or request.args.getlist("type") or []
     )
-    accs = finances.filter_accounts_by_type(ctx["accounts"], include_types or None)
+    accs = filters.filter_accounts_by_type(ctx["accounts"], include_types or None)
     include_types_set = set(t.lower() for t in include_types)
-    n2 = finances.liquid_minus_cc(accs)
+    n2 = calculations.liquid_minus_cc(accs)
     account_display_by_id = ctx["account_display_by_id"]
-    ctx["headers"], ctx["rows"] = finances._build_accounts_table(
+    ctx["headers"], ctx["rows"] = tables._build_accounts_table(
         accs, n2, account_display_by_id=account_display_by_id
     )
     ctx["rows"] = drop_separator_rows(ctx["rows"])
@@ -144,11 +145,11 @@ def accounts_view(filename: str):
     budget = ctx["budget"]
     today = date.today()
     ctx["funding_by_id"] = {
-        acc["id"]: finances.account_funding_needed(
+        acc["id"]: calculations.account_funding_needed(
             acc, all_accounts, budget, today, default_reserve=0
         )
         for acc in all_accounts
-        if finances._ACCOUNT_TYPE_TO_CALCULATION.get(acc.get("type")) == "liquid"
+        if calculations._ACCOUNT_TYPE_TO_CALCULATION.get(acc.get("type")) == "liquid"
     }
     ctx["headers"] += ["Reserve", "Funding Needed", "History"]
     ctx["rows"][-1] += ["-", "-", "-"]
@@ -295,9 +296,9 @@ def add(filename: str):
     acc = next((a for a in accs if a.get("id") == new_id), None)
     if not acc:
         abort(404)
-    n2 = finances.liquid_minus_cc(accs)
-    account_display_by_id = finances._account_display_by_id(accs)
-    _, rows = finances._build_accounts_table(
+    n2 = calculations.liquid_minus_cc(accs)
+    account_display_by_id = tables._account_display_by_id(accs)
+    _, rows = tables._build_accounts_table(
         accs, n2, account_display_by_id=account_display_by_id
     )
     idx = next((i for i, a in enumerate(accs) if a.get("id") == new_id), -1)

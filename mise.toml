@@ -6,19 +6,19 @@ run = "uv sync"
 description = "Install all dependencies into .venv"
 
 [tasks.format]
-run = "uv run ruff format fintrack/ web/ tests/ spending.py finances.py"
+run = "uv run ruff format fintrack/ web/ tests/ fintrack.py"
 description = "Format code with ruff"
 
 [tasks.format-check]
-run = "uv run ruff format --check fintrack/ web/ tests/ spending.py finances.py"
+run = "uv run ruff format --check fintrack/ web/ tests/ fintrack.py"
 description = "Check code formatting"
 
 [tasks.lint]
-run = "uv run ruff check fintrack/ web/ tests/ spending.py finances.py"
+run = "uv run ruff check fintrack/ web/ tests/ fintrack.py"
 description = "Lint with ruff"
 
 [tasks.lint-fix]
-run = "uv run ruff check --fix fintrack/ web/ tests/ spending.py finances.py"
+run = "uv run ruff check --fix fintrack/ web/ tests/ fintrack.py"
 description = "Fix lint issues with ruff"
 
 [tasks.test]

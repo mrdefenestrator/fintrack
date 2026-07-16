@@ -18,7 +18,7 @@ def db_engine():
 @pytest.fixture()
 def client(db_engine):
     """Flask test client with an in-memory DB that has one 'finances' snapshot."""
-    from web.app import create_app
+    from web_finances.app import create_app
 
     with db_engine.connect() as conn:
         create_snapshot(conn, "finances")

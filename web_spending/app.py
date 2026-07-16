@@ -23,7 +23,7 @@ def create_app(db_path: str | None = None) -> Flask:
     def money_filter(value, decimals=2):
         return f"{float(value):,.{decimals}f}"
 
-    from web.routes import register_blueprints
+    from web_spending.routes import register_blueprints
 
     register_blueprints(app)
 

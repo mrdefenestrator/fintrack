@@ -1,6 +1,6 @@
 import pytest
 
-from web.app import create_app
+from web_spending.app import create_app
 
 
 @pytest.fixture

@@ -2,7 +2,7 @@
 
 import pytest
 
-from tests.e2e.conftest import enable_edit_mode
+from tests.finances.e2e.conftest import enable_edit_mode
 
 pytestmark = pytest.mark.e2e
 

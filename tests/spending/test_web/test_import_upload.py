@@ -30,7 +30,9 @@ def test_upload_shows_classified_count(client, conn):
     acct_id = add_account(
         conn, name="Test", institution="Test Bank", account_type="checking"
     )
-    with patch("web.routes.imports.classify_and_cache", return_value=(3, None)):
+    with patch(
+        "web_spending.routes.imports.classify_and_cache", return_value=(3, None)
+    ):
         response = client.post(
             "/import/upload",
             data={
@@ -47,7 +49,9 @@ def test_upload_no_classified_count_when_zero(client, conn):
     acct_id = add_account(
         conn, name="Test", institution="Test Bank", account_type="checking"
     )
-    with patch("web.routes.imports.classify_and_cache", return_value=(0, None)):
+    with patch(
+        "web_spending.routes.imports.classify_and_cache", return_value=(0, None)
+    ):
         response = client.post(
             "/import/upload",
             data={

@@ -250,7 +250,7 @@ def status(ctx):
 @click.option("--port", default=5002, type=int)
 def serve(port):
     """Start the web server."""
-    from web.app import create_app
+    from web_spending.app import create_app
 
     app = create_app()
     app.run(debug=True, port=port)

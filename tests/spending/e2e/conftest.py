@@ -9,11 +9,12 @@ import time
 import urllib.parse
 import urllib.request
 import uuid
+from datetime import date
 from pathlib import Path
 
 import pytest
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 
 # ---------------------------------------------------------------------------
 # OFX content used for data-seeding fixtures
@@ -88,6 +89,31 @@ _SEEDED_OFX_2 = """\
             <TRNAMT>-8.99</TRNAMT>
             <FITID>E2E006</FITID>
             <NAME>SPOTIFY</NAME>
+          </STMTTRN>
+        </BANKTRANLIST>
+      </STMTRS>
+    </STMTTRNRS>
+  </BANKMSGSRSV1>
+</OFX>"""
+
+# OFX with a single transaction whose date is filled in at runtime — used by
+# tests of period views that window on the current date (e.g. quarterly
+# trends), where statically dated seed data would age out of the window.
+_CURRENT_DATE_OFX_TEMPLATE = """\
+<?xml version="1.0" encoding="UTF-8"?>
+<?OFX OFXHEADER="200" VERSION="220"?>
+<OFX>
+  <BANKMSGSRSV1>
+    <STMTTRNRS>
+      <STMTRS>
+        <BANKACCTFROM><ACCTID>9876543210</ACCTID></BANKACCTFROM>
+        <BANKTRANLIST>
+          <STMTTRN>
+            <TRNTYPE>DEBIT</TRNTYPE>
+            <DTPOSTED>{dtposted}120000</DTPOSTED>
+            <TRNAMT>-25.00</TRNAMT>
+            <FITID>QTR001</FITID>
+            <NAME>COSTCO WHOLESALE</NAME>
           </STMTTRN>
         </BANKTRANLIST>
       </STMTRS>
@@ -170,7 +196,7 @@ def _start_server(port: int, db_path: Path) -> subprocess.Popen:
         "ANTHROPIC_BASE_URL": "http://127.0.0.1:1",
     }
     proc = subprocess.Popen(
-        [sys.executable, "-m", "web.app"],
+        [sys.executable, "-m", "web_spending.app"],
         cwd=str(PROJECT_ROOT),
         env=env,
         stdout=subprocess.PIPE,
@@ -309,6 +335,47 @@ def confirmed_server(tmp_path_factory):
     import_id = m.group(1)
 
     # Confirm the import so transactions are visible in reports.
+    _form_post(f"{base_url}/import/{import_id}/confirm")
+
+    yield base_url
+    _stop_server(proc)
+
+
+@pytest.fixture(scope="module")
+def current_quarter_server(tmp_path_factory):
+    """Flask server pre-seeded with one confirmed transaction dated today.
+
+    Transaction: COSTCO WHOLESALE -$25.00, posted on the current date, so it
+    always falls inside date-windowed period views (quarterly, YTD).
+    """
+    port = _free_port()
+    db_dir = tmp_path_factory.mktemp("current_quarter_db")
+    db_path = db_dir / "test.db"
+    proc = _start_server(port, db_path)
+    base_url = f"http://127.0.0.1:{port}"
+
+    html = _form_post(
+        f"{base_url}/accounts",
+        {
+            "acct_name": "Test Checking",
+            "acct_institution": "Test Bank",
+            "acct_type": "checking",
+        },
+    )
+    m = re.search(r'<option value="(\d+)"', html)
+    assert m, f"Account creation failed. Response snippet:\n{html[:500]}"
+    account_id = m.group(1)
+
+    ofx = _CURRENT_DATE_OFX_TEMPLATE.format(dtposted=date.today().strftime("%Y%m%d"))
+    html = _multipart_post(
+        f"{base_url}/import/upload",
+        {"account_id": account_id},
+        {"files": ("seed_today.ofx", ofx.encode())},
+    )
+    m = re.search(r'id="batch-(\d+)"', html)
+    assert m, f"Import upload failed. Response snippet:\n{html[:500]}"
+    import_id = m.group(1)
+
     _form_post(f"{base_url}/import/{import_id}/confirm")
 
     yield base_url

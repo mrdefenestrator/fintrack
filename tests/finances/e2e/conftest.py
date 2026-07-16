@@ -9,8 +9,8 @@ from pathlib import Path
 
 import pytest
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-FIXTURE_YAML = PROJECT_ROOT / "tests" / "fixtures" / "test_finances.yaml"
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
+FIXTURE_YAML = PROJECT_ROOT / "tests" / "finances" / "fixtures" / "test_finances.yaml"
 
 
 def _free_port() -> int:
@@ -66,7 +66,7 @@ def flask_server(tmp_path_factory):
     }
 
     proc = subprocess.Popen(
-        [sys.executable, str(PROJECT_ROOT / "web" / "app.py")],
+        [sys.executable, str(PROJECT_ROOT / "web_finances" / "app.py")],
         env=env,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,

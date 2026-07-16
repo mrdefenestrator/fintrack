@@ -4,13 +4,13 @@ from decimal import Decimal
 from flask import Blueprint, Response, current_app, render_template, request
 from sqlalchemy import select
 
-from spending.models import transactions as txn_table
-from spending.repository.accounts import list_accounts
-from spending.repository.aggregations import base_transaction_query
-from spending.repository.categories import get_category_names
-from spending.repository.corrections import apply_transaction_correction
-from spending.repository.merchants import set_merchant_category
-from spending.repository.transactions import get_transactions
+from fintrack.core.models import transactions as txn_table
+from fintrack.ledger.repository.accounts import list_accounts
+from fintrack.ledger.repository.aggregations import base_transaction_query
+from fintrack.ledger.repository.categories import get_category_names
+from fintrack.ledger.repository.corrections import apply_transaction_correction
+from fintrack.ledger.repository.merchants import set_merchant_category
+from fintrack.ledger.repository.transactions import get_transactions
 
 bp = Blueprint("transactions", __name__)
 

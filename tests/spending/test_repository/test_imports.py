@@ -3,9 +3,9 @@ from decimal import Decimal
 
 from sqlalchemy import select
 
-from spending.models import imports
-from spending.repository.accounts import add_account
-from spending.repository.imports import (
+from fintrack.core.models import imports
+from fintrack.ledger.repository.accounts import add_account
+from fintrack.ledger.repository.imports import (
     check_file_hash,
     confirm_import,
     create_import,

@@ -4,9 +4,9 @@ from datetime import date
 
 from flask import Blueprint, abort, current_app, render_template, request
 
-import finances
-from finances.loader import load_finances_from_db
-from finances.repository import accounts as repo_accounts
+from fintrack import finances_compat as finances
+from fintrack.core.loader import load_finances_from_db
+from fintrack.accounts import repository as repo_accounts
 
 from .common import (
     account_field_editable,

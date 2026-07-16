@@ -1,7 +1,7 @@
 from flask import Blueprint, current_app, render_template, request
 
-from spending.repository.categories import get_category_names
-from spending.repository.merchants import (
+from fintrack.ledger.repository.categories import get_category_names
+from fintrack.ledger.repository.merchants import (
     get_merchant_with_stats_by_id,
     list_merchants_with_stats,
     set_merchant_category,

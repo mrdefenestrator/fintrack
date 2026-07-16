@@ -33,9 +33,9 @@ def _wait_for_server(port: int, timeout: float = 10.0) -> None:
 def _seed_db(db_path: Path) -> None:
     """Seed (or re-seed) the test snapshot from the fixture YAML."""
     from sqlalchemy import create_engine
-    from finances.db import init_db
-    from finances.repository.snapshots import delete_snapshot, get_snapshot_id
-    from finances.yaml_import import import_yaml
+    from fintrack.core.db import init_db
+    from fintrack.snapshots.repository import delete_snapshot, get_snapshot_id
+    from fintrack.migrate.yaml_import import import_yaml
 
     engine = create_engine(f"sqlite:///{db_path}", future=True)
     init_db(engine)

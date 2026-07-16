@@ -4,7 +4,7 @@ import re
 
 from flask import Blueprint, abort, current_app, redirect, request, url_for
 
-from finances.repository.snapshots import (
+from fintrack.snapshots.repository import (
     copy_snapshot,
     create_snapshot,
     delete_snapshot,

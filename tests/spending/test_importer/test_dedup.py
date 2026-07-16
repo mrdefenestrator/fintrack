@@ -1,8 +1,8 @@
 from datetime import date
 from decimal import Decimal
 
-from spending.importer.dedup import compute_fingerprints, deduplicate
-from spending.types import ParsedTransaction
+from fintrack.ledger.importer.dedup import compute_fingerprints, deduplicate
+from fintrack.core.types import ParsedTransaction
 
 
 def test_compute_fingerprints_unique():

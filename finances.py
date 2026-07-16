@@ -20,6 +20,6 @@ finances package (finances/). This script delegates to finances.cli.main().
 import sys
 
 if __name__ == "__main__":
-    from finances.cli import main
+    from fintrack.cli.finances_cli import main
 
     sys.exit(main())

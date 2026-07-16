@@ -2,8 +2,9 @@ import os
 
 from flask import Flask
 
-from spending.db import get_engine, init_db
-from spending.repository.categories import seed_categories
+from fintrack.core.config import CATEGORIES_CONFIG
+from fintrack.core.db import get_engine, init_db
+from fintrack.ledger.repository.categories import seed_categories
 
 
 def create_app(db_path: str | None = None) -> Flask:
@@ -17,7 +18,7 @@ def create_app(db_path: str | None = None) -> Flask:
     app.config["engine"] = engine
 
     with engine.connect() as conn:
-        seed_categories(conn, "configs/categories.yaml")
+        seed_categories(conn, CATEGORIES_CONFIG)
 
     @app.template_filter("money")
     def money_filter(value, decimals=2):

@@ -1,14 +1,14 @@
 from datetime import date
 from decimal import Decimal
 
-from spending.repository.accounts import add_account
-from spending.repository.aggregations import get_monthly_category_totals
-from spending.repository.imports import (
+from fintrack.ledger.repository.accounts import add_account
+from fintrack.ledger.repository.aggregations import get_monthly_category_totals
+from fintrack.ledger.repository.imports import (
     confirm_import,
     create_import,
     insert_transactions,
 )
-from spending.repository.merchants import set_merchant_category
+from fintrack.ledger.repository.merchants import set_merchant_category
 
 
 def _seed_transactions(conn):

@@ -28,7 +28,7 @@ requires = ["setuptools>=64"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-include = ["spending*", "finances*", "web_spending*", "web_finances*"]
+include = ["fintrack*", "web_spending*", "web_finances*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

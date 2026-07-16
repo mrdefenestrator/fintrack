@@ -2,7 +2,7 @@ from unittest.mock import patch
 
 from click.testing import CliRunner
 
-from spending.cli import cli
+from fintrack.cli.spending_cli import cli
 
 
 def test_accounts_list_empty(tmp_path):
@@ -63,7 +63,7 @@ def test_import_ofx(tmp_path, sample_ofx):
         ],
     )
 
-    with patch("spending.cli.classify_and_cache", return_value=(0, None)):
+    with patch("fintrack.cli.spending_cli.classify_and_cache", return_value=(0, None)):
         result = runner.invoke(
             cli,
             [

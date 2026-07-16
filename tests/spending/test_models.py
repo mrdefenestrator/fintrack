@@ -5,12 +5,16 @@ def test_all_tables_created(engine):
     inspector = inspect(engine)
     table_names = set(inspector.get_table_names())
     expected = {
+        "snapshots",
         "accounts",
         "imports",
         "transactions",
         "merchant_cache",
         "transaction_corrections",
         "categories",
+        "budget_entries",
+        "asset_entries",
+        "balance_history",
     }
     assert expected == table_names
 

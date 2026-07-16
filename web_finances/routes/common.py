@@ -5,9 +5,9 @@ from datetime import date
 
 from flask import abort, current_app
 
-import finances
-from finances.loader import load_finances_from_db
-from finances.repository.snapshots import get_snapshot_id, list_snapshots
+from fintrack import finances_compat as finances
+from fintrack.core.loader import load_finances_from_db
+from fintrack.snapshots.repository import get_snapshot_id, list_snapshots
 
 
 def validate_snapshot(filename: str) -> int:

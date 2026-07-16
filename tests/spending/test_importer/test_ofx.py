@@ -1,7 +1,7 @@
 from datetime import date
 from decimal import Decimal
 
-from spending.importer.ofx import extract_ofx_metadata, parse_ofx
+from fintrack.ledger.importer.ofx import extract_ofx_metadata, parse_ofx
 
 
 def test_parse_ofx_returns_transactions(sample_ofx):

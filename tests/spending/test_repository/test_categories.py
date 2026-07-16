@@ -1,4 +1,4 @@
-from spending.repository.categories import (
+from fintrack.ledger.repository.categories import (
     seed_categories,
     list_categories,
     add_category,

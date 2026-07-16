@@ -1,4 +1,4 @@
-from spending.cli import cli
+from fintrack.cli.spending_cli import cli
 
 if __name__ == "__main__":
     cli()

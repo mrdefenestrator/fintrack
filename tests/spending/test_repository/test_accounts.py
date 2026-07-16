@@ -3,14 +3,14 @@ from datetime import date
 import pytest
 from sqlalchemy.exc import IntegrityError
 
-from spending.repository.accounts import (
+from fintrack.ledger.repository.accounts import (
     add_account,
     delete_account,
     edit_account,
     get_account_by_name,
     list_accounts,
 )
-from spending.repository.imports import (
+from fintrack.ledger.repository.imports import (
     confirm_import,
     create_import,
     insert_transactions,

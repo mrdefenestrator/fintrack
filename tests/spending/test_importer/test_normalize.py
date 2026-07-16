@@ -1,4 +1,4 @@
-from spending.importer.normalize import normalize_merchant
+from fintrack.ledger.importer.normalize import normalize_merchant
 
 
 def test_strip_sq_prefix():

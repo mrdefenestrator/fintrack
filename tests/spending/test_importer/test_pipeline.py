@@ -3,9 +3,9 @@ from decimal import Decimal
 import pytest
 from sqlalchemy import select
 
-from spending.importer import run_import
-from spending.models import imports
-from spending.repository.accounts import add_account
+from fintrack.ledger.importer import run_import
+from fintrack.core.models import imports
+from fintrack.ledger.repository.accounts import add_account
 
 
 @pytest.fixture

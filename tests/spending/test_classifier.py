@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock, patch
 
-from spending.classifier import classify_merchants, _build_prompt
+from fintrack.ledger.classifier import classify_merchants, _build_prompt
 
 
 def test_build_prompt():
@@ -25,7 +25,7 @@ def test_classify_merchants_returns_mapping():
     mock_client = MagicMock()
     mock_client.messages.create.return_value = mock_response
 
-    with patch("spending.classifier.Anthropic", return_value=mock_client):
+    with patch("fintrack.ledger.classifier.Anthropic", return_value=mock_client):
         result = classify_merchants(
             merchant_names=["WHOLE FOODS", "NETFLIX"],
             category_names=["Groceries", "Subscriptions", "Other"],

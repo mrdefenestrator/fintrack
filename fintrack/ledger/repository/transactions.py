@@ -3,7 +3,36 @@ from datetime import date
 
 from sqlalchemy import Connection, func, select
 
+from fintrack.core.coerce import (
+    AMOUNT_FILTER_TOLERANCE,
+    AmountFilterSpec,
+    parse_amount_filter,
+)
 from fintrack.ledger.repository.aggregations import base_transaction_query
+
+
+def _apply_amount_filter(stmt, amount_col, spec: AmountFilterSpec):
+    """Apply a parsed AmountFilterSpec to a query, comparing abs(amount)."""
+    abs_col = func.abs(amount_col)
+    if spec.kind == "tolerance":
+        low = spec.value - AMOUNT_FILTER_TOLERANCE
+        high = spec.value + AMOUNT_FILTER_TOLERANCE
+        stmt = stmt.where(abs_col.between(low, high))
+        if spec.sign == "neg":
+            stmt = stmt.where(amount_col < 0)
+        elif spec.sign == "pos":
+            stmt = stmt.where(amount_col > 0)
+    elif spec.kind == "range":
+        stmt = stmt.where(abs_col.between(spec.low, spec.high))
+    elif spec.kind == "gt":
+        stmt = stmt.where(abs_col > spec.value)
+    elif spec.kind == "gte":
+        stmt = stmt.where(abs_col >= spec.value)
+    elif spec.kind == "lt":
+        stmt = stmt.where(abs_col < spec.value)
+    elif spec.kind == "lte":
+        stmt = stmt.where(abs_col <= spec.value)
+    return stmt
 
 
 def get_transactions(
@@ -15,6 +44,7 @@ def get_transactions(
     account_id: int | None = None,
     search: str | None = None,
     status: str | None = None,
+    amount: str | None = None,
     import_id: int | None = None,
     sort: str | None = None,
     sort_dir: str | None = None,
@@ -22,7 +52,9 @@ def get_transactions(
 ) -> list[dict]:
     """Get transactions with resolved category and merchant.
 
-    Filters are optional and combine with AND.
+    Filters are optional and combine with AND. `amount` accepts the search
+    syntax parsed by fintrack.core.coerce.parse_amount_filter (e.g.
+    "12.34", "-12.34", "10-20", ">50"); invalid amount text is ignored.
     """
     from fintrack.core.models import transactions
 
@@ -56,6 +88,10 @@ def get_transactions(
         stmt = stmt.where(
             subq.c.raw_description.ilike(pattern) | subq.c.merchant.ilike(pattern)
         )
+
+    amount_spec = parse_amount_filter(amount)
+    if amount_spec is not None:
+        stmt = _apply_amount_filter(stmt, subq.c.amount, amount_spec)
 
     if status == "corrected":
         stmt = stmt.where(subq.c.correction_id.isnot(None))

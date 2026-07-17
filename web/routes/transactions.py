@@ -24,6 +24,7 @@ def index():
     category = request.args.get("category")
     account_id = request.args.get("account_id", type=int)
     search = request.args.get("search")
+    amount = request.args.get("amount")
     status = request.args.get("status")
     all_months = request.args.get("all_months") == "true"
     sort = request.args.get("sort") or None
@@ -38,6 +39,7 @@ def index():
             category=category,
             account_id=account_id,
             search=search,
+            amount=amount,
             status=status,
             sort=sort,
             sort_dir=sort_dir,
@@ -74,6 +76,7 @@ def index():
         selected_category=category,
         selected_account=account_id,
         search=search or "",
+        amount=amount or "",
         selected_status=status,
         all_months=all_months,
         sort=sort,

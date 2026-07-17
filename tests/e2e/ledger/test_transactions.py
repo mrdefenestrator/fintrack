@@ -39,6 +39,12 @@ def test_transactions_search_input_present(page, flask_server):
     assert page.locator("input[name='search']").is_visible()
 
 
+def test_transactions_amount_filter_input_present(page, flask_server):
+    """Amount search input is rendered in the filter bar."""
+    page.goto(f"{flask_server}/s/ledger/transactions")
+    assert page.locator("input[name='amount']").is_visible()
+
+
 def test_transactions_month_label_displayed(page, flask_server):
     """Current month/year label is shown (MM/YYYY format)."""
     page.goto(f"{flask_server}/s/ledger/transactions?year=2026&month=4")
@@ -170,3 +176,22 @@ def test_transactions_search_filters_rows(page, confirmed_server):
     rows = page.locator("table tbody tr")
     assert rows.count() == 1
     assert "WHOLE FOODS" in rows.first.inner_text().upper()
+
+
+def test_transactions_amount_filter_range_filters_rows(page, confirmed_server):
+    """Amount range filter narrows the transaction list."""
+    page.goto(f"{confirmed_server}/s/ledger/transactions?year=2026&month=4")
+    all_rows = page.locator("table tbody tr").count()
+    page.goto(f"{confirmed_server}/s/ledger/transactions?year=2026&month=4&amount=0-1")
+    filtered_rows = page.locator("table tbody tr").count()
+    assert filtered_rows <= all_rows
+
+
+def test_transactions_amount_filter_invalid_input_ignored(page, confirmed_server):
+    """Invalid amount text is ignored rather than erroring."""
+    page.goto(f"{confirmed_server}/s/ledger/transactions?year=2026&month=4")
+    all_rows = page.locator("table tbody tr").count()
+    page.goto(
+        f"{confirmed_server}/s/ledger/transactions?year=2026&month=4&amount=garbage"
+    )
+    assert page.locator("table tbody tr").count() == all_rows

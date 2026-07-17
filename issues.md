@@ -48,6 +48,11 @@
     candidate; otherwise your existing selection is preserved (it used to be
     unconditionally reset to "Select account...").
 11. Search transactions by amount?  Would be helpful in correlating certain transactions like transfers.  Some sort of fuzzy search?
+    **FIXED** — new Amount box in the transactions filter bar: `12.34`
+    matches either sign within ±$0.50 (both transfer legs show), `-12.34` /
+    `+12.34` restrict sign, `10-20` / `10..20` are ranges, `>50` `<25` `>=`
+    `<=` compare. Invalid input is silently ignored; combines with all
+    existing filters.
 12. Merchants and Transactions lists edit is very clunky / slow.  CLick far right, mouse to far left, make change, save, repeat.  Maybe these should use a display and editing system similar to the "spreadsheet" style we see on the accounts/budget/assts pages?
 13. Is there a way to get historical balances out of empower or fidelity for 401k accounts?  This would support the projections view, I think.
 14. Do we have a feature for flagging deviations from expectations for spending categories / merchants?  This could be extended into a budget check feature.  Some real design work / collaboration is needed here.

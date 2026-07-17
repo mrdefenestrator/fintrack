@@ -1,4 +1,4 @@
-{% set filter_qs %}{% if selected_account %}&account_id={{ selected_account }}{% endif %}{% if selected_category %}&category={{ selected_category | urlencode }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}{% if search %}&search={{ search | urlencode }}{% endif %}{% if all_months %}&all_months=true{% endif %}{% endset %}
+{% set filter_qs %}{% if selected_account %}&account_id={{ selected_account }}{% endif %}{% if selected_category %}&category={{ selected_category | urlencode }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}{% if search %}&search={{ search | urlencode }}{% endif %}{% if amount %}&amount={{ amount | urlencode }}{% endif %}{% if all_months %}&all_months=true{% endif %}{% endset %}
 {% set ctrl = "border border-gray-300 dark:border-gray-600 rounded-md px-3 h-8 text-sm bg-white dark:bg-gray-700 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500" %}
 
 <span id="month-state" data-year="{{ year }}" data-month="{{ month }}" hidden></span>
@@ -29,6 +29,10 @@
                hx-get="/s/{{ filename }}/transactions" hx-target="#content" hx-include="[name]" hx-push-url="true"
                hx-trigger="keyup changed delay:300ms"
                class="w-44 {{ ctrl }}">
+        <input type="text" name="amount" value="{{ amount }}" placeholder="Amount (e.g. 12.34, >50, 10-20)"
+               hx-get="/s/{{ filename }}/transactions" hx-target="#content" hx-include="[name]" hx-push-url="true"
+               hx-trigger="keyup changed delay:300ms"
+               class="w-52 {{ ctrl }}">
         <label class="flex items-center gap-1.5 text-sm text-gray-600 dark:text-gray-300 cursor-pointer select-none ml-1">
             <input type="checkbox" name="all_months" value="true"
                    {{ 'checked' if all_months }}
@@ -54,7 +58,7 @@
     {% endif %}
 </div>
 
-{% set has_filters = selected_category or selected_account or selected_status or search %}
+{% set has_filters = selected_category or selected_account or selected_status or search or amount %}
 <div class="flex items-center justify-between mb-3 text-sm text-gray-500 dark:text-gray-400">
     <span>
         {{ txn_count }} transaction{{ 's' if txn_count != 1 else '' }}

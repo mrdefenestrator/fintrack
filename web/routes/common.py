@@ -59,6 +59,18 @@ def get_default_filename() -> str:
     return names[0] if names else ""
 
 
+def quick_totals(data: dict, today: date | None = None) -> dict:
+    """The header quick totals shown on the Accounts/Budget/Assets nav tabs."""
+    today = today or date.today()
+    return {
+        "n2": calculations.liquid_minus_cc(data.get("accounts") or []),
+        "n3": calculations.projected_change_to_eom(
+            data.get("budget") or [], today.year, today.month, today.day
+        ),
+        "n6": calculations.net_nonliquid_total(data.get("assets") or []),
+    }
+
+
 def get_common_context(snapshot_id: int, filename: str, edit_mode: bool):
     """Data and computed values shared by all views."""
     engine = current_app.config["engine"]
@@ -73,9 +85,8 @@ def get_common_context(snapshot_id: int, filename: str, edit_mode: bool):
     today = date.today()
     year, month, day = today.year, today.month, today.day
 
-    n2 = calculations.liquid_minus_cc(accs)
-    n3 = calculations.projected_change_to_eom(budget, year, month, day)
-    n6 = calculations.net_nonliquid_total(assets)
+    totals = quick_totals(data, today)
+    n2, n3, n6 = totals["n2"], totals["n3"], totals["n6"]
     account_display = tables._account_display_by_id(accs)
 
     return {

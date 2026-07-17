@@ -65,7 +65,18 @@
 13. Is there a way to get historical balances out of empower or fidelity for 401k accounts?  This would support the projections view, I think.
 14. Do we have a feature for flagging deviations from expectations for spending categories / merchants?  This could be extended into a budget check feature.  Some real design work / collaboration is needed here.
 15. In the spreadsheet views, it's hard to see when the sheet is scrolled to the top or bottom.  When the sheet is not at the top, we should have a subtle drop shadow on the sheet under the header row, and the opposite for the bottom.  When not at the bottom, there should be a subtle drop shadow on the sheet above the total row
+    **FIXED** — accounts/budget/assets sheets show a subtle gradient shadow
+    under the sticky header when scrolled down and above the total row when
+    not at the bottom (light + dark variants). Opt-in via a
+    `data-sheet-scroll` attribute so future sheets can adopt it; survives
+    HTMX swaps and row count changes.
 16. The quick totals in the ui tabs are not always visible, and as we move between tabs, the tab row grows and shrinks vertically depending on which tab is selected (did it come from the finances app or the spending app)
+    **FIXED** — two causes, both addressed: (a) every tab now always renders
+    a two-line label+total structure so the tab row height is constant on
+    every page; (b) the spending pages (transactions/trends/import/
+    merchants) never computed the totals at all — a context processor now
+    supplies n2/n3/n6 on every full-page render, so the quick totals are
+    visible on every tab.
 
 Tracebacks from failed import categorization: **FIXED** — classifier now
 chunks merchants into batches of 40, raised max_tokens 1024→4096, detects

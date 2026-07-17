@@ -29,6 +29,22 @@ def test_nav_links(page, flask_server):
     assert "Assets" in page.title()
 
 
+def test_tab_row_height_stable_across_tabs(page, flask_server):
+    """Header (title row + nav tab row) must be the same height whether the
+    current route computes quick totals (accounts) or not (transactions) —
+    regression test for the tab-row vertical jitter (QA item 16). Every tab
+    now always renders a totals line (visible or an invisible placeholder),
+    so the nav row can no longer grow/shrink when switching tabs."""
+    page.goto(f"{flask_server}/s/test_finances/accounts")
+    accounts_box = page.locator("#main-header").bounding_box()
+
+    page.goto(f"{flask_server}/s/test_finances/transactions")
+    transactions_box = page.locator("#main-header").bounding_box()
+
+    assert accounts_box is not None and transactions_box is not None
+    assert accounts_box["height"] == pytest.approx(transactions_box["height"], abs=1)
+
+
 def test_global_edit_mode_toggle(page, flask_server):
     """Global lock/unlock button in header toggles edit mode across tabs."""
     page.goto(f"{flask_server}/s/test_finances/accounts")

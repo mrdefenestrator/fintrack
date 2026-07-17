@@ -23,6 +23,45 @@ def test_budget_shows_total_row(page, flask_server):
     assert total_cell.count() >= 1
 
 
+def test_scroll_shadows_toggle_with_scroll_position(page, flask_server):
+    """QA item 15: the sheet container ([data-sheet-scroll]) shows a shadow
+    under the sticky header once scrolled down, and a shadow above the total
+    row until scrolled to the bottom; both hide at their respective extremes.
+
+    Shrink the viewport so the fixture's budget rows overflow the sheet and
+    it actually becomes scrollable.
+    """
+    page.set_viewport_size({"width": 800, "height": 320})
+    page.goto(f"{flask_server}/s/test_finances/budget")
+
+    container = page.locator("[data-sheet-scroll]")
+    top_shadow = container.locator(".sheet-scroll-shadow--top")
+    bottom_shadow = container.locator(".sheet-scroll-shadow--bottom")
+
+    # Sanity check the fixture actually overflows this viewport.
+    scroll_height = container.evaluate("el => el.scrollHeight")
+    client_height = container.evaluate("el => el.clientHeight")
+    assert scroll_height > client_height, (
+        "fixture/viewport no longer overflows — adjust viewport size"
+    )
+
+    # At the top: no top shadow; bottom shadow shown (more to scroll).
+    assert "is-visible" not in (top_shadow.get_attribute("class") or "")
+    assert "is-visible" in (bottom_shadow.get_attribute("class") or "")
+
+    # Scroll to the bottom: top shadow shown, bottom shadow gone.
+    container.evaluate("el => el.scrollTo(0, el.scrollHeight)")
+    page.wait_for_timeout(100)
+    assert "is-visible" in (top_shadow.get_attribute("class") or "")
+    assert "is-visible" not in (bottom_shadow.get_attribute("class") or "")
+
+    # Scroll back to the top: shadows revert.
+    container.evaluate("el => el.scrollTo(0, 0)")
+    page.wait_for_timeout(100)
+    assert "is-visible" not in (top_shadow.get_attribute("class") or "")
+    assert "is-visible" in (bottom_shadow.get_attribute("class") or "")
+
+
 def test_budget_click_to_edit(page, flask_server):
     """Clicking a cell in edit mode opens an input."""
     page.goto(f"{flask_server}/s/test_finances/budget")

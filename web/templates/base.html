@@ -225,6 +225,54 @@
         /* File picker row: reveal action buttons on hover */
         .file-row-actions { opacity: 0; pointer-events: none; transition: opacity 0.1s ease; }
         .file-row:hover .file-row-actions { opacity: 1; pointer-events: auto; }
+
+        /* Sheet scroll shadows (opt-in via [data-sheet-scroll]).
+           Mark a scrolling table container (the element with `overflow: auto`
+           — e.g. .table-scroll-container) with the `data-sheet-scroll`
+           attribute to get subtle drop shadows that appear under the sticky
+           header once scrolled down, and above the sticky total row until
+           scrolled to the bottom. web/static/js/sheet-scroll.js scans for
+           this attribute, inserts the two shadow overlays, and toggles their
+           visibility as the container scrolls (also re-scanning after htmx
+           swaps). Box-shadow on <thead>/<tr> is unreliable with
+           border-collapse, so the shadows are plain overlay divs positioned
+           against the container instead of against the table rows. */
+        [data-sheet-scroll] {
+            position: relative;
+        }
+
+        .sheet-scroll-shadow {
+            position: absolute;
+            left: 0;
+            right: 0;
+            height: 8px;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.15s ease;
+            z-index: 6;
+        }
+
+        .sheet-scroll-shadow--top {
+            top: var(--sheet-header-h, 0px);
+            background: linear-gradient(to bottom, rgba(0, 0, 0, 0.16), rgba(0, 0, 0, 0));
+        }
+
+        .sheet-scroll-shadow--bottom {
+            bottom: var(--sheet-footer-h, 0px);
+            background: linear-gradient(to top, rgba(0, 0, 0, 0.16), rgba(0, 0, 0, 0));
+        }
+
+        .sheet-scroll-shadow.is-visible {
+            opacity: 1;
+        }
+
+        .dark .sheet-scroll-shadow--top {
+            background: linear-gradient(to bottom, rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0));
+        }
+
+        .dark .sheet-scroll-shadow--bottom {
+            background: linear-gradient(to top, rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0));
+        }
     </style>
 </head>
 
@@ -417,49 +465,69 @@
             </div><!-- end right controls -->
         </div><!-- end row 1 -->
 
-        <!-- Row 2: nav tabs (full width) -->
+        <!-- Row 2: nav tabs (full width)
+
+             Every tab renders exactly two lines: a label and a totals line,
+             regardless of whether that route computes a quick total, so the
+             tab row is a constant height on every page. Routes that don't
+             call get_common_context (e.g. transactions, trends) leave
+             n2/n3/n6 as None; rather than omitting the totals line entirely
+             (which used to make the whole nav row shorter and visibly jump
+             when switching tabs), the line is always rendered and the
+             `invisible` utility class (visibility:hidden, still occupies
+             layout space) hides it when there's nothing to show. Do not
+             reintroduce a conditional that wraps the entire totals span in
+             an if-block keyed on n2/n3/n6 being set — that recreates the
+             jitter bug. -->
         {% if filename %}
         {% set _tab_active = 'border-white text-white' %}
         {% set _tab_idle = 'border-transparent text-blue-100 hover:text-white hover:border-blue-400' %}
+        {% set _tab_total_cls = 'text-xs font-normal tabular-nums' %}
         <nav class="flex border-t border-blue-700">
             <a href="{{ url_for('status.snapshot_status', filename=filename, edit=1 if edit_mode else none) }}"
                 class="flex-1 py-2 flex flex-col items-center text-sm font-medium border-b-2 transition-colors {% if active_tab is defined and active_tab == 'status' %}{{ _tab_active }}{% else %}{{ _tab_idle }}{% endif %}">
                 <span>Status</span>
+                <span class="{{ _tab_total_cls }} invisible" aria-hidden="true">&nbsp;</span>
             </a>
             <a href="{{ url_for('accounts.accounts_view', filename=filename, edit=1 if edit_mode else none) }}"
                 class="flex-1 py-2 flex flex-col items-center text-sm font-medium border-b-2 transition-colors {% if active_tab is defined and active_tab == 'accounts' %}{{ _tab_active }}{% else %}{{ _tab_idle }}{% endif %}">
                 <span>Accounts</span>
-                {% if n2 is not none %}<span class="text-xs font-normal tabular-nums {% if n2 | display_is_negative %}text-red-300{% else %}opacity-75{% endif %}">{{ n2 | fmt_money_header }}</span>{% endif %}
+                <span class="{{ _tab_total_cls }} {% if n2 is none %}invisible{% elif n2 | display_is_negative %}text-red-300{% else %}opacity-75{% endif %}" {% if n2 is none %}aria-hidden="true"{% endif %}>{{ (n2 | fmt_money_header) if n2 is not none else ' ' }}</span>
             </a>
             <a href="/s/{{ filename }}/transactions"
                 class="flex-1 py-2 flex flex-col items-center text-sm font-medium border-b-2 transition-colors {% if active_tab is defined and active_tab == 'transactions' %}{{ _tab_active }}{% else %}{{ _tab_idle }}{% endif %}">
                 <span>Transactions</span>
+                <span class="{{ _tab_total_cls }} invisible" aria-hidden="true">&nbsp;</span>
             </a>
             <a href="/s/{{ filename }}/trends"
                 class="flex-1 py-2 flex flex-col items-center text-sm font-medium border-b-2 transition-colors {% if active_tab is defined and active_tab == 'trends' %}{{ _tab_active }}{% else %}{{ _tab_idle }}{% endif %}">
                 <span>Trends</span>
+                <span class="{{ _tab_total_cls }} invisible" aria-hidden="true">&nbsp;</span>
             </a>
             <a href="{{ url_for('budget.budget_view', filename=filename, edit=1 if edit_mode else none) }}"
                 class="flex-1 py-2 flex flex-col items-center text-sm font-medium border-b-2 transition-colors {% if active_tab is defined and active_tab == 'budget' %}{{ _tab_active }}{% else %}{{ _tab_idle }}{% endif %}">
                 <span>Budget</span>
-                {% if n3 is not none %}<span class="text-xs font-normal tabular-nums {% if n3 | display_is_negative %}text-red-300{% else %}opacity-75{% endif %}">{{ n3 | fmt_money_header }}</span>{% endif %}
+                <span class="{{ _tab_total_cls }} {% if n3 is none %}invisible{% elif n3 | display_is_negative %}text-red-300{% else %}opacity-75{% endif %}" {% if n3 is none %}aria-hidden="true"{% endif %}>{{ (n3 | fmt_money_header) if n3 is not none else ' ' }}</span>
             </a>
             <a href="{{ url_for('assets.assets_view', filename=filename, edit=1 if edit_mode else none) }}"
                 class="flex-1 py-2 flex flex-col items-center text-sm font-medium border-b-2 transition-colors {% if active_tab is defined and active_tab == 'assets' %}{{ _tab_active }}{% else %}{{ _tab_idle }}{% endif %}">
                 <span>Assets</span>
-                {% if n6 is not none %}<span class="text-xs font-normal tabular-nums {% if n6 | display_is_negative %}text-red-300{% else %}opacity-75{% endif %}">{{ n6 | fmt_money_header }}</span>{% endif %}
+                <span class="{{ _tab_total_cls }} {% if n6 is none %}invisible{% elif n6 | display_is_negative %}text-red-300{% else %}opacity-75{% endif %}" {% if n6 is none %}aria-hidden="true"{% endif %}>{{ (n6 | fmt_money_header) if n6 is not none else ' ' }}</span>
             </a>
             <a href="{{ url_for('projections.projections_view', filename=filename, edit=1 if edit_mode else none) }}"
                 class="flex-1 py-2 flex flex-col items-center text-sm font-medium border-b-2 transition-colors {% if active_tab is defined and active_tab == 'projections' %}{{ _tab_active }}{% else %}{{ _tab_idle }}{% endif %}">
                 <span>Projections</span>
+                <span class="{{ _tab_total_cls }} invisible" aria-hidden="true">&nbsp;</span>
             </a>
             <a href="/s/{{ filename }}/import"
                 class="flex-1 py-2 flex flex-col items-center text-sm font-medium border-b-2 transition-colors {% if active_tab is defined and active_tab == 'import' %}{{ _tab_active }}{% else %}{{ _tab_idle }}{% endif %}">
                 <span>Import</span>
+                <span class="{{ _tab_total_cls }} invisible" aria-hidden="true">&nbsp;</span>
             </a>
             <a href="/s/{{ filename }}/merchants"
                 class="flex-1 py-2 flex flex-col items-center text-sm font-medium border-b-2 transition-colors {% if active_tab is defined and active_tab == 'merchants' %}{{ _tab_active }}{% else %}{{ _tab_idle }}{% endif %}">
                 <span>Merchants</span>
+                <span class="{{ _tab_total_cls }} invisible" aria-hidden="true">&nbsp;</span>
             </a>
         </nav>
         {% endif %}
@@ -471,6 +539,7 @@
 
     <script src="{{ url_for('static', filename='js/sortable.js') }}"></script>
     <script src="{{ url_for('static', filename='js/ledger.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/sheet-scroll.js') }}"></script>
 </body>
 
 </html>

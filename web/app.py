@@ -12,7 +12,7 @@ import os
 from decimal import Decimal
 from pathlib import Path
 
-from flask import Flask, g, render_template
+from flask import Flask, g, render_template, request
 
 # Add project root for direct-execution mode (python web/app.py)
 import sys
@@ -97,14 +97,17 @@ def create_app(db_path: str | None = None) -> Flask:
         """Chrome defaults for pages that don't build the finances context.
 
         The snapshot-scoped ledger blueprints populate g; explicit
-        render_template kwargs always win over these.
+        render_template kwargs always win over these. Quick totals (n2/n3/n6)
+        are computed for full-page renders so the nav tabs show them on every
+        page; HTMX partial responses never include the header, so they skip
+        the extra load.
         """
         filename = getattr(g, "filename", None)
         if filename is None:
             return {}
         with engine.connect() as conn:
             available_files = list_snapshots(conn)
-        return {
+        defaults = {
             "filename": filename,
             "active_file": filename,
             "available_files": available_files,
@@ -113,6 +116,15 @@ def create_app(db_path: str | None = None) -> Flask:
             "n3": None,
             "n6": None,
         }
+        snapshot_id = getattr(g, "snapshot_id", None)
+        if snapshot_id is not None and not request.headers.get("HX-Request"):
+            from fintrack.core.loader import load_finances_from_db
+            from web.routes.common import quick_totals
+
+            with engine.connect() as conn:
+                data = load_finances_from_db(conn, snapshot_id)
+            defaults.update(quick_totals(data))
+        return defaults
 
     @app.context_processor
     def _account_type_options():

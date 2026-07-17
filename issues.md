@@ -14,6 +14,8 @@
 12. Merchants and Transactions lists edit is very clunky / slow.  CLick far right, mouse to far left, make change, save, repeat.  Maybe these should use a display and editing system similar to the "spreadsheet" style we see on the accounts/budget/assts pages?
 13. Is there a way to get historical balances out of empower or fidelity for 401k accounts?  This would support the projections view, I think.
 14. Do we have a feature for flagging deviations from expectations for spending categories / merchants?  This could be extended into a budget check feature.  Some real design work / collaboration is needed here.
+15. In the spreadsheet views, it's hard to see when the sheet is scrolled to the top or bottom.  When the sheet is not at the top, we should have a subtle drop shadow on the sheet under the header row, and the opposite for the bottom.  When not at the bottom, there should be a subtle drop shadow on the sheet above the total row
+16. The quick totals in the ui tabs are not always visible, and as we move between tabs, the tab row grows and shrinks vertically depending on which tab is selected (did it come from the finances app or the spending app)
 
 Tracebacks from failed import categorization:
 

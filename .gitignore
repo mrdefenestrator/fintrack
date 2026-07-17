@@ -9,7 +9,6 @@ __pycache__/
 *.db
 *.egg-info/
 data/*
-!data/example.yaml
 source/
 docker-compose.yml
 *.csv

@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% block title %}Projections — fintrack{% endblock %}
+{% block content %}
+
+<!-- Controls: horizon + estimator toggles (linkable query params) -->
+<div class="flex flex-wrap items-center gap-4 mb-4 text-sm">
+    <div class="flex items-center gap-1">
+        <span class="text-gray-500 dark:text-gray-400 mr-1">Months:</span>
+        {% for choice in month_choices %}
+        <a href="{{ url_for('projections.projections_view', filename=filename, months=choice, estimate=1 if estimate else none, edit=1 if edit_mode else none) }}"
+            class="px-2 py-0.5 rounded {% if months == choice %}bg-blue-600 text-white{% else %}bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700{% endif %}">
+            {{ choice }}
+        </a>
+        {% endfor %}
+    </div>
+    <a href="{{ url_for('projections.projections_view', filename=filename, months=months, estimate=none if estimate else 1, edit=1 if edit_mode else none) }}"
+        data-estimate-toggle
+        class="flex items-center gap-1.5 px-2 py-0.5 rounded {% if estimate %}bg-blue-600 text-white{% else %}bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700{% endif %}">
+        <span class="inline-block w-3 h-3 rounded-sm border {% if estimate %}bg-white border-white{% else %}border-gray-400 dark:border-gray-500{% endif %}"></span>
+        Estimate unscheduled spend
+    </a>
+</div>
+
+{% if result.warnings %}
+<div class="mb-4 max-w-2xl rounded border border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-900/20 px-3 py-2 text-sm text-red-700 dark:text-red-300">
+    {% for w in result.warnings %}
+    <div data-projection-warning>⚠ {{ w.account.name }} falls to {{ w.balance | fmt_money }} in {{ w.month_label }}
+        (minimum {{ w.minimum | fmt_money }})</div>
+    {% endfor %}
+</div>
+{% endif %}
+
+<!-- Chart: liquid total + net worth -->
+{% if chart %}
+<section class="mb-6">
+    <div class="flex items-center gap-4 text-xs text-gray-600 dark:text-gray-300 mb-1">
+        <span class="flex items-center gap-1"><span class="inline-block w-3 h-0.5" style="background:#3B82F6"></span>
+            Liquid total</span>
+        <span class="flex items-center gap-1"><span class="inline-block w-3 h-0.5" style="background:#10B981"></span>
+            Net worth</span>
+    </div>
+    <svg data-projection-chart viewBox="0 0 {{ chart.width }} {{ chart.height + 18 }}" class="w-full max-w-3xl bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded shadow-sm"
+        preserveAspectRatio="xMinYMin meet">
+        {% if chart.show_zero %}
+        <line x1="0" x2="{{ chart.width }}" y1="{{ chart.zero_y }}" y2="{{ chart.zero_y }}"
+            stroke="currentColor" stroke-opacity="0.25" stroke-dasharray="4 3" />
+        {% endif %}
+        <polyline fill="none" stroke="#3B82F6" stroke-width="2" points="{{ chart.liquid_points }}" />
+        <polyline fill="none" stroke="#10B981" stroke-width="2" points="{{ chart.net_worth_points }}" />
+        <text x="4" y="{{ chart.hi_y + 10 }}" class="fill-gray-400" font-size="10">{{ chart.hi | fmt_money }}</text>
+        <text x="4" y="{{ chart.lo_y - 3 }}" class="fill-gray-400" font-size="10">{{ chart.lo | fmt_money }}</text>
+        {% for tick in chart.ticks %}
+        <text x="{{ tick.x }}" y="{{ chart.height + 12 }}" class="fill-gray-400" font-size="10"
+            text-anchor="middle">{{ tick.label }}</text>
+        {% endfor %}
+    </svg>
+</section>
+{% endif %}
+
+<!-- Accounts × months ending balances -->
+<section class="mb-6 min-h-0">
+    <div class="overflow-auto max-w-full border border-gray-300 dark:border-gray-600 rounded shadow-sm">
+        <table data-projection-table class="text-sm border-collapse bg-white dark:bg-gray-800 w-full">
+            <thead>
+                <tr class="bg-gray-100 dark:bg-gray-700 border-b border-gray-300 dark:border-gray-600">
+                    <th class="px-1.5 py-1 text-left font-medium text-gray-800 dark:text-gray-100 sticky left-0 bg-gray-100 dark:bg-gray-700">Account</th>
+                    {% for m in result.months %}
+                    <th class="px-1.5 py-1 text-right font-medium text-gray-800 dark:text-gray-100 tabular-nums whitespace-nowrap">{{ m.label }}</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in result.rows %}
+                <tr class="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                    <td class="px-1.5 py-0.5 whitespace-nowrap sticky left-0 bg-white dark:bg-gray-800">{{ row.account.name }}</td>
+                    {% for bal in row.balances %}
+                    <td class="px-1.5 py-0.5 text-right tabular-nums whitespace-nowrap
+                        {%- if row.below[loop.index0] %} bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 font-medium
+                        {%- elif bal | display_is_negative %} text-red-600 dark:text-red-400{% endif %}">
+                        {{ bal | fmt_money }}</td>
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+                {% if result.has_unassigned %}
+                <tr class="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 italic text-gray-600 dark:text-gray-300">
+                    <td class="px-1.5 py-0.5 whitespace-nowrap sticky left-0 bg-white dark:bg-gray-800">(unassigned)</td>
+                    {% for v in result.unassigned %}
+                    <td class="px-1.5 py-0.5 text-right tabular-nums whitespace-nowrap{% if v | display_is_negative %} text-red-600 dark:text-red-400{% endif %}">
+                        {{ v | fmt_money }}</td>
+                    {% endfor %}
+                </tr>
+                {% endif %}
+                <tr class="bg-gray-100 dark:bg-gray-700 border-t-2 border-gray-300 dark:border-gray-600 font-medium">
+                    <td class="px-1.5 py-1 whitespace-nowrap sticky left-0 bg-gray-100 dark:bg-gray-700">Liquid total</td>
+                    {% for v in result.liquid %}
+                    <td class="px-1.5 py-1 text-right tabular-nums whitespace-nowrap{% if v | display_is_negative %} text-red-600 dark:text-red-400{% endif %}">
+                        {{ v | fmt_money }}</td>
+                    {% endfor %}
+                </tr>
+                <tr class="bg-gray-100 dark:bg-gray-700 font-medium">
+                    <td class="px-1.5 py-1 whitespace-nowrap sticky left-0 bg-gray-100 dark:bg-gray-700">Net worth</td>
+                    {% for v in result.net_worth %}
+                    <td class="px-1.5 py-1 text-right tabular-nums whitespace-nowrap{% if v | display_is_negative %} text-red-600 dark:text-red-400{% endif %}">
+                        {{ v | fmt_money }}</td>
+                    {% endfor %}
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</section>
+
+{% if result.estimate is not none %}
+<section class="mb-6 max-w-md text-sm">
+    <h2 class="font-medium text-gray-800 dark:text-gray-100 mb-1">
+        Estimated unscheduled spend: {{ result.estimate.monthly | fmt_money }}/month
+    </h2>
+    <p class="text-xs text-gray-500 dark:text-gray-400 mb-2">
+        Trailing 3-month category averages, excluding categories claimed by budget entries.
+    </p>
+    <table class="w-full border-collapse border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 shadow-sm">
+        <tbody>
+            {% for category, avg in result.estimate.by_category | dictsort(by='value') %}
+            <tr class="border-b border-gray-200 dark:border-gray-700">
+                <td class="px-1.5 py-0.5">{{ category }}</td>
+                <td class="px-1.5 py-0.5 text-right tabular-nums text-red-600 dark:text-red-400">{{ avg | fmt_money }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>
+{% endif %}
+
+{% endblock %}

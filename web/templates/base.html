@@ -437,6 +437,10 @@
                 <span>Assets</span>
                 {% if n6 is not none %}<span class="text-xs font-normal tabular-nums {% if n6 | display_is_negative %}text-red-300{% else %}opacity-75{% endif %}">{{ n6 | fmt_money_header }}</span>{% endif %}
             </a>
+            <a href="{{ url_for('projections.projections_view', filename=filename, edit=1 if edit_mode else none) }}"
+                class="flex-1 py-2 flex flex-col items-center text-sm font-medium border-b-2 transition-colors {% if active_tab is defined and active_tab == 'projections' %}{{ _tab_active }}{% else %}{{ _tab_idle }}{% endif %}">
+                <span>Projections</span>
+            </a>
             <a href="/s/{{ filename }}/import"
                 class="flex-1 py-2 flex flex-col items-center text-sm font-medium border-b-2 transition-colors {% if active_tab is defined and active_tab == 'import' %}{{ _tab_active }}{% else %}{{ _tab_idle }}{% endif %}">
                 <span>Import</span>

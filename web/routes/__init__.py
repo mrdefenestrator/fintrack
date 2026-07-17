@@ -6,6 +6,7 @@ from .budget import budget_bp
 from .assets import assets_bp
 from .files import files_bp
 from .edit_mode import edit_mode_bp
+from .projections import projections_bp
 from .imports import bp as imports_bp
 from .merchants import bp as merchants_bp
 from .transactions import bp as transactions_bp
@@ -17,6 +18,7 @@ def register_blueprints(app):
     app.register_blueprint(accounts_bp)
     app.register_blueprint(budget_bp)
     app.register_blueprint(assets_bp)
+    app.register_blueprint(projections_bp)
     app.register_blueprint(files_bp)
     app.register_blueprint(edit_mode_bp)
     app.register_blueprint(imports_bp)

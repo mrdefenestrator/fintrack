@@ -41,6 +41,7 @@ from fintrack.cli.ledger import (  # noqa: E402
     staging,
 )
 from fintrack.cli.migrate_legacy import migrate_legacy  # noqa: E402
+from fintrack.cli.projections import project  # noqa: E402
 from fintrack.cli.networth import (  # noqa: E402
     accounts,
     assets,
@@ -69,6 +70,7 @@ for command in (
     assets,
     debts,
     funding,
+    project,
     serve,
     migrate_legacy,
 ):

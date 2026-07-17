@@ -124,10 +124,11 @@ ACCOUNTS_FIELD_TO_COL = [
     "statement_balance",
     "statement_due_day_of_month",
     "paymentAccountRef",
+    "minimum_balance",
 ]
 
 # Right-aligned column indices for accounts
-ACCOUNTS_RIGHT_ALIGN_COLS = (3, 4, 5, 6, 7, 8)
+ACCOUNTS_RIGHT_ALIGN_COLS = (3, 4, 5, 6, 7, 8, 10)
 
 # Fields that are right-aligned in accounts
 ACCOUNTS_RIGHT_ALIGN_FIELDS = {
@@ -137,14 +138,24 @@ ACCOUNTS_RIGHT_ALIGN_FIELDS = {
     "rewards_balance",
     "statement_balance",
     "statement_due_day_of_month",
+    "minimum_balance",
 }
+
+# Account types for which the Reserve column (accounts.minimum_balance) is
+# meaningful and therefore editable: cash-like accounts a household might
+# want to keep a floor balance in. Credit cards, loans, gift cards, and
+# "other" have no such reserve concept.
+RESERVE_EDITABLE_TYPES = {"checking", "savings", "wallet", "digital_wallet"}
 
 
 def account_field_editable(acc, field: str) -> bool:
     """Credit card rows: balance not editable (calculated); only CC can edit
     limit, available, rewards, statement, due. Non-CC: balance editable;
-    limit/available/rewards/statement/due not."""
+    limit/available/rewards/statement/due not. Reserve (minimum_balance) is
+    editable only for account types where a reserve is meaningful."""
     is_cc = acc.get("type") == "credit_card"
+    if field == "minimum_balance":
+        return acc.get("type") in RESERVE_EDITABLE_TYPES
     if is_cc and field == "balance":
         return False
     if not is_cc and field in (

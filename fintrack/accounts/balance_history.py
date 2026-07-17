@@ -73,11 +73,31 @@ def _sync_account_to_latest(conn: Connection, account_id: int) -> None:
     )
     if latest is None:
         return
-    conn.execute(
-        update(accounts)
-        .where(accounts.c.id == account_id)
-        .values(balance=latest["balance"], as_of_date=latest["as_of"])
-    )
+    values: dict[str, Any] = {
+        "balance": latest["balance"],
+        "as_of_date": latest["as_of"],
+    }
+    acct = conn.execute(
+        select(accounts.c.account_type, accounts.c.credit_limit).where(
+            accounts.c.id == account_id
+        )
+    ).first()
+    if acct is not None and acct.account_type == "credit_card":
+        # Keep balance == available - credit_limit consistent for credit
+        # cards: statement imports refresh balance, so available (and, when
+        # unknown, credit_limit) must follow.
+        balance = latest["balance"]
+        available = latest["available"]
+        credit_limit = acct.credit_limit
+        if available is not None:
+            values["available"] = available
+            if credit_limit is None:
+                # Fill only when unset; never overwrite a user-set limit.
+                values["credit_limit"] = available - balance
+        elif credit_limit is not None:
+            # balance is negative (amount owed); derive the remaining credit.
+            values["available"] = credit_limit + balance
+    conn.execute(update(accounts).where(accounts.c.id == account_id).values(**values))
 
 
 def get_balance_history(

@@ -1,4 +1,9 @@
 0. When bringing in the balance from an import for a credit card, we need to resolve how this interacts with the limit and available.
+   **FIXED** — resolution: a confirmed statement import now keeps credit-card
+   fields consistent. If the statement reports available credit, it's written
+   to the account (and fills credit_limit when unset — a user-set limit is
+   never overwritten); otherwise available is derived as credit_limit +
+   balance. balance stays canonical; non-CC accounts unchanged.
 0. Need to remove the code that displays and stores the partial account numbers for accounts.  This can be dropped from the db.  Partial account numbers will be put into name
    **FIXED** — column dropped (migration `b0b3c9940bc5` folds any existing
    partials into the name as " [1234]"); all code/UI references removed.
@@ -27,6 +32,9 @@
 7. The locked/unlocked control is only relevant for certain pages.  What should we do with it?  Should it only exist on the pages where it's relevant?  I feel we would still want a feeling of continuity between the pages that make use of it.  Or maybe the concept is not ideal in the first place?  It's nice to be able to switch between the modes, it sort of supports the "spreadsheet" ux experience on the accounts / budget / assets pages.
 8. Does it make any sense to make the spending categories user defined?  Start with a basic set but allow them to be removed / changed / added to?  What about account types?  Should we do the same?
 9. Reserve column on account page needs to be editable for at least checking and savings, probably wallet too?
+   **FIXED** — Reserve (minimum_balance) is now inline-editable for checking,
+   savings, wallet, and digital_wallet; stays read-only for credit cards,
+   loans, gift cards, and other.
 10. Is the account auto picker functionality on the import page ever going to work?  Maybe if no matching account is auto picked when the import file is chosen, we just leave the account dropdown alone.  Just in case someone chose the account before providing the file?
     **FIXED** — it now actually matches: institution (case-insensitive) +
     account type, narrowed by the OFX account number's last 4 digits appearing

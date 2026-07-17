@@ -47,8 +47,24 @@
     {% endif %}
     {% endfor %}
     {% set _fr = funding_by_id.get(account.id) if funding_by_id is defined else none %}
-    <td class="px-1.5 py-px border-r border-gray-100 dark:border-gray-700 text-right tabular-nums text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-gray-700">
-        {{ _fr.reserve | fmt_money if _fr and _fr.reserve > 0 else '—' }}</td>
+    {# Reserve (minimum_balance): editable only for cash-like account types —
+       keep in sync with account_field_editable / RESERVE_EDITABLE_TYPES. #}
+    {% set _reserve_editable = account.type in ('checking', 'savings', 'wallet', 'digital_wallet') %}
+    {% set _reserve_value = _fr.reserve | fmt_money if _fr and _fr.reserve > 0 else '—' %}
+    {% set _is_editing_reserve = (editing_account_id is defined and editing_account_id==account.id and editing_field is defined and editing_field=='minimum_balance') %}
+    {% set _is_updated_reserve = (updated_account_id is defined and updated_account_id==account.id and updated_field is defined and updated_field=='minimum_balance') %}
+    {% if _is_editing_reserve and _reserve_editable %}
+        {{ cell_edit_input('minimum_balance', editing_value, true,
+            url_for('accounts.update', filename=filename, account_id=account.id),
+            url_for('accounts.cell_edit', filename=filename, account_id=account.id, field='minimum_balance', display=1),
+            'accounts-tbody', none) }}
+    {% elif _reserve_editable %}
+        {{ cell_display(_reserve_value, true, false,
+            url_for('accounts.cell_edit', filename=filename, account_id=account.id, field='minimum_balance'),
+            'accounts-tbody', _is_updated_reserve) }}
+    {% else %}
+        {{ cell_non_editable(_reserve_value, true, false) }}
+    {% endif %}
     <td class="px-1.5 py-px border-r border-gray-100 dark:border-gray-700 last:border-r-0 text-right tabular-nums text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-gray-700">
         {{ _fr.funding_needed | fmt_money if _fr and _fr.funding_needed > 0 else '—' }}</td>
     {% include "partials/accounts_history_cell.html" %}

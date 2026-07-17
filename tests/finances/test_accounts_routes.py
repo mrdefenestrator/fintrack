@@ -159,3 +159,53 @@ def test_add_same_name_different_institution_succeeds(client, db_engine):
     with db_engine.connect() as conn:
         wallets = [a for a in get_accounts(conn, 1) if a["name"] == "Wallet"]
     assert {a["institution"] for a in wallets} == {"Venmo", "PayPal"}
+
+
+# ---- Reserve (minimum_balance) editability -----------------------------------
+
+
+def test_reserve_editable_only_for_cash_like_types():
+    from web.routes.common import account_field_editable
+
+    for t in ("checking", "savings", "wallet", "digital_wallet"):
+        assert account_field_editable({"type": t}, "minimum_balance"), t
+    for t in ("credit_card", "gift_card", "loan", "other"):
+        assert not account_field_editable({"type": t}, "minimum_balance"), t
+
+
+def test_update_reserve_on_wallet_persists(client, db_engine):
+    from decimal import Decimal
+
+    ids = _account_ids(db_engine)
+    resp = client.post(
+        f"/s/finances/accounts/update/{ids['Cash']}",
+        data={"field": "minimum_balance", "value": "250"},
+    )
+    assert resp.status_code == 200
+    with db_engine.connect() as conn:
+        acc = next(a for a in get_accounts(conn, 1) if a["name"] == "Cash")
+    assert acc["minimum_balance"] == Decimal("250")
+
+
+def test_update_reserve_on_credit_card_is_rejected(client, db_engine):
+    with db_engine.connect() as conn:
+        cc_id = add_account(
+            conn,
+            1,
+            {
+                "name": "Visa",
+                "type": "credit_card",
+                "institution": "Chase",
+                "limit": 5000,
+                "available": 5000,
+            },
+        )
+    resp = client.post(
+        f"/s/finances/accounts/update/{cc_id}",
+        data={"field": "minimum_balance", "value": "250"},
+    )
+    # Non-editable field: request is a no-op, value never stored.
+    assert resp.status_code == 200
+    with db_engine.connect() as conn:
+        acc = next(a for a in get_accounts(conn, 1) if a["id"] == cc_id)
+    assert acc.get("minimum_balance") is None

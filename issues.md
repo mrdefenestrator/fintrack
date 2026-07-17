@@ -1,4 +1,5 @@
 0. When bringing in the balance from an import for a credit card, we need to resolve how this interacts with the limit and available.
+0. Need to remove the code that displays and stores the partial account numbers for accounts.  This can be dropped from the db.  Partial account numbers will be put into name
 1. The UNIQ constraint on simply account name makes the accounts annoying to use.  We should be able to have a Wallet from venmo named wallet and a wallet from paypal named wallet without problems.
 2. We need to gracefully handle save errors and surface these to the user within the accounts spreadsheet.  For example, the UNIQ constraint error printed a traceback in the logs and made the web ui unpresponsive until I changes to a distinct account name.
 3. The account types on the import page for quick account creation should match all the account types in the accounts page.  We should do the same on the account picker on the transactions page, and anywhere else we have a similar input.

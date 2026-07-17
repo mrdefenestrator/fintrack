@@ -13,13 +13,26 @@
    stays responsive. Root cause of the freeze: HTMX 2.x ignores 4xx response
    bodies by default; a beforeSwap hook now swaps non-empty 422 bodies.
 3. The account types on the import page for quick account creation should match all the account types in the accounts page.  We should do the same on the account picker on the transactions page, and anywhere else we have a similar input.
+   **FIXED** — one canonical ordered list (ACCOUNT_TYPE_OPTIONS in
+   fintrack/core/types.py) now drives the import quick-create select, the
+   accounts page, and import validation; all 8 types offered everywhere.
 4. The account drop down selector should give more than just the account name.  It should definitely have the institution name and maybe the account type.  Just a thought "{Institution} [{Type}] {Name}"
+   **FIXED** — import and transactions account pickers now show
+   "{Institution} [{Type}] {Name}" via a shared `account_label` Jinja filter
+   (degrades to "[{Type}] {Name}" when no institution). The payment/auto
+   account-ref selects on accounts/budget already showed institution+name and
+   were left as-is.
 5. The top controls on the trends page needs to be reworked.  I like the default of trailing 12 months, but we should have a way to page back and forth.  Open to suggestions.
 6. We have too many many tabs on the top bar.  We need to find a better, more task oriented place to put some pages.  Maybe just iconic buttons for some things like import?  I'm open to a number of ideas.  Maybe a dual tiered tab structure?  We should think about options that support a user's journey and best practices for UX
 7. The locked/unlocked control is only relevant for certain pages.  What should we do with it?  Should it only exist on the pages where it's relevant?  I feel we would still want a feeling of continuity between the pages that make use of it.  Or maybe the concept is not ideal in the first place?  It's nice to be able to switch between the modes, it sort of supports the "spreadsheet" ux experience on the accounts / budget / assets pages.
 8. Does it make any sense to make the spending categories user defined?  Start with a basic set but allow them to be removed / changed / added to?  What about account types?  Should we do the same?
 9. Reserve column on account page needs to be editable for at least checking and savings, probably wallet too?
 10. Is the account auto picker functionality on the import page ever going to work?  Maybe if no matching account is auto picked when the import file is chosen, we just leave the account dropdown alone.  Just in case someone chose the account before providing the file?
+    **FIXED** — it now actually matches: institution (case-insensitive) +
+    account type, narrowed by the OFX account number's last 4 digits appearing
+    in the account name. It only auto-selects on exactly one confident
+    candidate; otherwise your existing selection is preserved (it used to be
+    unconditionally reset to "Select account...").
 11. Search transactions by amount?  Would be helpful in correlating certain transactions like transfers.  Some sort of fuzzy search?
 12. Merchants and Transactions lists edit is very clunky / slow.  CLick far right, mouse to far left, make change, save, repeat.  Maybe these should use a display and editing system similar to the "spreadsheet" style we see on the accounts/budget/assts pages?
 13. Is there a way to get historical balances out of empower or fidelity for 401k accounts?  This would support the projections view, I think.

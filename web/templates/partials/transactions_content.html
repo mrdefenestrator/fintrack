@@ -8,7 +8,7 @@
                 class="w-44 {{ ctrl }}">
             <option value="">All Accounts</option>
             {% for a in accounts %}
-            <option value="{{ a.id }}" {{ 'selected' if selected_account == a.id }}>{{ a.name }}</option>
+            <option value="{{ a.id }}" {{ 'selected' if selected_account == a.id }}>{{ a | account_label }}</option>
             {% endfor %}
         </select>
         <select name="category" hx-get="/s/{{ filename }}/transactions" hx-target="#content" hx-include="[name]" hx-push-url="true"

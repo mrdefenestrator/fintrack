@@ -1,11 +1,11 @@
 {% set ctrl = "border border-gray-300 dark:border-gray-600 rounded-md px-3 h-8 w-full text-sm bg-white dark:bg-gray-600 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500" %}
 
 {% macro account_type_select(meta) %}
+{% set current = meta.account_type if meta and meta.account_type else 'other' %}
 <select name="acct_type" class="{{ ctrl }}">
-    <option value="checking" {% if meta and meta.account_type == 'checking' %}selected{% endif %}>Checking</option>
-    <option value="savings" {% if meta and meta.account_type == 'savings' %}selected{% endif %}>Savings</option>
-    <option value="credit_card" {% if meta and meta.account_type == 'credit_card' %}selected{% endif %}>Credit Card</option>
-    <option value="other" {% if not meta or meta.account_type == 'other' %}selected{% endif %}>Other</option>
+    {% for value, label in account_type_options %}
+    <option value="{{ value }}" {% if value == current %}selected{% endif %}>{{ label }}</option>
+    {% endfor %}
 </select>
 {% endmacro %}
 
@@ -37,7 +37,7 @@
         <option value="">Select account...</option>
         {% for a in accounts %}
         <option value="{{ a.id }}" {% if selected_account_id and a.id == selected_account_id %}selected{% endif %}>
-            {{ a.name }}
+            {{ a | account_label }}
         </option>
         {% endfor %}
     </select>

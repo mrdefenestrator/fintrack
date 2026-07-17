@@ -25,6 +25,23 @@ AccountType = Literal[
     "other",
 ]
 
+# Canonical, ordered (value, display label) list of account types. This is
+# the single source of truth for every account-type select/validation in the
+# app (import quick-create, accounts page type editor, CLI --type choices).
+# Must stay a superset of every account_type value that appears in the DB.
+ACCOUNT_TYPE_OPTIONS: list[tuple[str, str]] = [
+    ("checking", "Checking"),
+    ("savings", "Savings"),
+    ("credit_card", "Credit Card"),
+    ("gift_card", "Gift Card"),
+    ("wallet", "Wallet"),
+    ("digital_wallet", "Digital Wallet"),
+    ("loan", "Loan"),
+    ("other", "Other"),
+]
+
+ACCOUNT_TYPE_VALUES: list[str] = [value for value, _ in ACCOUNT_TYPE_OPTIONS]
+
 # Income types enum
 IncomeType = Literal["salary", "refund", "bonus", "remittance"]
 
@@ -130,3 +147,4 @@ class AccountMeta(TypedDict):
     institution: str  # e.g. "Chase" (empty string if unavailable)
     account_type: str  # "checking" | "savings" | "credit_card" | "other"
     suggested_name: str  # e.g. "Chase Checking ...7890"
+    last4: str  # last 4 digits of the OFX account number ("" if unavailable)

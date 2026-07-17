@@ -22,6 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from fintrack.core import formatting
 from fintrack.core.config import CATEGORIES_CONFIG
 from fintrack.core.db import get_engine, init_db
+from fintrack.core.types import ACCOUNT_TYPE_OPTIONS
 from fintrack.ledger.repository.categories import seed_categories
 from fintrack.snapshots.repository import list_snapshots
 
@@ -66,6 +67,7 @@ def _register_filters(app: Flask) -> None:
         formatting.fmt_recurrence_display(x)
     )
     app.jinja_env.filters["format_month"] = lambda x: formatting.fmt_month_short(x)
+    app.jinja_env.filters["account_label"] = formatting.fmt_account_label
 
     @app.template_filter("money")
     def money_filter(value, decimals=2):
@@ -111,6 +113,13 @@ def create_app(db_path: str | None = None) -> Flask:
             "n3": None,
             "n6": None,
         }
+
+    @app.context_processor
+    def _account_type_options():
+        """Canonical account-type (value, label) list, available to every
+        template that renders an account-type select (import quick-create,
+        accounts page type editor)."""
+        return {"account_type_options": ACCOUNT_TYPE_OPTIONS}
 
     @app.errorhandler(404)
     def not_found(e):

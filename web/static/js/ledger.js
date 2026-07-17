@@ -20,6 +20,12 @@ function updateImportButton() {
 function detectAccount(file) {
     const formData = new FormData();
     formData.append('files', file);
+    // Include whatever account the user has already picked so the server
+    // can preserve it when auto-detection doesn't find a confident match.
+    const accountSelect = document.querySelector('select[name="account_id"]');
+    if (accountSelect && accountSelect.value !== '') {
+        formData.append('account_id', accountSelect.value);
+    }
     fetch(snapshotPrefix() + '/import/detect-account', { method: 'POST', body: formData })
         .then(r => {
             if (!r.ok) throw new Error(`detect-account failed: ${r.status}`);

@@ -1,4 +1,9 @@
-"""E2E tests for the Merchants tab."""
+"""E2E tests for the Merchants tab.
+
+The Merchants list uses the same spreadsheet-style inline editing as the
+accounts/budget/assets sheets: click the Category cell → it becomes a <select>
+that auto-saves on change (no far-right edit button, no far-left Save button).
+"""
 
 import pytest
 
@@ -57,38 +62,31 @@ def test_merchants_empty_after_import_before_categorization(page, confirmed_serv
     assert page.locator("table tbody tr").count() == 0
 
 
-def test_merchants_appear_after_transaction_correction(page, confirmed_server):
-    """Correcting a transaction with 'apply to merchant' populates the Merchants tab.
-
-    Flow:
-      1. Go to Transactions (April 2026).
-      2. Click the edit icon on the first row.
-      3. Select 'Groceries', check 'Apply to all from this merchant'.
-      4. Save → server returns 204 with HX-Redirect back to /transactions.
-      5. Navigate to /merchants → the merchant now appears.
-    """
-    # Step 1: open Transactions for April 2026
-    page.goto(f"{confirmed_server}/s/ledger/transactions?year=2026&month=4")
+def _seed_merchant_via_transaction(page, base_url):
+    """Populate the merchant cache by categorizing a transaction with the
+    inline Category editor's apply-to-merchant option checked."""
+    page.goto(f"{base_url}/s/ledger/transactions?year=2026&month=4")
     page.wait_for_selector("table tbody tr")
 
-    # Step 2: click the edit icon on the first row
-    edit_btn = page.locator("table tbody tr button[hx-get*='edit-category']").first
-    with page.expect_response(lambda r: "edit-category" in r.url):
-        edit_btn.click()
-    page.wait_for_selector('tr[id^="edit-"]')
+    # Open the Category cell (5th column) on the first row.
+    first_row = page.locator("table tbody tr").first
+    cat_cell = first_row.locator("td").nth(4)
+    with page.expect_response(lambda r: "/cell" in r.url and "category" in r.url):
+        cat_cell.click()
 
-    # Step 3: select a category and check apply-to-merchant
-    edit_row = page.locator('tr[id^="edit-"]').first
-    edit_row.locator("select[name='category']").select_option("Groceries")
+    edit_row = page.locator("table tbody tr").first
+    # apply-to-merchant is checked by default; selecting a category saves and
+    # (because it's merchant-wide) redirects/reloads the list.
     edit_row.locator("input[name='apply_to_merchant']").check()
-
-    # Step 4: save — server returns 204 with HX-Redirect
-    with page.expect_response(lambda r: r.status == 204):
-        edit_row.locator("button[type='submit']").click()
-    page.wait_for_url("**/transactions**")
+    with page.expect_response(lambda r: r.request.method == "POST"):
+        edit_row.locator("select[name='value']").select_option("Groceries")
     page.wait_for_load_state("networkidle")
 
-    # Step 5: merchants tab now has one entry
+
+def test_merchants_appear_after_transaction_correction(page, confirmed_server):
+    """Categorizing a transaction merchant-wide populates the Merchants tab."""
+    _seed_merchant_via_transaction(page, confirmed_server)
+
     page.goto(f"{confirmed_server}/s/ledger/merchants")
     rows = page.locator("table tbody tr")
     assert rows.count() >= 1
@@ -97,40 +95,54 @@ def test_merchants_appear_after_transaction_correction(page, confirmed_server):
     assert "manual" in row_text.lower()
 
 
-def test_merchants_edit_form_appears_on_edit_button_click(page, confirmed_server):
-    """Clicking the edit icon on a merchant row opens an inline edit form."""
+def test_merchants_category_cell_opens_inline_select(page, confirmed_server):
+    """Clicking a merchant's Category cell swaps it to an inline <select>."""
     page.goto(f"{confirmed_server}/s/ledger/merchants")
-
     if page.locator("table tbody tr").count() == 0:
-        pytest.skip(
-            "No merchants present — run after test_merchants_appear_after_transaction_correction"
-        )
+        _seed_merchant_via_transaction(page, confirmed_server)
+        page.goto(f"{confirmed_server}/s/ledger/merchants")
 
-    edit_btn = page.locator("table tbody tr button[hx-get*='/edit']").first
-    with page.expect_response(lambda r: "/merchants" in r.url and "/edit" in r.url):
-        edit_btn.click()
+    first_row = page.locator("table tbody tr").first
+    cat_cell = first_row.locator("td").nth(1)  # Category is the 2nd column
+    with page.expect_response(lambda r: "/cell" in r.url):
+        cat_cell.click()
 
-    page.wait_for_selector("table tbody tr.bg-blue-50")
-    edit_row = page.locator("table tbody tr.bg-blue-50")
-    assert edit_row.locator("select[name='category']").is_visible()
-    assert edit_row.locator("button", has_text="Save").is_visible()
-    assert edit_row.locator("button", has_text="Cancel").is_visible()
+    edit_row = page.locator("table tbody tr").first
+    assert edit_row.locator("select[name='value']").is_visible()
+
+
+def test_merchants_category_inline_edit_saves(page, confirmed_server):
+    """Selecting a new category in the inline editor persists it."""
+    page.goto(f"{confirmed_server}/s/ledger/merchants")
+    if page.locator("table tbody tr").count() == 0:
+        _seed_merchant_via_transaction(page, confirmed_server)
+        page.goto(f"{confirmed_server}/s/ledger/merchants")
+
+    first_row = page.locator("table tbody tr").first
+    cat_cell = first_row.locator("td").nth(1)
+    with page.expect_response(lambda r: "/cell" in r.url):
+        cat_cell.click()
+
+    edit_row = page.locator("table tbody tr").first
+    with page.expect_response(lambda r: r.request.method == "POST"):
+        edit_row.locator("select[name='value']").select_option("Dining")
+
+    # Row reverts to display showing the new category.
+    page.wait_for_selector("table tbody tr td:has-text('Dining')")
+    assert "Dining" in page.locator("table tbody tr").first.inner_text()
 
 
 def test_merchants_search_filters_results(page, confirmed_server):
     """Search parameter filters merchant rows by name."""
     page.goto(f"{confirmed_server}/s/ledger/merchants")
     if page.locator("table tbody tr").count() == 0:
-        pytest.skip(
-            "No merchants present — run after test_merchants_appear_after_transaction_correction"
-        )
+        _seed_merchant_via_transaction(page, confirmed_server)
+        page.goto(f"{confirmed_server}/s/ledger/merchants")
 
     total_before = page.locator("table tbody tr").count()
 
-    # Navigate with a no-match search → table should be empty
     page.goto(f"{confirmed_server}/s/ledger/merchants?search=XYZZY_NO_MATCH_9999")
     assert page.locator("table tbody tr").count() == 0
 
-    # Clear search → all rows return
     page.goto(f"{confirmed_server}/s/ledger/merchants")
     assert page.locator("table tbody tr").count() == total_before

@@ -1,0 +1,58 @@
+{# Spreadsheet-style inline-edit cells for the ledger tables (merchants,
+   transactions). Interaction mirrors the accounts sheet's key/blur semantics:
+
+     * A display cell is clickable (role=button, tabindex=0). Clicking it GETs
+       the row with that one field in edit mode and swaps the whole <tr>.
+     * A text edit cell saves via hx-post on `focusout changed` or Enter
+       (keydown[keyCode==13]); Enter's default form submit is suppressed. On
+       blur (focusout, 150ms) the row reverts to display via hx-get.
+     * A select edit cell saves via hx-post on `change`; when a `display_url`
+       is given it also reverts to display on blur. Editors with an extra
+       control inside the cell (e.g. the transactions apply-to-merchant
+       checkbox) omit `display_url` so clicking that control does not blur-
+       revert the editor before it is used.
+
+   Per-row swaps (never full-tbody) keep the surrounding filter / sort /
+   pagination state intact — only the edited row is re-rendered. #}
+
+{% macro cell_display(value, cell_url, row_id, extra_class='', align_class='') %}
+<td class="px-4 py-2 text-sm cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/20 {{ extra_class }} {{ align_class }}"
+    hx-get="{{ cell_url }}" hx-trigger="click" hx-target="#{{ row_id }}" hx-swap="outerHTML"
+    role="button" tabindex="0">{{ value }}</td>
+{% endmacro %}
+
+{% macro text_edit(field, value, update_url, display_url, row_id, align_class='') %}
+<td class="cell-editing px-4 py-2 text-sm {{ align_class }}">
+    <form class="inline" method="post" action="{{ update_url }}"
+          hx-get="{{ display_url }}" hx-trigger="focusout from:input delay:150ms"
+          hx-target="#{{ row_id }}" hx-swap="outerHTML"
+          onkeydown="if(event.keyCode===13) event.preventDefault();">
+        <input type="hidden" name="field" value="{{ field }}">
+        <input type="text" name="value" value="{{ value }}"
+               class="table-cell-input {{ align_class }}"
+               hx-post="{{ update_url }}"
+               hx-trigger="focusout changed, keydown[keyCode==13]"
+               hx-include="closest form" hx-target="#{{ row_id }}" hx-swap="outerHTML"
+               autofocus>
+    </form>
+</td>
+{% endmacro %}
+
+{% macro select_edit(field, current, options, update_url, row_id, display_url=none, align_class='') %}
+<td class="cell-editing px-4 py-2 text-sm {{ align_class }}">
+    <form class="inline" method="post" action="{{ update_url }}"
+          {% if display_url %}hx-get="{{ display_url }}"
+          hx-trigger="focusout from:select delay:150ms"
+          hx-target="#{{ row_id }}" hx-swap="outerHTML"{% endif %}>
+        <input type="hidden" name="field" value="{{ field }}">
+        <select name="value" class="table-cell-select {{ align_class }}" autofocus
+                hx-post="{{ update_url }}" hx-trigger="change" hx-include="closest form"
+                hx-target="#{{ row_id }}" hx-swap="outerHTML">
+            {% for o in options %}
+            <option value="{{ o }}" {{ 'selected' if current == o }}>{{ o }}</option>
+            {% endfor %}
+        </select>
+        {% if caller is defined %}{{ caller() }}{% endif %}
+    </form>
+</td>
+{% endmacro %}

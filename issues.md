@@ -76,7 +76,18 @@
     "apply to merchant" checkbox, checked by default like before. Notes got
     its own visible column.
 13. Is there a way to get historical balances out of empower or fidelity for 401k accounts?  This would support the projections view, I think.
+    **ON HOLD** (per review) — research findings: neither provider exports
+    balance history directly (Empower: transaction CSVs up to ~7 years;
+    Fidelity: ~90-day CSV/OFX windows), and reconstructing 401k balances
+    from transactions misses market movement. Recommended feature when
+    resumed: per-account CSV bulk-import of (date, balance) points into
+    balance_history, typed from PDF statements.
 14. Do we have a feature for flagging deviations from expectations for spending categories / merchants?  This could be extended into a budget check feature.  Some real design work / collaboration is needed here.
+    **DESIGN DOCUMENTED** — no such feature exists; the agreed direction is
+    written up as an implementation-ready spec in docs/deviation-flagging.md
+    (phase 1: trailing-median baseline + prorated deviation chips on Trends;
+    phase 2: budget-aware comparison via budget_entries.category; phase 3:
+    subscription/merchant anomalies, deferred).
 15. In the spreadsheet views, it's hard to see when the sheet is scrolled to the top or bottom.  When the sheet is not at the top, we should have a subtle drop shadow on the sheet under the header row, and the opposite for the bottom.  When not at the bottom, there should be a subtle drop shadow on the sheet above the total row
     **FIXED** — accounts/budget/assets sheets show a subtle gradient shadow
     under the sticky header when scrolled down and above the total row when

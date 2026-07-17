@@ -17,7 +17,12 @@
 15. In the spreadsheet views, it's hard to see when the sheet is scrolled to the top or bottom.  When the sheet is not at the top, we should have a subtle drop shadow on the sheet under the header row, and the opposite for the bottom.  When not at the bottom, there should be a subtle drop shadow on the sheet above the total row
 16. The quick totals in the ui tabs are not always visible, and as we move between tabs, the tab row grows and shrinks vertically depending on which tab is selected (did it come from the finances app or the spending app)
 
-Tracebacks from failed import categorization:
+Tracebacks from failed import categorization: **FIXED** — classifier now
+chunks merchants into batches of 40, raised max_tokens 1024→4096, detects
+truncated (`stop_reason == "max_tokens"`) and malformed JSON responses per
+batch, and caches each batch's successes immediately so one bad batch no
+longer loses the whole import. Partial failures surface as a "Classified X
+of Y" warning.
 
 127.0.0.1 - - [16/Jul/2026 16:54:56] "POST /s/test/import/detect-account HTTP/1.1" 200 -
 Classification failed unexpectedly

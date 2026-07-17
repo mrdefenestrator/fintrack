@@ -1,3 +1,4 @@
+0. When bringing in the balance from an import for a credit card, we need to resolve how this interacts with the limit and available.
 1. The UNIQ constraint on simply account name makes the accounts annoying to use.  We should be able to have a Wallet from venmo named wallet and a wallet from paypal named wallet without problems.
 2. We need to gracefully handle save errors and surface these to the user within the accounts spreadsheet.  For example, the UNIQ constraint error printed a traceback in the logs and made the web ui unpresponsive until I changes to a distinct account name.
 3. The account types on the import page for quick account creation should match all the account types in the accounts page.  We should do the same on the account picker on the transactions page, and anywhere else we have a similar input.
@@ -10,6 +11,8 @@
 10. Is the account auto picker functionality on the import page ever going to work?  Maybe if no matching account is auto picked when the import file is chosen, we just leave the account dropdown alone.  Just in case someone chose the account before providing the file?
 11. Search transactions by amount?  Would be helpful in correlating certain transactions like transfers.  Some sort of fuzzy search?
 12. Merchants and Transactions lists edit is very clunky / slow.  CLick far right, mouse to far left, make change, save, repeat.  Maybe these should use a display and editing system similar to the "spreadsheet" style we see on the accounts/budget/assts pages?
+13. Is there a way to get historical balances out of empower or fidelity for 401k accounts?  This would support the projections view, I think.
+14. Do we have a feature for flagging deviations from expectations for spending categories / merchants?  This could be extended into a budget check feature.  Some real design work / collaboration is needed here.
 
 Tracebacks from failed import categorization:
 

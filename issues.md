@@ -28,6 +28,12 @@
    account-ref selects on accounts/budget already showed institution+name and
    were left as-is.
 5. The top controls on the trends page needs to be reworked.  I like the default of trailing 12 months, but we should have a way to page back and forth.  Open to suggestions.
+   **FIXED** — trailing-12 default kept; new ◀ / ▶ pager shifts the window a
+   month at a time with the current range shown between (e.g. "Aug 2025 – Jul
+   2026"), plus a "Latest" reset that appears when paged back. Works with the
+   existing period presets, category detail expansion, and browser
+   back/forward (hx-push-url); malformed/future `end=` params fall back to
+   latest.
 6. We have too many many tabs on the top bar.  We need to find a better, more task oriented place to put some pages.  Maybe just iconic buttons for some things like import?  I'm open to a number of ideas.  Maybe a dual tiered tab structure?  We should think about options that support a user's journey and best practices for UX
 7. The locked/unlocked control is only relevant for certain pages.  What should we do with it?  Should it only exist on the pages where it's relevant?  I feel we would still want a feeling of continuity between the pages that make use of it.  Or maybe the concept is not ideal in the first place?  It's nice to be able to switch between the modes, it sort of supports the "spreadsheet" ux experience on the accounts / budget / assets pages.
 8. Does it make any sense to make the spending categories user defined?  Start with a basic set but allow them to be removed / changed / added to?  What about account types?  Should we do the same?

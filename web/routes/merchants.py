@@ -2,7 +2,7 @@ from flask import Blueprint, current_app, render_template, request
 
 from web.routes.common import snapshot_scoped
 
-from fintrack.ledger.repository.categories import get_category_names
+from fintrack.ledger.repository.categories import get_category_names, list_categories
 from fintrack.ledger.repository.merchants import (
     get_merchant_with_stats_by_id,
     list_merchants_with_stats,
@@ -39,6 +39,7 @@ def index():
     with engine.connect() as conn:
         merchants = list_merchants_with_stats(conn)
         categories = get_category_names(conn)
+        cats = list_categories(conn)
 
     if search:
         merchants = [
@@ -66,6 +67,7 @@ def index():
         active_tab="merchants",
         merchants=merchants,
         categories=categories,
+        cats=cats,
         search=search,
         selected_category=filter_category,
         selected_source=filter_source,

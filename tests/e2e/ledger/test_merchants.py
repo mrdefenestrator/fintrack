@@ -62,7 +62,7 @@ def test_merchants_empty_after_import_before_categorization(page, confirmed_serv
     assert page.locator("table tbody tr").count() == 0
 
 
-def _seed_merchant_via_transaction(page, base_url):
+def _seed_merchant_via_transaction(page, base_url, category="Groceries"):
     """Populate the merchant cache by categorizing a transaction with the
     inline Category editor's apply-to-merchant option checked."""
     page.goto(f"{base_url}/s/ledger/transactions?year=2026&month=4")
@@ -73,13 +73,19 @@ def _seed_merchant_via_transaction(page, base_url):
     cat_cell = first_row.locator("td").nth(4)
     with page.expect_response(lambda r: "/cell" in r.url and "category" in r.url):
         cat_cell.click()
+    # Let the swap fully settle before interacting further: under heavier
+    # load (e.g. after driving the categories panel elsewhere on the page)
+    # the response event can fire slightly before htmx finishes processing
+    # the newly-swapped row, so an immediate select_option's change event
+    # would be missed.
+    page.wait_for_load_state("networkidle")
 
     edit_row = page.locator("table tbody tr").first
     # apply-to-merchant is checked by default; selecting a category saves and
     # (because it's merchant-wide) redirects/reloads the list.
     edit_row.locator("input[name='apply_to_merchant']").check()
     with page.expect_response(lambda r: r.request.method == "POST"):
-        edit_row.locator("select[name='value']").select_option("Groceries")
+        edit_row.locator("select[name='value']").select_option(category)
     page.wait_for_load_state("networkidle")
 
 
@@ -146,3 +152,137 @@ def test_merchants_search_filters_results(page, confirmed_server):
 
     page.goto(f"{confirmed_server}/s/ledger/merchants")
     assert page.locator("table tbody tr").count() == total_before
+
+
+# ---------------------------------------------------------------------------
+# Manage categories panel (add / rename / blocked delete)
+# ---------------------------------------------------------------------------
+#
+# These tests add categories with names unique to this file (TempCat,
+# RenamedCat, ProtectedCat) rather than touching any of the seeded defaults
+# (Groceries, Dining, ...) that earlier tests in this module rely on, since
+# confirmed_server is module-scoped and shared across the whole file.
+
+
+def _open_categories_panel(page, base_url):
+    page.goto(f"{base_url}/s/ledger/merchants")
+    page.get_by_role("button", name="Manage categories").click()
+    page.wait_for_selector("#categories-panel-body input[name='name']")
+
+
+def test_categories_panel_collapsed_by_default(page, confirmed_server):
+    """The Manage-categories panel starts collapsed; its add form is hidden
+    until the toggle is clicked."""
+    page.goto(f"{confirmed_server}/s/ledger/merchants")
+    assert page.get_by_role("button", name="Manage categories").is_visible()
+    assert not page.locator("#categories-panel-body input[name='name']").is_visible()
+
+
+def test_categories_panel_add_new_category(page, confirmed_server):
+    """Adding a category via the panel makes it available in the Category
+    filter dropdown (which reads live from the categories table)."""
+    _open_categories_panel(page, confirmed_server)
+
+    name_input = page.locator("#categories-panel-body input[name='name']")
+    name_input.fill("TempCat")
+    with page.expect_response(
+        lambda r: "/categories/add" in r.url and r.request.method == "POST"
+    ):
+        name_input.press("Enter")
+    page.wait_for_load_state("networkidle")
+
+    options = page.locator("select[name='category'] option").all_inner_texts()
+    assert "TempCat" in options
+
+
+def test_categories_panel_add_duplicate_shows_inline_error(page, confirmed_server):
+    """Adding a category name that already exists shows an inline error
+    instead of navigating away, and does not create a duplicate."""
+    _open_categories_panel(page, confirmed_server)
+    name_input = page.locator("#categories-panel-body input[name='name']")
+    name_input.fill("DupCat")
+    with page.expect_response(
+        lambda r: "/categories/add" in r.url and r.request.method == "POST"
+    ):
+        name_input.press("Enter")
+    page.wait_for_load_state("networkidle")
+
+    _open_categories_panel(page, confirmed_server)
+    name_input = page.locator("#categories-panel-body input[name='name']")
+    name_input.fill("DupCat")
+    with page.expect_response(
+        lambda r: "/categories/add" in r.url and r.request.method == "POST"
+    ) as resp_info:
+        name_input.press("Enter")
+    assert resp_info.value.status == 422
+    assert "already exists" in page.locator("#categories-panel-body").inner_text()
+    options = page.locator("select[name='category'] option").all_inner_texts()
+    assert options.count("DupCat") == 1
+
+
+def test_categories_panel_rename_cascades_to_filter(page, confirmed_server):
+    """Renaming a category updates the Category filter options (cascade
+    through the categories table the filter reads from)."""
+    _open_categories_panel(page, confirmed_server)
+    name_input = page.locator("#categories-panel-body input[name='name']")
+    name_input.fill("RenameMeCat")
+    with page.expect_response(
+        lambda r: "/categories/add" in r.url and r.request.method == "POST"
+    ):
+        name_input.press("Enter")
+    page.wait_for_load_state("networkidle")
+
+    _open_categories_panel(page, confirmed_server)
+    row = page.locator("#categories-panel-body li", has_text="RenameMeCat")
+    with page.expect_response(lambda r: "/edit" in r.url):
+        row.get_by_text("RenameMeCat", exact=True).click()
+    page.wait_for_load_state("networkidle")
+
+    rename_input = page.locator("#categories-panel-body input[name='value']")
+    rename_input.wait_for()
+    rename_input.fill("RenamedCat")
+    with page.expect_response(
+        lambda r: "/rename" in r.url and r.request.method == "POST"
+    ):
+        rename_input.press("Enter")
+    # A successful rename carries HX-Refresh, which triggers a full page
+    # reload; wait for that navigation to complete (networkidle can resolve
+    # mid-navigation and race the reload) before reading the refreshed page.
+    page.wait_for_load_state("load")
+    page.wait_for_selector("select[name='category']")
+
+    options = page.locator("select[name='category'] option").all_inner_texts()
+    assert "RenamedCat" in options
+    assert "RenameMeCat" not in options
+
+
+def test_categories_panel_blocked_delete_shows_breakdown(page, confirmed_server):
+    """Deleting a category still referenced by a merchant is blocked and
+    shows the usage breakdown instead of silently failing or deleting it."""
+    _open_categories_panel(page, confirmed_server)
+    name_input = page.locator("#categories-panel-body input[name='name']")
+    name_input.fill("ProtectedCat")
+    with page.expect_response(
+        lambda r: "/categories/add" in r.url and r.request.method == "POST"
+    ):
+        name_input.press("Enter")
+    page.wait_for_load_state("networkidle")
+
+    _seed_merchant_via_transaction(page, confirmed_server, category="ProtectedCat")
+
+    _open_categories_panel(page, confirmed_server)
+    row = page.locator("#categories-panel-body li", has_text="ProtectedCat")
+    row.get_by_title("Delete category").click()
+    with page.expect_response(
+        lambda r: "/delete" in r.url and r.request.method == "POST"
+    ) as resp_info:
+        row.get_by_title("Confirm delete").click()
+    assert resp_info.value.status == 422
+
+    panel_text = page.locator("#categories-panel-body").inner_text()
+    assert "In use by" in panel_text
+    assert "1 merchant" in panel_text
+
+    # Category must still exist (delete was blocked).
+    options = page.locator("select[name='category'] option").all_inner_texts()
+    assert "ProtectedCat" in options

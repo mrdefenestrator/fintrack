@@ -50,6 +50,13 @@
    concept keeps its continuity. Edit state still carries through Finances
    links (including a detour through Projections).
 8. Does it make any sense to make the spending categories user defined?  Start with a basic set but allow them to be removed / changed / added to?  What about account types?  Should we do the same?
+   **FIXED** (scope agreed: categories yes, account types stay fixed) —
+   "Manage categories" panel on the Merchants page: add, inline rename
+   (cascades through merchant_cache, corrections, and budget entries), and
+   delete (blocked with an in-use breakdown while referenced). New
+   categories flow into the classifier automatically. Seeding now only
+   populates an empty table, so deleting a default category sticks across
+   restarts (previously it silently resurrected).
 9. Reserve column on account page needs to be editable for at least checking and savings, probably wallet too?
    **FIXED** — Reserve (minimum_balance) is now inline-editable for checking,
    savings, wallet, and digital_wallet; stays read-only for credit cards,

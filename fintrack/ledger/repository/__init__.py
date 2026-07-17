@@ -18,6 +18,8 @@ from fintrack.ledger.repository.categories import (
     edit_category,
     get_category_names,
     list_categories,
+    move_category,
+    rename_category,
     seed_categories,
 )
 from fintrack.ledger.repository.imports import (
@@ -71,6 +73,8 @@ __all__ = [
     "list_categories",
     "list_merchants",
     "list_merchants_with_stats",
+    "move_category",
+    "rename_category",
     "seed_categories",
     "set_merchant_category",
     "base_transaction_query",

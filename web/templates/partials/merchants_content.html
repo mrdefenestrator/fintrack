@@ -1,4 +1,5 @@
 {% set ctrl = "border border-gray-300 dark:border-gray-600 rounded-md px-3 h-8 text-sm bg-white dark:bg-gray-700 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500" %}
+{% include "partials/categories_panel.html" %}
 <div class="mb-4 flex flex-wrap gap-2 items-center">
     <input type="search" name="search" value="{{ search }}" placeholder="Search merchants..."
            hx-get="/s/{{ filename }}/merchants" hx-target="#content" hx-include="[name]" hx-push-url="true"

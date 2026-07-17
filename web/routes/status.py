@@ -1,9 +1,8 @@
-"""Status blueprint — snapshot picker at root, status dashboard per snapshot."""
+"""Status blueprint — snapshot picker at root; legacy status URL redirects."""
 
-from flask import Blueprint, current_app, render_template, request
+from flask import Blueprint, current_app, redirect, render_template, url_for
 
 from fintrack.snapshots.repository import list_snapshots
-from web.routes.common import get_common_context, validate_snapshot
 
 status_bp = Blueprint("status", __name__)
 
@@ -26,20 +25,6 @@ def status_view():
 
 @status_bp.route("/s/<string:filename>/status")
 def snapshot_status(filename):
-    """Key-numbers rollup for one snapshot (mirrors the CLI status command)."""
-    snapshot_id = validate_snapshot(filename)
-    edit_mode = request.args.get("edit") == "1"
-    context = get_common_context(snapshot_id, filename, edit_mode)
-    total = context["n2"] + context["n3"] + context["n6"]
-    status_rows = [
-        ("Accounts", context["n2"]),
-        ("Budget (prorated)", context["n3"]),
-        ("Assets", context["n6"]),
-        ("Total", total),
-    ]
-    return render_template(
-        "status.html",
-        active_tab="status",
-        status_rows=status_rows,
-        **context,
-    )
+    """Legacy status-page URL. The Status page was removed (QA issue 6);
+    redirect old bookmarks to the Accounts view."""
+    return redirect(url_for("accounts.accounts_view", filename=filename))

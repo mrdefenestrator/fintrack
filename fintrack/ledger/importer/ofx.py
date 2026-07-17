@@ -99,6 +99,7 @@ def extract_ofx_metadata(file_path: str | Path) -> AccountMeta | None:
             institution=institution,
             account_type=account_type,
             suggested_name=suggested_name,
+            last4=last4,
         )
     except Exception:
         return None

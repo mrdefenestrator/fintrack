@@ -1,19 +1,45 @@
-<tr id="txn-row-{{ txn.id }}" class="border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700">
-    <td class="px-4 py-3 text-sm">{{ txn.date }}</td>
-    <td class="px-4 py-3 text-sm">{{ txn.merchant }}</td>
-    <td class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">{{ txn.raw_description }}</td>
-    <td class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">{{ txn.account_name or '—' }}</td>
-    <td class="px-4 py-3 text-sm">{{ txn.category }}</td>
-    <td class="px-4 py-3 text-right {{ 'text-red-600 dark:text-red-400' if txn.amount < 0 else 'text-green-600 dark:text-green-400' }}">
+{% from "partials/ledger_cells.html" import cell_display, text_edit, select_edit %}
+{% set row_id = "txn-row-" ~ txn.id %}
+{% set base = "/s/" ~ filename ~ "/transactions/" ~ txn.id %}
+<tr id="{{ row_id }}" class="border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700">
+    {# Date — raw imported data, immutable #}
+    <td class="px-4 py-2 text-sm">{{ txn.date }}</td>
+
+    {# Merchant — corrections overlay (merchant_name) #}
+    {% if editing_field is defined and editing_field == 'merchant_name' %}
+        {{ text_edit('merchant_name', txn.merchant, base ~ "/update", base ~ "/row", row_id) }}
+    {% else %}
+        {{ cell_display(txn.merchant, base ~ "/cell?field=merchant_name", row_id) }}
+    {% endif %}
+
+    {# Description — raw imported data, immutable #}
+    <td class="px-4 py-2 text-sm text-gray-500 dark:text-gray-400">{{ txn.raw_description }}</td>
+
+    {# Account — immutable #}
+    <td class="px-4 py-2 text-sm text-gray-500 dark:text-gray-400">{{ txn.account_name or '—' }}</td>
+
+    {# Category — corrections overlay, with optional apply-to-merchant #}
+    {% if editing_field is defined and editing_field == 'category' %}
+        {% call select_edit('category', txn.category, categories, base ~ "/update", row_id) %}
+            <label class="ml-2 inline-flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 cursor-pointer align-middle"
+                   title="Also set this category on every transaction from this merchant">
+                <input type="checkbox" name="apply_to_merchant" value="on" checked>
+                <span class="hidden sm:inline">merchant</span>
+            </label>
+        {% endcall %}
+    {% else %}
+        {{ cell_display(txn.category, base ~ "/cell?field=category", row_id) }}
+    {% endif %}
+
+    {# Amount — raw imported data, immutable #}
+    <td class="px-4 py-2 text-right {{ 'text-red-600 dark:text-red-400' if txn.amount < 0 else 'text-green-600 dark:text-green-400' }}">
         {{ '-$' if txn.amount < 0 else '+$' }}{{ txn.amount|abs|money }}
     </td>
-    <td class="px-4 py-3">
-        <button class="text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 p-1 rounded"
-                hx-get="/s/{{ filename }}/transactions/{{ txn.id }}/edit-category"
-                hx-target="closest tr"
-                hx-swap="afterend"
-                hx-trigger="click[!document.getElementById('edit-{{ txn.id }}')]">
-            {% include "partials/edit_icon.html" %}
-        </button>
-    </td>
+
+    {# Notes — corrections overlay #}
+    {% if editing_field is defined and editing_field == 'notes' %}
+        {{ text_edit('notes', txn.notes or '', base ~ "/update", base ~ "/row", row_id) }}
+    {% else %}
+        {{ cell_display(txn.notes or '—', base ~ "/cell?field=notes", row_id) }}
+    {% endif %}
 </tr>

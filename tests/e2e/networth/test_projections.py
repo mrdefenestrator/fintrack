@@ -18,7 +18,7 @@ def test_projections_page_renders(page, flask_server):
 
 def test_projections_nav_tab(page, flask_server):
     page.goto(f"{flask_server}/s/test_finances/accounts")
-    page.click("nav >> text=Projections")
+    page.click("[data-nav-sub] >> text=Projections")
     page.wait_for_url("**/projections**")
     assert "Projections" in page.title()
 

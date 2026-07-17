@@ -20,6 +20,12 @@ function updateImportButton() {
 function detectAccount(file) {
     const formData = new FormData();
     formData.append('files', file);
+    // Include whatever account the user has already picked so the server
+    // can preserve it when auto-detection doesn't find a confident match.
+    const accountSelect = document.querySelector('select[name="account_id"]');
+    if (accountSelect && accountSelect.value !== '') {
+        formData.append('account_id', accountSelect.value);
+    }
     fetch(snapshotPrefix() + '/import/detect-account', { method: 'POST', body: formData })
         .then(r => {
             if (!r.ok) throw new Error(`detect-account failed: ${r.status}`);
@@ -98,7 +104,7 @@ document.addEventListener('change', function (e) {
     if (e.target.name === 'account_id') updateImportButton();
 });
 
-function toggleTrendDetail(rowId, category, period) {
+function toggleTrendDetail(rowId, category, period, end) {
     const detailRow = document.getElementById('trend-detail-' + rowId);
     const arrow = document.getElementById('arrow-' + rowId);
     if (!detailRow) return;
@@ -109,7 +115,9 @@ function toggleTrendDetail(rowId, category, period) {
         if (!detailRow.dataset.loaded) {
             detailRow.dataset.loaded = 'true';
             const cell = detailRow.querySelector('td');
-            fetch(snapshotPrefix() + '/trends/detail?category=' + encodeURIComponent(category) + '&period=' + encodeURIComponent(period))
+            let url = snapshotPrefix() + '/trends/detail?category=' + encodeURIComponent(category) + '&period=' + encodeURIComponent(period);
+            if (end) url += '&end=' + encodeURIComponent(end);
+            fetch(url)
                 .then(r => r.text())
                 .then(html => { cell.innerHTML = html; })
                 .catch(() => { cell.innerHTML = '<div class="p-4 text-xs text-red-400">Failed to load detail.</div>'; });

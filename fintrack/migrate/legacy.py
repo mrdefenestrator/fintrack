@@ -409,10 +409,20 @@ def apply_migration(
                 and a.get("limit") is not None
             ):
                 balance = a["available"] - a["limit"]
+            # partial_account_number is a dropped column on the unified schema;
+            # fold it into the stored name (unless already present, e.g. the
+            # disambiguation pass above already used it to qualify the name)
+            # so the information isn't silently lost. unified_by_key below
+            # stays keyed by the pre-fold final_name, since that's what the
+            # mapping YAML (from render_mapping_template) references.
+            stored_name = a["final_name"]
+            partial = a.get("partial_account_number")
+            if partial and str(partial) not in stored_name:
+                stored_name = f"{stored_name} [{partial}]"
             new_id = conn.execute(
                 insert(models.accounts).values(
                     snapshot_id=snap_map[a["snapshot_id"]],
-                    name=a["final_name"],
+                    name=stored_name,
                     institution=a.get("institution"),
                     account_type=a["type"],
                     balance=balance,
@@ -425,7 +435,6 @@ def apply_migration(
                         a.get("as_of_date"), f"account '{a['name']}'", warnings
                     ),
                     minimum_balance=a.get("minimum_balance"),
-                    partial_account_number=a.get("partial_account_number"),
                     sort_order=a.get("sort_order") or 0,
                 )
             ).inserted_primary_key[0]

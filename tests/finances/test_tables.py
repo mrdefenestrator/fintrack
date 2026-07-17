@@ -116,23 +116,6 @@ class TestAccountDisplayById:
         result = _account_display_by_id(accounts)
         assert result == {1: "Chase Checking"}
 
-    def test_with_partial_account_number(self):
-        accounts = [{"id": 1, "name": "Checking", "partial_account_number": "1234"}]
-        result = _account_display_by_id(accounts)
-        assert result == {1: "Checking [1234]"}
-
-    def test_with_all_fields(self):
-        accounts = [
-            {
-                "id": 1,
-                "name": "Checking",
-                "institution": "Chase",
-                "partial_account_number": "1234",
-            }
-        ]
-        result = _account_display_by_id(accounts)
-        assert result == {1: "Chase Checking [1234]"}
-
     def test_skips_no_id(self):
         accounts = [{"name": "NoID"}]
         assert _account_display_by_id(accounts) == {}
@@ -198,19 +181,6 @@ class TestBuildAccountsTable:
         headers, rows = _build_accounts_table(accounts, n2=100, show_id=True)
         assert headers[0] == "ID"
         assert rows[0][0] == "42"
-
-    def test_partial_account_number_in_name(self):
-        accounts = [
-            {
-                "id": 1,
-                "name": "Checking",
-                "type": "checking",
-                "balance": 100,
-                "partial_account_number": "9999",
-            }
-        ]
-        _, rows = _build_accounts_table(accounts, n2=100)
-        assert "Checking [9999]" in rows[0][2]
 
     def test_separator_and_total_rows(self):
         accounts = [{"id": 1, "name": "A", "type": "checking", "balance": 100}]

@@ -2,7 +2,7 @@ from flask import Blueprint, current_app, render_template, request
 
 from web.routes.common import snapshot_scoped
 
-from fintrack.ledger.repository.categories import get_category_names
+from fintrack.ledger.repository.categories import get_category_names, list_categories
 from fintrack.ledger.repository.merchants import (
     get_merchant_with_stats_by_id,
     list_merchants_with_stats,
@@ -10,6 +10,12 @@ from fintrack.ledger.repository.merchants import (
 )
 
 bp = snapshot_scoped(Blueprint("merchants", __name__, url_prefix="/s/<filename>"))
+
+
+# Fields on a merchant row that participate in the spreadsheet inline editor.
+# merchant_name is the cache key (used to join transactions) and is shown as a
+# link, not editable; source / count / last-seen are computed display columns.
+_MERCHANT_EDITABLE_FIELDS = {"category"}
 
 
 _MERCHANT_SORT_KEYS = {
@@ -33,6 +39,7 @@ def index():
     with engine.connect() as conn:
         merchants = list_merchants_with_stats(conn)
         categories = get_category_names(conn)
+        cats = list_categories(conn)
 
     if search:
         merchants = [
@@ -60,6 +67,7 @@ def index():
         active_tab="merchants",
         merchants=merchants,
         categories=categories,
+        cats=cats,
         search=search,
         selected_category=filter_category,
         selected_source=filter_source,
@@ -68,21 +76,29 @@ def index():
     )
 
 
-@bp.route("/merchants/<int:merchant_id>/edit", methods=["GET"])
-def edit_form(merchant_id):
+@bp.route("/merchants/<int:merchant_id>/cell", methods=["GET"])
+def cell_edit(merchant_id):
+    """Return the merchant row with one field switched to its inline editor."""
+    field = request.args.get("field", "category")
     engine = current_app.config["engine"]
     with engine.connect() as conn:
-        categories = get_category_names(conn)
         merchant = get_merchant_with_stats_by_id(conn, merchant_id)
+        categories = get_category_names(conn)
     if not merchant:
         return "", 404
+    if field not in _MERCHANT_EDITABLE_FIELDS:
+        return render_template("partials/merchant_row.html", m=merchant)
     return render_template(
-        "partials/merchant_edit.html", merchant=merchant, categories=categories
+        "partials/merchant_row.html",
+        m=merchant,
+        categories=categories,
+        editing_field=field,
     )
 
 
 @bp.route("/merchants/<int:merchant_id>/row")
 def row(merchant_id):
+    """Display (non-editing) merchant row — used to revert an open editor."""
     engine = current_app.config["engine"]
     with engine.connect() as conn:
         merchant = get_merchant_with_stats_by_id(conn, merchant_id)
@@ -93,13 +109,18 @@ def row(merchant_id):
 
 @bp.route("/merchants/<int:merchant_id>/category", methods=["POST"])
 def update_category(merchant_id):
-    category = request.form["category"]
-    merchant_name = request.form["merchant_name"]
+    # `value` is the spreadsheet cell input name; fall back to the legacy
+    # `category` field name for compatibility.
+    category = request.form.get("value", request.form.get("category", "")).strip()
 
     engine = current_app.config["engine"]
     with engine.connect() as conn:
-        set_merchant_category(conn, merchant_name, category, source="manual")
         merchant = get_merchant_with_stats_by_id(conn, merchant_id)
-    if not merchant:
-        return "", 404
+        if not merchant:
+            return "", 404
+        if category:
+            set_merchant_category(
+                conn, merchant["merchant_name"], category, source="manual"
+            )
+            merchant = get_merchant_with_stats_by_id(conn, merchant_id)
     return render_template("partials/merchant_row.html", m=merchant)

@@ -1,18 +1,20 @@
 #!/usr/bin/env python3
 """Unified fintrack web application.
 
-One Flask app serving both domains: the net-worth pages (status, accounts,
-budget, assets — finances-style explicit filename views with spreadsheet
+One Flask app serving both domains: the net-worth pages (accounts, budget,
+assets, projections — finances-style explicit filename views with spreadsheet
 editing) and the ledger pages (transactions, trends, merchants, import —
 snapshot-scoped HTMX partial swaps). URL scheme: / is the snapshot picker;
-everything else lives under /s/<snapshot>/<section>.
+everything else lives under /s/<snapshot>/<section>. Navigation is two-tier:
+Finances (accounts, budget, assets, projections) and Spending (transactions,
+trends, merchants) group tabs plus a sub-tab row; import is a header icon.
 """
 
 import os
 from decimal import Decimal
 from pathlib import Path
 
-from flask import Flask, g, render_template
+from flask import Flask, g, render_template, request
 
 # Add project root for direct-execution mode (python web/app.py)
 import sys
@@ -22,6 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from fintrack.core import formatting
 from fintrack.core.config import CATEGORIES_CONFIG
 from fintrack.core.db import get_engine, init_db
+from fintrack.core.types import ACCOUNT_TYPE_OPTIONS
 from fintrack.ledger.repository.categories import seed_categories
 from fintrack.snapshots.repository import list_snapshots
 
@@ -66,6 +69,7 @@ def _register_filters(app: Flask) -> None:
         formatting.fmt_recurrence_display(x)
     )
     app.jinja_env.filters["format_month"] = lambda x: formatting.fmt_month_short(x)
+    app.jinja_env.filters["account_label"] = formatting.fmt_account_label
 
     @app.template_filter("money")
     def money_filter(value, decimals=2):
@@ -95,14 +99,17 @@ def create_app(db_path: str | None = None) -> Flask:
         """Chrome defaults for pages that don't build the finances context.
 
         The snapshot-scoped ledger blueprints populate g; explicit
-        render_template kwargs always win over these.
+        render_template kwargs always win over these. Quick totals (n2/n3/n6)
+        are computed for full-page renders so the nav tabs show them on every
+        page; HTMX partial responses never include the header, so they skip
+        the extra load.
         """
         filename = getattr(g, "filename", None)
         if filename is None:
             return {}
         with engine.connect() as conn:
             available_files = list_snapshots(conn)
-        return {
+        defaults = {
             "filename": filename,
             "active_file": filename,
             "available_files": available_files,
@@ -111,6 +118,22 @@ def create_app(db_path: str | None = None) -> Flask:
             "n3": None,
             "n6": None,
         }
+        snapshot_id = getattr(g, "snapshot_id", None)
+        if snapshot_id is not None and not request.headers.get("HX-Request"):
+            from fintrack.core.loader import load_finances_from_db
+            from web.routes.common import quick_totals
+
+            with engine.connect() as conn:
+                data = load_finances_from_db(conn, snapshot_id)
+            defaults.update(quick_totals(data))
+        return defaults
+
+    @app.context_processor
+    def _account_type_options():
+        """Canonical account-type (value, label) list, available to every
+        template that renders an account-type select (import quick-create,
+        accounts page type editor)."""
+        return {"account_type_options": ACCOUNT_TYPE_OPTIONS}
 
     @app.errorhandler(404)
     def not_found(e):

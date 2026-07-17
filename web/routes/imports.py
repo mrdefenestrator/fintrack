@@ -5,6 +5,7 @@ from pathlib import Path
 from flask import Blueprint, current_app, g, render_template, request
 from sqlalchemy.exc import IntegrityError
 
+from fintrack.core.types import ACCOUNT_TYPE_VALUES
 from fintrack.ledger.classifier import classify_and_cache
 from fintrack.ledger.importer import run_import
 from fintrack.ledger.importer.ofx import extract_ofx_metadata
@@ -100,9 +101,45 @@ def upload():
     )
 
 
+def _match_account(accounts: list[dict], meta) -> int | None:
+    """Match OFX metadata to exactly one existing account, conservatively.
+
+    A candidate must have a case-insensitively matching institution and an
+    exactly matching account_type. If the OFX exposes an account number, the
+    candidates are further narrowed to accounts whose name contains its last
+    4 digits (users fold partials into names by convention, e.g. "...7890").
+    Only returns a match when exactly one confident candidate remains —
+    ambiguous or empty results return None so the caller falls back to
+    whatever the user had already selected.
+    """
+    if not meta or not meta.get("institution"):
+        return None
+    institution = meta["institution"].strip().lower()
+    account_type = meta.get("account_type")
+    candidates = [
+        a
+        for a in accounts
+        if (a.get("institution") or "").strip().lower() == institution
+        and a.get("account_type") == account_type
+    ]
+    if not candidates:
+        return None
+    last4 = (meta.get("last4") or "").strip()
+    if last4:
+        narrowed = [a for a in candidates if last4 in (a.get("name") or "")]
+        if narrowed:
+            candidates = narrowed
+    if len(candidates) == 1:
+        return candidates[0]["id"]
+    return None
+
+
 @bp.route("/import/detect-account", methods=["POST"])
 def detect_account():
     file = request.files.get("files")
+    # The currently selected account, if any, so a low-confidence (or failed)
+    # match never clobbers a choice the user already made.
+    prev_account_id = request.form.get("account_id", type=int)
     meta = None
 
     if file and file.filename:
@@ -120,11 +157,14 @@ def detect_account():
     with engine.connect() as conn:
         accounts = list_accounts(conn, g.snapshot_id)
 
+    matched_id = _match_account(accounts, meta)
+    selected_account_id = matched_id if matched_id is not None else prev_account_id
+
     return render_template(
         "partials/account_panel.html",
         accounts=accounts,
         meta=meta,
-        selected_account_id=None,
+        selected_account_id=selected_account_id,
         show_create=(len(accounts) == 0),
         error=None,
     )
@@ -170,16 +210,8 @@ def do_reject(import_id):
     )
 
 
-VALID_ACCOUNT_TYPES = {
-    "checking",
-    "savings",
-    "gift_card",
-    "wallet",
-    "digital_wallet",
-    "credit_card",
-    "loan",
-    "other",
-}
+# Single source of truth for valid account types: fintrack.core.types.
+VALID_ACCOUNT_TYPES = set(ACCOUNT_TYPE_VALUES)
 
 
 @bp.route("/import/accounts", methods=["POST"])
@@ -222,7 +254,10 @@ def create_account():
                 meta=None,
                 selected_account_id=None,
                 show_create=True,
-                error=f'Account "{name}" already exists.',
+                error=(
+                    f'An account named "{name}" already exists for '
+                    f'institution "{institution}".'
+                ),
             )
 
         accounts = list_accounts(conn, g.snapshot_id)

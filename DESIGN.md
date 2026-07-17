@@ -73,8 +73,9 @@ Single `MetaData` in `fintrack/core/models.py`.
 - **snapshots** — `name` (unique), `created_at`. A snapshot is an independent
   household; the whole app is scoped by it.
 - **accounts** — merged from both predecessors: identity (`name` unique per
-  snapshot, `institution`, `account_type`, `partial_account_number` — which
-  also powers OFX account detection), balance state (`balance`, `available`,
+  `(snapshot, institution)`, `institution`, `account_type`; partial account
+  numbers live in the name itself, e.g. "Checking [1234]"), balance state
+  (`balance`, `available`,
   `credit_limit`, `rewards_balance`, `as_of_date`), autopay/funding config
   (`statement_balance`, `statement_due_day_of_month`, `payment_account_ref`
   self-FK, `minimum_balance`), and `sort_order`.
@@ -199,14 +200,20 @@ Single Flask app (`web/app.py`), port 5003 (`FINTRACK_PORT`), database from
 `/s/<snapshot>/<section>`, with
 `?edit=1` toggling spreadsheet-style edit mode on the net-worth pages.
 
-Navigation: `Status · Accounts · Transactions · Trends · Budget · Assets ·
-Projections · Import · Merchants`. Status is the landing dashboard (key
-numbers + funding).
+Navigation is two-tier and task-oriented: a primary row with two group tabs —
+`Finances` (Accounts · Budget · Assets · Projections) and `Spending`
+(Transactions · Trends · Merchants) — and a secondary row showing the active
+group's sub-tabs. Accounts is the landing page; each group tab remembers its
+last-visited sub-tab for the session (sessionStorage, `web/static/js/nav.js`).
+Import is an icon button in the header rather than a tab, and the edit-mode
+lock is functional only on the pages that honor it (Accounts, Budget,
+Assets — muted elsewhere). The old `/s/<snapshot>/status` dashboard was
+removed; its URL redirects to the Accounts view.
 
 Two HTMX idioms coexist by design: ledger pages (transactions, trends,
 merchants, import) use `HX-Request` partial swaps and are snapshot-scoped via
-a `url_value_preprocessor` (`g.snapshot_id`); net-worth pages (status,
-accounts, budget, assets) use finances-style spreadsheet cell editing with
+a `url_value_preprocessor` (`g.snapshot_id`); net-worth pages (accounts,
+budget, assets) use finances-style spreadsheet cell editing with
 explicit template names. One `base.html` carries Tailwind, HTMX, Alpine.js,
 and the light/dark theme toggle.
 

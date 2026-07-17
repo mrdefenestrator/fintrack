@@ -37,7 +37,6 @@ def _row_to_account(row) -> Account:
         ("as_of_date", "asOfDate"),
         ("minimum_balance", "minimum_balance"),
         ("institution", "institution"),
-        ("partial_account_number", "partial_account_number"),
     ):
         val = r.get(src)
         if val is not None:
@@ -220,7 +219,6 @@ _FIELD_TO_COL.update(
         "statement_balance": "statement_balance",
         "minimum_balance": "minimum_balance",
         "institution": "institution",
-        "partial_account_number": "partial_account_number",
         "name": "name",
         "type": "account_type",
     }
@@ -251,7 +249,6 @@ def _account_dict_to_row(
         "asOfDate": "as_of_date",
         "minimum_balance": "minimum_balance",
         "institution": "institution",
-        "partial_account_number": "partial_account_number",
     }
     for field, col in optional_map.items():
         val = account.get(field)

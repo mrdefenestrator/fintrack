@@ -1,7 +1,7 @@
 from datetime import date
 from decimal import Decimal
 
-from flask import Blueprint, Response, current_app, g, render_template, request
+from flask import Blueprint, current_app, g, render_template, request
 from sqlalchemy import select
 
 from fintrack.core.models import transactions as txn_table
@@ -16,6 +16,17 @@ from web.routes.common import snapshot_scoped
 bp = snapshot_scoped(Blueprint("transactions", __name__, url_prefix="/s/<filename>"))
 
 
+# User-editable overlay fields (transaction_corrections). Raw imported columns
+# (date, amount, raw_description, account) are immutable per DESIGN.md.
+_TXN_EDITABLE_FIELDS = {"category", "merchant_name", "notes"}
+
+
+def _load_txn(conn, txn_id):
+    subq = base_transaction_query().where(txn_table.c.id == txn_id).subquery()
+    row = conn.execute(select(subq)).fetchone()
+    return dict(row._mapping) if row else None
+
+
 @bp.route("/transactions")
 def index():
     today = date.today()
@@ -24,6 +35,7 @@ def index():
     category = request.args.get("category")
     account_id = request.args.get("account_id", type=int)
     search = request.args.get("search")
+    amount = request.args.get("amount")
     status = request.args.get("status")
     all_months = request.args.get("all_months") == "true"
     sort = request.args.get("sort") or None
@@ -38,6 +50,7 @@ def index():
             category=category,
             account_id=account_id,
             search=search,
+            amount=amount,
             status=status,
             sort=sort,
             sort_dir=sort_dir,
@@ -74,6 +87,7 @@ def index():
         selected_category=category,
         selected_account=account_id,
         search=search or "",
+        amount=amount or "",
         selected_status=status,
         all_months=all_months,
         sort=sort,
@@ -83,62 +97,67 @@ def index():
     )
 
 
-@bp.route("/transactions/<int:txn_id>/edit-category", methods=["GET"])
-def edit_category_form(txn_id):
+@bp.route("/transactions/<int:txn_id>/cell", methods=["GET"])
+def cell_edit(txn_id):
+    """Return the transaction row with one overlay field in its inline editor."""
+    field = request.args.get("field", "category")
     engine = current_app.config["engine"]
     with engine.connect() as conn:
         categories = get_category_names(conn)
-        subq = base_transaction_query().where(txn_table.c.id == txn_id).subquery()
-        row = conn.execute(select(subq)).fetchone()
-    current_category = dict(row._mapping)["category"] if row else None
-    return render_template(
-        "partials/transaction_edit.html",
-        txn_id=txn_id,
-        categories=categories,
-        current_category=current_category,
-    )
+        txn = _load_txn(conn, txn_id)
+    if not txn:
+        return "", 404
+    kwargs = {"txn": txn, "categories": categories}
+    if field in _TXN_EDITABLE_FIELDS:
+        kwargs["editing_field"] = field
+    return render_template("partials/transaction_row.html", **kwargs)
 
 
 @bp.route("/transactions/<int:txn_id>/row")
 def row(txn_id):
+    """Display (non-editing) transaction row — used to revert an open editor."""
     engine = current_app.config["engine"]
     with engine.connect() as conn:
-        subq = base_transaction_query().where(txn_table.c.id == txn_id).subquery()
-        result = conn.execute(select(subq)).fetchone()
-    if not result:
+        txn = _load_txn(conn, txn_id)
+    if not txn:
         return "", 404
-    return render_template("partials/transaction_row.html", txn=dict(result._mapping))
+    return render_template("partials/transaction_row.html", txn=txn)
 
 
-@bp.route("/transactions/<int:txn_id>/category", methods=["POST"])
-def update_category(txn_id):
-    category = request.form["category"]
+@bp.route("/transactions/<int:txn_id>/update", methods=["POST"])
+def update(txn_id):
+    """Apply an inline spreadsheet edit to a transaction's overlay fields.
+
+    Edits are written to the transaction_corrections overlay; raw imported
+    columns are never modified. Editing the category with the apply-to-merchant
+    checkbox instead sets the merchant-wide category and reloads the list.
+    """
+    field = request.form.get("field", "").strip()
+    value = request.form.get("value", "").strip()
     apply_to_merchant = request.form.get("apply_to_merchant") == "on"
 
+    if field not in _TXN_EDITABLE_FIELDS:
+        return "", 422
+
     engine = current_app.config["engine"]
     with engine.connect() as conn:
-        if apply_to_merchant:
-            row = conn.execute(
+        if field == "category" and apply_to_merchant:
+            merchant_row = conn.execute(
                 select(txn_table.c.normalized_merchant).where(txn_table.c.id == txn_id)
             ).fetchone()
-            if row:
-                set_merchant_category(conn, row[0], category, source="manual")
-            # Many rows changed — reload the content area preserving URL state
+            if merchant_row is None:
+                return "", 404
+            set_merchant_category(conn, merchant_row[0], value, source="manual")
+            # Many rows change at once — reload the content area, preserving
+            # the current URL's filter/sort/month state.
             current_url = request.headers.get(
                 "HX-Current-URL", f"/s/{g.filename}/transactions"
             )
             return "", 204, {"HX-Redirect": current_url}
-        else:
-            apply_transaction_correction(conn, txn_id, category=category)
 
-        subq = base_transaction_query().where(txn_table.c.id == txn_id).subquery()
-        updated = conn.execute(select(subq)).fetchone()
+        apply_transaction_correction(conn, txn_id, **{field: value})
+        txn = _load_txn(conn, txn_id)
 
-    if not updated:
+    if not txn:
         return "", 404
-
-    row_html = render_template(
-        "partials/transaction_row.html", txn=dict(updated._mapping)
-    )
-    oob_delete = f'<tr id="edit-{txn_id}" hx-swap-oob="delete"></tr>'
-    return Response(row_html + oob_delete, content_type="text/html")
+    return render_template("partials/transaction_row.html", txn=txn)

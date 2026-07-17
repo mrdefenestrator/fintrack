@@ -1,3 +1,5 @@
+import re
+from calendar import monthrange
 from datetime import date
 from collections import defaultdict
 
@@ -7,6 +9,8 @@ from fintrack.ledger.repository.aggregations import get_monthly_totals_range
 from web.routes.common import snapshot_scoped
 
 bp = snapshot_scoped(Blueprint("trends", __name__, url_prefix="/s/<filename>"))
+
+_END_PARAM_RE = re.compile(r"^(\d{4})-(\d{2})$")
 
 
 def _period_range(period: str, today: date) -> tuple[date, date]:
@@ -28,11 +32,64 @@ def _period_range(period: str, today: date) -> tuple[date, date]:
         return date(today.year, 1, 1), today
 
 
+def _parse_end_param(value: str | None) -> tuple[int, int] | None:
+    """Parse an `end=YYYY-MM` query param. Returns None if missing/malformed
+    or the month is out of range — callers fall back to the latest window."""
+    if not value:
+        return None
+    m = _END_PARAM_RE.match(value)
+    if not m:
+        return None
+    year, month = int(m.group(1)), int(m.group(2))
+    if not (1 <= month <= 12):
+        return None
+    return year, month
+
+
+def _shift_month(year: int, month: int, delta: int) -> tuple[int, int]:
+    """Shift a (year, month) pair by `delta` months."""
+    idx = year * 12 + (month - 1) + delta
+    return idx // 12, idx % 12 + 1
+
+
+def _resolve_window_end(
+    end_param: str | None, today: date
+) -> tuple[date, int, int, bool]:
+    """Resolve the effective end-of-window date for the trends page.
+
+    `end_param` is the raw `end=YYYY-MM` query string value. Malformed values
+    and months at-or-after the current month both fall back to "latest"
+    (today, so the current partial month behaves exactly as before paging
+    existed). Past months resolve to the last calendar day of that month, so
+    a paged-back window always covers a full month.
+
+    Returns (effective_end_date, anchor_year, anchor_month, is_latest).
+    """
+    parsed = _parse_end_param(end_param)
+    current_ym = (today.year, today.month)
+    if parsed is None or parsed >= current_ym:
+        return today, today.year, today.month, True
+    year, month = parsed
+    _, last_day = monthrange(year, month)
+    return date(year, month, last_day), year, month, False
+
+
 @bp.route("/trends")
 def index():
     today = date.today()
     period = request.args.get("period", "trailing12")
-    start, end = _period_range(period, today)
+    anchor_end, anchor_year, anchor_month, is_latest = _resolve_window_end(
+        request.args.get("end"), today
+    )
+    start, end = _period_range(period, anchor_end)
+
+    prev_year, prev_month = _shift_month(anchor_year, anchor_month, -1)
+    next_year, next_month = _shift_month(anchor_year, anchor_month, 1)
+    prev_end = f"{prev_year:04d}-{prev_month:02d}"
+    next_end = f"{next_year:04d}-{next_month:02d}"
+    anchor_end_param = f"{anchor_year:04d}-{anchor_month:02d}"
+    end_qs = "" if is_latest else f"&end={anchor_end_param}"
+    window_label = f"{start:%b %Y} – {end:%b %Y}"
 
     engine = current_app.config["engine"]
     with engine.connect() as conn:
@@ -117,6 +174,12 @@ def index():
         monthly_footer_values=monthly_footer_values,
         num_months=num_months,
         footer_pct_change=footer_pct_change,
+        prev_end=prev_end,
+        next_end=next_end,
+        anchor_end=anchor_end_param,
+        end_qs=end_qs,
+        is_latest=is_latest,
+        window_label=window_label,
     )
 
 
@@ -125,7 +188,8 @@ def detail():
     today = date.today()
     period = request.args.get("period", "ytd")
     category = request.args.get("category", "")
-    start, end = _period_range(period, today)
+    anchor_end, _, _, _ = _resolve_window_end(request.args.get("end"), today)
+    start, end = _period_range(period, anchor_end)
 
     engine = current_app.config["engine"]
     with engine.connect() as conn:

@@ -1,4 +1,10 @@
-"""E2E tests for the Transactions tab."""
+"""E2E tests for the Transactions tab.
+
+Transactions use spreadsheet-style inline editing for the corrections-overlay
+fields (Merchant, Category, Notes): click the cell → it becomes an input/select
+that saves on change/blur. Raw imported columns (Date, Description, Account,
+Amount) are display-only.
+"""
 
 import pytest
 
@@ -39,6 +45,12 @@ def test_transactions_search_input_present(page, flask_server):
     assert page.locator("input[name='search']").is_visible()
 
 
+def test_transactions_amount_filter_input_present(page, flask_server):
+    """Amount search input is rendered in the filter bar."""
+    page.goto(f"{flask_server}/s/ledger/transactions")
+    assert page.locator("input[name='amount']").is_visible()
+
+
 def test_transactions_month_label_displayed(page, flask_server):
     """Current month/year label is shown (MM/YYYY format)."""
     page.goto(f"{flask_server}/s/ledger/transactions?year=2026&month=4")
@@ -63,7 +75,7 @@ def test_transactions_table_has_expected_columns(page, flask_server):
     """Table header renders the expected columns."""
     page.goto(f"{flask_server}/s/ledger/transactions")
     header = page.locator("table thead tr")
-    for col in ("Date", "Merchant", "Description", "Category", "Amount"):
+    for col in ("Date", "Merchant", "Description", "Category", "Amount", "Notes"):
         assert header.locator("th", has_text=col).is_visible(), f"Missing column: {col}"
 
 
@@ -95,53 +107,55 @@ def test_transactions_merchant_names_visible(page, confirmed_server):
     assert "WHOLE FOODS" in body_text or "CHIPOTLE" in body_text
 
 
-def test_transactions_edit_button_per_row(page, confirmed_server):
-    """Each transaction row has an edit icon button."""
+# ---------------------------------------------------------------------------
+# Inline spreadsheet editing
+# ---------------------------------------------------------------------------
+
+
+def test_transactions_category_cell_opens_inline_select(page, confirmed_server):
+    """Clicking the Category cell (col 4) swaps it to a <select> with the
+    apply-to-merchant option."""
     page.goto(f"{confirmed_server}/s/ledger/transactions?year=2026&month=4")
-    buttons = page.locator("table tbody tr button[hx-get*='edit-category']")
-    assert buttons.count() == 4
+    cat_cell = page.locator("table tbody tr").first.locator("td").nth(4)
+    with page.expect_response(lambda r: "/cell" in r.url and "category" in r.url):
+        cat_cell.click()
+    edit_row = page.locator("table tbody tr").first
+    assert edit_row.locator("select[name='value']").is_visible()
+    assert edit_row.locator("input[name='apply_to_merchant']").count() == 1
 
 
-def test_transactions_click_edit_shows_inline_form(page, confirmed_server):
-    """Clicking the edit icon inserts an inline edit form row via HTMX."""
+def test_transactions_merchant_cell_opens_text_input(page, confirmed_server):
+    """Clicking the Merchant cell (col 1) swaps it to a text input."""
     page.goto(f"{confirmed_server}/s/ledger/transactions?year=2026&month=4")
-    edit_btn = page.locator("table tbody tr button[hx-get*='edit-category']").first
-    with page.expect_response(lambda r: "edit-category" in r.url):
-        edit_btn.click()
-    page.wait_for_selector('tr[id^="edit-"]')
+    merchant_cell = page.locator("table tbody tr").first.locator("td").nth(1)
+    with page.expect_response(lambda r: "/cell" in r.url and "merchant_name" in r.url):
+        merchant_cell.click()
+    edit_row = page.locator("table tbody tr").first
+    assert edit_row.locator("input[name='value']").is_visible()
 
 
-def test_transactions_edit_form_has_category_select(page, confirmed_server):
-    """Inline edit form contains a category <select> with options."""
+def test_transactions_notes_cell_opens_text_input(page, confirmed_server):
+    """Clicking the Notes cell (col 6) swaps it to a text input."""
     page.goto(f"{confirmed_server}/s/ledger/transactions?year=2026&month=4")
-    edit_btn = page.locator("table tbody tr button[hx-get*='edit-category']").first
-    with page.expect_response(lambda r: "edit-category" in r.url):
-        edit_btn.click()
-    edit_row = page.locator('tr[id^="edit-"]').first
-    cat_select = edit_row.locator("select[name='category']")
-    assert cat_select.is_visible()
-    assert cat_select.locator("option").count() > 0
+    notes_cell = page.locator("table tbody tr").first.locator("td").nth(6)
+    with page.expect_response(lambda r: "/cell" in r.url and "notes" in r.url):
+        notes_cell.click()
+    edit_row = page.locator("table tbody tr").first
+    assert edit_row.locator("input[name='value']").is_visible()
 
 
-def test_transactions_edit_form_has_apply_to_merchant_checkbox(page, confirmed_server):
-    """Inline edit form has the 'Apply to all from this merchant' checkbox."""
+def test_transactions_amount_cell_not_editable(page, confirmed_server):
+    """The Amount cell (col 5) is raw data and does not open an editor."""
     page.goto(f"{confirmed_server}/s/ledger/transactions?year=2026&month=4")
-    edit_btn = page.locator("table tbody tr button[hx-get*='edit-category']").first
-    with page.expect_response(lambda r: "edit-category" in r.url):
-        edit_btn.click()
-    edit_row = page.locator('tr[id^="edit-"]').first
-    assert edit_row.locator("input[name='apply_to_merchant']").is_visible()
+    amount_cell = page.locator("table tbody tr").first.locator("td").nth(5)
+    amount_cell.click()
+    # No inline input appears anywhere in the table.
+    assert page.locator("table tbody input[name='value']").count() == 0
 
 
-def test_transactions_edit_form_cancel_removes_row(page, confirmed_server):
-    """Clicking Cancel in the inline edit form removes the edit row."""
-    page.goto(f"{confirmed_server}/s/ledger/transactions?year=2026&month=4")
-    edit_btn = page.locator("table tbody tr button[hx-get*='edit-category']").first
-    with page.expect_response(lambda r: "edit-category" in r.url):
-        edit_btn.click()
-    page.wait_for_selector('tr[id^="edit-"]')
-    page.locator('tr[id^="edit-"] button', has_text="Cancel").click()
-    assert page.locator('tr[id^="edit-"]').count() == 0
+# ---------------------------------------------------------------------------
+# Filters (read-only) — run before the mutating save test below
+# ---------------------------------------------------------------------------
 
 
 def test_transactions_filter_by_status_uncategorized(page, confirmed_server):
@@ -170,3 +184,42 @@ def test_transactions_search_filters_rows(page, confirmed_server):
     rows = page.locator("table tbody tr")
     assert rows.count() == 1
     assert "WHOLE FOODS" in rows.first.inner_text().upper()
+
+
+def test_transactions_amount_filter_range_filters_rows(page, confirmed_server):
+    """Amount range filter narrows the transaction list."""
+    page.goto(f"{confirmed_server}/s/ledger/transactions?year=2026&month=4")
+    all_rows = page.locator("table tbody tr").count()
+    page.goto(f"{confirmed_server}/s/ledger/transactions?year=2026&month=4&amount=0-1")
+    filtered_rows = page.locator("table tbody tr").count()
+    assert filtered_rows <= all_rows
+
+
+def test_transactions_amount_filter_invalid_input_ignored(page, confirmed_server):
+    """Invalid amount text is ignored rather than erroring."""
+    page.goto(f"{confirmed_server}/s/ledger/transactions?year=2026&month=4")
+    all_rows = page.locator("table tbody tr").count()
+    page.goto(
+        f"{confirmed_server}/s/ledger/transactions?year=2026&month=4&amount=garbage"
+    )
+    assert page.locator("table tbody tr").count() == all_rows
+
+
+# ---------------------------------------------------------------------------
+# Mutating save test — placed last so it cannot disturb the counts above.
+# Editing Notes writes a correction without changing category/status counts.
+# ---------------------------------------------------------------------------
+
+
+def test_transactions_notes_inline_edit_saves(page, confirmed_server):
+    """Typing a note and blurring persists it to the corrections overlay."""
+    page.goto(f"{confirmed_server}/s/ledger/transactions?year=2026&month=4")
+    notes_cell = page.locator("table tbody tr").first.locator("td").nth(6)
+    with page.expect_response(lambda r: "/cell" in r.url and "notes" in r.url):
+        notes_cell.click()
+    note_input = page.locator("table tbody tr").first.locator("input[name='value']")
+    note_input.fill("reimbursable")
+    with page.expect_response(lambda r: r.request.method == "POST"):
+        note_input.press("Enter")
+    page.wait_for_selector("table tbody tr td:has-text('reimbursable')")
+    assert "reimbursable" in page.locator("table tbody").inner_text()

@@ -258,11 +258,19 @@ def categories_list(cli):
 
 @categories.command("add")
 @click.option("--name", required=True)
-@click.option("--sort-order", required=True, type=int)
+@click.option(
+    "--sort-order",
+    type=int,
+    default=None,
+    help="Defaults to appending after the current highest sort order.",
+)
 @pass_cli
 def categories_add(cli, name, sort_order):
     with cli.connect() as conn:
-        add_category(conn, name=name, sort_order=sort_order)
+        try:
+            add_category(conn, name=name, sort_order=sort_order)
+        except ValueError as e:
+            raise click.ClickException(str(e)) from e
     click.echo(f"Added category: {name}")
 
 
@@ -273,7 +281,10 @@ def categories_add(cli, name, sort_order):
 @pass_cli
 def categories_edit(cli, category_id, name, sort_order):
     with cli.connect() as conn:
-        edit_category(conn, category_id, name=name, sort_order=sort_order)
+        try:
+            edit_category(conn, category_id, name=name, sort_order=sort_order)
+        except ValueError as e:
+            raise click.ClickException(str(e)) from e
     click.echo(f"Updated category {category_id}")
 
 
@@ -282,7 +293,10 @@ def categories_edit(cli, category_id, name, sort_order):
 @pass_cli
 def categories_delete(cli, name):
     with cli.connect() as conn:
-        delete_category(conn, name=name)
+        try:
+            delete_category(conn, name=name)
+        except ValueError as e:
+            raise click.ClickException(str(e)) from e
     click.echo(f"Deleted category: {name}")
 
 

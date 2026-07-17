@@ -12,39 +12,56 @@ def test_root_shows_snapshot_picker(page, flask_server):
 
 
 def test_all_ledger_tabs_load(page, flask_server):
-    """Each ledger tab URL renders the nav and content area without errors."""
+    """Each ledger page URL renders the nav and content area without errors."""
     tabs = ["/trends", "/transactions", "/merchants", "/import"]
     for path in tabs:
         page.goto(f"{flask_server}/s/ledger{path}")
-        assert page.locator("nav").is_visible(), f"Nav missing on {path}"
+        assert page.locator("[data-nav]").is_visible(), f"Nav missing on {path}"
         assert page.locator("#content").is_visible(), f"Content missing on {path}"
 
 
 def test_initial_active_tab_highlighted(page, flask_server):
-    """Server-rendered active tab has the highlight classes on initial load."""
-    for path in ("/trends", "/merchants", "/import"):
+    """Server-rendered active sub-tab and Spending group tab have the
+    highlight classes on initial load."""
+    for path in ("/transactions", "/trends", "/merchants"):
         page.goto(f"{flask_server}/s/ledger{path}")
-        active = page.locator(f"nav a[href='/s/ledger{path}']")
+        active = page.locator(f"[data-nav-sub] a[href='/s/ledger{path}']")
         classes = active.get_attribute("class")
-        assert "border-white" in classes, f"Tab not highlighted on {path}"
+        assert "border-white" in classes, f"Sub-tab not highlighted on {path}"
+        group = page.locator("[data-nav-group='spending']")
+        assert "border-white" in group.get_attribute("class"), path
+
+
+def test_import_page_neither_group_active(page, flask_server):
+    """The import page activates the header import icon, not a nav group,
+    and still renders a (placeholder) sub-tab row for constant height."""
+    page.goto(f"{flask_server}/s/ledger/import")
+    for group in ("finances", "spending"):
+        classes = page.locator(f"[data-nav-group='{group}']").get_attribute("class")
+        assert "border-white" not in classes, group
+    assert page.locator("[data-import-link]").get_attribute("aria-current") == "page"
+    assert page.locator("[data-nav-sub]").count() == 1
 
 
 def test_tab_navigation(page, flask_server):
     """Clicking nav tabs navigates between ledger and net-worth pages."""
     page.goto(f"{flask_server}/s/ledger/trends")
 
-    page.click("nav a[href='/s/ledger/merchants']")
+    page.click("[data-nav-sub] a[href='/s/ledger/merchants']")
     page.wait_for_url("**/merchants**")
 
-    page.click("nav a[href='/s/ledger/import']")
+    # Import is a header icon button now, not a tab
+    page.click("[data-import-link]")
     page.wait_for_url("**/import**")
 
-    page.click("nav >> text=Accounts")
+    # From import (no active group) the Finances group tab lands on Accounts
+    page.click("[data-nav-group='finances']")
     page.wait_for_url("**/accounts**")
 
-    page.click("nav a[href='/s/ledger/transactions']")
-    page.wait_for_url("**/transactions**")
-    active = page.locator("nav a[href='/s/ledger/transactions']")
+    # Spending group tab remembers the last-visited sub-tab (merchants)
+    page.click("[data-nav-group='spending']")
+    page.wait_for_url("**/merchants**")
+    active = page.locator("[data-nav-sub] a[href='/s/ledger/merchants']")
     assert "border-white" in active.get_attribute("class")
 
 

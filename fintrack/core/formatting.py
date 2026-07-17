@@ -79,6 +79,25 @@ def fmt_type_display(raw: str | None) -> str:
     return _fmt_label(raw)
 
 
+def fmt_account_label(account: dict) -> str:
+    """Build the canonical account-picker label: '{Institution} [{Type}] {Name}'.
+
+    Degrades to '[{Type}] {Name}' when institution is empty/None. Tolerates
+    both the ledger repository's raw "account_type" column name and the
+    net-worth repository's unified "type" field name.
+    """
+    institution = (account.get("institution") or "").strip()
+    account_type = account.get("account_type") or account.get("type")
+    name = account.get("name") or "-"
+    parts = []
+    if institution:
+        parts.append(institution)
+    if account_type:
+        parts.append(f"[{fmt_type_display(account_type)}]")
+    parts.append(name)
+    return " ".join(parts)
+
+
 def fmt_recurrence_display(raw: str | None) -> str:
     """Format recurrence for display: one_time -> One time, monthly -> Monthly."""
     return _fmt_label(raw)

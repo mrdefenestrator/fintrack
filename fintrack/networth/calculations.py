@@ -17,6 +17,7 @@ from fintrack.budget.recurrence import (
     semiannual_other_month as _semiannual_other_month,  # noqa: F401
     subtotal_remainder_of_month as _subtotal_remainder_of_month,
 )
+from fintrack.core.types import ACCOUNT_TYPE_VALUES
 
 _ZERO = Decimal("0")
 
@@ -26,16 +27,18 @@ _ZERO = Decimal("0")
 _ACCOUNT_TYPE_TO_CALCULATION = {
     "checking": "liquid",
     "savings": "liquid",
+    "credit_card": "credit_card",
     "gift_card": "liquid",
     "wallet": "liquid",
     "digital_wallet": "liquid",
-    "credit_card": "credit_card",
     "loan": "other",
     "other": "other",
 }
 
-# CLI filter options (parity with GUI)
-ACCOUNT_TYPES_CLI = list(_ACCOUNT_TYPE_TO_CALCULATION.keys())
+# CLI filter options (parity with GUI). Values and order come from the
+# canonical account-type list in fintrack.core.types (single source of truth
+# shared with the web UI's selects/validation).
+ACCOUNT_TYPES_CLI = ACCOUNT_TYPE_VALUES
 BUDGET_KINDS_CLI = ["income", "expense"]
 BUDGET_INCOME_TYPES_CLI = ["salary", "refund", "bonus", "remittance"]
 BUDGET_EXPENSE_TYPES_CLI = [

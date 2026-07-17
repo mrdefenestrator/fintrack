@@ -1,21 +1,120 @@
 0. When bringing in the balance from an import for a credit card, we need to resolve how this interacts with the limit and available.
+   **FIXED** — resolution: a confirmed statement import now keeps credit-card
+   fields consistent. If the statement reports available credit, it's written
+   to the account (and fills credit_limit when unset — a user-set limit is
+   never overwritten); otherwise available is derived as credit_limit +
+   balance. balance stays canonical; non-CC accounts unchanged.
 0. Need to remove the code that displays and stores the partial account numbers for accounts.  This can be dropped from the db.  Partial account numbers will be put into name
+   **FIXED** — column dropped (migration `b0b3c9940bc5` folds any existing
+   partials into the name as " [1234]"); all code/UI references removed.
+   NOTE: run `uv run alembic stamp 6a88702b7507 && uv run alembic upgrade head`
+   once on your real DB (it predates Alembic tracking).
 1. The UNIQ constraint on simply account name makes the accounts annoying to use.  We should be able to have a Wallet from venmo named wallet and a wallet from paypal named wallet without problems.
+   **FIXED** — uniqueness is now (snapshot, institution, name): Venmo/Wallet
+   and PayPal/Wallet coexist; duplicates within one institution still rejected.
 2. We need to gracefully handle save errors and surface these to the user within the accounts spreadsheet.  For example, the UNIQ constraint error printed a traceback in the logs and made the web ui unpresponsive until I changes to a distinct account name.
+   **FIXED** — duplicate saves now show an inline red banner in the sheet
+   ("An account named ... already exists for institution ...") and the page
+   stays responsive. Root cause of the freeze: HTMX 2.x ignores 4xx response
+   bodies by default; a beforeSwap hook now swaps non-empty 422 bodies.
 3. The account types on the import page for quick account creation should match all the account types in the accounts page.  We should do the same on the account picker on the transactions page, and anywhere else we have a similar input.
+   **FIXED** — one canonical ordered list (ACCOUNT_TYPE_OPTIONS in
+   fintrack/core/types.py) now drives the import quick-create select, the
+   accounts page, and import validation; all 8 types offered everywhere.
 4. The account drop down selector should give more than just the account name.  It should definitely have the institution name and maybe the account type.  Just a thought "{Institution} [{Type}] {Name}"
+   **FIXED** — import and transactions account pickers now show
+   "{Institution} [{Type}] {Name}" via a shared `account_label` Jinja filter
+   (degrades to "[{Type}] {Name}" when no institution). The payment/auto
+   account-ref selects on accounts/budget already showed institution+name and
+   were left as-is.
 5. The top controls on the trends page needs to be reworked.  I like the default of trailing 12 months, but we should have a way to page back and forth.  Open to suggestions.
+   **FIXED** — trailing-12 default kept; new ◀ / ▶ pager shifts the window a
+   month at a time with the current range shown between (e.g. "Aug 2025 – Jul
+   2026"), plus a "Latest" reset that appears when paged back. Works with the
+   existing period presets, category detail expansion, and browser
+   back/forward (hx-push-url); malformed/future `end=` params fall back to
+   latest.
 6. We have too many many tabs on the top bar.  We need to find a better, more task oriented place to put some pages.  Maybe just iconic buttons for some things like import?  I'm open to a number of ideas.  Maybe a dual tiered tab structure?  We should think about options that support a user's journey and best practices for UX
+   **FIXED** (design agreed in review) — two-tier nav: Finances (Accounts,
+   Budget, Assets, Projections) and Spending (Transactions, Trends,
+   Merchants) group tabs with a sub-tab row; each group tab remembers your
+   last sub-tab for the session. Import is now a header icon button. The
+   Status page was removed (its four numbers are fully redundant with the
+   header totals); /s/<name>/status redirects to Accounts. Both nav rows
+   keep constant height on every page.
 7. The locked/unlocked control is only relevant for certain pages.  What should we do with it?  Should it only exist on the pages where it's relevant?  I feel we would still want a feeling of continuity between the pages that make use of it.  Or maybe the concept is not ideal in the first place?  It's nice to be able to switch between the modes, it sort of supports the "spreadsheet" ux experience on the accounts / budget / assets pages.
+   **FIXED** — the lock stays (it's what makes the spreadsheet UX safe) but
+   is now functional only on the pages that honor it (Accounts, Budget,
+   Assets); everywhere else the same-size lock renders muted and
+   non-interactive with a tooltip, so the header never shifts and the
+   concept keeps its continuity. Edit state still carries through Finances
+   links (including a detour through Projections).
 8. Does it make any sense to make the spending categories user defined?  Start with a basic set but allow them to be removed / changed / added to?  What about account types?  Should we do the same?
+   **FIXED** (scope agreed: categories yes, account types stay fixed) —
+   "Manage categories" panel on the Merchants page: add, inline rename
+   (cascades through merchant_cache, corrections, and budget entries), and
+   delete (blocked with an in-use breakdown while referenced). New
+   categories flow into the classifier automatically. Seeding now only
+   populates an empty table, so deleting a default category sticks across
+   restarts (previously it silently resurrected).
 9. Reserve column on account page needs to be editable for at least checking and savings, probably wallet too?
+   **FIXED** — Reserve (minimum_balance) is now inline-editable for checking,
+   savings, wallet, and digital_wallet; stays read-only for credit cards,
+   loans, gift cards, and other.
 10. Is the account auto picker functionality on the import page ever going to work?  Maybe if no matching account is auto picked when the import file is chosen, we just leave the account dropdown alone.  Just in case someone chose the account before providing the file?
+    **FIXED** — it now actually matches: institution (case-insensitive) +
+    account type, narrowed by the OFX account number's last 4 digits appearing
+    in the account name. It only auto-selects on exactly one confident
+    candidate; otherwise your existing selection is preserved (it used to be
+    unconditionally reset to "Select account...").
 11. Search transactions by amount?  Would be helpful in correlating certain transactions like transfers.  Some sort of fuzzy search?
+    **FIXED** — new Amount box in the transactions filter bar: `12.34`
+    matches either sign within ±$0.50 (both transfer legs show), `-12.34` /
+    `+12.34` restrict sign, `10-20` / `10..20` are ranges, `>50` `<25` `>=`
+    `<=` compare. Invalid input is silently ignored; combines with all
+    existing filters.
 12. Merchants and Transactions lists edit is very clunky / slow.  CLick far right, mouse to far left, make change, save, repeat.  Maybe these should use a display and editing system similar to the "spreadsheet" style we see on the accounts/budget/assts pages?
+    **FIXED** — both pages now use accounts-style inline cell editing: click
+    a cell, edit in place, Enter/blur saves, per-row swap keeps filters and
+    pagination intact. Merchants: category select (merchant name stays a
+    link — renaming isn't supported by the data model). Transactions:
+    category / merchant name / notes via the corrections overlay (raw
+    date/amount/description stay immutable); the category editor keeps an
+    "apply to merchant" checkbox, checked by default like before. Notes got
+    its own visible column.
 13. Is there a way to get historical balances out of empower or fidelity for 401k accounts?  This would support the projections view, I think.
+    **ON HOLD** (per review) — research findings: neither provider exports
+    balance history directly (Empower: transaction CSVs up to ~7 years;
+    Fidelity: ~90-day CSV/OFX windows), and reconstructing 401k balances
+    from transactions misses market movement. Recommended feature when
+    resumed: per-account CSV bulk-import of (date, balance) points into
+    balance_history, typed from PDF statements.
 14. Do we have a feature for flagging deviations from expectations for spending categories / merchants?  This could be extended into a budget check feature.  Some real design work / collaboration is needed here.
+    **DESIGN DOCUMENTED** — no such feature exists; the agreed direction is
+    written up as an implementation-ready spec in docs/deviation-flagging.md
+    (phase 1: trailing-median baseline + prorated deviation chips on Trends;
+    phase 2: budget-aware comparison via budget_entries.category; phase 3:
+    subscription/merchant anomalies, deferred).
+15. In the spreadsheet views, it's hard to see when the sheet is scrolled to the top or bottom.  When the sheet is not at the top, we should have a subtle drop shadow on the sheet under the header row, and the opposite for the bottom.  When not at the bottom, there should be a subtle drop shadow on the sheet above the total row
+    **FIXED** — accounts/budget/assets sheets show a subtle gradient shadow
+    under the sticky header when scrolled down and above the total row when
+    not at the bottom (light + dark variants). Opt-in via a
+    `data-sheet-scroll` attribute so future sheets can adopt it; survives
+    HTMX swaps and row count changes.
+16. The quick totals in the ui tabs are not always visible, and as we move between tabs, the tab row grows and shrinks vertically depending on which tab is selected (did it come from the finances app or the spending app)
+    **FIXED** — two causes, both addressed: (a) every tab now always renders
+    a two-line label+total structure so the tab row height is constant on
+    every page; (b) the spending pages (transactions/trends/import/
+    merchants) never computed the totals at all — a context processor now
+    supplies n2/n3/n6 on every full-page render, so the quick totals are
+    visible on every tab.
 
-Tracebacks from failed import categorization:
+Tracebacks from failed import categorization: **FIXED** — classifier now
+chunks merchants into batches of 40, raised max_tokens 1024→4096, detects
+truncated (`stop_reason == "max_tokens"`) and malformed JSON responses per
+batch, and caches each batch's successes immediately so one bad batch no
+longer loses the whole import. Partial failures surface as a "Classified X
+of Y" warning.
 
 127.0.0.1 - - [16/Jul/2026 16:54:56] "POST /s/test/import/detect-account HTTP/1.1" 200 -
 Classification failed unexpectedly

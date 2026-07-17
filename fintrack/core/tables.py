@@ -88,8 +88,6 @@ def _account_display_by_id(accounts: List[Dict[str, Any]]) -> Dict[int, str]:
             continue
         parts = [a.get("institution")] if a.get("institution") else []
         parts.append(a.get("name", "-"))
-        if a.get("partial_account_number"):
-            parts.append(f"[{a.get('partial_account_number')}]")
         result[aid] = " ".join(parts)
     return result
 
@@ -120,11 +118,7 @@ def _build_accounts_table(
     for a in accounts:
         account_id = a.get("id")
         institution = a.get("institution")
-        name = a.get("name", "-")
-        partial = a.get("partial_account_number")
-        name_display = name
-        if partial:
-            name_display = f"{name} [{partial}]"
+        name_display = a.get("name", "-")
         institution_display = institution or "-"
         rewards = a.get("rewards_balance")
         stmt_bal = a.get("statement_balance")

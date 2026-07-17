@@ -1,5 +1,12 @@
 {# Accounts table tbody - used for full tbody swap after cell edit #}
 {% from "macros/table.html" import total_row %}
+{% if error %}
+<tr id="accounts-error-row">
+    <td colspan="100" class="px-2 py-1 text-sm text-red-500 bg-red-50 dark:bg-red-950/40 border-b border-red-200 dark:border-red-800">
+        {{ error }}
+    </td>
+</tr>
+{% endif %}
 {% if edit_mode %}
 {% for account, row_cells in edit_rows %}
 {% include "partials/accounts_row_display.html" %}

@@ -225,3 +225,113 @@ def test_reconciliation_flags_unexplained_delta(conn):
     assert note is not None
     assert "unreconciled" in note
     assert "+20.00" in note
+
+
+# ---- credit-card available/limit consistency on sync -------------------------
+
+
+def _cc_account(conn, name="Visa", credit_limit=None):
+    snapshot_id = create_snapshot(conn, f"snap-{name}")
+    account = {"name": name, "type": "credit_card"}
+    if credit_limit is not None:
+        account["limit"] = credit_limit
+    account_id = fin_add_account(conn, snapshot_id, account)
+    return snapshot_id, account_id
+
+
+def test_cc_import_confirm_updates_available(conn):
+    _, account_id = _cc_account(conn, name="CCImport", credit_limit=Decimal("5000"))
+    import_id = create_import(
+        conn,
+        account_id=account_id,
+        filename="cc.ofx",
+        file_hash="cc1",
+        ledger_balance=Decimal("-600.00"),
+        ledger_balance_date=date(2026, 6, 15),
+        available_balance=Decimal("4400.00"),
+    )
+    confirm_import(conn, import_id)
+    acct = get_account_by_id(conn, account_id)
+    assert acct["balance"] == Decimal("-600.00")
+    assert acct["available"] == Decimal("4400.00")
+    assert acct["credit_limit"] == Decimal("5000")
+    # invariant restored: balance == available - credit_limit
+    assert acct["balance"] == acct["available"] - acct["credit_limit"]
+
+
+def test_cc_sync_derives_available_when_point_lacks_it(conn):
+    _, account_id = _cc_account(conn, name="CCDerive", credit_limit=Decimal("5000"))
+    record_balance(
+        conn,
+        account_id=account_id,
+        balance=Decimal("-600.00"),
+        as_of=date(2026, 6, 15),
+        source="statement",
+    )
+    acct = get_account_by_id(conn, account_id)
+    assert acct["balance"] == Decimal("-600.00")
+    assert acct["available"] == Decimal("4400.00")  # credit_limit + balance
+    assert acct["credit_limit"] == Decimal("5000")
+
+
+def test_cc_sync_fills_null_credit_limit_from_available(conn):
+    _, account_id = _cc_account(conn, name="CCFill")  # no credit_limit
+    record_balance(
+        conn,
+        account_id=account_id,
+        balance=Decimal("-600.00"),
+        as_of=date(2026, 6, 15),
+        source="statement",
+        available=Decimal("4400.00"),
+    )
+    acct = get_account_by_id(conn, account_id)
+    assert acct["available"] == Decimal("4400.00")
+    assert acct["credit_limit"] == Decimal("5000.00")  # available - balance
+
+
+def test_cc_sync_never_overwrites_user_credit_limit(conn):
+    _, account_id = _cc_account(conn, name="CCKeep", credit_limit=Decimal("5000"))
+    # Statement implies a different limit (4000 - (-600) = 4600); the
+    # user-set credit_limit must survive, available follows the statement.
+    record_balance(
+        conn,
+        account_id=account_id,
+        balance=Decimal("-600.00"),
+        as_of=date(2026, 6, 15),
+        source="statement",
+        available=Decimal("4000.00"),
+    )
+    acct = get_account_by_id(conn, account_id)
+    assert acct["credit_limit"] == Decimal("5000")
+    assert acct["available"] == Decimal("4000.00")
+
+
+def test_cc_sync_no_available_no_limit_leaves_available_null(conn):
+    _, account_id = _cc_account(conn, name="CCBare")  # no credit_limit
+    record_balance(
+        conn,
+        account_id=account_id,
+        balance=Decimal("-600.00"),
+        as_of=date(2026, 6, 15),
+        source="statement",
+    )
+    acct = get_account_by_id(conn, account_id)
+    assert acct["balance"] == Decimal("-600.00")
+    assert acct["available"] is None
+    assert acct["credit_limit"] is None
+
+
+def test_non_cc_sync_leaves_available_and_limit_untouched(conn):
+    _, account_id = _account(conn, name="CheckingSync")
+    record_balance(
+        conn,
+        account_id=account_id,
+        balance=Decimal("987.65"),
+        as_of=date(2026, 6, 15),
+        source="statement",
+        available=Decimal("900.00"),
+    )
+    acct = get_account_by_id(conn, account_id)
+    assert acct["balance"] == Decimal("987.65")
+    assert acct["available"] is None
+    assert acct["credit_limit"] is None

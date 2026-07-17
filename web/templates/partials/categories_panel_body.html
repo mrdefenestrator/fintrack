@@ -1,0 +1,87 @@
+{# Manage-categories panel body: every add/rename/delete action swaps this
+   whole div (id="categories-panel-body") via hx-swap="outerHTML", rather
+   than a single row, since renaming/deleting also has to be reflected in
+   this same list (e.g. the freshly-renamed name, or the row disappearing).
+   Errors (duplicate name, in-use delete) come back as a 422 with this same
+   markup plus an inline banner; base.html's htmx:beforeSwap hook swaps
+   non-empty 422 bodies in instead of the default no-op 4xx handling.
+
+   This deliberately uses a <ul>/<li> list rather than a <table>: the
+   Merchants page already has a data table, and e2e tests select rows with
+   the generic "table tbody tr" selector, so a second <table> here would
+   silently inflate that count. The click-to-edit / focusout-or-Enter-to-
+   save interaction still mirrors partials/ledger_cells.html; it's just not
+   literally reusing those <td>-shaped macros. #}
+<div id="categories-panel-body">
+    {% if error %}
+    <div class="mb-2 px-3 py-2 text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 rounded-md">
+        {{ error }}
+    </div>
+    {% endif %}
+    <ul class="divide-y divide-gray-100 dark:divide-gray-700">
+        {% for c in cats %}
+        <li class="flex items-center justify-between gap-2 py-1.5 text-sm">
+            {% if editing_id == c.id %}
+            <form class="flex-1" method="post"
+                  action="{{ url_for('categories.rename', filename=filename, category_id=c.id) }}"
+                  hx-get="{{ url_for('categories.row', filename=filename, category_id=c.id) }}"
+                  hx-trigger="focusout from:input delay:150ms"
+                  hx-target="#categories-panel-body" hx-swap="outerHTML"
+                  onkeydown="if(event.keyCode===13) event.preventDefault();">
+                <input type="text" name="value" value="{{ c.name }}"
+                       class="w-full border border-blue-300 dark:border-blue-600 rounded-md px-2 h-7 text-sm bg-white dark:bg-gray-700 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                       hx-post="{{ url_for('categories.rename', filename=filename, category_id=c.id) }}"
+                       hx-trigger="focusout changed, keydown[keyCode==13]"
+                       hx-include="closest form" hx-target="#categories-panel-body" hx-swap="outerHTML"
+                       autofocus>
+            </form>
+            {% else %}
+            <span class="flex-1 text-gray-700 dark:text-gray-200 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400"
+                  role="button" tabindex="0"
+                  hx-get="{{ url_for('categories.edit', filename=filename, category_id=c.id) }}"
+                  hx-target="#categories-panel-body" hx-swap="outerHTML">{{ c.name }}</span>
+            {% endif %}
+            <span class="shrink-0">
+                {% if confirm_id == c.id %}
+                <span class="inline-flex items-center gap-1 text-xs whitespace-nowrap">
+                    <form class="inline" hx-post="{{ url_for('categories.delete', filename=filename, category_id=c.id) }}"
+                          hx-target="#categories-panel-body" hx-swap="outerHTML">
+                        <button type="submit"
+                                class="font-bold px-1.5 py-0.5 rounded border border-red-300 dark:border-red-700 text-red-700 dark:text-red-400 bg-white dark:bg-gray-700 hover:bg-red-100 dark:hover:bg-red-800"
+                                title="Confirm delete">&#10003;</button>
+                    </form>
+                    <button type="button"
+                            class="font-bold px-1.5 py-0.5 rounded border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600"
+                            title="Cancel delete"
+                            hx-get="{{ url_for('categories.delete_btn', filename=filename, category_id=c.id) }}"
+                            hx-target="#categories-panel-body" hx-swap="outerHTML">&#10007;</button>
+                </span>
+                {% else %}
+                <button type="button"
+                        class="p-1 text-gray-400 dark:text-gray-500 hover:text-red-600 dark:hover:text-red-400"
+                        title="Delete category"
+                        hx-get="{{ url_for('categories.delete_confirm', filename=filename, category_id=c.id) }}"
+                        hx-target="#categories-panel-body" hx-swap="outerHTML">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                </button>
+                {% endif %}
+            </span>
+        </li>
+        {% endfor %}
+        {% if not cats %}
+        <li class="py-2 text-sm text-gray-400 dark:text-gray-500">No categories yet.</li>
+        {% endif %}
+    </ul>
+    <form class="mt-3 flex gap-2" hx-post="{{ url_for('categories.add', filename=filename) }}"
+          hx-target="#categories-panel-body" hx-swap="outerHTML">
+        <input type="text" name="name" placeholder="New category name" required
+               class="flex-1 border border-gray-300 dark:border-gray-600 rounded-md px-3 h-8 text-sm bg-white dark:bg-gray-700 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500">
+        <button type="submit"
+                class="h-8 px-3 bg-blue-500 text-white rounded-md text-sm font-medium hover:bg-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-500">
+            Add
+        </button>
+    </form>
+</div>

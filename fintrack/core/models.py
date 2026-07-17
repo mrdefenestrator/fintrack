@@ -73,10 +73,14 @@ accounts = Table(
     Column("payment_account_ref", Integer, ForeignKey("accounts.id"), nullable=True),
     Column("as_of_date", Date, nullable=True),
     Column("minimum_balance", Numeric(12, 2), nullable=True),
-    Column("partial_account_number", String, nullable=True),
     Column("sort_order", Integer, nullable=False, default=0),
     Column("created_at", DateTime, default=_utcnow),
-    UniqueConstraint("snapshot_id", "name", name="uq_accounts_snapshot_name"),
+    UniqueConstraint(
+        "snapshot_id",
+        "institution",
+        "name",
+        name="uq_accounts_snapshot_institution_name",
+    ),
 )
 
 imports = Table(

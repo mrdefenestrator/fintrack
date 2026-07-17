@@ -211,7 +211,6 @@ def _account_field_options(f):
             click.option("--statement_balance", type=float, default=None),
             click.option("--statement_due_day_of_month", type=int, default=None),
             click.option("--institution", default=None),
-            click.option("--partial_account_number", default=None),
             click.option("--asOfDate", "as_of", default=None),
             click.option("--minimum_balance", type=float, default=None),
         ]
@@ -229,7 +228,6 @@ def _account_updates(kwargs) -> dict:
         "statement_balance": "statement_balance",
         "statement_due_day_of_month": "statement_due_day_of_month",
         "institution": "institution",
-        "partial_account_number": "partial_account_number",
         "as_of": "asOfDate",
         "minimum_balance": "minimum_balance",
     }

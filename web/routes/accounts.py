@@ -2,7 +2,8 @@
 
 from datetime import date
 
-from flask import Blueprint, abort, current_app, render_template, request
+from flask import Blueprint, abort, current_app, make_response, render_template, request
+from sqlalchemy.exc import IntegrityError
 
 from fintrack.core import filters, tables
 from fintrack.networth import calculations
@@ -65,6 +66,19 @@ def _history_meta(conn, accs: list) -> dict:
     return out
 
 
+def _duplicate_account_message(name: str, institution: str | None) -> str:
+    """User-facing message for a unique constraint violation on accounts.
+
+    The constraint is (snapshot_id, institution, name): two accounts can
+    share a name as long as their institution differs.
+    """
+    if institution:
+        return (
+            f'An account named "{name}" already exists for institution "{institution}".'
+        )
+    return f'An account named "{name}" already exists.'
+
+
 def _render_tbody(
     snapshot_id: int,
     filename: str,
@@ -74,6 +88,7 @@ def _render_tbody(
     editing_account_id=None,
     editing_field=None,
     editing_value=None,
+    error=None,
 ):
     engine = current_app.config["engine"]
     with engine.connect() as conn:
@@ -114,6 +129,7 @@ def _render_tbody(
         editing_field=editing_field,
         editing_value=editing_value,
         funding_by_id=funding_by_id,
+        error=error,
     )
 
 
@@ -235,11 +251,26 @@ def update(filename: str, account_id: int):
             updated_field=field,
         )
 
-    try:
-        with engine.connect() as conn:
+    with engine.connect() as conn:
+        try:
             repo_accounts.update_account(conn, snapshot_id, account_id, {field: value})
-    except ValueError:
-        return _render_tbody(snapshot_id, filename, edit_mode=True), 422
+        except ValueError:
+            return _render_tbody(snapshot_id, filename, edit_mode=True), 422
+        except IntegrityError:
+            conn.rollback()
+            new_name = value if field == "name" else (acc or {}).get("name", "")
+            new_institution = (
+                value if field == "institution" else (acc or {}).get("institution")
+            )
+            return (
+                _render_tbody(
+                    snapshot_id,
+                    filename,
+                    edit_mode=True,
+                    error=_duplicate_account_message(new_name, new_institution),
+                ),
+                422,
+            )
 
     return _render_tbody(
         snapshot_id,
@@ -280,16 +311,36 @@ def add(filename: str):
             account["balance"] = float(request.form.get("balance") or 0)
         except ValueError:
             account["balance"] = 0
-    for key in ("institution", "partial_account_number", "asOfDate"):
+    for key in ("institution", "asOfDate"):
         v = request.form.get(key, "").strip()
         if v:
             account[key] = v
     engine = current_app.config["engine"]
-    try:
-        with engine.connect() as conn:
+    with engine.connect() as conn:
+        try:
             new_id = repo_accounts.add_account(conn, snapshot_id, account)
-    except ValueError:
-        return "", 422
+        except ValueError:
+            return "", 422
+        except IntegrityError:
+            conn.rollback()
+            # The add row's form targets #accounts-add-row with hx-swap
+            # beforebegin, so this response must retarget itself onto the
+            # tbody to show the error banner instead of getting inserted as
+            # a stray row above the add row.
+            resp = make_response(
+                _render_tbody(
+                    snapshot_id,
+                    filename,
+                    edit_mode=True,
+                    error=_duplicate_account_message(
+                        account["name"], account.get("institution")
+                    ),
+                ),
+                422,
+            )
+            resp.headers["HX-Retarget"] = "#accounts-tbody"
+            resp.headers["HX-Reswap"] = "innerHTML"
+            return resp
     with engine.connect() as conn:
         data = load_finances_from_db(conn, snapshot_id)
     accs = data.get("accounts") or []

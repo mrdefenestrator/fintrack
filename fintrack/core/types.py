@@ -55,7 +55,6 @@ class Account(TypedDict, total=False):
     asOfDate: str  # ISO8601 date string
     minimum_balance: Decimal  # Target floor balance
     institution: str  # Bank/provider name
-    partial_account_number: str  # Last 4 digits etc.
 
 
 class BudgetEntry(TypedDict, total=False):

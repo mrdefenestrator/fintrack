@@ -247,11 +247,12 @@ def test_apply_full_migration(
         assert len(accounts) == 4
         by_name = {a["name"]: a for a in accounts}
 
-        checking = by_name["Chase Checking"]
-        visa = by_name["Chase Visa"]
+        # partial_account_number is a dropped column; its value is folded
+        # into the stored name instead ("Chase Checking [1234]").
+        checking = by_name["Chase Checking [1234]"]
+        visa = by_name["Chase Visa [5678]"]
         venmo = by_name["Venmo"]
         # merge kept finances metadata, statement balance re-synced from history
-        assert checking["partial_account_number"] == "1234"
         assert checking["balance"] == Decimal("987.65")
         assert checking["as_of_date"] == date(2026, 2, 1)
         # CC canonical balance derived from available - limit
@@ -395,7 +396,10 @@ def test_duplicate_fin_account_names_disambiguated(
     engine = get_engine(target)
     with engine.connect() as conn:
         names = {r[0] for r in conn.execute(select(models.accounts.c.name)).all()}
-        assert "Chase Checking (Chase)" in names
+        # id=10 (Chase Checking, partial_account_number '1234') gets both the
+        # institution qualifier from disambiguation and the folded partial
+        # number appended, since the column that used to hold it is gone.
+        assert "Chase Checking (Chase) [1234]" in names
         assert "Chase Checking (Westerra)" in names
 
 

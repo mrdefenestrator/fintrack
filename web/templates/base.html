@@ -31,6 +31,18 @@
         htmx.config.historyCacheSize = 0;
         htmx.config.refreshOnHistoryMiss = false;
         htmx.config.defaultSwapStyle = 'innerHTML';
+        // Non-empty 422 responses carry a re-rendered partial with an inline
+        // error message (e.g. duplicate account name); swap it in instead of
+        // the default 4xx behavior of ignoring the body, which left the
+        // spreadsheet stuck in edit state with no feedback. Empty 422 bodies
+        // (failed delete/move) keep the default no-swap so their row-targeted
+        // swaps don't blank the row.
+        document.addEventListener('htmx:beforeSwap', (evt) => {
+            if (evt.detail.xhr.status === 422 && evt.detail.serverResponse) {
+                evt.detail.shouldSwap = true;
+                evt.detail.isError = false;
+            }
+        });
     </script>
     <style>
         /* Hide Alpine-controlled elements until Alpine initializes (prevents flash) */

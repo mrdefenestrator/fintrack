@@ -37,6 +37,15 @@ def test_add_duplicate_name_fails(conn):
         )
 
 
+def test_add_same_name_different_institution_ok(conn):
+    """UNIQUE is (snapshot_id, institution, name), not (snapshot_id, name)."""
+    add_account(conn, name="Wallet", institution="Venmo", account_type="wallet")
+    add_account(conn, name="Wallet", institution="PayPal", account_type="wallet")
+    accts = list_accounts(conn)
+    assert len(accts) == 2
+    assert {a["institution"] for a in accts} == {"Venmo", "PayPal"}
+
+
 def test_get_account_by_name(conn):
     add_account(
         conn, name="Chase Visa", institution="Chase", account_type="credit_card"

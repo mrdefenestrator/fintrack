@@ -223,6 +223,57 @@ def test_update_account_not_found(conn):
         update_account(c, snap_id, 9999, {"name": "X"})
 
 
+def test_same_name_different_institution_allowed(conn):
+    """UNIQUE is (snapshot_id, institution, name): two 'Wallet' accounts under
+    different institutions can coexist."""
+    c, snap_id = conn
+    add_account(
+        c,
+        snap_id,
+        {"name": "Wallet", "type": "wallet", "institution": "Venmo", "balance": 10},
+    )
+    add_account(
+        c,
+        snap_id,
+        {"name": "Wallet", "type": "wallet", "institution": "PayPal", "balance": 20},
+    )
+    wallets = [a for a in get_accounts(c, snap_id) if a["name"] == "Wallet"]
+    assert {a["institution"] for a in wallets} == {"Venmo", "PayPal"}
+
+
+def test_same_name_same_institution_rejected(conn):
+    c, snap_id = conn
+    add_account(
+        c,
+        snap_id,
+        {"name": "Wallet", "type": "wallet", "institution": "Venmo", "balance": 10},
+    )
+    with pytest.raises(IntegrityError):
+        add_account(
+            c,
+            snap_id,
+            {"name": "Wallet", "type": "wallet", "institution": "Venmo", "balance": 20},
+        )
+    c.rollback()
+
+
+def test_update_to_duplicate_name_same_institution_rejected(conn):
+    c, snap_id = conn
+    add_account(
+        c,
+        snap_id,
+        {"name": "Wallet", "type": "wallet", "institution": "Venmo", "balance": 10},
+    )
+    other_id = add_account(
+        c,
+        snap_id,
+        {"name": "Cash", "type": "wallet", "institution": "Venmo", "balance": 20},
+    )
+    with pytest.raises(IntegrityError):
+        update_account(c, snap_id, other_id, {"name": "Wallet"})
+    c.rollback()
+
+
 def test_delete_account(conn):
     c, snap_id = conn
     accs = get_accounts(c, snap_id)

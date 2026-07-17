@@ -222,7 +222,10 @@ def create_account():
                 meta=None,
                 selected_account_id=None,
                 show_create=True,
-                error=f'Account "{name}" already exists.',
+                error=(
+                    f'An account named "{name}" already exists for '
+                    f'institution "{institution}".'
+                ),
             )
 
         accounts = list_accounts(conn, g.snapshot_id)

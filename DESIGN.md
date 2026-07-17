@@ -73,8 +73,9 @@ Single `MetaData` in `fintrack/core/models.py`.
 - **snapshots** — `name` (unique), `created_at`. A snapshot is an independent
   household; the whole app is scoped by it.
 - **accounts** — merged from both predecessors: identity (`name` unique per
-  snapshot, `institution`, `account_type`, `partial_account_number` — which
-  also powers OFX account detection), balance state (`balance`, `available`,
+  `(snapshot, institution)`, `institution`, `account_type`; partial account
+  numbers live in the name itself, e.g. "Checking [1234]"), balance state
+  (`balance`, `available`,
   `credit_limit`, `rewards_balance`, `as_of_date`), autopay/funding config
   (`statement_balance`, `statement_due_day_of_month`, `payment_account_ref`
   self-FK, `minimum_balance`), and `sort_order`.

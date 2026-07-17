@@ -1,7 +1,17 @@
 0. When bringing in the balance from an import for a credit card, we need to resolve how this interacts with the limit and available.
 0. Need to remove the code that displays and stores the partial account numbers for accounts.  This can be dropped from the db.  Partial account numbers will be put into name
+   **FIXED** — column dropped (migration `b0b3c9940bc5` folds any existing
+   partials into the name as " [1234]"); all code/UI references removed.
+   NOTE: run `uv run alembic stamp 6a88702b7507 && uv run alembic upgrade head`
+   once on your real DB (it predates Alembic tracking).
 1. The UNIQ constraint on simply account name makes the accounts annoying to use.  We should be able to have a Wallet from venmo named wallet and a wallet from paypal named wallet without problems.
+   **FIXED** — uniqueness is now (snapshot, institution, name): Venmo/Wallet
+   and PayPal/Wallet coexist; duplicates within one institution still rejected.
 2. We need to gracefully handle save errors and surface these to the user within the accounts spreadsheet.  For example, the UNIQ constraint error printed a traceback in the logs and made the web ui unpresponsive until I changes to a distinct account name.
+   **FIXED** — duplicate saves now show an inline red banner in the sheet
+   ("An account named ... already exists for institution ...") and the page
+   stays responsive. Root cause of the freeze: HTMX 2.x ignores 4xx response
+   bodies by default; a beforeSwap hook now swaps non-empty 422 bodies.
 3. The account types on the import page for quick account creation should match all the account types in the accounts page.  We should do the same on the account picker on the transactions page, and anywhere else we have a similar input.
 4. The account drop down selector should give more than just the account name.  It should definitely have the institution name and maybe the account type.  Just a thought "{Institution} [{Type}] {Name}"
 5. The top controls on the trends page needs to be reworked.  I like the default of trailing 12 months, but we should have a way to page back and forth.  Open to suggestions.

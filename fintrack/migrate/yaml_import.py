@@ -57,7 +57,6 @@ def import_yaml(conn: Connection, path: Path, name: str | None = None) -> int:
             ("asOfDate", "as_of_date"),
             ("minimum_balance", "minimum_balance"),
             ("institution", "institution"),
-            ("partial_account_number", "partial_account_number"),
         ):
             val = acc.get(field)
             if val is not None:

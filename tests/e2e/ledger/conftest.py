@@ -195,12 +195,15 @@ def _start_server(port: int, db_path: Path) -> subprocess.Popen:
         # Port 1 is never open — instant ECONNREFUSED
         "ANTHROPIC_BASE_URL": "http://127.0.0.1:1",
     }
+    # DEVNULL, not PIPE: nobody drains the pipes, and werkzeug logs one line
+    # per request to stderr — once the OS pipe buffer fills, the (single-
+    # threaded) server blocks on the write and every request wedges forever.
     proc = subprocess.Popen(
         [sys.executable, "-m", "web.app"],
         cwd=str(PROJECT_ROOT),
         env=env,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
     )
     try:
         _wait_for_server(port)

@@ -69,10 +69,10 @@ def test_import_confirm_transaction_and_networth_account(page, unified_server):
     page.goto(f"{unified_server}/s/ledger/accounts")
     assert page.locator("td", has_text="Flow Checking").first.is_visible()
 
-    # Status dashboard renders the key-numbers rollup for the snapshot
+    # Legacy status URL redirects to the accounts view (page was removed)
     page.goto(f"{unified_server}/s/ledger/status")
-    body = page.locator("tbody").inner_text()
-    assert "Accounts" in body and "Total" in body
+    page.wait_for_url("**/accounts**")
+    assert page.locator("td", has_text="Flow Checking").first.is_visible()
 
 
 _OFX_WITH_LEDGERBAL = """\

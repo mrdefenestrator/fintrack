@@ -35,7 +35,20 @@
    back/forward (hx-push-url); malformed/future `end=` params fall back to
    latest.
 6. We have too many many tabs on the top bar.  We need to find a better, more task oriented place to put some pages.  Maybe just iconic buttons for some things like import?  I'm open to a number of ideas.  Maybe a dual tiered tab structure?  We should think about options that support a user's journey and best practices for UX
+   **FIXED** (design agreed in review) — two-tier nav: Finances (Accounts,
+   Budget, Assets, Projections) and Spending (Transactions, Trends,
+   Merchants) group tabs with a sub-tab row; each group tab remembers your
+   last sub-tab for the session. Import is now a header icon button. The
+   Status page was removed (its four numbers are fully redundant with the
+   header totals); /s/<name>/status redirects to Accounts. Both nav rows
+   keep constant height on every page.
 7. The locked/unlocked control is only relevant for certain pages.  What should we do with it?  Should it only exist on the pages where it's relevant?  I feel we would still want a feeling of continuity between the pages that make use of it.  Or maybe the concept is not ideal in the first place?  It's nice to be able to switch between the modes, it sort of supports the "spreadsheet" ux experience on the accounts / budget / assets pages.
+   **FIXED** — the lock stays (it's what makes the spreadsheet UX safe) but
+   is now functional only on the pages that honor it (Accounts, Budget,
+   Assets); everywhere else the same-size lock renders muted and
+   non-interactive with a tooltip, so the header never shifts and the
+   concept keeps its continuity. Edit state still carries through Finances
+   links (including a detour through Projections).
 8. Does it make any sense to make the spending categories user defined?  Start with a basic set but allow them to be removed / changed / added to?  What about account types?  Should we do the same?
 9. Reserve column on account page needs to be editable for at least checking and savings, probably wallet too?
    **FIXED** — Reserve (minimum_balance) is now inline-editable for checking,

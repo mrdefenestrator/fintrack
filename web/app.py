@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """Unified fintrack web application.
 
-One Flask app serving both domains: the net-worth pages (status, accounts,
-budget, assets — finances-style explicit filename views with spreadsheet
+One Flask app serving both domains: the net-worth pages (accounts, budget,
+assets, projections — finances-style explicit filename views with spreadsheet
 editing) and the ledger pages (transactions, trends, merchants, import —
 snapshot-scoped HTMX partial swaps). URL scheme: / is the snapshot picker;
-everything else lives under /s/<snapshot>/<section>.
+everything else lives under /s/<snapshot>/<section>. Navigation is two-tier:
+Finances (accounts, budget, assets, projections) and Spending (transactions,
+trends, merchants) group tabs plus a sub-tab row; import is a header icon.
 """
 
 import os

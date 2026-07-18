@@ -1,6 +1,12 @@
 {% extends "base.html" %}
 {% block title %}Projections — fintrack{% endblock %}
 {% block content %}
+{# Single scroll container for the whole page. Without it the sections below
+   are direct flex children of the flex-column <main>, so when their combined
+   height exceeds the viewport they get flex-shrunk and visually overlap (the
+   estimate table colliding with the projection table) with nothing scrollable
+   — QA item 11.2 / 11.3. #}
+<div class="flex-1 min-h-0 overflow-y-auto">
 
 <!-- Controls: horizon + estimator toggles (linkable query params) -->
 <div class="flex flex-wrap items-center gap-4 mb-4 text-sm">
@@ -58,8 +64,8 @@
 {% endif %}
 
 <!-- Accounts × months ending balances -->
-<section class="mb-6 min-h-0">
-    <div class="overflow-auto max-w-full border border-gray-300 dark:border-gray-600 rounded shadow-sm">
+<section class="mb-6">
+    <div class="overflow-x-auto max-w-full border border-gray-300 dark:border-gray-600 rounded shadow-sm">
         <table data-projection-table class="text-sm border-collapse bg-white dark:bg-gray-800 w-full">
             <thead>
                 <tr class="bg-gray-100 dark:bg-gray-700 border-b border-gray-300 dark:border-gray-600">
@@ -130,4 +136,5 @@
 </section>
 {% endif %}
 
+</div>
 {% endblock %}

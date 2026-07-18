@@ -8,7 +8,6 @@ _PERIODS = [
     ("quarterly", "Quarterly"),
     ("ytd", "Year to Date"),
     ("trailing12", "Trailing 12 Mo"),
-    ("annual", "Last Year"),
 ]
 
 
@@ -18,10 +17,16 @@ _PERIODS = [
 
 
 def test_trends_all_period_buttons_visible(page, flask_server):
-    """All four preset period buttons are rendered."""
+    """All preset period buttons are rendered."""
     page.goto(f"{flask_server}/s/ledger/trends")
     for _, label in _PERIODS:
         assert page.locator(f"a:has-text('{label}')").is_visible(), f"Missing: {label}"
+
+
+def test_trends_no_last_year_button(page, flask_server):
+    """The 'Last Year' preset is gone — paging YTD back one page covers it."""
+    page.goto(f"{flask_server}/s/ledger/trends")
+    assert page.locator("a:has-text('Last Year')").count() == 0
 
 
 def test_trends_trailing12_is_active_by_default(page, flask_server):
@@ -57,13 +62,6 @@ def test_trends_click_trailing12_updates_url(page, flask_server):
     page.goto(f"{flask_server}/s/ledger/trends")
     page.click("a:has-text('Trailing 12 Mo')")
     page.wait_for_url("**/trends**period=trailing12**")
-
-
-def test_trends_click_annual_updates_url(page, flask_server):
-    """Clicking 'Last Year' updates the URL to period=annual."""
-    page.goto(f"{flask_server}/s/ledger/trends")
-    page.click("a:has-text('Last Year')")
-    page.wait_for_url("**/trends**period=annual**")
 
 
 # ---------------------------------------------------------------------------

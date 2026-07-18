@@ -18,7 +18,13 @@ from fintrack.ledger.repository.imports import (
     insert_transactions,
 )
 from fintrack.snapshots.repository import get_snapshot_id
-from web.routes.trends import _parse_end_param, _resolve_window_end, _shift_month
+from web.routes.trends import (
+    _parse_end_param,
+    _period_range,
+    _period_stride,
+    _resolve_window_end,
+    _shift_month,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -140,6 +146,76 @@ def test_resolve_window_end_handles_february_leap_year():
 
 
 # ---------------------------------------------------------------------------
+# _period_stride — each period pages by one whole window
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "period,stride",
+    [
+        ("quarterly", 3),
+        ("ytd", 12),
+        ("trailing12", 12),
+        ("unknown", 12),  # defensive default
+    ],
+)
+def test_period_stride(period, stride):
+    assert _period_stride(period) == stride
+
+
+# ---------------------------------------------------------------------------
+# _period_range — latest windows are period-to-date; paged-back windows are
+# the full period (full quarter / full calendar year).
+# ---------------------------------------------------------------------------
+
+
+def test_period_range_quarterly_latest_is_partial_to_today():
+    today = date(2026, 7, 17)  # Q3, mid-quarter
+    assert _period_range("quarterly", today, is_latest=True) == (
+        date(2026, 7, 1),
+        today,
+    )
+
+
+def test_period_range_quarterly_past_is_full_quarter():
+    # Paged back to Q2 (anchor resolved to end-of-month by _resolve_window_end).
+    anchor = date(2026, 4, 30)
+    assert _period_range("quarterly", anchor, is_latest=False) == (
+        date(2026, 4, 1),
+        date(2026, 6, 30),
+    )
+
+
+def test_period_range_ytd_latest_is_year_to_date():
+    today = date(2026, 7, 17)
+    assert _period_range("ytd", today, is_latest=True) == (date(2026, 1, 1), today)
+
+
+def test_period_range_ytd_past_is_full_calendar_year():
+    # Paging YTD back one page lands on the full prior calendar year — this is
+    # what the removed "Last Year" button used to show.
+    anchor = date(2025, 7, 31)
+    assert _period_range("ytd", anchor, is_latest=False) == (
+        date(2025, 1, 1),
+        date(2025, 12, 31),
+    )
+
+
+def test_period_range_trailing12_is_twelve_months_ending_at_anchor():
+    # A fixed 12-month window either way; paging just slides it.
+    today = date(2026, 7, 17)
+    assert _period_range("trailing12", today, is_latest=True) == (
+        date(2025, 8, 1),
+        today,
+    )
+    anchor = date(2025, 7, 31)
+    assert _period_range("trailing12", anchor, is_latest=False) == (
+        date(2024, 8, 1),
+        date(2025, 7, 31),
+    )
+
+
+# ---------------------------------------------------------------------------
 # Route-level: /trends default and paging
 # ---------------------------------------------------------------------------
 
@@ -194,6 +270,34 @@ def test_trends_paging_forward_to_current_month_reaches_latest(client):
     assert response.status_code == 200
     html = response.data.decode()
     assert "Latest" not in html
+
+
+def test_trends_quarterly_pages_back_by_a_quarter(client):
+    """The 'earlier' link steps the quarterly window back one quarter (3 mo)."""
+    today = date.today()
+    response = client.get("/s/ledger/trends?period=quarterly")
+    html = response.data.decode()
+    py, pm = today.year, today.month - 3
+    while pm <= 0:
+        pm += 12
+        py -= 1
+    assert f"end={py:04d}-{pm:02d}" in html
+
+
+def test_trends_ytd_pages_back_by_a_calendar_year(client):
+    """The 'earlier' link steps the YTD window back one calendar year."""
+    today = date.today()
+    response = client.get("/s/ledger/trends?period=ytd")
+    html = response.data.decode()
+    assert f"end={today.year - 1:04d}-{today.month:02d}" in html
+
+
+def test_trends_trailing12_pages_back_by_a_year(client):
+    """The 'earlier' link slides the trailing-12 window back a full year."""
+    today = date.today()
+    response = client.get("/s/ledger/trends?period=trailing12")
+    html = response.data.decode()
+    assert f"end={today.year - 1:04d}-{today.month:02d}" in html
 
 
 def test_trends_preserves_period_param_while_paging(client):

@@ -224,9 +224,11 @@ def test_trends_default_has_no_end_param_and_is_latest(client):
     response = client.get("/s/ledger/trends")
     assert response.status_code == 200
     html = response.data.decode()
-    # At latest: no "Latest" reset button, no enabled next-month link.
+    # At the latest window: no "Latest" reset button, and the forward (next)
+    # arrow is disabled rather than a live link. (The back arrow still carries
+    # an end anchor for the previous window — that's expected.)
     assert "Latest" not in html
-    assert "&amp;end=" not in html
+    assert 'aria-disabled="true"' in html
 
 
 def test_trends_malformed_end_falls_back_to_latest(client):

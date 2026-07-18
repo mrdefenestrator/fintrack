@@ -1,3 +1,4 @@
+{% import "partials/pager.html" as nav %}
 <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
     <div class="flex items-center gap-2">
         {% for p, label in [("quarterly", "Quarterly"), ("ytd", "Year to Date"), ("trailing12", "Trailing 12 Mo")] %}
@@ -8,38 +9,13 @@
         </a>
         {% endfor %}
     </div>
-    <div class="flex items-center gap-2">
-        <a href="/s/{{ filename }}/trends?period={{ period }}&end={{ prev_end }}"
-           hx-get="/s/{{ filename }}/trends?period={{ period }}&end={{ prev_end }}"
-           hx-target="#content" hx-push-url="true"
-           title="Earlier"
-           class="h-8 w-8 flex items-center justify-center rounded-md border border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer">
-            &#9664;
-        </a>
-        <span class="h-8 flex items-center justify-center px-2 text-sm font-medium text-gray-700 dark:text-gray-200 whitespace-nowrap">
-            {{ window_label }}
-        </span>
-        {% if is_latest %}
-        <span title="Already at the latest window" aria-disabled="true"
-              class="h-8 w-8 flex items-center justify-center rounded-md border border-gray-200 dark:border-gray-700 text-gray-300 dark:text-gray-600 cursor-not-allowed">
-            &#9654;
-        </span>
-        {% else %}
-        <a href="/s/{{ filename }}/trends?period={{ period }}&end={{ next_end }}"
-           hx-get="/s/{{ filename }}/trends?period={{ period }}&end={{ next_end }}"
-           hx-target="#content" hx-push-url="true"
-           title="Later"
-           class="h-8 w-8 flex items-center justify-center rounded-md border border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer">
-            &#9654;
-        </a>
-        <a href="/s/{{ filename }}/trends?period={{ period }}"
-           hx-get="/s/{{ filename }}/trends?period={{ period }}"
-           hx-target="#content" hx-push-url="true"
-           class="px-3 h-8 flex items-center text-sm rounded-md border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer">
-            Latest
-        </a>
-        {% endif %}
-    </div>
+    {{ nav.pager(
+        prev_url="/s/%s/trends?period=%s&end=%s" | format(filename, period, prev_end),
+        next_url="/s/%s/trends?period=%s&end=%s" | format(filename, period, next_end),
+        label=window_label,
+        is_latest=is_latest,
+        latest_url="/s/%s/trends?period=%s" | format(filename, period),
+        label_width='w-48') }}
 </div>
 
 {% macro month_cells(row) %}

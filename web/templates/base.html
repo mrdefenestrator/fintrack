@@ -273,6 +273,26 @@
         .dark .sheet-scroll-shadow--bottom {
             background: linear-gradient(to top, rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0));
         }
+
+        /* Import submit button busy state: while htmx is uploading (hx-indicator
+           puts `.htmx-request` on the button), swap the label for a spinner and
+           keep the button looking active-busy rather than greyed-out-disabled. */
+        #import-submit .import-btn-busy { display: none; }
+        #import-submit.htmx-request .import-btn-idle { display: none; }
+        #import-submit.htmx-request .import-btn-busy { display: inline-flex; }
+        #import-submit.htmx-request {
+            opacity: 1;
+            cursor: wait;
+        }
+        .import-spinner {
+            width: 1rem;
+            height: 1rem;
+            border: 2px solid currentColor;
+            border-top-color: transparent;
+            border-radius: 9999px;
+            animation: import-spin 0.6s linear infinite;
+        }
+        @keyframes import-spin { to { transform: rotate(360deg); } }
     </style>
 </head>
 
@@ -322,17 +342,22 @@
             </nav>
             {% endif %}
 
+            {# Shared header pill: icon + label with a `sm:`-collapsing label,
+               reused by the Import link and the lock/edit toggle so they stay
+               visually consistent and shrink to icon-only on narrow screens. #}
+            {% set _hdr_pill = 'flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors' %}
             <div class="flex items-center ml-auto gap-2 shrink-0">
-            <!-- Import statements (icon button; the Import page is not a tab) -->
+            <!-- Import statements (the Import page is not a tab) -->
             {% if filename %}
             <div class="flex items-center py-2">
                 <a href="/s/{{ filename }}/import" data-import-link title="Import statements"
                     {% if _cur_tab == 'import' %}aria-current="page"{% endif %}
-                    class="flex items-center px-2 py-1 rounded text-xs transition-colors {% if _cur_tab == 'import' %}bg-blue-700 text-white{% else %}text-blue-200 hover:text-white hover:bg-blue-700{% endif %}">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    class="{{ _hdr_pill }} {% if _cur_tab == 'import' %}bg-blue-700 text-white{% else %}text-blue-200 hover:text-white hover:bg-blue-700{% endif %}">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
                     </svg>
+                    <span class="hidden sm:inline">Import</span>
                 </a>
             </div>
             {% endif %}
@@ -346,7 +371,7 @@
             <form method="POST" action="{{ url_for('edit_mode.toggle') }}" class="flex items-center py-2">
                 {% if edit_mode %}
                 <button type="submit" title="Exit edit mode"
-                    class="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium bg-amber-400 text-amber-900 hover:bg-amber-300 transition-colors">
+                    class="{{ _hdr_pill }} bg-amber-400 text-amber-900 hover:bg-amber-300">
                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M8 11V7a4 4 0 018 0M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z"/>
@@ -355,7 +380,7 @@
                 </button>
                 {% else %}
                 <button type="submit" title="Enter edit mode"
-                    class="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium text-blue-200 hover:text-white hover:bg-blue-700 transition-colors">
+                    class="{{ _hdr_pill }} text-blue-200 hover:text-white hover:bg-blue-700">
                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
@@ -367,7 +392,7 @@
             {% else %}
             <div class="flex items-center py-2" data-lock-muted>
                 <span title="Editing applies to Accounts, Budget, and Assets"
-                    class="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium text-blue-300 opacity-40 cursor-default select-none">
+                    class="{{ _hdr_pill }} text-blue-300 opacity-40 cursor-default select-none">
                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>

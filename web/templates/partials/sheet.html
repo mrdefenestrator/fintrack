@@ -1,0 +1,48 @@
+{# Single source of truth for the spreadsheet ("sheet") table styling shared by
+   the Accounts, Budget, Assets, Transactions, and Merchants pages. Every sheet
+   table renders its header, rows, and cells through these macros so
+   padding / border / hover stay identical across all five. Row height itself is
+   enforced globally in base.html (`table tbody tr { height: 1.75rem }`).
+
+   The class strings are exposed as macros (not `{% set %}` constants) so they
+   can be used inside any template's `class="…"` attribute — including from
+   other macro modules that `{% import %}` this one (macros/table.html,
+   ledger_cells.html). #}
+
+{# Base data cell: compact padding + right/bottom cell borders. `align` adds
+   e.g. "text-right tabular-nums"; `extra` adds anything else (colour, bg). #}
+{%- macro cell_class(align='', extra='') -%}
+px-1.5 py-px border-r border-gray-100 dark:border-gray-700 last:border-r-0{% if align %} {{ align }}{% endif %}{% if extra %} {{ extra }}{% endif %}
+{%- endmacro -%}
+
+{# Clickable display cell (click-to-edit): base cell + hover affordance. #}
+{%- macro display_cell_class(align='', extra='') -%}
+{{ cell_class(align, ('cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/20 ' ~ extra) | trim) }}
+{%- endmacro -%}
+
+{# Data row: bottom divider + hover; `accent` adds a coloured left border. #}
+{%- macro row_class(accent='') -%}
+border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50{% if accent %} border-l-4 {{ accent }}{% endif %}
+{%- endmacro -%}
+
+{# Negative-amount colour token (empty string when not negative). #}
+{%- macro neg(is_negative) -%}
+{% if is_negative %}text-red-600 dark:text-red-400{% endif %}
+{%- endmacro -%}
+
+{# Sortable <thead>. `headers` is the column labels; `right_align_cols` the
+   0-based indices to right-align; `actions_col` appends a trailing (unlabelled)
+   actions header used by the editable Finances sheets. Column sorting is wired
+   client-side by web/static/js/sortable.js via the `sortable-th` / `data-col`
+   hooks below. #}
+{%- macro thead(headers, right_align_cols=[], actions_col=false) -%}
+<thead>
+    <tr class="bg-gray-100 dark:bg-gray-700 border-b border-gray-300 dark:border-gray-600">
+        {% for h in headers -%}
+        <th class="sortable-th px-1.5 py-0.5 {% if loop.index0 in right_align_cols %}text-right{% else %}text-left{% endif %} font-medium text-gray-800 dark:text-gray-100 border-r border-gray-200 dark:border-gray-600 last:border-r-0 cursor-pointer select-none hover:bg-gray-200 dark:hover:bg-gray-600"
+            data-col="{{ loop.index0 }}" role="button" tabindex="0" title="Sort by this column">{{ h }} <span class="sort-indicator"></span></th>
+        {% endfor -%}
+        {% if actions_col %}<th class="table-actions-cell px-1.5 py-0.5 border-r border-gray-200 dark:border-gray-600" aria-label="Actions"></th>{% endif %}
+    </tr>
+</thead>
+{%- endmacro -%}

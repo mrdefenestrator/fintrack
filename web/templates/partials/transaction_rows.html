@@ -3,19 +3,9 @@
    `sortable` class + `sortable-th` headers; there is no server-side sort.
    Inline cell editing (Merchant/Category/Notes) is preserved — see
    partials/transaction_row.html and partials/ledger_cells.html. #}
-{% set _th = "sortable-th px-1.5 py-0.5 font-medium text-gray-800 dark:text-gray-100 border-r border-gray-200 dark:border-gray-600 last:border-r-0 cursor-pointer select-none hover:bg-gray-200 dark:hover:bg-gray-600" %}
+{% import "partials/sheet.html" as sheet %}
 <table class="sortable w-full text-sm border-collapse bg-white dark:bg-gray-800">
-    <thead>
-        <tr class="bg-gray-100 dark:bg-gray-700 border-b border-gray-300 dark:border-gray-600">
-            <th class="{{ _th }} text-left" data-col="0" role="button" tabindex="0" title="Sort by this column">Date <span class="sort-indicator"></span></th>
-            <th class="{{ _th }} text-left" data-col="1" role="button" tabindex="0" title="Sort by this column">Merchant <span class="sort-indicator"></span></th>
-            <th class="{{ _th }} text-left" data-col="2" role="button" tabindex="0" title="Sort by this column">Description <span class="sort-indicator"></span></th>
-            <th class="{{ _th }} text-left" data-col="3" role="button" tabindex="0" title="Sort by this column">Account <span class="sort-indicator"></span></th>
-            <th class="{{ _th }} text-left" data-col="4" role="button" tabindex="0" title="Sort by this column">Category <span class="sort-indicator"></span></th>
-            <th class="{{ _th }} text-right" data-col="5" role="button" tabindex="0" title="Sort by this column">Amount <span class="sort-indicator"></span></th>
-            <th class="{{ _th }} text-left" data-col="6" role="button" tabindex="0" title="Sort by this column">Notes <span class="sort-indicator"></span></th>
-        </tr>
-    </thead>
+    {{ sheet.thead(["Date", "Merchant", "Description", "Account", "Category", "Amount", "Notes"], right_align_cols=[5]) }}
     <tbody>
         {% for txn in transactions %}
         {% include "partials/transaction_row.html" %}

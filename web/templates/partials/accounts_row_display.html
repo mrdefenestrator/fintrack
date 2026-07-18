@@ -1,7 +1,8 @@
 {# One data row in edit mode: cells are clickable when editable for account type. #}
 {% from "macros/table.html" import cell_display, cell_non_editable, cell_edit_input, cell_edit_select %}
+{% import "partials/sheet.html" as sheet %}
 {% set _acc_border = 'border-l-rose-400' if account.type == 'credit_card' else ('border-l-slate-300' if account.type in ('loan', 'other') else 'border-l-emerald-400') %}
-<tr class="border-b border-gray-200 dark:border-b-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 border-l-4 {{ _acc_border }}" id="account-row-{{ account.id }}">
+<tr class="{{ sheet.row_class(_acc_border) }}" id="account-row-{{ account.id }}">
     {% set is_cc = (account.type == 'credit_card') %}
     {% set fields = ['institution','type','name','balance','limit','available','rewards_balance','statement_balance','statement_due_day_of_month','paymentAccountRef'] %}
     {% for col_index in range(10) %}
@@ -65,7 +66,7 @@
     {% else %}
         {{ cell_non_editable(_reserve_value, true, false) }}
     {% endif %}
-    <td class="px-1.5 py-px border-r border-gray-100 dark:border-gray-700 last:border-r-0 text-right tabular-nums text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-gray-700">
+    <td class="{{ sheet.cell_class('text-right tabular-nums', 'text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-gray-700') }}">
         {{ _fr.funding_needed | fmt_money if _fr and _fr.funding_needed > 0 else '—' }}</td>
     {% include "partials/accounts_history_cell.html" %}
     {% with account_id=account.id, edit_mode=true %}{% include "partials/accounts_delete_icon.html" %}{% endwith %}

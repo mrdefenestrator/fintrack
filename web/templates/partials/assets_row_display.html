@@ -1,6 +1,7 @@
 {# One assets row in edit mode: cells clickable (display), last cell is delete. #}
 {% from "macros/table.html" import cell_display, cell_non_editable, cell_edit_input, cell_edit_select %}
-<tr class="border-b border-gray-200 dark:border-b-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 border-l-4 {{ 'border-l-emerald-400' if kind == 'asset' else 'border-l-rose-400' }}" id="assets-row-{{ index }}">
+{% import "partials/sheet.html" as sheet %}
+<tr class="{{ sheet.row_class('border-l-emerald-400' if kind == 'asset' else 'border-l-rose-400') }}" id="assets-row-{{ index }}">
     {% set fields_asset = [None, 'institution', 'name', 'value', 'quantity', None, 'source', None] %}
     {% set fields_debt = [None, 'institution', 'name', 'balance', 'quantity', None, 'assetRef', 'interestRate'] %}
     {% for col_index in range(8) %}

@@ -10,5 +10,17 @@
         {% for txn in transactions %}
         {% include "partials/transaction_row.html" %}
         {% endfor %}
+        {# Sticky total row (like the Accounts/Assets sheets): the transaction
+           count doubles as the row label; the sum sits in the Amount column,
+           coloured like that column (green income / red spend). sortable.js
+           keeps `.total-row` pinned to the bottom while sorting. Hidden when
+           there are no transactions, mirroring the Accounts total row. #}
+        {% if txn_count %}
+        <tr class="total-row bg-gray-100 dark:bg-gray-700 border-t-2 border-gray-300 dark:border-gray-600 font-medium">
+            <td class="{{ sheet.cell_class('', 'whitespace-nowrap') }}" colspan="5">{{ txn_count }} transaction{{ 's' if txn_count != 1 else '' }}</td>
+            <td class="{{ sheet.cell_class('text-right tabular-nums', 'text-red-600 dark:text-red-400' if txn_total < 0 else 'text-green-600 dark:text-green-400') }}">{{ '-$' if txn_total < 0 else '+$' }}{{ txn_total|abs|money }}</td>
+            <td class="{{ sheet.cell_class() }}"></td>
+        </tr>
+        {% endif %}
     </tbody>
 </table>

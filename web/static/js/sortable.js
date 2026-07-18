@@ -12,6 +12,9 @@
     }
 
     function isTotalRow(tr) {
+        // Prefer the explicit class (sheet total rows carry it); fall back to
+        // the text heuristic for any table that renders a total row without it.
+        if (tr.classList && tr.classList.contains('total-row')) return true;
         var first = tr.cells[0];
         return first && (first.textContent.trim() === 'Total' || /^-+$/.test(first.textContent.trim()));
     }

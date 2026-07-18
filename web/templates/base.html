@@ -201,6 +201,11 @@
             overflow: auto;
             flex: 1 1 0;
             min-height: 0;
+            /* Suppress the elastic overscroll "bounce" at the top/bottom so it
+               can't momentarily detach the sticky header / total rows and make
+               the sheet look broken (QA item 10). `none` (not `contain`) is
+               what disables the bounce affordance itself. */
+            overscroll-behavior: none;
         }
 
         .table-scroll-container thead {
@@ -335,10 +340,12 @@
                below. data-nav / data-nav-group / data-nav-active-group are
                required by web/static/js/nav.js (group-tab memory); keep them. #}
             {% if filename %}
-            {% set _grp_active = 'bg-blue-700 text-white' %}
-            {% set _grp_idle = 'text-blue-100 hover:text-white hover:bg-blue-700' %}
-            {% set _grp_cls = 'px-3 py-1.5 rounded text-sm font-medium transition-colors' %}
-            <nav class="flex items-center gap-1 ml-2 shrink-0" data-nav data-nav-file="{{ filename }}"
+            {# Group tabs render as underline tabs (QA item 7) so they read like
+               the sub-tabs below, rather than as ambiguous pills. #}
+            {% set _grp_active = 'border-white text-white' %}
+            {% set _grp_idle = 'border-transparent text-blue-100 hover:text-white hover:border-blue-400' %}
+            {% set _grp_cls = 'px-3 flex items-center text-sm font-medium border-b-2 transition-colors' %}
+            <nav class="flex items-stretch gap-2 ml-3 shrink-0 self-stretch" data-nav data-nav-file="{{ filename }}"
                 {% if _active_group %}data-nav-active-group="{{ _active_group }}"{% endif %}>
                 <a href="{{ url_for('accounts.accounts_view', filename=filename, edit=1 if edit_mode else none) }}"
                     data-nav-group="finances"
@@ -363,7 +370,7 @@
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
                     </svg>
-                    <span class="hidden sm:inline">Import</span>
+                    <span class="hidden md:inline">Import</span>
                 </a>
             </div>
             {% endif %}
@@ -382,7 +389,7 @@
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M8 11V7a4 4 0 018 0M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z"/>
                     </svg>
-                    <span class="hidden sm:inline">Editing</span>
+                    <span class="hidden md:inline">Editing</span>
                 </button>
                 {% else %}
                 <button type="submit" title="Enter edit mode"
@@ -391,7 +398,7 @@
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
                     </svg>
-                    <span class="hidden sm:inline">Locked</span>
+                    <span class="hidden md:inline">Locked</span>
                 </button>
                 {% endif %}
             </form>
@@ -403,7 +410,7 @@
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
                     </svg>
-                    <span class="hidden sm:inline">Locked</span>
+                    <span class="hidden md:inline">Locked</span>
                 </span>
             </div>
             {% endif %}
@@ -435,7 +442,7 @@
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
                     </svg>
-                    <span x-text="theme" class="hidden sm:inline capitalize"></span>
+                    <span x-text="theme" class="hidden md:inline capitalize"></span>
                 </button>
             </div>
 

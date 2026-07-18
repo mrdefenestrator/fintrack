@@ -4,6 +4,7 @@ from decimal import Decimal
 from flask import Blueprint, current_app, g, render_template, request
 from sqlalchemy import select
 
+from fintrack.core.coerce import parse_amount_filter
 from fintrack.core.models import transactions as txn_table
 from fintrack.ledger.repository.accounts import list_accounts
 from fintrack.ledger.repository.aggregations import base_transaction_query
@@ -34,8 +35,18 @@ def index():
     month = request.args.get("month", today.month, type=int)
     category = request.args.get("category")
     account_id = request.args.get("account_id", type=int)
+    # One smart filter box (QA item 1): `q` filters by amount when it parses as
+    # an amount expression (e.g. "45", ">50", "10-20"), otherwise it searches
+    # merchant/description text. Legacy `search`/`amount` params are still
+    # honored (e.g. the Merchants "view transactions" link, old bookmarks).
     search = request.args.get("search")
     amount = request.args.get("amount")
+    q = request.args.get("q")
+    if q is not None and q.strip():
+        if parse_amount_filter(q) is not None:
+            search, amount = None, q
+        else:
+            search, amount = q, None
     status = request.args.get("status")
     all_months = request.args.get("all_months") == "true"
 
@@ -82,8 +93,7 @@ def index():
         next_month=next_month,
         selected_category=category,
         selected_account=account_id,
-        search=search or "",
-        amount=amount or "",
+        q=amount or search or "",
         selected_status=status,
         all_months=all_months,
         txn_count=txn_count,

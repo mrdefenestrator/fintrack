@@ -1,0 +1,31 @@
+{# Shared time-window pager used by the Transactions (month) and Trends
+   (period window) views, so both look and behave identically (QA item 4).
+
+   The label sits in a fixed-width, centered box between the prev/next arrows
+   so the arrows never shift as the label text changes width — the specific
+   complaint about the old Trends pager. `label_width` is a Tailwind width
+   utility sized to the longest label a view produces (e.g. w-20 for "04/2026",
+   w-48 for "Sep 2025 – Aug 2026").
+
+   prev_url / next_url are full hrefs (built by the caller with its filter
+   state). latest_url is optional: when provided and not already latest, a
+   "Latest" button is appended (Trends). is_latest disables the next arrow. #}
+{%- macro pager(prev_url, next_url, label, is_latest=false, latest_url=none, target='#content', label_width='w-28') -%}
+{% set _btn = 'h-8 w-8 flex items-center justify-center rounded-md border border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer' %}
+{% set _btn_off = 'h-8 w-8 flex items-center justify-center rounded-md border border-gray-200 dark:border-gray-700 text-gray-300 dark:text-gray-600 cursor-not-allowed' %}
+<div class="flex items-center gap-2">
+    <a href="{{ prev_url }}" hx-get="{{ prev_url }}" hx-target="{{ target }}" hx-push-url="true"
+       title="Earlier" class="{{ _btn }}">&#9664;</a>
+    <span class="h-8 flex items-center justify-center px-2 {{ label_width }} text-center text-sm font-medium text-gray-700 dark:text-gray-200 whitespace-nowrap overflow-hidden">{{ label }}</span>
+    {% if is_latest %}
+    <span title="Already at the latest window" aria-disabled="true" class="{{ _btn_off }}">&#9654;</span>
+    {% else %}
+    <a href="{{ next_url }}" hx-get="{{ next_url }}" hx-target="{{ target }}" hx-push-url="true"
+       title="Later" class="{{ _btn }}">&#9654;</a>
+    {% endif %}
+    {% if latest_url is not none and not is_latest %}
+    <a href="{{ latest_url }}" hx-get="{{ latest_url }}" hx-target="{{ target }}" hx-push-url="true"
+       class="px-3 h-8 flex items-center text-sm rounded-md border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer">Latest</a>
+    {% endif %}
+</div>
+{%- endmacro -%}

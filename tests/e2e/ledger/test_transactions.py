@@ -40,15 +40,28 @@ def test_transactions_status_filter_present(page, flask_server):
 
 
 def test_transactions_search_input_present(page, flask_server):
-    """Text search input is rendered."""
+    """The combined search/amount input is rendered."""
     page.goto(f"{flask_server}/s/ledger/transactions")
-    assert page.locator("input[name='search']").is_visible()
+    assert page.locator("input[name='q']").is_visible()
 
 
-def test_transactions_amount_filter_input_present(page, flask_server):
-    """Amount search input is rendered in the filter bar."""
-    page.goto(f"{flask_server}/s/ledger/transactions")
-    assert page.locator("input[name='amount']").is_visible()
+def test_transactions_combined_filter_by_amount(page, confirmed_server):
+    """The single q box filters by amount when the text parses as an amount.
+
+    q=15-16 matches only NETFLIX (-$15.99), not the other seeded rows.
+    """
+    page.goto(f"{confirmed_server}/s/ledger/transactions?year=2026&month=4&q=15-16")
+    body_text = page.locator("table tbody").inner_text()
+    assert "NETFLIX" in body_text
+    assert "WHOLE FOODS" not in body_text
+
+
+def test_transactions_combined_filter_by_text(page, confirmed_server):
+    """The single q box searches text when it is not an amount expression."""
+    page.goto(f"{confirmed_server}/s/ledger/transactions?year=2026&month=4&q=WHOLE")
+    body_text = page.locator("table tbody").inner_text()
+    assert "WHOLE FOODS" in body_text
+    assert "NETFLIX" not in body_text
 
 
 def test_transactions_month_label_displayed(page, flask_server):

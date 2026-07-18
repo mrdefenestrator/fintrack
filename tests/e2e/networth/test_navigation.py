@@ -37,15 +37,18 @@ def test_group_tabs_navigate_to_landing_pages(page, flask_server):
     """Group tabs land on the group's default page and get the active marker."""
     page.goto(f"{flask_server}/s/test_finances/accounts")
     finances = page.locator("[data-nav-group='finances']")
-    assert "border-white" in finances.get_attribute("class")
+    assert "bg-blue-700" in finances.get_attribute("class").split()
 
     page.click("[data-nav-group='spending']")
     page.wait_for_url("**/transactions**")
     spending = page.locator("[data-nav-group='spending']")
-    assert "border-white" in spending.get_attribute("class")
-    assert "border-white" not in page.locator(
-        "[data-nav-group='finances']"
-    ).get_attribute("class")
+    assert "bg-blue-700" in spending.get_attribute("class").split()
+    assert (
+        "bg-blue-700"
+        not in page.locator("[data-nav-group='finances']")
+        .get_attribute("class")
+        .split()
+    )
 
     page.click("[data-nav-group='finances']")
     page.wait_for_url("**/accounts**")
@@ -64,7 +67,7 @@ def test_group_tab_remembers_last_subtab(page, flask_server):
 
 
 def test_tab_row_height_stable_across_tabs(page, flask_server):
-    """Header (title row + both nav rows) must be the same height whether the
+    """Header (title/group-tab row + sub-tab row) must be the same height whether the
     current route computes quick totals (accounts), doesn't (transactions),
     or belongs to neither group (import) — regression test for the tab-row
     vertical jitter (QA item 16). Every tab always renders a totals line

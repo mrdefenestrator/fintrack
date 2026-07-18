@@ -29,7 +29,7 @@ def test_initial_active_tab_highlighted(page, flask_server):
         classes = active.get_attribute("class")
         assert "border-white" in classes, f"Sub-tab not highlighted on {path}"
         group = page.locator("[data-nav-group='spending']")
-        assert "border-white" in group.get_attribute("class"), path
+        assert "bg-blue-700" in group.get_attribute("class").split(), path
 
 
 def test_import_page_neither_group_active(page, flask_server):
@@ -38,7 +38,7 @@ def test_import_page_neither_group_active(page, flask_server):
     page.goto(f"{flask_server}/s/ledger/import")
     for group in ("finances", "spending"):
         classes = page.locator(f"[data-nav-group='{group}']").get_attribute("class")
-        assert "border-white" not in classes, group
+        assert "bg-blue-700" not in classes.split(), group
     assert page.locator("[data-import-link]").get_attribute("aria-current") == "page"
     assert page.locator("[data-nav-sub]").count() == 1
 

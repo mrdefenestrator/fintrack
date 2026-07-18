@@ -301,6 +301,27 @@
             </a>
             {% endif %}
 
+            {# Group tabs (Finances / Spending) live inline in the header row,
+               between the title and the right-hand controls. They carry no
+               totals line — the title already shows the combined net total —
+               so they render as single-line pills. Sub-tabs (Accounts, Budget,
+               … / Transactions, Trends, …) remain in their own full-width row
+               below. data-nav / data-nav-group / data-nav-active-group are
+               required by web/static/js/nav.js (group-tab memory); keep them. #}
+            {% if filename %}
+            {% set _grp_active = 'bg-blue-700 text-white' %}
+            {% set _grp_idle = 'text-blue-100 hover:text-white hover:bg-blue-700' %}
+            {% set _grp_cls = 'px-3 py-1.5 rounded text-sm font-medium transition-colors' %}
+            <nav class="flex items-center gap-1 ml-2 shrink-0" data-nav data-nav-file="{{ filename }}"
+                {% if _active_group %}data-nav-active-group="{{ _active_group }}"{% endif %}>
+                <a href="{{ url_for('accounts.accounts_view', filename=filename, edit=1 if edit_mode else none) }}"
+                    data-nav-group="finances"
+                    class="{{ _grp_cls }} {% if _active_group == 'finances' %}{{ _grp_active }}{% else %}{{ _grp_idle }}{% endif %}">Finances</a>
+                <a href="/s/{{ filename }}/transactions" data-nav-group="spending"
+                    class="{{ _grp_cls }} {% if _active_group == 'spending' %}{{ _grp_active }}{% else %}{{ _grp_idle }}{% endif %}">Spending</a>
+            </nav>
+            {% endif %}
+
             <div class="flex items-center ml-auto gap-2 shrink-0">
             <!-- Import statements (icon button; the Import page is not a tab) -->
             {% if filename %}
@@ -504,51 +525,37 @@
             </div><!-- end right controls -->
         </div><!-- end row 1 -->
 
-        <!-- Rows 2 + 3: nav tabs (full width)
+        <!-- Sub-tab row (full width)
 
-             Row 2 is the primary group row (Finances / Spending); row 3 is
-             the active group's sub-tabs. Every tab in BOTH rows renders
-             exactly two lines: a label and a totals line, regardless of
-             whether that route computes a quick total, so each row is a
-             constant height on every page. Routes that don't call
+             The active group's sub-tabs (Accounts/Budget/Assets/Projections
+             or Transactions/Trends/Merchants). The group tabs themselves
+             (Finances / Spending) live inline in the header row above. Every
+             sub-tab renders exactly two lines: a label and a totals line,
+             regardless of whether that route computes a quick total, so the
+             row is a constant height on every page. Routes that don't call
              get_common_context (e.g. transactions, trends) leave n2/n3/n6
              as None; rather than omitting the totals line entirely (which
-             used to make the whole nav row shorter and visibly jump when
-             switching tabs), the line is always rendered and the
-             `invisible` utility class (visibility:hidden, still occupies
-             layout space) hides it when there's nothing to show. The same
-             applies to whole rows: on pages where neither group is active
-             (import), row 3 still renders with an invisible placeholder
-             tab so the header keeps its height. Do not reintroduce a
-             conditional that wraps the entire totals span (or the sub-tab
-             row) in an if-block keyed on n2/n3/n6 or the active group —
-             that recreates the jitter bug (QA item 16).
+             used to make the row shorter and visibly jump when switching
+             tabs), the line is always rendered and the `invisible` utility
+             class (visibility:hidden, still occupies layout space) hides it
+             when there's nothing to show. The same applies to the whole row:
+             on pages where neither group is active (import), the row still
+             renders with an invisible placeholder tab so the header keeps its
+             height. Do not reintroduce a conditional that wraps the entire
+             totals span (or the sub-tab row) in an if-block keyed on n2/n3/n6
+             or the active group — that recreates the jitter bug (QA item 16).
 
              web/static/js/nav.js records the current group + sub-tab in
-             sessionStorage (keyed on the data-nav-* attributes below) and
-             rewrites the group-tab hrefs so each group tab returns to its
-             last-visited sub-tab; without JS the tabs fall back to the
-             server-rendered defaults (Finances→Accounts,
+             sessionStorage (keyed on the data-nav-* attributes on the header
+             group nav) and rewrites the group-tab hrefs so each group tab
+             returns to its last-visited sub-tab; without JS the tabs fall
+             back to the server-rendered defaults (Finances→Accounts,
              Spending→Transactions). -->
         {% if filename %}
         {% set _tab_active = 'border-white text-white' %}
         {% set _tab_idle = 'border-transparent text-blue-100 hover:text-white hover:border-blue-400' %}
         {% set _tab_total_cls = 'text-xs font-normal tabular-nums' %}
         {% set _tab_cls = 'flex-1 py-2 flex flex-col items-center text-sm font-medium border-b-2 transition-colors' %}
-        <nav class="flex border-t border-blue-700" data-nav data-nav-file="{{ filename }}"
-            {% if _active_group %}data-nav-active-group="{{ _active_group }}"{% endif %}>
-            <a href="{{ url_for('accounts.accounts_view', filename=filename, edit=1 if edit_mode else none) }}"
-                data-nav-group="finances"
-                class="{{ _tab_cls }} {% if _active_group == 'finances' %}{{ _tab_active }}{% else %}{{ _tab_idle }}{% endif %}">
-                <span>Finances</span>
-                {% if n2 is not none and n3 is not none and n6 is not none %}{% set _gtotal = n2 + n3 + n6 %}<span class="{{ _tab_total_cls }} {% if _gtotal | display_is_negative %}text-red-300{% else %}opacity-75{% endif %}">{{ _gtotal | fmt_money_header }}</span>{% else %}<span class="{{ _tab_total_cls }} invisible" aria-hidden="true">&nbsp;</span>{% endif %}
-            </a>
-            <a href="/s/{{ filename }}/transactions" data-nav-group="spending"
-                class="{{ _tab_cls }} {% if _active_group == 'spending' %}{{ _tab_active }}{% else %}{{ _tab_idle }}{% endif %}">
-                <span>Spending</span>
-                <span class="{{ _tab_total_cls }} invisible" aria-hidden="true">&nbsp;</span>
-            </a>
-        </nav>
         {% if _active_group == 'finances' %}
         <nav class="flex border-t border-blue-700 bg-blue-900/25" data-nav-sub>
             <a href="{{ url_for('accounts.accounts_view', filename=filename, edit=1 if edit_mode else none) }}"

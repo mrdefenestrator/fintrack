@@ -38,8 +38,6 @@ def index():
     amount = request.args.get("amount")
     status = request.args.get("status")
     all_months = request.args.get("all_months") == "true"
-    sort = request.args.get("sort") or None
-    sort_dir = request.args.get("dir") or None
 
     engine = current_app.config["engine"]
     with engine.connect() as conn:
@@ -52,8 +50,6 @@ def index():
             search=search,
             amount=amount,
             status=status,
-            sort=sort,
-            sort_dir=sort_dir,
             snapshot_id=g.snapshot_id,
         )
         accounts = list_accounts(conn, g.snapshot_id)
@@ -90,8 +86,6 @@ def index():
         amount=amount or "",
         selected_status=status,
         all_months=all_months,
-        sort=sort,
-        dir=sort_dir,
         txn_count=txn_count,
         txn_total=txn_total,
     )

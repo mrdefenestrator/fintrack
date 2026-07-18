@@ -2,7 +2,7 @@
    collapse toggle itself is a static Alpine wrapper that is never swapped by
    HTMX, so its open/closed state survives every add/rename/delete
    round-trip against #categories-panel-body inside it. #}
-<div class="mb-4 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700"
+<div class="shrink-0 mb-4 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700"
      x-data="{ open: false }">
     <button type="button" @click="open = !open"
             class="w-full flex items-center justify-between px-4 py-2.5 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded-lg">

@@ -1,16 +1,19 @@
-{% from "partials/macros.html" import sort_th with context %}
-<table class="w-full bg-white dark:bg-gray-800 rounded-lg shadow-sm">
+{# Transactions sheet: spreadsheet-style table matching the Finances pages.
+   Column sorting is client-side (web/static/js/sortable.js) via the
+   `sortable` class + `sortable-th` headers; there is no server-side sort.
+   Inline cell editing (Merchant/Category/Notes) is preserved — see
+   partials/transaction_row.html and partials/ledger_cells.html. #}
+{% set _th = "sortable-th px-1.5 py-0.5 font-medium text-gray-800 dark:text-gray-100 border-r border-gray-200 dark:border-gray-600 last:border-r-0 cursor-pointer select-none hover:bg-gray-200 dark:hover:bg-gray-600" %}
+<table class="sortable w-full text-sm border-collapse bg-white dark:bg-gray-800">
     <thead>
-        <tr class="border-b dark:border-gray-700 text-left text-sm text-gray-500 dark:text-gray-400">
-            <th class="px-4 py-3 whitespace-nowrap">
-                Date{% if not sort %}<span class="ml-1 text-xs">↓</span>{% endif %}
-            </th>
-            {{ sort_th("/transactions", "merchant", "Merchant") }}
-            {{ sort_th("/transactions", "description", "Description") }}
-            {{ sort_th("/transactions", "account", "Account") }}
-            {{ sort_th("/transactions", "category", "Category") }}
-            {{ sort_th("/transactions", "amount", "Amount", first_dir="desc", extra_class="text-right") }}
-            <th class="px-4 py-3 whitespace-nowrap">Notes</th>
+        <tr class="bg-gray-100 dark:bg-gray-700 border-b border-gray-300 dark:border-gray-600">
+            <th class="{{ _th }} text-left" data-col="0" role="button" tabindex="0" title="Sort by this column">Date <span class="sort-indicator"></span></th>
+            <th class="{{ _th }} text-left" data-col="1" role="button" tabindex="0" title="Sort by this column">Merchant <span class="sort-indicator"></span></th>
+            <th class="{{ _th }} text-left" data-col="2" role="button" tabindex="0" title="Sort by this column">Description <span class="sort-indicator"></span></th>
+            <th class="{{ _th }} text-left" data-col="3" role="button" tabindex="0" title="Sort by this column">Account <span class="sort-indicator"></span></th>
+            <th class="{{ _th }} text-left" data-col="4" role="button" tabindex="0" title="Sort by this column">Category <span class="sort-indicator"></span></th>
+            <th class="{{ _th }} text-right" data-col="5" role="button" tabindex="0" title="Sort by this column">Amount <span class="sort-indicator"></span></th>
+            <th class="{{ _th }} text-left" data-col="6" role="button" tabindex="0" title="Sort by this column">Notes <span class="sort-indicator"></span></th>
         </tr>
     </thead>
     <tbody>

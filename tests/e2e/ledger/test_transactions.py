@@ -91,6 +91,50 @@ def test_transactions_rows_visible_with_data(page, confirmed_server):
     assert rows.count() == 4
 
 
+# ---------------------------------------------------------------------------
+# Client-side column sorting (spreadsheet-style, shared sortable.js)
+# ---------------------------------------------------------------------------
+
+
+def test_transactions_uses_sheet_style_sortable_table(page, flask_server):
+    """The table adopts the Finances sheet: a scroll container + sortable headers."""
+    page.goto(f"{flask_server}/s/ledger/transactions")
+    assert page.locator("[data-sheet-scroll] table.sortable").count() == 1
+    assert page.locator("th.sortable-th[data-col='1']").is_visible()
+
+
+def test_transactions_sort_by_merchant_reorders_rows(page, confirmed_server):
+    """Clicking the Merchant header sorts client-side asc → desc without reload."""
+    page.goto(f"{confirmed_server}/s/ledger/transactions?year=2026&month=4")
+
+    def first_merchant():
+        return page.locator("table tbody tr").first.locator("td").nth(1).inner_text()
+
+    # Default order is newest-first (date desc): NETFLIX (04-15) leads.
+    assert "NETFLIX" in first_merchant()
+    # Ascending by merchant name → CHIPOTLE sorts first.
+    page.locator("th[data-col='1']").click()
+    assert "CHIPOTLE" in first_merchant()
+    # Descending → WHOLE FOODS sorts first.
+    page.locator("th[data-col='1']").click()
+    assert "WHOLE FOODS" in first_merchant()
+
+
+def test_transactions_sort_by_amount_is_numeric(page, confirmed_server):
+    """The Amount header sorts numerically (parsing the $ / sign), not lexically."""
+    page.goto(f"{confirmed_server}/s/ledger/transactions?year=2026&month=4")
+
+    def first_amount():
+        return page.locator("table tbody tr").first.locator("td").nth(5).inner_text()
+
+    # Ascending by signed amount → the largest expense (-$52.75) leads.
+    page.locator("th[data-col='5']").click()
+    assert "52.75" in first_amount()
+    # Descending → the smallest expense (-$15.99) leads.
+    page.locator("th[data-col='5']").click()
+    assert "15.99" in first_amount()
+
+
 def test_transactions_row_shows_date_and_amount(page, confirmed_server):
     """Each row contains a date (column 0) and a dollar amount (column 5)."""
     page.goto(f"{confirmed_server}/s/ledger/transactions?year=2026&month=4")

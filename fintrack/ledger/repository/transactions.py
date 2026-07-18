@@ -46,8 +46,6 @@ def get_transactions(
     status: str | None = None,
     amount: str | None = None,
     import_id: int | None = None,
-    sort: str | None = None,
-    sort_dir: str | None = None,
     snapshot_id: int | None = None,
 ) -> list[dict]:
     """Get transactions with resolved category and merchant.
@@ -103,19 +101,9 @@ def get_transactions(
             subq.c.correction_id.is_(None),
         )
 
-    _sort_cols = {
-        "merchant": subq.c.merchant,
-        "description": subq.c.raw_description,
-        "account": subq.c.account_name,
-        "category": subq.c.category,
-        "amount": func.abs(subq.c.amount),
-    }
-    sort_col = _sort_cols.get(sort) if sort else None
-    if sort_col is not None:
-        order = sort_col.desc() if sort_dir == "desc" else sort_col.asc()
-        stmt = stmt.order_by(order, subq.c.date.desc())
-    else:
-        stmt = stmt.order_by(subq.c.date.desc())
+    # Default (newest-first) order; column sorting is done client-side in the
+    # web UI (web/static/js/sortable.js).
+    stmt = stmt.order_by(subq.c.date.desc())
 
     rows = conn.execute(stmt).fetchall()
     return [dict(row._mapping) for row in rows]

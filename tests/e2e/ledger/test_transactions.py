@@ -87,17 +87,79 @@ def test_transactions_table_has_expected_columns(page, flask_server):
 def test_transactions_rows_visible_with_data(page, confirmed_server):
     """Transaction rows appear after a confirmed import."""
     page.goto(f"{confirmed_server}/s/ledger/transactions?year=2026&month=4")
-    rows = page.locator("table tbody tr")
+    rows = page.locator("table tbody tr:not(.total-row)")
     assert rows.count() == 4
+
+
+# ---------------------------------------------------------------------------
+# Client-side column sorting (spreadsheet-style, shared sortable.js)
+# ---------------------------------------------------------------------------
+
+
+def test_transactions_uses_sheet_style_sortable_table(page, flask_server):
+    """The table adopts the Finances sheet: a scroll container + sortable headers."""
+    page.goto(f"{flask_server}/s/ledger/transactions")
+    assert page.locator("[data-sheet-scroll] table.sortable").count() == 1
+    assert page.locator("th.sortable-th[data-col='1']").is_visible()
+
+
+def test_transactions_sort_by_merchant_reorders_rows(page, confirmed_server):
+    """Clicking the Merchant header sorts client-side asc → desc without reload."""
+    page.goto(f"{confirmed_server}/s/ledger/transactions?year=2026&month=4")
+
+    def first_merchant():
+        return page.locator("table tbody tr").first.locator("td").nth(1).inner_text()
+
+    # Default order is newest-first (date desc): NETFLIX (04-15) leads.
+    assert "NETFLIX" in first_merchant()
+    # Ascending by merchant name → CHIPOTLE sorts first.
+    page.locator("th[data-col='1']").click()
+    assert "CHIPOTLE" in first_merchant()
+    # Descending → WHOLE FOODS sorts first.
+    page.locator("th[data-col='1']").click()
+    assert "WHOLE FOODS" in first_merchant()
+
+
+def test_transactions_sort_by_amount_is_numeric(page, confirmed_server):
+    """The Amount header sorts numerically (parsing the $ / sign), not lexically."""
+    page.goto(f"{confirmed_server}/s/ledger/transactions?year=2026&month=4")
+
+    def first_amount():
+        return page.locator("table tbody tr").first.locator("td").nth(5).inner_text()
+
+    # Ascending by signed amount → the largest expense (-$52.75) leads.
+    page.locator("th[data-col='5']").click()
+    assert "52.75" in first_amount()
+    # Descending → the smallest expense (-$15.99) leads.
+    page.locator("th[data-col='5']").click()
+    assert "15.99" in first_amount()
 
 
 def test_transactions_row_shows_date_and_amount(page, confirmed_server):
     """Each row contains a date (column 0) and a dollar amount (column 5)."""
     page.goto(f"{confirmed_server}/s/ledger/transactions?year=2026&month=4")
-    first_row = page.locator("table tbody tr").first
+    first_row = page.locator("table tbody tr:not(.total-row)").first
     cells = first_row.locator("td").all_inner_texts()
     assert "2026" in cells[0]  # date column
     assert "$" in cells[5]  # amount column
+
+
+def test_transactions_total_row_in_sheet(page, confirmed_server):
+    """The count + sum live in a sticky in-sheet total row (4 txns, $132.24)."""
+    page.goto(f"{confirmed_server}/s/ledger/transactions?year=2026&month=4")
+    total = page.locator("table tbody tr.total-row")
+    assert total.count() == 1
+    text = total.inner_text()
+    assert "4 transactions" in text
+    assert "132.24" in text
+
+
+def test_transactions_total_row_stays_last_when_sorted(page, confirmed_server):
+    """Sorting a column keeps the total row pinned to the bottom of the sheet."""
+    page.goto(f"{confirmed_server}/s/ledger/transactions?year=2026&month=4")
+    page.locator("th[data-col='1']").click()  # sort by Merchant
+    last_row = page.locator("table tbody tr").last
+    assert "total-row" in (last_row.get_attribute("class") or "")
 
 
 def test_transactions_merchant_names_visible(page, confirmed_server):
@@ -163,7 +225,7 @@ def test_transactions_filter_by_status_uncategorized(page, confirmed_server):
     page.goto(
         f"{confirmed_server}/s/ledger/transactions?year=2026&month=4&status=uncategorized"
     )
-    rows = page.locator("table tbody tr")
+    rows = page.locator("table tbody tr:not(.total-row)")
     assert rows.count() == 4
 
 
@@ -172,7 +234,7 @@ def test_transactions_filter_by_status_categorized_empty(page, confirmed_server)
     page.goto(
         f"{confirmed_server}/s/ledger/transactions?year=2026&month=4&status=categorized"
     )
-    rows = page.locator("table tbody tr")
+    rows = page.locator("table tbody tr:not(.total-row)")
     assert rows.count() == 0
 
 
@@ -181,7 +243,7 @@ def test_transactions_search_filters_rows(page, confirmed_server):
     page.goto(
         f"{confirmed_server}/s/ledger/transactions?year=2026&month=4&search=WHOLE+FOODS"
     )
-    rows = page.locator("table tbody tr")
+    rows = page.locator("table tbody tr:not(.total-row)")
     assert rows.count() == 1
     assert "WHOLE FOODS" in rows.first.inner_text().upper()
 
@@ -189,20 +251,20 @@ def test_transactions_search_filters_rows(page, confirmed_server):
 def test_transactions_amount_filter_range_filters_rows(page, confirmed_server):
     """Amount range filter narrows the transaction list."""
     page.goto(f"{confirmed_server}/s/ledger/transactions?year=2026&month=4")
-    all_rows = page.locator("table tbody tr").count()
+    all_rows = page.locator("table tbody tr:not(.total-row)").count()
     page.goto(f"{confirmed_server}/s/ledger/transactions?year=2026&month=4&amount=0-1")
-    filtered_rows = page.locator("table tbody tr").count()
+    filtered_rows = page.locator("table tbody tr:not(.total-row)").count()
     assert filtered_rows <= all_rows
 
 
 def test_transactions_amount_filter_invalid_input_ignored(page, confirmed_server):
     """Invalid amount text is ignored rather than erroring."""
     page.goto(f"{confirmed_server}/s/ledger/transactions?year=2026&month=4")
-    all_rows = page.locator("table tbody tr").count()
+    all_rows = page.locator("table tbody tr:not(.total-row)").count()
     page.goto(
         f"{confirmed_server}/s/ledger/transactions?year=2026&month=4&amount=garbage"
     )
-    assert page.locator("table tbody tr").count() == all_rows
+    assert page.locator("table tbody tr:not(.total-row)").count() == all_rows
 
 
 # ---------------------------------------------------------------------------

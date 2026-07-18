@@ -1,6 +1,7 @@
 {# One budget row in edit mode: cells clickable (display), last cell is delete. #}
 {% from "macros/table.html" import cell_display, cell_non_editable, cell_edit_input, cell_edit_select %}
-<tr class="border-b border-gray-200 dark:border-b-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 border-l-4 {{ 'border-l-emerald-400' if kind == 'income' else 'border-l-rose-400' }}" id="budget-row-{{ index }}">
+{% import "partials/sheet.html" as sheet %}
+<tr class="{{ sheet.row_class('border-l-emerald-400' if kind == 'income' else 'border-l-rose-400') }}" id="budget-row-{{ index }}">
     {% set recurrence_display = row_cells[4] if row_cells | length > 4 else '' %}
     {% set when_display = row_cells[5] if row_cells | length > 5 else '' %}
     {% if recurrence_display == 'One Time' %}
@@ -59,7 +60,7 @@
             {% if editing_when_recurrence == 'monthly' %}
                 {# Monthly: number input for dayOfMonth + checkbox for continuous (expense only) #}
                 {% if kind == 'expense' %}
-                <td class="cell-editing px-1.5 py-px border-r border-gray-100 last:border-r-0"
+                <td class="cell-editing {{ sheet.cell_class() }}"
                     x-data="{ cont: {{ 'true' if editing_when_continuous else 'false' }} }">
                     <form method="post" action="{{ when_update_url }}" class="flex items-center gap-0.5"
                           hx-post="{{ when_update_url }}"
@@ -84,7 +85,7 @@
                 </td>
                 {% else %}
                 {# Income monthly: only dayOfMonth input, no continuous #}
-                <td class="cell-editing px-1.5 py-px border-r border-gray-100 last:border-r-0">
+                <td class="cell-editing {{ sheet.cell_class() }}">
                     <form method="post" action="{{ when_update_url }}" class="flex items-center gap-0.5"
                           hx-post="{{ when_update_url }}"
                           hx-trigger="save" hx-swap="innerHTML" hx-target="#budget-tbody"
@@ -101,7 +102,7 @@
                 {% endif %}
             {% else %}
                 {# Annual / quarterly / semiannual: month select + day number input #}
-                <td class="cell-editing px-1.5 py-px border-r border-gray-100 last:border-r-0"
+                <td class="cell-editing {{ sheet.cell_class() }}"
                     @focusout.debounce.200ms="!$el.contains(document.activeElement) && $el.querySelector('form')?.requestSubmit()">
                     <form method="post" action="{{ when_update_url }}" class="flex items-center gap-0.5"
                           hx-post="{{ when_update_url }}"

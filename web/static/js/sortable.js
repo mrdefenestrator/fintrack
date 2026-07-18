@@ -12,6 +12,9 @@
     }
 
     function isTotalRow(tr) {
+        // Prefer the explicit class (sheet total rows carry it); fall back to
+        // the text heuristic for any table that renders a total row without it.
+        if (tr.classList && tr.classList.contains('total-row')) return true;
         var first = tr.cells[0];
         return first && (first.textContent.trim() === 'Total' || /^-+$/.test(first.textContent.trim()));
     }
@@ -99,55 +102,77 @@
         window.history.pushState({}, '', url);
     }
 
-    function initSortable() {
-        document.querySelectorAll('table.sortable').forEach(function (table) {
-            var initialCol = table.getAttribute('data-sort-col');
-            var initialDir = table.getAttribute('data-sort-dir');
-            if (initialCol && initialDir && initialDir !== 'none') {
-                sortTable(table, parseInt(initialCol, 10), initialDir);
-                updateIndicators(table, parseInt(initialCol, 10), initialDir);
-            }
+    // Bind sorting to one table. Idempotent: a table is only wired once (so
+    // repeated scans after htmx swaps don't stack duplicate click handlers).
+    function initTable(table) {
+        if (table._sortableInit) return;
+        table._sortableInit = true;
 
-            table.querySelectorAll('.sortable-th').forEach(function (th) {
-                var colIndex = parseInt(th.getAttribute('data-col'), 10);
-                if (isNaN(colIndex)) return;
-                function doSort() {
-                    var currentCol = table.getAttribute('data-sort-col');
-                    var currentDir = table.getAttribute('data-sort-dir') || 'none';
-                    var dir;
-                    if (currentCol !== String(colIndex)) {
-                        dir = 'asc';
-                    } else if (currentDir === 'asc') {
-                        dir = 'desc';
-                    } else if (currentDir === 'desc') {
-                        dir = 'none';
-                    } else {
-                        dir = 'asc';
-                    }
-                    table.setAttribute('data-sort-col', colIndex);
-                    table.setAttribute('data-sort-dir', dir);
-                    if (dir === 'none') {
-                        restoreOriginalOrder(table);
-                    } else {
-                        sortTable(table, colIndex, dir);
-                    }
-                    updateIndicators(table, colIndex, dir);
-                    updateSortUrl(table, colIndex, dir);
+        var initialCol = table.getAttribute('data-sort-col');
+        var initialDir = table.getAttribute('data-sort-dir');
+        if (initialCol && initialDir && initialDir !== 'none') {
+            sortTable(table, parseInt(initialCol, 10), initialDir);
+            updateIndicators(table, parseInt(initialCol, 10), initialDir);
+        }
+
+        table.querySelectorAll('.sortable-th').forEach(function (th) {
+            var colIndex = parseInt(th.getAttribute('data-col'), 10);
+            if (isNaN(colIndex)) return;
+            function doSort() {
+                var currentCol = table.getAttribute('data-sort-col');
+                var currentDir = table.getAttribute('data-sort-dir') || 'none';
+                var dir;
+                if (currentCol !== String(colIndex)) {
+                    dir = 'asc';
+                } else if (currentDir === 'asc') {
+                    dir = 'desc';
+                } else if (currentDir === 'desc') {
+                    dir = 'none';
+                } else {
+                    dir = 'asc';
                 }
-                th.addEventListener('click', doSort);
-                th.addEventListener('keydown', function (e) {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        doSort();
-                    }
-                });
+                table.setAttribute('data-sort-col', colIndex);
+                table.setAttribute('data-sort-dir', dir);
+                if (dir === 'none') {
+                    restoreOriginalOrder(table);
+                } else {
+                    sortTable(table, colIndex, dir);
+                }
+                updateIndicators(table, colIndex, dir);
+                updateSortUrl(table, colIndex, dir);
+            }
+            th.addEventListener('click', doSort);
+            th.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    doSort();
+                }
             });
         });
     }
 
+    function scan() {
+        document.querySelectorAll('table.sortable').forEach(initTable);
+    }
+
+    // htmx swaps rows (or the whole content area) in place. Any cached
+    // original-order snapshot then points at detached <tr> nodes, so drop it;
+    // the next sort rebuilds it from the live DOM. New tables get wired by the
+    // subsequent scan().
+    function onSwap() {
+        document.querySelectorAll('table.sortable').forEach(function (t) {
+            delete t._originalRowOrder;
+            delete t._originalTotalRow;
+            delete t._originalAddRow;
+        });
+        scan();
+    }
+
+    document.addEventListener('htmx:afterSwap', onSwap);
+
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', initSortable);
+        document.addEventListener('DOMContentLoaded', scan);
     } else {
-        initSortable();
+        scan();
     }
 })();

@@ -1,8 +1,9 @@
 {# Balance-history cell: sparkline of recent points + as-of staleness colour
    (green ≤35d, amber ≤95d, red older) + ⚠ when the latest statement point
    carries a reconciliation note. #}
+{% import "partials/sheet.html" as sheet %}
 {% set _h = history_by_id.get(account.id) if history_by_id is defined else none %}
-<td class="px-1.5 py-px border-r border-gray-100 dark:border-gray-700 last:border-r-0 whitespace-nowrap"
+<td class="{{ sheet.cell_class('', 'whitespace-nowrap') }}"
     data-history-cell>
     {% if _h %}
     <div class="flex items-center gap-1.5 justify-end">

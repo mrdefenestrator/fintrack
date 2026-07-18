@@ -1,8 +1,9 @@
 {% from "partials/ledger_cells.html" import cell_display, select_edit %}
+{% import "partials/sheet.html" as sheet %}
 {% set source_labels = {"api": "Auto", "manual": "Manual"} %}
 {% set row_id = "merchant-row-" ~ m.id %}
-<tr id="{{ row_id }}" class="border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700">
-    <td class="px-4 py-2 font-medium text-sm">
+<tr id="{{ row_id }}" class="{{ sheet.row_class() }}">
+    <td class="{{ sheet.cell_class('', 'font-medium') }}">
         <a class="text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
            hx-get="/s/{{ filename }}/transactions?search={{ m.merchant_name | urlencode }}"
            hx-target="#content" hx-push-url="true">{{ m.merchant_name }}</a>
@@ -15,7 +16,7 @@
     {% else %}
         {{ cell_display(m.category, "/s/" ~ filename ~ "/merchants/" ~ m.id ~ "/cell?field=category", row_id) }}
     {% endif %}
-    <td class="px-4 py-2 text-sm text-gray-500 dark:text-gray-400">{{ source_labels.get(m.source, m.source) }}</td>
-    <td class="px-4 py-2 text-right text-sm">{{ m.txn_count }}</td>
-    <td class="px-4 py-2 text-sm text-gray-500 dark:text-gray-400">{{ m.last_seen or '—' }}</td>
+    <td class="{{ sheet.cell_class('', 'text-gray-500 dark:text-gray-400') }}">{{ source_labels.get(m.source, m.source) }}</td>
+    <td class="{{ sheet.cell_class('text-right tabular-nums') }}">{{ m.txn_count }}</td>
+    <td class="{{ sheet.cell_class('', 'text-gray-500 dark:text-gray-400 whitespace-nowrap') }}">{{ m.last_seen or '—' }}</td>
 </tr>

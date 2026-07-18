@@ -1,21 +1,26 @@
-{% from "partials/macros.html" import sort_th with context %}
-<table class="w-full bg-white dark:bg-gray-800 rounded-lg shadow-sm">
-    <thead>
-        <tr class="border-b dark:border-gray-700 text-left text-sm text-gray-500 dark:text-gray-400">
-            <th class="px-4 py-3 whitespace-nowrap">
-                Date{% if not sort %}<span class="ml-1 text-xs">↓</span>{% endif %}
-            </th>
-            {{ sort_th("/transactions", "merchant", "Merchant") }}
-            {{ sort_th("/transactions", "description", "Description") }}
-            {{ sort_th("/transactions", "account", "Account") }}
-            {{ sort_th("/transactions", "category", "Category") }}
-            {{ sort_th("/transactions", "amount", "Amount", first_dir="desc", extra_class="text-right") }}
-            <th class="px-4 py-3 whitespace-nowrap">Notes</th>
-        </tr>
-    </thead>
+{# Transactions sheet: spreadsheet-style table matching the Finances pages.
+   Column sorting is client-side (web/static/js/sortable.js) via the
+   `sortable` class + `sortable-th` headers; there is no server-side sort.
+   Inline cell editing (Merchant/Category/Notes) is preserved — see
+   partials/transaction_row.html and partials/ledger_cells.html. #}
+{% import "partials/sheet.html" as sheet %}
+<table class="sortable w-full text-sm border-collapse bg-white dark:bg-gray-800">
+    {{ sheet.thead(["Date", "Merchant", "Description", "Account", "Category", "Amount", "Notes"], right_align_cols=[5]) }}
     <tbody>
         {% for txn in transactions %}
         {% include "partials/transaction_row.html" %}
         {% endfor %}
+        {# Sticky total row (like the Accounts/Assets sheets): the transaction
+           count doubles as the row label; the sum sits in the Amount column,
+           coloured like that column (green income / red spend). sortable.js
+           keeps `.total-row` pinned to the bottom while sorting. Hidden when
+           there are no transactions, mirroring the Accounts total row. #}
+        {% if txn_count %}
+        <tr class="total-row bg-gray-100 dark:bg-gray-700 border-t-2 border-gray-300 dark:border-gray-600 font-medium">
+            <td class="{{ sheet.cell_class('', 'whitespace-nowrap') }}" colspan="5">{{ txn_count }} transaction{{ 's' if txn_count != 1 else '' }}</td>
+            <td class="{{ sheet.cell_class('text-right tabular-nums', 'text-red-600 dark:text-red-400' if txn_total < 0 else 'text-green-600 dark:text-green-400') }}">{{ '-$' if txn_total < 0 else '+$' }}{{ txn_total|abs|money }}</td>
+            <td class="{{ sheet.cell_class() }}"></td>
+        </tr>
+        {% endif %}
     </tbody>
 </table>

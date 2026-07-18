@@ -1,9 +1,10 @@
 {% from "partials/ledger_cells.html" import cell_display, text_edit, select_edit %}
+{% import "partials/sheet.html" as sheet %}
 {% set row_id = "txn-row-" ~ txn.id %}
 {% set base = "/s/" ~ filename ~ "/transactions/" ~ txn.id %}
-<tr id="{{ row_id }}" class="border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700">
+<tr id="{{ row_id }}" class="{{ sheet.row_class() }}">
     {# Date — raw imported data, immutable #}
-    <td class="px-4 py-2 text-sm">{{ txn.date }}</td>
+    <td class="{{ sheet.cell_class('', 'whitespace-nowrap') }}">{{ txn.date }}</td>
 
     {# Merchant — corrections overlay (merchant_name) #}
     {% if editing_field is defined and editing_field == 'merchant_name' %}
@@ -13,10 +14,10 @@
     {% endif %}
 
     {# Description — raw imported data, immutable #}
-    <td class="px-4 py-2 text-sm text-gray-500 dark:text-gray-400">{{ txn.raw_description }}</td>
+    <td class="{{ sheet.cell_class('', 'text-gray-500 dark:text-gray-400') }}">{{ txn.raw_description }}</td>
 
     {# Account — immutable #}
-    <td class="px-4 py-2 text-sm text-gray-500 dark:text-gray-400">{{ txn.account_name or '—' }}</td>
+    <td class="{{ sheet.cell_class('', 'text-gray-500 dark:text-gray-400') }}">{{ txn.account_name or '—' }}</td>
 
     {# Category — corrections overlay, with optional apply-to-merchant #}
     {% if editing_field is defined and editing_field == 'category' %}
@@ -32,7 +33,7 @@
     {% endif %}
 
     {# Amount — raw imported data, immutable #}
-    <td class="px-4 py-2 text-right {{ 'text-red-600 dark:text-red-400' if txn.amount < 0 else 'text-green-600 dark:text-green-400' }}">
+    <td class="{{ sheet.cell_class('text-right tabular-nums', 'whitespace-nowrap ' ~ ('text-red-600 dark:text-red-400' if txn.amount < 0 else 'text-green-600 dark:text-green-400')) }}">
         {{ '-$' if txn.amount < 0 else '+$' }}{{ txn.amount|abs|money }}
     </td>
 

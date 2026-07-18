@@ -51,6 +51,14 @@ def test_merchants_empty_db_has_no_data_rows(page, flask_server):
     assert page.locator("table tbody tr").count() == 0
 
 
+def test_merchants_uses_sheet_style_sortable_table(page, flask_server):
+    """The table adopts the Finances sheet: a scroll container + sortable headers."""
+    page.goto(f"{flask_server}/s/ledger/merchants")
+    assert page.locator("[data-sheet-scroll] table.sortable").count() == 1
+    for col in range(5):
+        assert page.locator(f"th.sortable-th[data-col='{col}']").count() == 1
+
+
 # ---------------------------------------------------------------------------
 # Data display and inline editing (confirmed_server)
 # ---------------------------------------------------------------------------

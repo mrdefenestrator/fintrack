@@ -1,14 +1,10 @@
-{% from "partials/macros.html" import sort_th with context %}
-<table class="w-full bg-white dark:bg-gray-800 rounded-lg shadow-sm">
-    <thead>
-        <tr class="border-b dark:border-gray-700 text-left text-sm text-gray-500 dark:text-gray-400">
-            {{ sort_th("/merchants", "merchant", "Merchant", is_default=True) }}
-            {{ sort_th("/merchants", "category", "Category") }}
-            {{ sort_th("/merchants", "source", "Source") }}
-            {{ sort_th("/merchants", "txn_count", "Transactions", first_dir="desc", extra_class="text-right") }}
-            {{ sort_th("/merchants", "last_seen", "Last Seen", first_dir="desc") }}
-        </tr>
-    </thead>
+{# Merchants sheet: spreadsheet-style table matching the Finances pages.
+   Column sorting is client-side (web/static/js/sortable.js) via the
+   `sortable` class + `sortable-th` headers; there is no server-side sort.
+   Inline Category editing is preserved — see partials/merchant_row.html. #}
+{% import "partials/sheet.html" as sheet %}
+<table class="sortable w-full text-sm border-collapse bg-white dark:bg-gray-800">
+    {{ sheet.thead(["Merchant", "Category", "Source", "Transactions", "Last Seen"], right_align_cols=[3]) }}
     <tbody>
         {% for m in merchants %}
         {% include "partials/merchant_row.html" %}

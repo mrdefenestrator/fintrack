@@ -15,14 +15,18 @@
    Per-row swaps (never full-tbody) keep the surrounding filter / sort /
    pagination state intact — only the edited row is re-rendered. #}
 
+{# Cells use the compact spreadsheet styling shared with the Finances sheets,
+   sourced from partials/sheet.html; row height comes from base.html's global
+   `table tbody tr` rule. #}
+{% import "partials/sheet.html" as sheet %}
 {% macro cell_display(value, cell_url, row_id, extra_class='', align_class='') %}
-<td class="px-4 py-2 text-sm cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/20 {{ extra_class }} {{ align_class }}"
+<td class="{{ sheet.display_cell_class(align_class, extra_class) }}"
     hx-get="{{ cell_url }}" hx-trigger="click" hx-target="#{{ row_id }}" hx-swap="outerHTML"
     role="button" tabindex="0">{{ value }}</td>
 {% endmacro %}
 
 {% macro text_edit(field, value, update_url, display_url, row_id, align_class='') %}
-<td class="cell-editing px-4 py-2 text-sm {{ align_class }}">
+<td class="cell-editing {{ sheet.cell_class(align_class) }}">
     <form class="inline" method="post" action="{{ update_url }}"
           hx-get="{{ display_url }}" hx-trigger="focusout from:input delay:150ms"
           hx-target="#{{ row_id }}" hx-swap="outerHTML"
@@ -39,7 +43,7 @@
 {% endmacro %}
 
 {% macro select_edit(field, current, options, update_url, row_id, display_url=none, align_class='') %}
-<td class="cell-editing px-4 py-2 text-sm {{ align_class }}">
+<td class="cell-editing {{ sheet.cell_class(align_class) }}">
     <form class="inline" method="post" action="{{ update_url }}"
           {% if display_url %}hx-get="{{ display_url }}"
           hx-trigger="focusout from:select delay:150ms"

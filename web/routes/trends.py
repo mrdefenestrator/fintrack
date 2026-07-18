@@ -13,23 +13,51 @@ bp = snapshot_scoped(Blueprint("trends", __name__, url_prefix="/s/<filename>"))
 _END_PARAM_RE = re.compile(r"^(\d{4})-(\d{2})$")
 
 
-def _period_range(period: str, today: date) -> tuple[date, date]:
+# Paging stride per period, in months: each "prev/next" click moves the
+# window by one whole page rather than a single month (QA: trends paging).
+# Quarterly steps a quarter, YTD steps a calendar year, trailing-12 steps a
+# year so the 12-month window slides back/forward intact.
+_PERIOD_STRIDE = {"quarterly": 3, "ytd": 12, "trailing12": 12}
+
+
+def _period_stride(period: str) -> int:
+    return _PERIOD_STRIDE.get(period, 12)
+
+
+def _period_range(period: str, anchor_end: date, is_latest: bool) -> tuple[date, date]:
+    """The [start, end] date span for a period window anchored at `anchor_end`.
+
+    The *latest* window is period-to-date (ends at `anchor_end`, i.e. today):
+    the current partial quarter or the current year so far. A paged-back
+    window is the *full* period containing the anchor month — the full quarter
+    or the full calendar year — so stepping back lands on complete periods.
+    Trailing-12 is a fixed 12-month window ending at the anchor either way.
+    """
     if period == "quarterly":
-        quarter_start_month = ((today.month - 1) // 3) * 3 + 1
-        return date(today.year, quarter_start_month, 1), today
+        quarter_start_month = ((anchor_end.month - 1) // 3) * 3 + 1
+        start = date(anchor_end.year, quarter_start_month, 1)
+        if is_latest:
+            return start, anchor_end
+        quarter_end_month = quarter_start_month + 2
+        _, last_day = monthrange(anchor_end.year, quarter_end_month)
+        return start, date(anchor_end.year, quarter_end_month, last_day)
     elif period == "ytd":
-        return date(today.year, 1, 1), today
+        start = date(anchor_end.year, 1, 1)
+        if is_latest:
+            return start, anchor_end
+        return start, date(anchor_end.year, 12, 31)
     elif period == "trailing12":
-        start_year = today.year - 1
-        start_month = today.month + 1
+        start_year = anchor_end.year - 1
+        start_month = anchor_end.month + 1
         if start_month > 12:
             start_month -= 12
             start_year += 1
-        return date(start_year, start_month, 1), today
-    elif period == "annual":
-        return date(today.year - 1, 1, 1), date(today.year - 1, 12, 31)
+        return date(start_year, start_month, 1), anchor_end
     else:
-        return date(today.year, 1, 1), today
+        start = date(anchor_end.year, 1, 1)
+        return (
+            (start, anchor_end) if is_latest else (start, date(anchor_end.year, 12, 31))
+        )
 
 
 def _parse_end_param(value: str | None) -> tuple[int, int] | None:
@@ -81,15 +109,19 @@ def index():
     anchor_end, anchor_year, anchor_month, is_latest = _resolve_window_end(
         request.args.get("end"), today
     )
-    start, end = _period_range(period, anchor_end)
+    start, end = _period_range(period, anchor_end, is_latest)
 
-    prev_year, prev_month = _shift_month(anchor_year, anchor_month, -1)
-    next_year, next_month = _shift_month(anchor_year, anchor_month, 1)
+    stride = _period_stride(period)
+    prev_year, prev_month = _shift_month(anchor_year, anchor_month, -stride)
+    next_year, next_month = _shift_month(anchor_year, anchor_month, stride)
     prev_end = f"{prev_year:04d}-{prev_month:02d}"
     next_end = f"{next_year:04d}-{next_month:02d}"
     anchor_end_param = f"{anchor_year:04d}-{anchor_month:02d}"
     end_qs = "" if is_latest else f"&end={anchor_end_param}"
-    window_label = f"{start:%b %Y} – {end:%b %Y}"
+    if (start.year, start.month) == (end.year, end.month):
+        window_label = f"{start:%b %Y}"
+    else:
+        window_label = f"{start:%b %Y} – {end:%b %Y}"
 
     engine = current_app.config["engine"]
     with engine.connect() as conn:
@@ -188,8 +220,8 @@ def detail():
     today = date.today()
     period = request.args.get("period", "ytd")
     category = request.args.get("category", "")
-    anchor_end, _, _, _ = _resolve_window_end(request.args.get("end"), today)
-    start, end = _period_range(period, anchor_end)
+    anchor_end, _, _, is_latest = _resolve_window_end(request.args.get("end"), today)
+    start, end = _period_range(period, anchor_end, is_latest)
 
     engine = current_app.config["engine"]
     with engine.connect() as conn:

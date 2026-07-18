@@ -1,6 +1,6 @@
 <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
     <div class="flex items-center gap-2">
-        {% for p, label in [("quarterly", "Quarterly"), ("ytd", "Year to Date"), ("trailing12", "Trailing 12 Mo"), ("annual", "Last Year")] %}
+        {% for p, label in [("quarterly", "Quarterly"), ("ytd", "Year to Date"), ("trailing12", "Trailing 12 Mo")] %}
         <a href="/s/{{ filename }}/trends?period={{ p }}{{ end_qs }}"
            hx-get="/s/{{ filename }}/trends?period={{ p }}{{ end_qs }}" hx-target="#content" hx-push-url="true"
            class="px-3 py-1.5 text-sm rounded {{ 'bg-blue-500 text-white' if period == p else 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600' }}">

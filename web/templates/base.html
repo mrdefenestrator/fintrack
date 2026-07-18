@@ -230,15 +230,21 @@
            Mark a scrolling table container (the element with `overflow: auto`
            — e.g. .table-scroll-container) with the `data-sheet-scroll`
            attribute to get subtle drop shadows that appear under the sticky
-           header once scrolled down, and above the sticky total row until
-           scrolled to the bottom. web/static/js/sheet-scroll.js scans for
-           this attribute, inserts the two shadow overlays, and toggles their
-           visibility as the container scrolls (also re-scanning after htmx
-           swaps). Box-shadow on <thead>/<tr> is unreliable with
-           border-collapse, so the shadows are plain overlay divs positioned
-           against the container instead of against the table rows. */
-        [data-sheet-scroll] {
+           header once scrolled down, and above the sticky total row (or the
+           table's bottom edge) until scrolled to the bottom.
+           web/static/js/sheet-scroll.js wraps each such container in a
+           non-scrolling `.sheet-scroll-frame` and appends the two shadow
+           overlays to that frame — NOT to the scrolling container itself,
+           where they would scroll away with the content (the original bug).
+           The overlays are positioned against the frame so they stay pinned as
+           the container scrolls. Box-shadow on <thead>/<tr> is unreliable with
+           border-collapse, so plain overlay divs are used. */
+        .sheet-scroll-frame {
             position: relative;
+            display: flex;
+            flex-direction: column;
+            flex: 1 1 0;
+            min-height: 0;
         }
 
         .sheet-scroll-shadow {

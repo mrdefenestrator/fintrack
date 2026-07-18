@@ -304,6 +304,11 @@
             animation: import-spin 0.6s linear infinite;
         }
         @keyframes import-spin { to { transform: rotate(360deg); } }
+
+        /* Projections chart: reveal the vertical guide line while hovering a
+           month's hover band (the band also carries a native value tooltip). */
+        .projection-hover-guide { opacity: 0; transition: opacity 0.1s ease; }
+        .projection-hover-band:hover .projection-hover-guide { opacity: 1; }
     </style>
 </head>
 

@@ -7,6 +7,22 @@ function snapshotPrefix() {
     return window.location.pathname.split('/').slice(0, 3).join('/');
 }
 
+// Remove one selected value from a multi-select filter chip: uncheck the
+// matching hidden checkbox and re-fire its htmx request so the list reloads
+// with that value dropped. Used by partials/filter_controls.html chips.
+function removeFilter(name, value) {
+    // name is a controlled field name; match the value in JS so category names
+    // with special characters don't break an attribute selector.
+    const boxes = document.querySelectorAll('input[name="' + name + '"]');
+    for (const cb of boxes) {
+        if (cb.value === value) {
+            cb.checked = false;
+            window.htmx && htmx.trigger(cb, 'change');
+            break;
+        }
+    }
+}
+
 function updateImportButton() {
     const btn = document.getElementById('import-submit');
     if (!btn) return;

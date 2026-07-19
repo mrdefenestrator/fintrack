@@ -41,7 +41,9 @@ def get_transactions(
     year: int | None = None,
     month: int | None = None,
     category: str | None = None,
+    categories: list[str] | None = None,
     account_id: int | None = None,
+    account_ids: list[int] | None = None,
     search: str | None = None,
     status: str | None = None,
     amount: str | None = None,
@@ -50,11 +52,16 @@ def get_transactions(
 ) -> list[dict]:
     """Get transactions with resolved category and merchant.
 
-    Filters are optional and combine with AND. `amount` accepts the search
-    syntax parsed by fintrack.core.coerce.parse_amount_filter (e.g.
-    "12.34", "-12.34", "10-20", ">50"); invalid amount text is ignored.
+    Filters are optional and combine with AND. Account and category accept
+    either a single value (`account_id` / `category`) or a list (`account_ids`
+    / `categories`, matched with IN) for the multi-select filter UI. `amount`
+    accepts the search syntax parsed by fintrack.core.coerce.parse_amount_filter
+    (e.g. "12.34", "-12.34", "10-20", ">50"); invalid amount text is ignored.
     """
     from fintrack.core.models import transactions
+
+    acct_filter = account_ids if account_ids else ([account_id] if account_id else None)
+    cat_filter = categories if categories else ([category] if category else None)
 
     subq = base_transaction_query(snapshot_id)
 
@@ -67,8 +74,8 @@ def get_transactions(
             transactions.c.date <= end,
         )
 
-    if account_id:
-        subq = subq.where(transactions.c.account_id == account_id)
+    if acct_filter:
+        subq = subq.where(transactions.c.account_id.in_(acct_filter))
 
     if import_id:
         subq = subq.where(transactions.c.import_id == import_id)
@@ -78,8 +85,8 @@ def get_transactions(
     # Wrap in outer query to filter on resolved columns
     stmt = select(subq)
 
-    if category:
-        stmt = stmt.where(subq.c.category == category)
+    if cat_filter:
+        stmt = stmt.where(subq.c.category.in_(cat_filter))
 
     if search:
         pattern = f"%{search}%"

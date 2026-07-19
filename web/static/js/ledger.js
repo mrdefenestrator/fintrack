@@ -17,19 +17,22 @@ function removeFilter(name, value) {
     for (const cb of boxes) {
         if (cb.value === value) {
             cb.checked = false;
-            window.htmx && htmx.trigger(cb, 'change');
+            // Native change event: triggers both htmx (hx-trigger="change") and
+            // a form's onchange="submit()" — so this works for the htmx filter
+            // bars and the form-submit Finances sheets alike.
+            cb.dispatchEvent(new Event('change', { bubbles: true }));
             break;
         }
     }
 }
 
 // Clear a single-select radio filter: select its empty ("Any") option and
-// re-fire the htmx request. Used by single-select filter chips.
+// re-fire the request. Used by single-select filter chips.
 function clearRadio(name) {
     const any = document.querySelector('input[type="radio"][name="' + name + '"][value=""]');
     if (any) {
         any.checked = true;
-        window.htmx && htmx.trigger(any, 'change');
+        any.dispatchEvent(new Event('change', { bubbles: true }));
     }
 }
 

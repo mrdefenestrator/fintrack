@@ -11,8 +11,12 @@
    - hx_target:  htmx target selector (default #content)
 
    Chip removal calls removeFilter(name, value) (web/static/js/ledger.js), which
-   unchecks the matching box and re-triggers the htmx request. #}
-{%- macro multi_select(name, label, options, target_url, hx_target='#content') -%}
+   unchecks the matching box and dispatches a native change event.
+
+   Modes: pass target_url for htmx pages (checkbox fires hx-get). Pass form_id
+   instead for the form-submit Finances sheets (checkbox submits that form).
+   Exactly one of target_url / form_id is used. #}
+{%- macro multi_select(name, label, options, target_url='', hx_target='#content', form_id=none) -%}
 {% set _selected = options | selectattr('checked') | list %}
 <div class="relative" x-data="{ open: false }">
     <button type="button" @click="open = !open"
@@ -28,7 +32,7 @@
         {% for o in options %}
         <label class="flex items-center px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer">
             <input type="checkbox" name="{{ name }}" value="{{ o.value }}" {% if o.checked %}checked{% endif %}
-                hx-get="{{ target_url }}" hx-target="{{ hx_target }}" hx-include="[name]" hx-push-url="true" hx-trigger="change"
+                {% if form_id %}onchange="document.getElementById('{{ form_id }}').submit()"{% else %}hx-get="{{ target_url }}" hx-target="{{ hx_target }}" hx-include="[name]" hx-push-url="true" hx-trigger="change"{% endif %}
                 class="mr-2 rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500">
             <span class="text-sm">{{ o.display }}</span>
         </label>
@@ -38,7 +42,9 @@
 {% for o in _selected %}
 <span class="inline-flex items-center bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700 text-blue-700 dark:text-blue-300 text-xs rounded-full pl-2 pr-1 py-0.5">
     {{ o.display }}
-    <button type="button" title="Remove" onclick="removeFilter({{ name | tojson }}, {{ o.value | string | tojson }})"
+    {# single-quoted attr: tojson emits double quotes, which would close a
+       double-quoted onclick early (chip clearing then silently no-ops). #}
+    <button type="button" title="Remove" onclick='removeFilter({{ name | tojson }}, {{ o.value | string | tojson }})'
         class="ml-1 font-bold leading-none hover:text-blue-900 dark:hover:text-blue-100">&times;</button>
 </span>
 {% endfor %}
@@ -85,7 +91,7 @@
 {% if _sel %}
 <span class="inline-flex items-center bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700 text-blue-700 dark:text-blue-300 text-xs rounded-full pl-2 pr-1 py-0.5">
     {{ _sel.display }}
-    <button type="button" title="Remove" onclick="clearRadio({{ name | tojson }})"
+    <button type="button" title="Remove" onclick='clearRadio({{ name | tojson }})'
         class="ml-1 font-bold leading-none hover:text-blue-900 dark:hover:text-blue-100">&times;</button>
 </span>
 {% endif %}

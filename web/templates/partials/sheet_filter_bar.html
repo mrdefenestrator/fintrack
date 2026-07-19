@@ -17,8 +17,10 @@
 
    - active_count: number of active filters (drives the mobile badge + whether
      Reset shows)
-   - reset_url:    href/hx-get URL that clears the filters #}
-{%- macro filter_bar(active_count=0, reset_url='', hx_target='#content') -%}
+   - reset_url:    href/hx-get URL that clears the filters
+   - use_htmx:     True (default) for htmx partial-swap pages; False for the
+                   form-submit Finances sheets (Reset becomes a plain link) #}
+{%- macro filter_bar(active_count=0, reset_url='', hx_target='#content', use_htmx=true) -%}
 <div class="shrink-0 relative z-20" x-data="{ open: false }">
     <div class="bg-white dark:bg-gray-800 rounded-t-lg border border-gray-300 dark:border-gray-600 text-sm text-gray-600 dark:text-gray-300">
         {# Mobile: compact trigger row #}
@@ -35,8 +37,8 @@
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
                 </svg>
             </button>
-            {% if active_count and reset_url %}
-            <a href="{{ reset_url }}" hx-get="{{ reset_url }}" hx-target="{{ hx_target }}" hx-push-url="true"
+            {% if reset_url %}
+            <a href="{{ reset_url }}" {% if use_htmx %}hx-get="{{ reset_url }}" hx-target="{{ hx_target }}" hx-push-url="true"{% endif %}
                 class="shrink-0 px-2 py-2 border-l border-gray-200 dark:border-gray-700 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">Reset</a>
             {% endif %}
         </div>
@@ -52,9 +54,10 @@
             </svg>
             {{ caller() }}
             {# Reset: shown in the bar on sm+ (desktop); on mobile it lives in the
-               always-visible trigger row above instead. #}
-            {% if active_count and reset_url %}
-            <a href="{{ reset_url }}" hx-get="{{ reset_url }}" hx-target="{{ hx_target }}" hx-push-url="true"
+               always-visible trigger row above instead. Always shown (Accounts
+               behavior) rather than only when filters are active. #}
+            {% if reset_url %}
+            <a href="{{ reset_url }}" {% if use_htmx %}hx-get="{{ reset_url }}" hx-target="{{ hx_target }}" hx-push-url="true"{% endif %}
                 class="hidden sm:block ml-auto px-2 py-1 rounded border border-gray-200 dark:border-gray-600 text-xs bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 cursor-pointer">Reset</a>
             {% endif %}
         </div>

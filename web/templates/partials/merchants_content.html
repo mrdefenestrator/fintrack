@@ -1,24 +1,24 @@
-{% set ctrl = "border border-gray-300 dark:border-gray-600 rounded-md px-3 h-8 text-sm bg-white dark:bg-gray-700 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500" %}
+{% import "partials/filter_controls.html" as fc %}
+{% import "partials/sheet_filter_bar.html" as fb %}
+{% set _url = "/s/%s/merchants" | format(filename) %}
 {% include "partials/categories_panel.html" %}
-<div class="shrink-0 mb-4 flex flex-wrap gap-2 items-center">
+
+{% set category_opts = [] %}
+{% for c in categories %}{% set _ = category_opts.append({'value': c, 'display': c}) %}{% endfor %}
+{% set source_opts = [
+    {'value': 'api', 'display': 'Auto'},
+    {'value': 'manual', 'display': 'Manual'}] %}
+{% set _active = (1 if selected_category else 0) + (1 if selected_source else 0) + (1 if search else 0) %}
+
+{% call fb.filter_bar(active_count=_active, reset_url=_url) %}
+    {{ fc.single_select('category', 'Category', category_opts, selected_category or '', _url, any_label='Any category') }}
+    {{ fc.single_select('source', 'Source', source_opts, selected_source or '', _url, any_label='Any source') }}
     <input type="search" name="search" value="{{ search }}" placeholder="Search merchants..."
-           hx-get="/s/{{ filename }}/merchants" hx-target="#content" hx-include="[name]" hx-push-url="true"
+           hx-get="{{ _url }}" hx-target="#content" hx-include="[name]" hx-push-url="true"
            hx-trigger="keyup changed delay:300ms"
-           class="w-56 {{ ctrl }}">
-    <select name="category" hx-get="/s/{{ filename }}/merchants" hx-target="#content" hx-include="[name]" hx-push-url="true"
-            class="w-40 {{ ctrl }}">
-        <option value="">All Categories</option>
-        {% for c in categories %}
-        <option value="{{ c }}" {{ 'selected' if selected_category == c }}>{{ c }}</option>
-        {% endfor %}
-    </select>
-    <select name="source" hx-get="/s/{{ filename }}/merchants" hx-target="#content" hx-include="[name]" hx-push-url="true"
-            class="w-32 {{ ctrl }}">
-        <option value="">All Sources</option>
-        <option value="api" {{ 'selected' if selected_source == 'api' }}>Auto</option>
-        <option value="manual" {{ 'selected' if selected_source == 'manual' }}>Manual</option>
-    </select>
-</div>
-<div class="table-scroll-container rounded-lg border border-gray-300 dark:border-gray-600 shadow-sm" data-sheet-scroll>
+           class="w-56 bg-white dark:bg-gray-700 px-2 py-1 rounded border border-gray-200 dark:border-gray-600 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500">
+{% endcall %}
+
+<div class="table-scroll-container rounded-b-lg border-l border-b border-r border-gray-300 dark:border-gray-600 shadow-sm" data-sheet-scroll>
     {% include "partials/merchant_rows.html" %}
 </div>

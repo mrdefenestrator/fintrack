@@ -24,13 +24,15 @@ def test_merchants_search_input_present(page, flask_server):
 def test_merchants_category_filter_present(page, flask_server):
     """Category dropdown filter is rendered."""
     page.goto(f"{flask_server}/s/ledger/merchants")
-    assert page.get_by_role("button", name="Category").is_visible()
+    assert page.locator(
+        "button.filter-dropdown-trigger:has-text('Category')"
+    ).is_visible()
 
 
 def test_merchants_source_filter_present(page, flask_server):
     """Source dropdown filter is rendered with Auto and Manual options."""
     page.goto(f"{flask_server}/s/ledger/merchants")
-    source_trigger = page.get_by_role("button", name="Source")
+    source_trigger = page.locator("button.filter-dropdown-trigger:has-text('Source')")
     assert source_trigger.is_visible()
     source_trigger.click()
     labels = page.locator("input[name='source']").locator("xpath=..").all_inner_texts()
@@ -267,7 +269,9 @@ def test_categories_panel_rename_cascades_to_filter(page, confirmed_server):
     # reload; wait for that navigation to complete (networkidle can resolve
     # mid-navigation and race the reload) before reading the refreshed page.
     page.wait_for_load_state("load")
-    page.wait_for_selector("input[name='category']")
+    # The Category radios live inside a collapsed (display:none) dropdown, so
+    # wait for them to be attached rather than visible.
+    page.wait_for_selector("input[name='category']", state="attached")
 
     labels = [
         t.strip()

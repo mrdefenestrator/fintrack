@@ -215,14 +215,15 @@ def test_filter_by_type_mobile(page, flask_server):
     assert page.locator(".sm\\:hidden").first.is_visible()
     assert not page.locator(".sm\\:flex").first.is_visible()
 
-    # Expand the mobile filter panel
+    # Expand the mobile filter panel (shared bar: one control set, revealed
+    # below sm when the Filters trigger is tapped)
     page.locator(".sm\\:hidden > button[type=button]").click()
 
-    # Filter panel should now be visible — open the Type dropdown inside it
-    page.locator(".sm\\:hidden .filter-dropdown-trigger:has-text('Type')").click()
+    # The control set is now visible — open the Type dropdown in it
+    page.locator("button.filter-dropdown-trigger:has-text('Type')").click()
 
     # Select credit_card
-    page.locator(".sm\\:hidden input[name='include_type'][value='credit_card']").click()
+    page.locator("input[name='include_type'][value='credit_card']").click()
     page.wait_for_url("**/accounts**include_type**")
 
     # Active count badge should appear in the mobile trigger row

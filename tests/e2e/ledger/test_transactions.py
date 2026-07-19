@@ -19,13 +19,17 @@ pytestmark = pytest.mark.e2e
 def test_transactions_account_filter_present(page, flask_server):
     """The Account multi-select dropdown is rendered in the filter bar."""
     page.goto(f"{flask_server}/s/ledger/transactions")
-    assert page.get_by_role("button", name="Account").is_visible()
+    assert page.locator(
+        "button.filter-dropdown-trigger:has-text('Account')"
+    ).is_visible()
 
 
 def test_transactions_category_filter_present(page, flask_server):
     """The Category multi-select dropdown is rendered in the filter bar."""
     page.goto(f"{flask_server}/s/ledger/transactions")
-    assert page.get_by_role("button", name="Category").is_visible()
+    assert page.locator(
+        "button.filter-dropdown-trigger:has-text('Category')"
+    ).is_visible()
 
 
 def test_transactions_status_filter_present(page, flask_server):

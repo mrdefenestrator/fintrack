@@ -53,21 +53,22 @@
     }
 
     function ensureShadowEls(frame) {
-        var top = frame.querySelector(":scope > .sheet-scroll-shadow--top");
-        var bottom = frame.querySelector(":scope > .sheet-scroll-shadow--bottom");
-        if (!top) {
-            top = document.createElement("div");
-            top.className = "sheet-scroll-shadow sheet-scroll-shadow--top";
-            top.setAttribute("aria-hidden", "true");
-            frame.appendChild(top);
+        function ensure(edge) {
+            var el = frame.querySelector(":scope > .sheet-scroll-shadow--" + edge);
+            if (!el) {
+                el = document.createElement("div");
+                el.className = "sheet-scroll-shadow sheet-scroll-shadow--" + edge;
+                el.setAttribute("aria-hidden", "true");
+                frame.appendChild(el);
+            }
+            return el;
         }
-        if (!bottom) {
-            bottom = document.createElement("div");
-            bottom.className = "sheet-scroll-shadow sheet-scroll-shadow--bottom";
-            bottom.setAttribute("aria-hidden", "true");
-            frame.appendChild(bottom);
-        }
-        return { top: top, bottom: bottom };
+        return {
+            top: ensure("top"),
+            bottom: ensure("bottom"),
+            left: ensure("left"),
+            right: ensure("right"),
+        };
     }
 
     // The overlays read their offsets from CSS vars; set them on the frame
@@ -95,11 +96,20 @@
             container.scrollTop + container.clientHeight >=
             container.scrollHeight - TOLERANCE;
         // Nothing to scroll at all: never show either shadow.
-        var isScrollable =
+        var isScrollableY =
             container.scrollHeight - container.clientHeight > TOLERANCE;
 
-        els.top.classList.toggle("is-visible", isScrollable && !atTop);
-        els.bottom.classList.toggle("is-visible", isScrollable && !atBottom);
+        var atLeft = container.scrollLeft <= TOLERANCE;
+        var atRight =
+            container.scrollLeft + container.clientWidth >=
+            container.scrollWidth - TOLERANCE;
+        var isScrollableX =
+            container.scrollWidth - container.clientWidth > TOLERANCE;
+
+        els.top.classList.toggle("is-visible", isScrollableY && !atTop);
+        els.bottom.classList.toggle("is-visible", isScrollableY && !atBottom);
+        els.left.classList.toggle("is-visible", isScrollableX && !atLeft);
+        els.right.classList.toggle("is-visible", isScrollableX && !atRight);
     }
 
     function init(container) {

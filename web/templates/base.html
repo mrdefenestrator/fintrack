@@ -266,15 +266,29 @@
             min-height: 0;
         }
 
+        /* ~1 data-row-tall gradients (QA item 19): larger/softer, not darker, so
+           they're noticeable without hurting readability. The same treatment is
+           used on all four edges for a consistent look. */
         .sheet-scroll-shadow {
             position: absolute;
-            left: 0;
-            right: 0;
-            height: 8px;
             pointer-events: none;
             opacity: 0;
             transition: opacity 0.15s ease;
             z-index: 6;
+        }
+
+        .sheet-scroll-shadow--top,
+        .sheet-scroll-shadow--bottom {
+            left: 0;
+            right: 0;
+            height: 1.75rem;
+        }
+
+        .sheet-scroll-shadow--left,
+        .sheet-scroll-shadow--right {
+            top: 0;
+            bottom: 0;
+            width: 1.75rem;
         }
 
         .sheet-scroll-shadow--top {
@@ -287,6 +301,16 @@
             background: linear-gradient(to top, rgba(0, 0, 0, 0.16), rgba(0, 0, 0, 0));
         }
 
+        .sheet-scroll-shadow--left {
+            left: 0;
+            background: linear-gradient(to right, rgba(0, 0, 0, 0.16), rgba(0, 0, 0, 0));
+        }
+
+        .sheet-scroll-shadow--right {
+            right: 0;
+            background: linear-gradient(to left, rgba(0, 0, 0, 0.16), rgba(0, 0, 0, 0));
+        }
+
         .sheet-scroll-shadow.is-visible {
             opacity: 1;
         }
@@ -297,6 +321,14 @@
 
         .dark .sheet-scroll-shadow--bottom {
             background: linear-gradient(to top, rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0));
+        }
+
+        .dark .sheet-scroll-shadow--left {
+            background: linear-gradient(to right, rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0));
+        }
+
+        .dark .sheet-scroll-shadow--right {
+            background: linear-gradient(to left, rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0));
         }
 
         /* Import submit button busy state: while htmx is uploading (hx-indicator

@@ -75,6 +75,16 @@
             disabled: reorderDisabled(tbody),
             ghostClass: "row-reorder-ghost",
             chosenClass: "row-reorder-chosen",
+            // Keep drags within the data rows — never drop past the grid filler,
+            // add row, or total row (QA item 17).
+            onMove: function (evt) {
+                var r = evt.related;
+                return !(
+                    r.classList.contains("sheet-grid-filler") ||
+                    r.hasAttribute("data-add-row") ||
+                    r.classList.contains("total-row")
+                );
+            },
             onEnd: function () { postOrder(tbody); },
         });
     }

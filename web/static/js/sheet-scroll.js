@@ -86,10 +86,58 @@
         );
     }
 
+    var ROW_H = 28; // 1.75rem data-row height
+
+    // Inject (once) a single filler row below the last data row, positioned
+    // just before the add row / total row, so we can grow it to push those
+    // rows to the sheet's bottom (QA item 17). Kept in place on every call.
+    function ensureFiller(container) {
+        var tbody = container.querySelector("tbody");
+        if (!tbody) return null;
+        var filler = tbody.querySelector(":scope > .sheet-grid-filler");
+        if (!filler) {
+            filler = document.createElement("tr");
+            filler.className = "sheet-grid-filler";
+            filler.setAttribute("aria-hidden", "true");
+            var td = document.createElement("td");
+            td.className = "sheet-grid-filler-cell";
+            td.colSpan = container.querySelectorAll("thead th").length || 100;
+            filler.appendChild(td);
+        }
+        // Keep it directly before the add row (or the total row if no add row).
+        var anchor =
+            tbody.querySelector(":scope > [data-add-row]") ||
+            tbody.querySelector(":scope > .total-row");
+        if (anchor) {
+            if (filler.nextElementSibling !== anchor) tbody.insertBefore(filler, anchor);
+        } else if (filler.parentElement !== tbody) {
+            tbody.appendChild(filler);
+        }
+        return filler;
+    }
+
+    // Size the filler to exactly fill the leftover vertical space (only when
+    // there's at least ~one empty row's worth), else hide it.
+    function sizeFiller(container, filler) {
+        if (!filler) return;
+        // Collapse it, then measure the real content height (the table's — the
+        // container's scrollHeight is clamped to clientHeight when content is
+        // short, so it can't tell us the gap).
+        filler.style.display = "none";
+        var table = container.querySelector("table");
+        var contentH = table ? table.offsetHeight : 0;
+        var gap = container.clientHeight - contentH;
+        if (gap >= ROW_H) {
+            filler.firstChild.style.height = gap + "px";
+            filler.style.display = "";
+        }
+    }
+
     function update(container) {
         var frame = ensureFrame(container);
         var els = ensureShadowEls(frame);
         measure(frame, container);
+        sizeFiller(container, ensureFiller(container));
 
         var atTop = container.scrollTop <= TOLERANCE;
         var atBottom =

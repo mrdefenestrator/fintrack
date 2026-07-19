@@ -64,7 +64,9 @@
 
         <!-- Desktop: full inline bar -->
         <div class="hidden sm:flex flex-wrap items-center gap-1.5 p-2">
-            <span class="font-medium text-gray-700 dark:text-gray-200">Include only:</span>
+            <svg class="w-4 h-4 shrink-0 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" role="img" aria-label="Filters">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M7 12h10M10 18h4" />
+            </svg>
             <div class="relative" x-data="{ open: false }">
                 <button type="button"
                     class="filter-dropdown-trigger inline-flex items-center bg-gray-50 dark:bg-gray-700 px-2 py-1 rounded border border-gray-200 dark:border-gray-600 text-xs hover:bg-gray-100 dark:hover:bg-gray-600"

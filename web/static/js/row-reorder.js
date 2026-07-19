@@ -19,10 +19,15 @@
     "use strict";
     if (typeof Sortable === "undefined") return;
 
-    function columnSorted(tbody) {
+    // Dragging is only valid when the rows shown are the full, canonical order.
+    // A column sort (data-sort-dir) or an active filter (data-reorder-locked,
+    // set server-side when some rows are hidden) both make the visible row
+    // positions not match the stored order, so reordering must be disabled.
+    function reorderDisabled(tbody) {
         var table = tbody.closest("table");
-        var dir = table && table.getAttribute("data-sort-dir");
-        return dir === "asc" || dir === "desc";
+        if (!table) return false;
+        var dir = table.getAttribute("data-sort-dir");
+        return dir === "asc" || dir === "desc" || table.hasAttribute("data-reorder-locked");
     }
 
     function renumber(tbody) {
@@ -56,7 +61,7 @@
 
     function init(tbody) {
         if (tbody._rowReorder) {
-            tbody._rowReorder.option("disabled", columnSorted(tbody));
+            tbody._rowReorder.option("disabled", reorderDisabled(tbody));
             return;
         }
         tbody._rowReorder = Sortable.create(tbody, {
@@ -67,7 +72,7 @@
             // slide of one swap hasn't finished before the next begins). Instant
             // swaps keep the sheet legible while dragging.
             animation: 0,
-            disabled: columnSorted(tbody),
+            disabled: reorderDisabled(tbody),
             ghostClass: "row-reorder-ghost",
             chosenClass: "row-reorder-chosen",
             onEnd: function () { postOrder(tbody); },

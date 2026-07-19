@@ -159,11 +159,15 @@
             height: 1rem;
         }
 
-        /* Hide the drag-reorder handle while a column sort is applied, so manual
-           row order and column sorting don't fight (row-reorder.js also disables
-           dragging in that state). */
+        /* Hide the drag-reorder handle when the row order shown isn't the full,
+           canonical order — i.e. while a column sort is applied, or while a
+           filter hides some rows (dragging then would reorder against the
+           wrong positions). row-reorder.js also disables dragging in these
+           states. `data-reorder-locked` is set by the page when a filter is
+           active. */
         table[data-sort-dir="asc"] .drag-handle,
-        table[data-sort-dir="desc"] .drag-handle {
+        table[data-sort-dir="desc"] .drag-handle,
+        table[data-reorder-locked] .drag-handle {
             display: none;
         }
 
@@ -173,11 +177,13 @@
         .row-reorder-ghost { opacity: 0.4; }
         .row-reorder-chosen { background: rgba(59, 130, 246, 0.08); }
 
-        /* Action column: no wrap, no overflow, fixed width for icon row */
+        /* Action column: no wrap, no overflow, fixed width for icon row. Two
+           icons now (drag handle + delete, or the ✓/✗ delete-confirm pair), so
+           it's narrower than when it held the old up/down/delete trio. */
         table .table-actions-cell {
             width: 1%;
-            min-width: 5.5rem;
-            max-width: 5.5rem;
+            min-width: 3.5rem;
+            max-width: 3.5rem;
             white-space: nowrap;
             overflow: hidden;
             padding-left: 0.25rem;
@@ -200,8 +206,8 @@
         /* Actions column: fixed width to stay compact */
         table.editable-table .table-actions-cell,
         table.editable-table thead th.table-actions-cell {
-            width: 5.5rem;
-            min-width: 5.5rem;
+            width: 3.5rem;
+            min-width: 3.5rem;
         }
 
         /* Scrollable table container: data rows scroll, header/footer rows stick */

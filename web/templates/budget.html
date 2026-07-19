@@ -230,7 +230,8 @@
     </div>
 </form>
 <div class="table-scroll-container rounded-b-lg border-l border-b border-r border-gray-300 dark:border-gray-600 shadow-sm" data-sheet-scroll>
-<table class="editable-table sortable w-full text-sm border-collapse bg-white dark:bg-gray-800" {% if
+<table class="editable-table sortable w-full text-sm border-collapse bg-white dark:bg-gray-800"
+    {% if _active_count %}data-reorder-locked{% endif %} {% if
     sort_col %}data-sort-col="{{ sort_col }}" {% endif %} {% if sort_dir %}data-sort-dir="{{ sort_dir }}" {% endif %}>
 {% with headers=headers, right_align_cols=[3, 5, 6, 7, 8] %}{% include "partials/editable_table_thead.html" %}{% endwith %}
     <tbody id="budget-tbody"{% if edit_mode %} data-reorder-url="{{ url_for('budget.reorder', filename=filename) }}"{% endif %}>

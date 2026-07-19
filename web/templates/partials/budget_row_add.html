@@ -70,8 +70,14 @@
                 }).then(r => { if (r.ok) { $el.reset(); location.reload(); } })
             ">
             <button type="submit"
-                class="table-action-btn text-blue-700 dark:text-blue-300 bg-white dark:bg-gray-700 hover:bg-blue-100 dark:hover:bg-blue-800 border border-blue-300 dark:border-blue-600 rounded px-2 font-bold text-sm"
-                title="Add">+</button>
+                class="table-action-btn text-blue-700 dark:text-blue-300 bg-white dark:bg-gray-700 hover:bg-blue-100 dark:hover:bg-blue-800 border border-blue-300 dark:border-blue-600 rounded"
+                title="Save new entry">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 21v-8H7v8M7 3v5h8" />
+                </svg>
+            </button>
         </form>
     </td>
 </tr>

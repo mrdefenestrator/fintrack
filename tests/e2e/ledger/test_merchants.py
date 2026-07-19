@@ -24,17 +24,20 @@ def test_merchants_search_input_present(page, flask_server):
 def test_merchants_category_filter_present(page, flask_server):
     """Category dropdown filter is rendered."""
     page.goto(f"{flask_server}/s/ledger/merchants")
-    assert page.locator("select[name='category']").is_visible()
+    assert page.locator(
+        "button.filter-dropdown-trigger:has-text('Category')"
+    ).is_visible()
 
 
 def test_merchants_source_filter_present(page, flask_server):
     """Source dropdown filter is rendered with Auto and Manual options."""
     page.goto(f"{flask_server}/s/ledger/merchants")
-    source_select = page.locator("select[name='source']")
-    assert source_select.is_visible()
-    options = source_select.locator("option").all_inner_texts()
-    assert "Auto" in options
-    assert "Manual" in options
+    source_trigger = page.locator("button.filter-dropdown-trigger:has-text('Source')")
+    assert source_trigger.is_visible()
+    source_trigger.click()
+    labels = page.locator("input[name='source']").locator("xpath=..").all_inner_texts()
+    assert any("Auto" in t for t in labels)
+    assert any("Manual" in t for t in labels)
 
 
 def test_merchants_table_has_expected_columns(page, flask_server):
@@ -199,8 +202,12 @@ def test_categories_panel_add_new_category(page, confirmed_server):
         name_input.press("Enter")
     page.wait_for_load_state("networkidle")
 
-    options = page.locator("select[name='category'] option").all_inner_texts()
-    assert "TempCat" in options
+    # The Category filter is now a custom radio dropdown; its option labels
+    # read live from the categories table.
+    labels = (
+        page.locator("input[name='category']").locator("xpath=..").all_inner_texts()
+    )
+    assert any("TempCat" in t for t in labels)
 
 
 def test_categories_panel_add_duplicate_shows_inline_error(page, confirmed_server):
@@ -224,8 +231,13 @@ def test_categories_panel_add_duplicate_shows_inline_error(page, confirmed_serve
         name_input.press("Enter")
     assert resp_info.value.status == 422
     assert "already exists" in page.locator("#categories-panel-body").inner_text()
-    options = page.locator("select[name='category'] option").all_inner_texts()
-    assert options.count("DupCat") == 1
+    labels = [
+        t.strip()
+        for t in page.locator("input[name='category']")
+        .locator("xpath=..")
+        .all_inner_texts()
+    ]
+    assert labels.count("DupCat") == 1
 
 
 def test_categories_panel_rename_cascades_to_filter(page, confirmed_server):
@@ -257,11 +269,18 @@ def test_categories_panel_rename_cascades_to_filter(page, confirmed_server):
     # reload; wait for that navigation to complete (networkidle can resolve
     # mid-navigation and race the reload) before reading the refreshed page.
     page.wait_for_load_state("load")
-    page.wait_for_selector("select[name='category']")
+    # The Category radios live inside a collapsed (display:none) dropdown, so
+    # wait for them to be attached rather than visible.
+    page.wait_for_selector("input[name='category']", state="attached")
 
-    options = page.locator("select[name='category'] option").all_inner_texts()
-    assert "RenamedCat" in options
-    assert "RenameMeCat" not in options
+    labels = [
+        t.strip()
+        for t in page.locator("input[name='category']")
+        .locator("xpath=..")
+        .all_inner_texts()
+    ]
+    assert "RenamedCat" in labels
+    assert "RenameMeCat" not in labels
 
 
 def test_categories_panel_blocked_delete_shows_breakdown(page, confirmed_server):
@@ -292,5 +311,10 @@ def test_categories_panel_blocked_delete_shows_breakdown(page, confirmed_server)
     assert "1 merchant" in panel_text
 
     # Category must still exist (delete was blocked).
-    options = page.locator("select[name='category'] option").all_inner_texts()
-    assert "ProtectedCat" in options
+    labels = [
+        t.strip()
+        for t in page.locator("input[name='category']")
+        .locator("xpath=..")
+        .all_inner_texts()
+    ]
+    assert "ProtectedCat" in labels

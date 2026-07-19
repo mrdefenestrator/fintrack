@@ -1,75 +1,67 @@
-{% set filter_qs %}{% if selected_account %}&account_id={{ selected_account }}{% endif %}{% if selected_category %}&category={{ selected_category | urlencode }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}{% if search %}&search={{ search | urlencode }}{% endif %}{% if amount %}&amount={{ amount | urlencode }}{% endif %}{% if all_months %}&all_months=true{% endif %}{% endset %}
-{% set ctrl = "border border-gray-300 dark:border-gray-600 rounded-md px-3 h-8 text-sm bg-white dark:bg-gray-700 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500" %}
+{% import "partials/pager.html" as nav %}
+{% import "partials/filter_controls.html" as fc %}
+{% import "partials/sheet_filter_bar.html" as fb %}
+{% set _url = "/s/%s/transactions" | format(filename) %}
+
+{# Multi-select option lists (value/display/checked) for the Account and
+   Category dropdowns; single-select options for Status. #}
+{% set account_opts = [] %}
+{% for a in accounts %}{% set _ = account_opts.append({'value': a.id, 'display': a | account_label, 'checked': a.id in selected_accounts}) %}{% endfor %}
+{% set category_opts = [] %}
+{% for c in categories %}{% set _ = category_opts.append({'value': c, 'display': c, 'checked': c in selected_categories}) %}{% endfor %}
+{% set status_opts = [
+    {'value': 'categorized', 'display': 'Categorized'},
+    {'value': 'uncategorized', 'display': 'Uncategorized'},
+    {'value': 'corrected', 'display': 'Corrected'}] %}
+
+{# filter_qs carries the column filters (multi account_id / category, status, q)
+   for the time-nav links; month/all-months state is passed explicitly. #}
+{% set filter_qs %}{% for aid in selected_accounts %}&account_id={{ aid }}{% endfor %}{% for c in selected_categories %}&category={{ c | urlencode }}{% endfor %}{% if selected_status %}&status={{ selected_status }}{% endif %}{% if q %}&q={{ q | urlencode }}{% endif %}{% endset %}
+
+{% set _active = (selected_accounts | length) + (selected_categories | length) + (1 if selected_status else 0) + (1 if q else 0) %}
+{% set _reset = "%s?year=%s&month=%s%s" | format(_url, year, month, '&all_months=true' if all_months else '') %}
 
 <span id="month-state" data-year="{{ year }}" data-month="{{ month }}" hidden></span>
-<div class="shrink-0 mb-4 flex flex-wrap gap-3 items-center justify-between">
-    <div class="flex flex-wrap gap-2 items-center">
-        <select name="account_id" hx-get="/s/{{ filename }}/transactions" hx-target="#content" hx-include="[name]" hx-push-url="true"
-                class="w-44 {{ ctrl }}">
-            <option value="">All Accounts</option>
-            {% for a in accounts %}
-            <option value="{{ a.id }}" {{ 'selected' if selected_account == a.id }}>{{ a | account_label }}</option>
-            {% endfor %}
-        </select>
-        <select name="category" hx-get="/s/{{ filename }}/transactions" hx-target="#content" hx-include="[name]" hx-push-url="true"
-                class="w-40 {{ ctrl }}">
-            <option value="">All Categories</option>
-            {% for c in categories %}
-            <option value="{{ c }}" {{ 'selected' if selected_category == c }}>{{ c }}</option>
-            {% endfor %}
-        </select>
-        <select name="status" hx-get="/s/{{ filename }}/transactions" hx-target="#content" hx-include="[name]" hx-push-url="true"
-                class="w-36 {{ ctrl }}">
-            <option value="">All Status</option>
-            <option value="categorized" {{ 'selected' if selected_status == 'categorized' }}>Categorized</option>
-            <option value="uncategorized" {{ 'selected' if selected_status == 'uncategorized' }}>Uncategorized</option>
-            <option value="corrected" {{ 'selected' if selected_status == 'corrected' }}>Corrected</option>
-        </select>
-        <input type="search" name="search" value="{{ search }}" placeholder="Search..."
-               hx-get="/s/{{ filename }}/transactions" hx-target="#content" hx-include="[name]" hx-push-url="true"
-               hx-trigger="keyup changed delay:300ms"
-               class="w-44 {{ ctrl }}">
-        <input type="text" name="amount" value="{{ amount }}" placeholder="Amount (e.g. 12.34, >50, 10-20)"
-               hx-get="/s/{{ filename }}/transactions" hx-target="#content" hx-include="[name]" hx-push-url="true"
-               hx-trigger="keyup changed delay:300ms"
-               class="w-52 {{ ctrl }}">
-        <label class="flex items-center gap-1.5 text-sm text-gray-600 dark:text-gray-300 cursor-pointer select-none ml-1">
-            <input type="checkbox" name="all_months" value="true"
-                   {{ 'checked' if all_months }}
-                   hx-get="/s/{{ filename }}/transactions" hx-target="#content" hx-include="[name]" hx-push-url="true"
-                   hx-trigger="change">
-            All months
-        </label>
-        <input type="hidden" name="year" value="{{ year }}">
-        <input type="hidden" name="month" value="{{ month }}">
+
+{# Time navigation (This month / All time + month pager) — its own right-aligned
+   cluster next to the filter card, since it navigates rather than filters. #}
+<div class="shrink-0 mb-2 flex items-center justify-end gap-2">
+    {% set _seg = 'px-3 h-8 flex items-center text-sm transition-colors' %}
+    {% set _seg_on = 'bg-blue-500 text-white' %}
+    {% set _seg_off = 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600' %}
+    <div class="inline-flex h-8 rounded-md border border-gray-300 dark:border-gray-600 overflow-hidden">
+        <a href="{{ _url }}?year={{ year }}&month={{ month }}{{ filter_qs }}"
+           hx-get="{{ _url }}?year={{ year }}&month={{ month }}{{ filter_qs }}"
+           hx-target="#content" hx-push-url="true"
+           class="{{ _seg }} {{ _seg_off if all_months else _seg_on }}">This month</a>
+        <a href="{{ _url }}?all_months=true{{ filter_qs }}"
+           hx-get="{{ _url }}?all_months=true{{ filter_qs }}"
+           hx-target="#content" hx-push-url="true"
+           class="{{ _seg }} border-l border-gray-300 dark:border-gray-600 {{ _seg_on if all_months else _seg_off }}">All time</a>
     </div>
     {% if not all_months %}
-    <div class="flex items-center gap-1">
-        <a hx-get="/s/{{ filename }}/transactions?year={{ prev_year }}&month={{ prev_month }}{{ filter_qs }}"
-           hx-target="#content" hx-push-url="true"
-           class="px-2 py-1 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded cursor-pointer">&larr;</a>
-        <span class="text-sm font-medium text-gray-700 dark:text-gray-200 w-20 text-center">{{ '%02d/%d' | format(month, year) }}</span>
-        <a hx-get="/s/{{ filename }}/transactions?year={{ next_year }}&month={{ next_month }}{{ filter_qs }}"
-           hx-target="#content" hx-push-url="true"
-           class="px-2 py-1 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded cursor-pointer">&rarr;</a>
-    </div>
+    {{ nav.pager(
+        prev_url="%s?year=%s&month=%s%s" | format(_url, prev_year, prev_month, filter_qs),
+        next_url="%s?year=%s&month=%s%s" | format(_url, next_year, next_month, filter_qs),
+        label="%02d/%d" | format(month, year),
+        label_width='w-20') }}
     {% endif %}
 </div>
 
-{% set has_filters = selected_category or selected_account or selected_status or search or amount %}
-{# Transaction count + total now live in the sheet's sticky total row (see
-   partials/transaction_rows.html). Only the Clear-filters affordance remains
-   above the sheet, and only while a filter is active. #}
-{% if has_filters %}
-<div class="shrink-0 flex justify-end mb-3 text-sm">
-    <a hx-get="/s/{{ filename }}/transactions?year={{ year }}&month={{ month }}"
-       hx-target="#content" hx-push-url="true"
-       class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 cursor-pointer">
-        &times; Clear filters
-    </a>
-</div>
-{% endif %}
+{# Integrated filter card (QA item 13), fused to the top of the table. #}
+{% call fb.filter_bar(active_count=_active, reset_url=_reset) %}
+    {{ fc.multi_select('account_id', 'Account', account_opts, _url) }}
+    {{ fc.multi_select('category', 'Category', category_opts, _url) }}
+    {{ fc.single_select('status', 'Status', status_opts, selected_status or '', _url) }}
+    <input type="search" name="q" value="{{ q }}" placeholder="Search or amount (e.g. netflix, &gt;50, 10-20)"
+           hx-get="{{ _url }}" hx-target="#content" hx-include="[name]" hx-push-url="true"
+           hx-trigger="keyup changed delay:300ms"
+           class="w-64 bg-white dark:bg-gray-700 px-2 py-1 rounded border border-gray-200 dark:border-gray-600 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500">
+    <input type="hidden" name="year" value="{{ year }}">
+    <input type="hidden" name="month" value="{{ month }}">
+    <input type="hidden" name="all_months" value="{{ 'true' if all_months else '' }}">
+{% endcall %}
 
-<div class="table-scroll-container rounded-lg border border-gray-300 dark:border-gray-600 shadow-sm" data-sheet-scroll>
+<div class="table-scroll-container rounded-b-lg border-l border-b border-r border-gray-300 dark:border-gray-600 shadow-sm" data-sheet-scroll>
     {% include "partials/transaction_rows.html" %}
 </div>

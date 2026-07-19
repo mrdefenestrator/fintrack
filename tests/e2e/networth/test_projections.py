@@ -26,7 +26,9 @@ def test_projections_nav_tab(page, flask_server):
 def test_projections_horizon_and_estimate_toggles(page, flask_server):
     page.goto(f"{flask_server}/s/test_finances/projections")
 
-    page.click("text=24")
+    # Target the horizon link by href — "24" as bare text now also appears in
+    # the chart's axis labels / tooltips, so text=24 is ambiguous.
+    page.click("a[href*='months=24']")
     page.wait_for_url("**months=24**")
     assert page.locator("[data-projection-table]").is_visible()
 

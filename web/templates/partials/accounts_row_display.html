@@ -2,7 +2,7 @@
 {% from "macros/table.html" import cell_display, cell_non_editable, cell_edit_input, cell_edit_select %}
 {% import "partials/sheet.html" as sheet %}
 {% set _acc_border = 'border-l-rose-400' if account.type == 'credit_card' else ('border-l-slate-300' if account.type in ('loan', 'other') else 'border-l-emerald-400') %}
-<tr class="{{ sheet.row_class(_acc_border) }}" id="account-row-{{ account.id }}">
+<tr class="{{ sheet.row_class(_acc_border) }}" id="account-row-{{ account.id }}" data-reorder-index="{{ row_index }}">
     {% set is_cc = (account.type == 'credit_card') %}
     {% set fields = ['institution','type','name','balance','limit','available','rewards_balance','statement_balance','statement_due_day_of_month','paymentAccountRef'] %}
     {% for col_index in range(10) %}

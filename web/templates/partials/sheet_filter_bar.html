@@ -1,0 +1,66 @@
+{# Shared integrated filter bar for the spreadsheet pages (QA item 13).
+
+   A card fused to the top of the table holding the page's filter controls, with
+   a leading funnel icon and a trailing Reset. On phones it collapses behind a
+   "Filters" trigger with an active-count badge; on sm+ the controls are always
+   shown. Unlike the older per-page markup, the controls live once — Alpine
+   toggles `hidden` only below sm — so there's no duplicated control set.
+
+   Use with {% call %}, rendering the page's dropdowns/search as the body:
+
+     {% import "partials/sheet_filter_bar.html" as fb %}
+     {% call fb.filter_bar(active_count=n, reset_url=url) %}
+        {{ fc.multi_select(...) }}
+        {{ fc.single_select(...) }}
+        <input type="search" name="q" ...>
+     {% endcall %}
+
+   - active_count: number of active filters (drives the mobile badge + whether
+     Reset shows)
+   - reset_url:    href/hx-get URL that clears the filters
+   - use_htmx:     True (default) for htmx partial-swap pages; False for the
+                   form-submit Finances sheets (Reset becomes a plain link) #}
+{%- macro filter_bar(active_count=0, reset_url='', hx_target='#content', use_htmx=true) -%}
+<div class="shrink-0 relative z-20" x-data="{ open: false }">
+    <div class="bg-white dark:bg-gray-800 rounded-t-lg border border-gray-300 dark:border-gray-600 text-sm text-gray-600 dark:text-gray-300">
+        {# Mobile: compact trigger row #}
+        <div class="sm:hidden flex items-center">
+            <button type="button" @click="open = !open"
+                class="flex-1 flex items-center gap-2 px-2 py-2 text-left min-w-0">
+                <svg class="w-4 h-4 shrink-0 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M7 12h10M10 18h4" />
+                </svg>
+                <span class="font-medium text-gray-700 dark:text-gray-200">Filters</span>
+                {% if active_count %}<span class="bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 text-xs font-medium rounded-full px-1.5 py-0.5 tabular-nums">{{ active_count }}</span>{% endif %}
+                <svg class="w-4 h-4 ml-auto shrink-0 transition-transform duration-150 text-gray-400 dark:text-gray-500"
+                    :class="{ 'rotate-180': open }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                </svg>
+            </button>
+            {% if reset_url %}
+            <a href="{{ reset_url }}" {% if use_htmx %}hx-get="{{ reset_url }}" hx-target="{{ hx_target }}" hx-push-url="true"{% endif %}
+                class="shrink-0 px-2 py-2 border-l border-gray-200 dark:border-gray-700 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">Reset</a>
+            {% endif %}
+        </div>
+
+        {# Controls: always shown on sm+, collapsible on mobile (one shared set) #}
+        {# sm+: always a flex-wrap row. Below sm: hidden until `open`, then flex
+           (so the expanded panel wraps like the desktop bar rather than stacking
+           as block). #}
+        <div class="sm:flex flex-wrap items-center gap-1.5 p-2 border-t border-gray-200 dark:border-gray-700 sm:border-t-0"
+            :class="{ 'hidden': !open, 'flex': open }">
+            <svg class="hidden sm:block w-4 h-4 shrink-0 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" role="img" aria-label="Filters">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M7 12h10M10 18h4" />
+            </svg>
+            {{ caller() }}
+            {# Reset: shown in the bar on sm+ (desktop); on mobile it lives in the
+               always-visible trigger row above instead. Always shown (Accounts
+               behavior) rather than only when filters are active. #}
+            {% if reset_url %}
+            <a href="{{ reset_url }}" {% if use_htmx %}hx-get="{{ reset_url }}" hx-target="{{ hx_target }}" hx-push-url="true"{% endif %}
+                class="hidden sm:block ml-auto px-2 py-1 rounded border border-gray-200 dark:border-gray-600 text-xs bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 cursor-pointer">Reset</a>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{%- endmacro -%}

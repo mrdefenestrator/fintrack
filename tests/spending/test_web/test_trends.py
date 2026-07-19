@@ -224,16 +224,19 @@ def test_trends_default_has_no_end_param_and_is_latest(client):
     response = client.get("/s/ledger/trends")
     assert response.status_code == 200
     html = response.data.decode()
-    # At latest: no "Latest" reset button, no enabled next-month link.
-    assert "Latest" not in html
-    assert "&amp;end=" not in html
+    # At the latest window both forward controls — the next arrow and the
+    # "Latest" button — render as disabled spans (title "Already at the latest
+    # window") instead of live links, so the pager width doesn't shift when you
+    # page away from latest (QA item 20).
+    assert html.count('title="Already at the latest window"') == 2
 
 
 def test_trends_malformed_end_falls_back_to_latest(client):
     response = client.get("/s/ledger/trends?end=not-a-date")
     assert response.status_code == 200
     html = response.data.decode()
-    assert "Latest" not in html
+    # Fell back to the latest window: forward controls are disabled spans.
+    assert html.count('title="Already at the latest window"') == 2
 
 
 def test_trends_future_end_falls_back_to_latest(client):
@@ -242,7 +245,8 @@ def test_trends_future_end_falls_back_to_latest(client):
     response = client.get(f"/s/ledger/trends?end={future_year}-01")
     assert response.status_code == 200
     html = response.data.decode()
-    assert "Latest" not in html
+    # Fell back to the latest window: forward controls are disabled spans.
+    assert html.count('title="Already at the latest window"') == 2
 
 
 def test_trends_past_end_shows_latest_button_and_window_label(client):
@@ -269,7 +273,8 @@ def test_trends_paging_forward_to_current_month_reaches_latest(client):
     response = client.get(f"/s/ledger/trends?end={today.year:04d}-{today.month:02d}")
     assert response.status_code == 200
     html = response.data.decode()
-    assert "Latest" not in html
+    # Fell back to the latest window: forward controls are disabled spans.
+    assert html.count('title="Already at the latest window"') == 2
 
 
 def test_trends_quarterly_pages_back_by_a_quarter(client):

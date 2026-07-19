@@ -1,7 +1,7 @@
 {# One budget row in edit mode: cells clickable (display), last cell is delete. #}
 {% from "macros/table.html" import cell_display, cell_non_editable, cell_edit_input, cell_edit_select %}
 {% import "partials/sheet.html" as sheet %}
-<tr class="{{ sheet.row_class('border-l-emerald-400' if kind == 'income' else 'border-l-rose-400') }}" id="budget-row-{{ index }}">
+<tr class="{{ sheet.row_class('border-l-emerald-400' if kind == 'income' else 'border-l-rose-400') }}" id="budget-row-{{ index }}" data-reorder-index="{{ index }}">
     {% set recurrence_display = row_cells[4] if row_cells | length > 4 else '' %}
     {% set when_display = row_cells[5] if row_cells | length > 5 else '' %}
     {% if recurrence_display == 'One Time' %}

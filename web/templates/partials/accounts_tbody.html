@@ -9,6 +9,7 @@
 {% endif %}
 {% if edit_mode %}
 {% for account, row_cells in edit_rows %}
+{% set row_index = loop.index0 %}{# passed to the include; `loop` itself isn't visible there #}
 {% include "partials/accounts_row_display.html" %}
 {% endfor %}
 {% include "partials/accounts_row_add.html" %}

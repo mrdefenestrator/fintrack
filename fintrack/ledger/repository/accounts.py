@@ -69,7 +69,9 @@ def list_accounts(conn: Connection, snapshot_id: int | None = None) -> list[dict
         .where(accounts.c.snapshot_id == sid)
         .outerjoin(latest_txn, accounts.c.id == latest_txn.c.account_id)
         .outerjoin(latest_import, accounts.c.id == latest_import.c.account_id)
-        .order_by(accounts.c.name)
+        # Match the Accounts page order (sort_order) so the account dropdowns
+        # in Import / Transactions feel familiar; name is a stable tiebreak.
+        .order_by(accounts.c.sort_order, accounts.c.name)
     )
     rows = conn.execute(stmt).fetchall()
     return [dict(row._mapping) for row in rows]

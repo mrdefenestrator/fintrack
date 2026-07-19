@@ -7,6 +7,7 @@ from sqlalchemy.exc import IntegrityError
 
 from fintrack.core.coerce import to_date
 from fintrack.core.models import asset_entries
+from fintrack.core.ordering import reorder_by_positions
 from fintrack.core.types import AssetEntry
 
 _DATE_COLS = ("next_due_date", "as_of_date")
@@ -162,6 +163,13 @@ def move_asset_entry(
         .values(sort_order=order_a)
     )
     conn.commit()
+
+
+def reorder_asset_entries(
+    conn: Connection, snapshot_id: int, new_order: list[int]
+) -> None:
+    """Persist a drag-reordered asset-entry order (see core.ordering)."""
+    reorder_by_positions(conn, asset_entries, snapshot_id, new_order)
 
 
 def _index_to_db_id(conn: Connection, snapshot_id: int, index: int) -> int:

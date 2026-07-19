@@ -17,38 +17,58 @@ pytestmark = pytest.mark.e2e
 
 
 def test_transactions_account_filter_present(page, flask_server):
-    """Account dropdown is rendered in the filter bar."""
+    """The Account multi-select dropdown is rendered in the filter bar."""
     page.goto(f"{flask_server}/s/ledger/transactions")
-    assert page.locator("select[name='account_id']").is_visible()
+    assert page.locator(
+        "button.filter-dropdown-trigger:has-text('Account')"
+    ).is_visible()
 
 
 def test_transactions_category_filter_present(page, flask_server):
-    """Category dropdown is rendered in the filter bar."""
+    """The Category multi-select dropdown is rendered in the filter bar."""
     page.goto(f"{flask_server}/s/ledger/transactions")
-    assert page.locator("select[name='category']").is_visible()
+    assert page.locator(
+        "button.filter-dropdown-trigger:has-text('Category')"
+    ).is_visible()
 
 
 def test_transactions_status_filter_present(page, flask_server):
-    """Status dropdown is rendered with the expected options."""
+    """Status dropdown (single-select radio) offers the expected options."""
     page.goto(f"{flask_server}/s/ledger/transactions")
-    status_select = page.locator("select[name='status']")
-    assert status_select.is_visible()
-    options = status_select.locator("option").all_inner_texts()
-    assert "Categorized" in options
-    assert "Uncategorized" in options
-    assert "Corrected" in options
+    assert page.locator(
+        "button.filter-dropdown-trigger:has-text('Status')"
+    ).is_visible()
+    labels = " ".join(
+        page.locator("input[name='status']").locator("xpath=..").all_inner_texts()
+    )
+    assert "Categorized" in labels
+    assert "Uncategorized" in labels
+    assert "Corrected" in labels
 
 
 def test_transactions_search_input_present(page, flask_server):
-    """Text search input is rendered."""
+    """The combined search/amount input is rendered."""
     page.goto(f"{flask_server}/s/ledger/transactions")
-    assert page.locator("input[name='search']").is_visible()
+    assert page.locator("input[name='q']").is_visible()
 
 
-def test_transactions_amount_filter_input_present(page, flask_server):
-    """Amount search input is rendered in the filter bar."""
-    page.goto(f"{flask_server}/s/ledger/transactions")
-    assert page.locator("input[name='amount']").is_visible()
+def test_transactions_combined_filter_by_amount(page, confirmed_server):
+    """The single q box filters by amount when the text parses as an amount.
+
+    q=15-16 matches only NETFLIX (-$15.99), not the other seeded rows.
+    """
+    page.goto(f"{confirmed_server}/s/ledger/transactions?year=2026&month=4&q=15-16")
+    body_text = page.locator("table tbody").inner_text()
+    assert "NETFLIX" in body_text
+    assert "WHOLE FOODS" not in body_text
+
+
+def test_transactions_combined_filter_by_text(page, confirmed_server):
+    """The single q box searches text when it is not an amount expression."""
+    page.goto(f"{confirmed_server}/s/ledger/transactions?year=2026&month=4&q=WHOLE")
+    body_text = page.locator("table tbody").inner_text()
+    assert "WHOLE FOODS" in body_text
+    assert "NETFLIX" not in body_text
 
 
 def test_transactions_month_label_displayed(page, flask_server):
@@ -60,14 +80,14 @@ def test_transactions_month_label_displayed(page, flask_server):
 def test_transactions_prev_arrow_navigates(page, flask_server):
     """← arrow navigates to the previous month and updates the URL."""
     page.goto(f"{flask_server}/s/ledger/transactions?year=2026&month=4")
-    page.click("a:has-text('←')")
+    page.click("a[title='Earlier']")
     page.wait_for_url("**/transactions**month=3**")
 
 
 def test_transactions_next_arrow_navigates(page, flask_server):
     """→ arrow navigates to the next month and updates the URL."""
     page.goto(f"{flask_server}/s/ledger/transactions?year=2026&month=4")
-    page.click("a:has-text('→')")
+    page.click("a[title='Later']")
     page.wait_for_url("**/transactions**month=5**")
 
 

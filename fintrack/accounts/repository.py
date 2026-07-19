@@ -16,6 +16,7 @@ from sqlalchemy.exc import IntegrityError
 
 from fintrack.core.coerce import to_date
 from fintrack.core.models import accounts
+from fintrack.core.ordering import reorder_by_positions
 from fintrack.core.types import Account
 
 
@@ -202,6 +203,11 @@ def move_account(
         update(accounts).where(accounts.c.id == swap_id).values(sort_order=order_a)
     )
     conn.commit()
+
+
+def reorder_accounts(conn: Connection, snapshot_id: int, new_order: list[int]) -> None:
+    """Persist a drag-reordered account order (see core.ordering)."""
+    reorder_by_positions(conn, accounts, snapshot_id, new_order)
 
 
 _COL_TO_FIELD = {

@@ -100,9 +100,7 @@ def test_import_upload_ofx_creates_staging_batch(page, import_server, ofx_file):
         page.set_input_files("#file-input", str(ofx_file))
 
     # Re-select account after detect-account replaces the panel (loses prior selection)
-    page.select_option(
-        "select[name='account_id']", label="Test Bank [Checking] Test Checking"
-    )
+    page.select_option("select[name='account_id']", label="Test Bank Test Checking")
 
     # Submit the import form (hx-post /import/upload)
     with page.expect_response(lambda r: "/import/upload" in r.url and r.status == 200):
@@ -155,9 +153,7 @@ def test_import_second_upload_creates_new_staging(page, import_server, ofx_file_
     with page.expect_response(lambda r: "detect-account" in r.url):
         page.set_input_files("#file-input", str(ofx_file_2))
 
-    page.select_option(
-        "select[name='account_id']", label="Test Bank [Checking] Test Checking"
-    )
+    page.select_option("select[name='account_id']", label="Test Bank Test Checking")
 
     with page.expect_response(lambda r: "/import/upload" in r.url and r.status == 200):
         page.click("#import-submit")
@@ -188,9 +184,7 @@ def test_import_rejected_file_can_be_reimported(page, import_server, ofx_file_2)
     with page.expect_response(lambda r: "detect-account" in r.url):
         page.set_input_files("#file-input", str(ofx_file_2))
 
-    page.select_option(
-        "select[name='account_id']", label="Test Bank [Checking] Test Checking"
-    )
+    page.select_option("select[name='account_id']", label="Test Bank Test Checking")
 
     with page.expect_response(lambda r: "/import/upload" in r.url and r.status == 200):
         page.click("#import-submit")
@@ -218,9 +212,7 @@ def test_import_duplicate_file_shows_already_imported(page, import_server, ofx_f
     with page.expect_response(lambda r: "detect-account" in r.url):
         page.set_input_files("#file-input", str(ofx_file))
 
-    page.select_option(
-        "select[name='account_id']", label="Test Bank [Checking] Test Checking"
-    )
+    page.select_option("select[name='account_id']", label="Test Bank Test Checking")
 
     with page.expect_response(lambda r: "/import/upload" in r.url and r.status == 200):
         page.click("#import-submit")

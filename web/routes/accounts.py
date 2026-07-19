@@ -21,6 +21,7 @@ from .crud import (
     ACCOUNTS_COERCION,
     coerce_value,
     handle_move,
+    handle_reorder,
 )
 
 accounts_bp = Blueprint("accounts", __name__, url_prefix="/s")
@@ -401,5 +402,15 @@ def move(filename: str, account_id: int):
     engine = current_app.config["engine"]
     return handle_move(
         lambda conn, d: repo_accounts.move_account(conn, snapshot_id, account_id, d),
+        engine,
+    )
+
+
+@accounts_bp.route("/<filename>/accounts/reorder", methods=["POST"])
+def reorder(filename: str):
+    snapshot_id = validate_snapshot(filename)
+    engine = current_app.config["engine"]
+    return handle_reorder(
+        lambda conn, order: repo_accounts.reorder_accounts(conn, snapshot_id, order),
         engine,
     )

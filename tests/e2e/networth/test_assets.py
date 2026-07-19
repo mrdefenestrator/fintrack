@@ -79,7 +79,7 @@ def test_assets_add_asset(page, flask_server):
     add_row.locator("input[name='name']").fill("Bitcoin")
     add_row.locator("input[name='value']").fill("45000")
 
-    add_row.locator("button[title='Add']").click()
+    add_row.locator("button[type='submit']").click()
     page.wait_for_timeout(500)
 
     page.goto(f"{flask_server}/s/test_finances/assets")
@@ -98,7 +98,7 @@ def test_assets_add_debt(page, flask_server):
     add_row.locator("input[name='name']").fill("Car Loan")
     add_row.locator("input[name='balance']").fill("15000")
 
-    add_row.locator("button[title='Add']").click()
+    add_row.locator("button[type='submit']").click()
     page.wait_for_timeout(500)
 
     page.goto(f"{flask_server}/s/test_finances/assets")
@@ -178,14 +178,15 @@ def test_assets_filter_by_kind_mobile(page, flask_server):
     assert page.locator(".sm\\:hidden").first.is_visible()
     assert not page.locator(".sm\\:flex").first.is_visible()
 
-    # Expand the mobile filter panel
+    # Expand the mobile filter panel (shared bar: one control set, revealed
+    # below sm when the Filters trigger is tapped)
     page.locator(".sm\\:hidden > button[type=button]").click()
 
-    # Open the Kind dropdown inside the mobile panel
-    page.locator(".sm\\:hidden .filter-dropdown-trigger:has-text('Kind')").click()
+    # The control set is now visible — open the Kind dropdown in it
+    page.locator("button.filter-dropdown-trigger:has-text('Kind')").click()
 
     # Select debt
-    page.locator(".sm\\:hidden input[name='include_kind'][value='debt']").click()
+    page.locator("input[name='include_kind'][value='debt']").click()
     page.wait_for_url("**/assets**include_kind**")
 
     # Active count badge should appear in the mobile trigger row

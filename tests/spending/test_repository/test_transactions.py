@@ -82,6 +82,41 @@ def test_get_transactions_filter_by_category(conn):
     assert txns[0]["merchant"] == "WHOLE FOODS"
 
 
+def test_get_transactions_filter_by_categories_multi(conn):
+    _seed(conn)  # WHOLE FOODS=Groceries, NETFLIX=Subscriptions
+    both = get_transactions(
+        conn, year=2024, month=1, categories=["Groceries", "Subscriptions"]
+    )
+    assert {t["merchant"] for t in both} == {"WHOLE FOODS", "NETFLIX"}
+    one = get_transactions(conn, year=2024, month=1, categories=["Subscriptions"])
+    assert [t["merchant"] for t in one] == ["NETFLIX"]
+
+
+def test_get_transactions_filter_by_account_ids_multi(conn):
+    acct1 = _seed(conn)  # Chase, 2 transactions
+    acct2 = add_account(conn, name="BofA", institution="BofA", account_type="checking")
+    imp2 = create_import(conn, account_id=acct2, filename="b.ofx", file_hash="hb")
+    confirm_import(conn, imp2)
+    insert_transactions(
+        conn,
+        import_id=imp2,
+        account_id=acct2,
+        transactions_data=[
+            {
+                "date": date(2024, 1, 10),
+                "amount": Decimal("-5.00"),
+                "raw_description": "COFFEE",
+                "normalized_merchant": "COFFEE",
+                "fingerprint": "fpc",
+            }
+        ],
+    )
+    both = get_transactions(conn, year=2024, month=1, account_ids=[acct1, acct2])
+    assert len(both) == 3
+    one = get_transactions(conn, year=2024, month=1, account_ids=[acct2])
+    assert [t["merchant"] for t in one] == ["COFFEE"]
+
+
 def _seed_transfer_pair(conn):
     """Seed a matching pair of transfer legs plus an unrelated transaction."""
     acct_id = add_account(

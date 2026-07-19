@@ -159,17 +159,31 @@
             height: 1rem;
         }
 
-        /* Show reorder buttons only when no column sort is applied */
-        table[data-sort-dir="asc"] .reorder-buttons,
-        table[data-sort-dir="desc"] .reorder-buttons {
+        /* Hide the drag-reorder handle when the row order shown isn't the full,
+           canonical order — i.e. while a column sort is applied, or while a
+           filter hides some rows (dragging then would reorder against the
+           wrong positions). row-reorder.js also disables dragging in these
+           states. `data-reorder-locked` is set by the page when a filter is
+           active. */
+        table[data-sort-dir="asc"] .drag-handle,
+        table[data-sort-dir="desc"] .drag-handle,
+        table[data-reorder-locked] .drag-handle {
             display: none;
         }
 
-        /* Action column: no wrap, no overflow, fixed width for icon row */
+        /* SortableJS drag feedback for reorderable rows. */
+        .drag-handle { cursor: grab; }
+        .drag-handle:active { cursor: grabbing; }
+        .row-reorder-ghost { opacity: 0.4; }
+        .row-reorder-chosen { background: rgba(59, 130, 246, 0.08); }
+
+        /* Action column: no wrap, no overflow, fixed width for icon row. Two
+           icons now (drag handle + delete, or the ✓/✗ delete-confirm pair), so
+           it's narrower than when it held the old up/down/delete trio. */
         table .table-actions-cell {
             width: 1%;
-            min-width: 5.5rem;
-            max-width: 5.5rem;
+            min-width: 3.5rem;
+            max-width: 3.5rem;
             white-space: nowrap;
             overflow: hidden;
             padding-left: 0.25rem;
@@ -192,8 +206,8 @@
         /* Actions column: fixed width to stay compact */
         table.editable-table .table-actions-cell,
         table.editable-table thead th.table-actions-cell {
-            width: 5.5rem;
-            min-width: 5.5rem;
+            width: 3.5rem;
+            min-width: 3.5rem;
         }
 
         /* Scrollable table container: data rows scroll, header/footer rows stick */
@@ -201,6 +215,11 @@
             overflow: auto;
             flex: 1 1 0;
             min-height: 0;
+            /* Suppress the elastic overscroll "bounce" at the top/bottom so it
+               can't momentarily detach the sticky header / total rows and make
+               the sheet look broken (QA item 10). `none` (not `contain`) is
+               what disables the bounce affordance itself. */
+            overscroll-behavior: none;
         }
 
         .table-scroll-container thead {
@@ -230,26 +249,46 @@
            Mark a scrolling table container (the element with `overflow: auto`
            — e.g. .table-scroll-container) with the `data-sheet-scroll`
            attribute to get subtle drop shadows that appear under the sticky
-           header once scrolled down, and above the sticky total row until
-           scrolled to the bottom. web/static/js/sheet-scroll.js scans for
-           this attribute, inserts the two shadow overlays, and toggles their
-           visibility as the container scrolls (also re-scanning after htmx
-           swaps). Box-shadow on <thead>/<tr> is unreliable with
-           border-collapse, so the shadows are plain overlay divs positioned
-           against the container instead of against the table rows. */
-        [data-sheet-scroll] {
+           header once scrolled down, and above the sticky total row (or the
+           table's bottom edge) until scrolled to the bottom.
+           web/static/js/sheet-scroll.js wraps each such container in a
+           non-scrolling `.sheet-scroll-frame` and appends the two shadow
+           overlays to that frame — NOT to the scrolling container itself,
+           where they would scroll away with the content (the original bug).
+           The overlays are positioned against the frame so they stay pinned as
+           the container scrolls. Box-shadow on <thead>/<tr> is unreliable with
+           border-collapse, so plain overlay divs are used. */
+        .sheet-scroll-frame {
             position: relative;
+            display: flex;
+            flex-direction: column;
+            flex: 1 1 0;
+            min-height: 0;
         }
 
+        /* ~1 data-row-tall gradients (QA item 19): larger/softer, not darker, so
+           they're noticeable without hurting readability. The same treatment is
+           used on all four edges for a consistent look. */
         .sheet-scroll-shadow {
             position: absolute;
-            left: 0;
-            right: 0;
-            height: 8px;
             pointer-events: none;
             opacity: 0;
             transition: opacity 0.15s ease;
             z-index: 6;
+        }
+
+        .sheet-scroll-shadow--top,
+        .sheet-scroll-shadow--bottom {
+            left: 0;
+            right: 0;
+            height: 1.75rem;
+        }
+
+        .sheet-scroll-shadow--left,
+        .sheet-scroll-shadow--right {
+            top: 0;
+            bottom: 0;
+            width: 1.75rem;
         }
 
         .sheet-scroll-shadow--top {
@@ -260,6 +299,16 @@
         .sheet-scroll-shadow--bottom {
             bottom: var(--sheet-footer-h, 0px);
             background: linear-gradient(to top, rgba(0, 0, 0, 0.16), rgba(0, 0, 0, 0));
+        }
+
+        .sheet-scroll-shadow--left {
+            left: 0;
+            background: linear-gradient(to right, rgba(0, 0, 0, 0.16), rgba(0, 0, 0, 0));
+        }
+
+        .sheet-scroll-shadow--right {
+            right: 0;
+            background: linear-gradient(to left, rgba(0, 0, 0, 0.16), rgba(0, 0, 0, 0));
         }
 
         .sheet-scroll-shadow.is-visible {
@@ -273,6 +322,39 @@
         .dark .sheet-scroll-shadow--bottom {
             background: linear-gradient(to top, rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0));
         }
+
+        .dark .sheet-scroll-shadow--left {
+            background: linear-gradient(to right, rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0));
+        }
+
+        .dark .sheet-scroll-shadow--right {
+            background: linear-gradient(to left, rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0));
+        }
+
+        /* Import submit button busy state: while htmx is uploading (hx-indicator
+           puts `.htmx-request` on the button), swap the label for a spinner and
+           keep the button looking active-busy rather than greyed-out-disabled. */
+        #import-submit .import-btn-busy { display: none; }
+        #import-submit.htmx-request .import-btn-idle { display: none; }
+        #import-submit.htmx-request .import-btn-busy { display: inline-flex; }
+        #import-submit.htmx-request {
+            opacity: 1;
+            cursor: wait;
+        }
+        .import-spinner {
+            width: 1rem;
+            height: 1rem;
+            border: 2px solid currentColor;
+            border-top-color: transparent;
+            border-radius: 9999px;
+            animation: import-spin 0.6s linear infinite;
+        }
+        @keyframes import-spin { to { transform: rotate(360deg); } }
+
+        /* Projections chart: reveal the vertical guide line while hovering a
+           month's hover band (the band also carries a native value tooltip). */
+        .projection-hover-guide { opacity: 0; transition: opacity 0.1s ease; }
+        .projection-hover-band:hover .projection-hover-guide { opacity: 1; }
     </style>
 </head>
 
@@ -309,30 +391,37 @@
                below. data-nav / data-nav-group / data-nav-active-group are
                required by web/static/js/nav.js (group-tab memory); keep them. #}
             {% if filename %}
-            {% set _grp_active = 'bg-blue-700 text-white' %}
-            {% set _grp_idle = 'text-blue-100 hover:text-white hover:bg-blue-700' %}
-            {% set _grp_cls = 'px-3 py-1.5 rounded text-sm font-medium transition-colors' %}
-            <nav class="flex items-center gap-1 ml-2 shrink-0" data-nav data-nav-file="{{ filename }}"
+            {# Group tabs render as underline tabs (QA item 7) so they read like
+               the sub-tabs below, rather than as ambiguous pills. #}
+            {% set _grp_active = 'border-white text-white' %}
+            {% set _grp_idle = 'border-transparent text-blue-100 hover:text-white hover:border-blue-400' %}
+            {% set _grp_cls = 'px-3 flex items-center text-sm font-medium border-b-2 transition-colors' %}
+            <nav class="flex items-stretch gap-2 ml-3 shrink-0 self-stretch" data-nav data-nav-file="{{ filename }}"
                 {% if _active_group %}data-nav-active-group="{{ _active_group }}"{% endif %}>
                 <a href="{{ url_for('accounts.accounts_view', filename=filename, edit=1 if edit_mode else none) }}"
                     data-nav-group="finances"
                     class="{{ _grp_cls }} {% if _active_group == 'finances' %}{{ _grp_active }}{% else %}{{ _grp_idle }}{% endif %}">Finances</a>
-                <a href="/s/{{ filename }}/transactions" data-nav-group="spending"
+                <a href="/s/{{ filename }}/trends" data-nav-group="spending"
                     class="{{ _grp_cls }} {% if _active_group == 'spending' %}{{ _grp_active }}{% else %}{{ _grp_idle }}{% endif %}">Spending</a>
             </nav>
             {% endif %}
 
+            {# Shared header pill: icon + label with a `sm:`-collapsing label,
+               reused by the Import link and the lock/edit toggle so they stay
+               visually consistent and shrink to icon-only on narrow screens. #}
+            {% set _hdr_pill = 'flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors' %}
             <div class="flex items-center ml-auto gap-2 shrink-0">
-            <!-- Import statements (icon button; the Import page is not a tab) -->
+            <!-- Import statements (the Import page is not a tab) -->
             {% if filename %}
             <div class="flex items-center py-2">
                 <a href="/s/{{ filename }}/import" data-import-link title="Import statements"
                     {% if _cur_tab == 'import' %}aria-current="page"{% endif %}
-                    class="flex items-center px-2 py-1 rounded text-xs transition-colors {% if _cur_tab == 'import' %}bg-blue-700 text-white{% else %}text-blue-200 hover:text-white hover:bg-blue-700{% endif %}">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    class="{{ _hdr_pill }} {% if _cur_tab == 'import' %}bg-blue-700 text-white{% else %}text-blue-200 hover:text-white hover:bg-blue-700{% endif %}">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
                     </svg>
+                    <span class="hidden md:inline">Import</span>
                 </a>
             </div>
             {% endif %}
@@ -346,33 +435,33 @@
             <form method="POST" action="{{ url_for('edit_mode.toggle') }}" class="flex items-center py-2">
                 {% if edit_mode %}
                 <button type="submit" title="Exit edit mode"
-                    class="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium bg-amber-400 text-amber-900 hover:bg-amber-300 transition-colors">
+                    class="{{ _hdr_pill }} bg-amber-400 text-amber-900 hover:bg-amber-300">
                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M8 11V7a4 4 0 018 0M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z"/>
                     </svg>
-                    <span class="hidden sm:inline">Editing</span>
+                    <span class="hidden md:inline">Editing</span>
                 </button>
                 {% else %}
                 <button type="submit" title="Enter edit mode"
-                    class="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium text-blue-200 hover:text-white hover:bg-blue-700 transition-colors">
+                    class="{{ _hdr_pill }} text-blue-200 hover:text-white hover:bg-blue-700">
                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
                     </svg>
-                    <span class="hidden sm:inline">Locked</span>
+                    <span class="hidden md:inline">Locked</span>
                 </button>
                 {% endif %}
             </form>
             {% else %}
             <div class="flex items-center py-2" data-lock-muted>
                 <span title="Editing applies to Accounts, Budget, and Assets"
-                    class="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium text-blue-300 opacity-40 cursor-default select-none">
+                    class="{{ _hdr_pill }} text-blue-300 opacity-40 cursor-default select-none">
                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
                     </svg>
-                    <span class="hidden sm:inline">Locked</span>
+                    <span class="hidden md:inline">Locked</span>
                 </span>
             </div>
             {% endif %}
@@ -404,7 +493,7 @@
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
                     </svg>
-                    <span x-text="theme" class="hidden sm:inline capitalize"></span>
+                    <span x-text="theme" class="hidden md:inline capitalize"></span>
                 </button>
             </div>
 
@@ -581,14 +670,14 @@
         </nav>
         {% elif _active_group == 'spending' %}
         <nav class="flex border-t border-blue-700 bg-blue-900/25" data-nav-sub>
-            <a href="/s/{{ filename }}/transactions"
-                class="{{ _tab_cls }} {% if _cur_tab == 'transactions' %}{{ _tab_active }}{% else %}{{ _tab_idle }}{% endif %}">
-                <span>Transactions</span>
-                <span class="{{ _tab_total_cls }} invisible" aria-hidden="true">&nbsp;</span>
-            </a>
             <a href="/s/{{ filename }}/trends"
                 class="{{ _tab_cls }} {% if _cur_tab == 'trends' %}{{ _tab_active }}{% else %}{{ _tab_idle }}{% endif %}">
                 <span>Trends</span>
+                <span class="{{ _tab_total_cls }} invisible" aria-hidden="true">&nbsp;</span>
+            </a>
+            <a href="/s/{{ filename }}/transactions"
+                class="{{ _tab_cls }} {% if _cur_tab == 'transactions' %}{{ _tab_active }}{% else %}{{ _tab_idle }}{% endif %}">
+                <span>Transactions</span>
                 <span class="{{ _tab_total_cls }} invisible" aria-hidden="true">&nbsp;</span>
             </a>
             <a href="/s/{{ filename }}/merchants"
@@ -613,7 +702,9 @@
         {% block content %}{% endblock %}
     </main>
 
+    <script src="{{ url_for('static', filename='js/vendor/Sortable.min.js') }}"></script>
     <script src="{{ url_for('static', filename='js/sortable.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/row-reorder.js') }}"></script>
     <script src="{{ url_for('static', filename='js/ledger.js') }}"></script>
     <script src="{{ url_for('static', filename='js/sheet-scroll.js') }}"></script>
     <script src="{{ url_for('static', filename='js/nav.js') }}"></script>

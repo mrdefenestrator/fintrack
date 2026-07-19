@@ -1,0 +1,98 @@
+{# Reusable multi-select filter control for the integrated sheet filter bar:
+   a custom checkbox dropdown (with an active-count badge) followed by removable
+   chips for each selected value. Selecting/removing fires htmx to reload the
+   content area, carrying the full filter state via hx-include="[name]".
+
+   Params:
+   - name:       form field name (repeated per selection → IN filter server-side)
+   - label:      dropdown button label (e.g. "Account")
+   - options:    list of {value, display, checked}
+   - target_url: htmx GET url (the content route)
+   - hx_target:  htmx target selector (default #content)
+
+   Chip removal calls removeFilter(name, value) (web/static/js/ledger.js), which
+   unchecks the matching box and dispatches a native change event.
+
+   Modes: pass target_url for htmx pages (checkbox fires hx-get). Pass form_id
+   instead for the form-submit Finances sheets (checkbox submits that form).
+   Exactly one of target_url / form_id is used. #}
+{%- macro multi_select(name, label, options, target_url='', hx_target='#content', form_id=none) -%}
+{% set _selected = options | selectattr('checked') | list %}
+<div class="relative" x-data="{ open: false }">
+    <button type="button" @click="open = !open"
+        class="filter-dropdown-trigger inline-flex items-center bg-gray-50 dark:bg-gray-700 px-2 py-1 rounded border border-gray-200 dark:border-gray-600 text-xs hover:bg-gray-100 dark:hover:bg-gray-600">
+        {{ label }}
+        {% if _selected %}<span class="ml-1 bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 rounded-full px-1.5 tabular-nums">{{ _selected | length }}</span>{% endif %}
+        <svg class="w-4 h-4 ml-1.5 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+        </svg>
+    </button>
+    <div x-show="open" style="display:none" @click.outside="open = false"
+        class="absolute z-10 mt-1 w-56 max-h-[min(16rem,60vh)] overflow-y-auto bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-2 left-0">
+        {% for o in options %}
+        <label class="flex items-center px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer">
+            <input type="checkbox" name="{{ name }}" value="{{ o.value }}" {% if o.checked %}checked{% endif %}
+                {% if form_id %}onchange="document.getElementById('{{ form_id }}').submit()"{% else %}hx-get="{{ target_url }}" hx-target="{{ hx_target }}" hx-include="[name]" hx-push-url="true" hx-trigger="change"{% endif %}
+                class="mr-2 rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500">
+            <span class="text-sm">{{ o.display }}</span>
+        </label>
+        {% endfor %}
+    </div>
+</div>
+{% for o in _selected %}
+<span class="inline-flex items-center bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700 text-blue-700 dark:text-blue-300 text-xs rounded-full pl-2 pr-1 py-0.5">
+    {{ o.display }}
+    {# single-quoted attr: tojson emits double quotes, which would close a
+       double-quoted onclick early (chip clearing then silently no-ops). #}
+    <button type="button" title="Remove" onclick='removeFilter({{ name | tojson }}, {{ o.value | string | tojson }})'
+        class="ml-1 font-bold leading-none hover:text-blue-900 dark:hover:text-blue-100">&times;</button>
+</span>
+{% endfor %}
+{%- endmacro -%}
+
+
+{# Single-select variant: a radio-list dropdown (with an "Any" option to clear)
+   plus a chip for the current selection. Same look as multi_select, but only
+   one value at a time; deselect via the chip × (or the "Any" option).
+
+   Params:
+   - name, label, target_url, hx_target as above
+   - options: list of {value, display}
+   - selected: the currently-selected value ('' / none = Any)
+   - any_label: text for the clear option (default "Any") #}
+{%- macro single_select(name, label, options, selected, target_url, hx_target='#content', any_label='Any') -%}
+{% set _sel = (options | selectattr('value', 'equalto', selected) | list | first) if selected else none %}
+<div class="relative" x-data="{ open: false }">
+    <button type="button" @click="open = !open"
+        class="filter-dropdown-trigger inline-flex items-center bg-gray-50 dark:bg-gray-700 px-2 py-1 rounded border border-gray-200 dark:border-gray-600 text-xs hover:bg-gray-100 dark:hover:bg-gray-600">
+        {{ label }}
+        <svg class="w-4 h-4 ml-1.5 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+        </svg>
+    </button>
+    <div x-show="open" style="display:none" @click.outside="open = false"
+        class="absolute z-10 mt-1 w-56 max-h-[min(16rem,60vh)] overflow-y-auto bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-2 left-0">
+        <label class="flex items-center px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer">
+            <input type="radio" name="{{ name }}" value="" {% if not selected %}checked{% endif %}
+                hx-get="{{ target_url }}" hx-target="{{ hx_target }}" hx-include="[name]" hx-push-url="true" hx-trigger="change"
+                class="mr-2 border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500">
+            <span class="text-sm text-gray-500 dark:text-gray-400">{{ any_label }}</span>
+        </label>
+        {% for o in options %}
+        <label class="flex items-center px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer">
+            <input type="radio" name="{{ name }}" value="{{ o.value }}" {% if o.value == selected %}checked{% endif %}
+                hx-get="{{ target_url }}" hx-target="{{ hx_target }}" hx-include="[name]" hx-push-url="true" hx-trigger="change"
+                class="mr-2 border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500">
+            <span class="text-sm">{{ o.display }}</span>
+        </label>
+        {% endfor %}
+    </div>
+</div>
+{% if _sel %}
+<span class="inline-flex items-center bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700 text-blue-700 dark:text-blue-300 text-xs rounded-full pl-2 pr-1 py-0.5">
+    {{ _sel.display }}
+    <button type="button" title="Remove" onclick='clearRadio({{ name | tojson }})'
+        class="ml-1 font-bold leading-none hover:text-blue-900 dark:hover:text-blue-100">&times;</button>
+</span>
+{% endif %}
+{%- endmacro -%}

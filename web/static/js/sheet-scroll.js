@@ -1,23 +1,30 @@
 /**
- * Sheet scroll shadows (QA item 15).
+ * Sheet scroll shadows (QA item 15 / 2).
  *
  * Opt-in mechanism: any scrolling container marked with the `data-sheet-scroll`
  * attribute (the element with `overflow: auto` — e.g. `.table-scroll-container`
- * used by the accounts/budget/assets spreadsheet pages) automatically gets two
- * shadow overlays inserted as direct children:
+ * used by the accounts/budget/assets/transactions/merchants sheet pages)
+ * automatically gets two shadow overlays:
  *
  *   - `.sheet-scroll-shadow--top`    shown once the sheet is scrolled down from
  *                                    the top (a subtle shadow under the sticky
  *                                    header row).
  *   - `.sheet-scroll-shadow--bottom` shown until the sheet is scrolled all the
  *                                    way to the bottom (a subtle shadow above
- *                                    the sticky total row). Skipped if the
- *                                    container has no `tr.total-row`.
+ *                                    the sticky total row, or the table's bottom
+ *                                    edge when there is no total row).
  *
- * Both fade out at their respective scroll extremes via the `.is-visible`
- * class (see base.html for the actual box styling). To adopt this on another
- * table, just add `data-sheet-scroll` to its scrolling container — no other
- * wiring is required.
+ * Crucially, the overlays must NOT live inside the scrolling element: an
+ * absolutely-positioned child of an `overflow:auto` box scrolls with the
+ * content, so the shadows would drift out of view (the top one never appeared;
+ * the bottom one never pinned — QA item 2). Instead this script wraps each
+ * container in a non-scrolling `.sheet-scroll-frame` and appends the overlays
+ * to that frame, so they stay pinned against the container's viewport. The
+ * frame inherits the container's flex sizing so page layout is unchanged.
+ *
+ * Both fade in/out via the `.is-visible` class (see base.html for the box
+ * styling). To adopt this on another table, just add `data-sheet-scroll` to its
+ * scrolling container — no other wiring is required.
  *
  * Re-scans on DOMContentLoaded, htmx:afterSwap/afterSettle (tbody content is
  * frequently swapped in place by htmx) and window resize, and uses a
@@ -30,54 +37,79 @@
 
     var TOLERANCE = 1; // px
 
-    function ensureShadowEls(container) {
-        var top = container.querySelector(":scope > .sheet-scroll-shadow--top");
-        var bottom = container.querySelector(":scope > .sheet-scroll-shadow--bottom");
-        if (!top) {
-            top = document.createElement("div");
-            top.className = "sheet-scroll-shadow sheet-scroll-shadow--top";
-            top.setAttribute("aria-hidden", "true");
-            container.appendChild(top);
+    // Wrap the scrolling container in a non-scrolling positioned frame (once)
+    // and return it. The shadow overlays are attached to this frame so they do
+    // not scroll with the container's content.
+    function ensureFrame(container) {
+        var parent = container.parentElement;
+        if (parent && parent.classList.contains("sheet-scroll-frame")) {
+            return parent;
         }
-        if (!bottom) {
-            bottom = document.createElement("div");
-            bottom.className = "sheet-scroll-shadow sheet-scroll-shadow--bottom";
-            bottom.setAttribute("aria-hidden", "true");
-            container.appendChild(bottom);
-        }
-        return { top: top, bottom: bottom };
+        var frame = document.createElement("div");
+        frame.className = "sheet-scroll-frame";
+        container.parentNode.insertBefore(frame, container);
+        frame.appendChild(container);
+        return frame;
     }
 
-    function measure(container) {
+    function ensureShadowEls(frame) {
+        function ensure(edge) {
+            var el = frame.querySelector(":scope > .sheet-scroll-shadow--" + edge);
+            if (!el) {
+                el = document.createElement("div");
+                el.className = "sheet-scroll-shadow sheet-scroll-shadow--" + edge;
+                el.setAttribute("aria-hidden", "true");
+                frame.appendChild(el);
+            }
+            return el;
+        }
+        return {
+            top: ensure("top"),
+            bottom: ensure("bottom"),
+            left: ensure("left"),
+            right: ensure("right"),
+        };
+    }
+
+    // The overlays read their offsets from CSS vars; set them on the frame
+    // (their positioned ancestor) so they inherit down.
+    function measure(frame, container) {
         var thead = container.querySelector("thead");
         var totalRow = container.querySelector("tr.total-row");
-        container.style.setProperty(
+        frame.style.setProperty(
             "--sheet-header-h",
             (thead ? thead.offsetHeight : 0) + "px"
         );
-        container.style.setProperty(
+        frame.style.setProperty(
             "--sheet-footer-h",
             (totalRow ? totalRow.offsetHeight : 0) + "px"
         );
-        return totalRow;
     }
 
     function update(container) {
-        var els = ensureShadowEls(container);
-        var totalRow = measure(container);
+        var frame = ensureFrame(container);
+        var els = ensureShadowEls(frame);
+        measure(frame, container);
 
         var atTop = container.scrollTop <= TOLERANCE;
         var atBottom =
             container.scrollTop + container.clientHeight >=
             container.scrollHeight - TOLERANCE;
         // Nothing to scroll at all: never show either shadow.
-        var isScrollable = container.scrollHeight - container.clientHeight > TOLERANCE;
+        var isScrollableY =
+            container.scrollHeight - container.clientHeight > TOLERANCE;
 
-        els.top.classList.toggle("is-visible", isScrollable && !atTop);
-        els.bottom.classList.toggle(
-            "is-visible",
-            isScrollable && !atBottom && totalRow != null
-        );
+        var atLeft = container.scrollLeft <= TOLERANCE;
+        var atRight =
+            container.scrollLeft + container.clientWidth >=
+            container.scrollWidth - TOLERANCE;
+        var isScrollableX =
+            container.scrollWidth - container.clientWidth > TOLERANCE;
+
+        els.top.classList.toggle("is-visible", isScrollableY && !atTop);
+        els.bottom.classList.toggle("is-visible", isScrollableY && !atBottom);
+        els.left.classList.toggle("is-visible", isScrollableX && !atLeft);
+        els.right.classList.toggle("is-visible", isScrollableX && !atRight);
     }
 
     function init(container) {
@@ -86,7 +118,8 @@
             return;
         }
         container.dataset.sheetScrollBound = "true";
-        ensureShadowEls(container);
+        var frame = ensureFrame(container);
+        ensureShadowEls(frame);
 
         container.addEventListener("scroll", function () { update(container); }, {
             passive: true,

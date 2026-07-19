@@ -40,7 +40,7 @@ def test_group_tabs_navigate_to_landing_pages(page, flask_server):
     assert "border-white" in finances.get_attribute("class").split()
 
     page.click("[data-nav-group='spending']")
-    page.wait_for_url("**/transactions**")
+    page.wait_for_url("**/trends**")  # Spending lands on Trends (QA item 14)
     spending = page.locator("[data-nav-group='spending']")
     assert "border-white" in spending.get_attribute("class").split()
     assert (
@@ -59,7 +59,7 @@ def test_group_tab_remembers_last_subtab(page, flask_server):
     page.goto(f"{flask_server}/s/test_finances/budget")
 
     page.click("[data-nav-group='spending']")
-    page.wait_for_url("**/transactions**")
+    page.wait_for_url("**/trends**")  # Spending default is Trends (QA item 14)
 
     # Finances tab now points back at Budget, not the Accounts default
     page.click("[data-nav-group='finances']")

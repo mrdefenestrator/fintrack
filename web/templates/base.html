@@ -401,7 +401,7 @@
                 <a href="{{ url_for('accounts.accounts_view', filename=filename, edit=1 if edit_mode else none) }}"
                     data-nav-group="finances"
                     class="{{ _grp_cls }} {% if _active_group == 'finances' %}{{ _grp_active }}{% else %}{{ _grp_idle }}{% endif %}">Finances</a>
-                <a href="/s/{{ filename }}/transactions" data-nav-group="spending"
+                <a href="/s/{{ filename }}/trends" data-nav-group="spending"
                     class="{{ _grp_cls }} {% if _active_group == 'spending' %}{{ _grp_active }}{% else %}{{ _grp_idle }}{% endif %}">Spending</a>
             </nav>
             {% endif %}
@@ -670,14 +670,14 @@
         </nav>
         {% elif _active_group == 'spending' %}
         <nav class="flex border-t border-blue-700 bg-blue-900/25" data-nav-sub>
-            <a href="/s/{{ filename }}/transactions"
-                class="{{ _tab_cls }} {% if _cur_tab == 'transactions' %}{{ _tab_active }}{% else %}{{ _tab_idle }}{% endif %}">
-                <span>Transactions</span>
-                <span class="{{ _tab_total_cls }} invisible" aria-hidden="true">&nbsp;</span>
-            </a>
             <a href="/s/{{ filename }}/trends"
                 class="{{ _tab_cls }} {% if _cur_tab == 'trends' %}{{ _tab_active }}{% else %}{{ _tab_idle }}{% endif %}">
                 <span>Trends</span>
+                <span class="{{ _tab_total_cls }} invisible" aria-hidden="true">&nbsp;</span>
+            </a>
+            <a href="/s/{{ filename }}/transactions"
+                class="{{ _tab_cls }} {% if _cur_tab == 'transactions' %}{{ _tab_active }}{% else %}{{ _tab_idle }}{% endif %}">
+                <span>Transactions</span>
                 <span class="{{ _tab_total_cls }} invisible" aria-hidden="true">&nbsp;</span>
             </a>
             <a href="/s/{{ filename }}/merchants"

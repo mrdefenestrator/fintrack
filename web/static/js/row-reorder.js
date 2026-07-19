@@ -62,7 +62,11 @@
         tbody._rowReorder = Sortable.create(tbody, {
             handle: ".drag-handle",
             draggable: "[data-reorder-index]",
-            animation: 150,
+            // No swap animation: animating <tr> transforms makes rows visually
+            // "bunch up" / overlap when you drag fast over several rows (the
+            // slide of one swap hasn't finished before the next begins). Instant
+            // swaps keep the sheet legible while dragging.
+            animation: 0,
             disabled: columnSorted(tbody),
             ghostClass: "row-reorder-ghost",
             chosenClass: "row-reorder-chosen",

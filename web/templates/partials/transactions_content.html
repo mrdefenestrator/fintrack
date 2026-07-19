@@ -1,23 +1,30 @@
 {% import "partials/pager.html" as nav %}
 {% import "partials/filter_controls.html" as fc %}
+{% import "partials/sheet_filter_bar.html" as fb %}
 {% set _url = "/s/%s/transactions" | format(filename) %}
 
-{# Build the multi-select option lists (value/display/checked) for the custom
-   Account and Category dropdowns. #}
+{# Multi-select option lists (value/display/checked) for the Account and
+   Category dropdowns; single-select options for Status. #}
 {% set account_opts = [] %}
 {% for a in accounts %}{% set _ = account_opts.append({'value': a.id, 'display': a | account_label, 'checked': a.id in selected_accounts}) %}{% endfor %}
 {% set category_opts = [] %}
 {% for c in categories %}{% set _ = category_opts.append({'value': c, 'display': c, 'checked': c in selected_categories}) %}{% endfor %}
+{% set status_opts = [
+    {'value': 'categorized', 'display': 'Categorized'},
+    {'value': 'uncategorized', 'display': 'Uncategorized'},
+    {'value': 'corrected', 'display': 'Corrected'}] %}
 
 {# filter_qs carries the column filters (multi account_id / category, status, q)
    for the time-nav links; month/all-months state is passed explicitly. #}
 {% set filter_qs %}{% for aid in selected_accounts %}&account_id={{ aid }}{% endfor %}{% for c in selected_categories %}&category={{ c | urlencode }}{% endfor %}{% if selected_status %}&status={{ selected_status }}{% endif %}{% if q %}&q={{ q | urlencode }}{% endif %}{% endset %}
 
+{% set _active = (selected_accounts | length) + (selected_categories | length) + (1 if selected_status else 0) + (1 if q else 0) %}
+{% set _reset = "%s?year=%s&month=%s%s" | format(_url, year, month, '&all_months=true' if all_months else '') %}
+
 <span id="month-state" data-year="{{ year }}" data-month="{{ month }}" hidden></span>
 
-{# Time navigation (This month / All time + month pager) — kept as its own
-   right-aligned cluster next to the filter card, since it navigates rather than
-   filters. #}
+{# Time navigation (This month / All time + month pager) — its own right-aligned
+   cluster next to the filter card, since it navigates rather than filters. #}
 <div class="shrink-0 mb-2 flex items-center justify-end gap-2">
     {% set _seg = 'px-3 h-8 flex items-center text-sm transition-colors' %}
     {% set _seg_on = 'bg-blue-500 text-white' %}
@@ -41,38 +48,19 @@
     {% endif %}
 </div>
 
-{# Integrated filter card, fused to the top of the table (QA item 13). #}
-{% set has_filters = selected_accounts or selected_categories or selected_status or q %}
-<div class="shrink-0 relative z-20">
-    <div class="bg-white dark:bg-gray-800 rounded-t-lg border border-gray-300 dark:border-gray-600 text-sm text-gray-600 dark:text-gray-300">
-        <div class="flex flex-wrap items-center gap-1.5 p-2">
-            <svg class="w-4 h-4 shrink-0 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" role="img" aria-label="Filters">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M7 12h10M10 18h4" />
-            </svg>
-            {{ fc.multi_select('account_id', 'Account', account_opts, _url) }}
-            {{ fc.multi_select('category', 'Category', category_opts, _url) }}
-            <select name="status" hx-get="{{ _url }}" hx-target="#content" hx-include="[name]" hx-push-url="true"
-                    class="bg-gray-50 dark:bg-gray-700 px-2 py-1 rounded border border-gray-200 dark:border-gray-600 text-xs hover:bg-gray-100 dark:hover:bg-gray-600 focus:outline-none focus:ring-1 focus:ring-blue-500">
-                <option value="">Any status</option>
-                <option value="categorized" {{ 'selected' if selected_status == 'categorized' }}>Categorized</option>
-                <option value="uncategorized" {{ 'selected' if selected_status == 'uncategorized' }}>Uncategorized</option>
-                <option value="corrected" {{ 'selected' if selected_status == 'corrected' }}>Corrected</option>
-            </select>
-            <input type="search" name="q" value="{{ q }}" placeholder="Search or amount (e.g. netflix, &gt;50, 10-20)"
-                   hx-get="{{ _url }}" hx-target="#content" hx-include="[name]" hx-push-url="true"
-                   hx-trigger="keyup changed delay:300ms"
-                   class="w-64 bg-white dark:bg-gray-700 px-2 py-1 rounded border border-gray-200 dark:border-gray-600 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500">
-            {% if has_filters %}
-            <a hx-get="{{ _url }}?year={{ year }}&month={{ month }}{% if all_months %}&all_months=true{% endif %}"
-               hx-target="#content" hx-push-url="true"
-               class="ml-auto px-2 py-1 rounded border border-gray-200 dark:border-gray-600 text-xs bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 cursor-pointer">Reset</a>
-            {% endif %}
-        </div>
-    </div>
+{# Integrated filter card (QA item 13), fused to the top of the table. #}
+{% call fb.filter_bar(active_count=_active, reset_url=_reset) %}
+    {{ fc.multi_select('account_id', 'Account', account_opts, _url) }}
+    {{ fc.multi_select('category', 'Category', category_opts, _url) }}
+    {{ fc.single_select('status', 'Status', status_opts, selected_status or '', _url) }}
+    <input type="search" name="q" value="{{ q }}" placeholder="Search or amount (e.g. netflix, &gt;50, 10-20)"
+           hx-get="{{ _url }}" hx-target="#content" hx-include="[name]" hx-push-url="true"
+           hx-trigger="keyup changed delay:300ms"
+           class="w-64 bg-white dark:bg-gray-700 px-2 py-1 rounded border border-gray-200 dark:border-gray-600 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500">
     <input type="hidden" name="year" value="{{ year }}">
     <input type="hidden" name="month" value="{{ month }}">
     <input type="hidden" name="all_months" value="{{ 'true' if all_months else '' }}">
-</div>
+{% endcall %}
 
 <div class="table-scroll-container rounded-b-lg border-l border-b border-r border-gray-300 dark:border-gray-600 shadow-sm" data-sheet-scroll>
     {% include "partials/transaction_rows.html" %}

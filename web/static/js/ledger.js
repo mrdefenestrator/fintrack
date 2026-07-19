@@ -23,6 +23,16 @@ function removeFilter(name, value) {
     }
 }
 
+// Clear a single-select radio filter: select its empty ("Any") option and
+// re-fire the htmx request. Used by single-select filter chips.
+function clearRadio(name) {
+    const any = document.querySelector('input[type="radio"][name="' + name + '"][value=""]');
+    if (any) {
+        any.checked = true;
+        window.htmx && htmx.trigger(any, 'change');
+    }
+}
+
 function updateImportButton() {
     const btn = document.getElementById('import-submit');
     if (!btn) return;

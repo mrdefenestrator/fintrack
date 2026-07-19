@@ -104,7 +104,7 @@
 <table class="editable-table sortable w-full text-sm border-collapse bg-white dark:bg-gray-800" {% if
     sort_col %}data-sort-col="{{ sort_col }}" {% endif %} {% if sort_dir %}data-sort-dir="{{ sort_dir }}" {% endif %}>
 {% with headers=headers, right_align_cols=[3, 4, 5, 7] %}{% include "partials/editable_table_thead.html" %}{% endwith %}
-    <tbody id="assets-tbody">
+    <tbody id="assets-tbody"{% if edit_mode %} data-reorder-url="{{ url_for('assets.reorder', filename=filename) }}"{% endif %}>
         {% include "partials/assets_tbody.html" %}
     </tbody>
 </table>

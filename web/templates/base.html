@@ -159,11 +159,19 @@
             height: 1rem;
         }
 
-        /* Show reorder buttons only when no column sort is applied */
-        table[data-sort-dir="asc"] .reorder-buttons,
-        table[data-sort-dir="desc"] .reorder-buttons {
+        /* Hide the drag-reorder handle while a column sort is applied, so manual
+           row order and column sorting don't fight (row-reorder.js also disables
+           dragging in that state). */
+        table[data-sort-dir="asc"] .drag-handle,
+        table[data-sort-dir="desc"] .drag-handle {
             display: none;
         }
+
+        /* SortableJS drag feedback for reorderable rows. */
+        .drag-handle { cursor: grab; }
+        .drag-handle:active { cursor: grabbing; }
+        .row-reorder-ghost { opacity: 0.4; }
+        .row-reorder-chosen { background: rgba(59, 130, 246, 0.08); }
 
         /* Action column: no wrap, no overflow, fixed width for icon row */
         table .table-actions-cell {
@@ -656,7 +664,9 @@
         {% block content %}{% endblock %}
     </main>
 
+    <script src="{{ url_for('static', filename='js/vendor/Sortable.min.js') }}"></script>
     <script src="{{ url_for('static', filename='js/sortable.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/row-reorder.js') }}"></script>
     <script src="{{ url_for('static', filename='js/ledger.js') }}"></script>
     <script src="{{ url_for('static', filename='js/sheet-scroll.js') }}"></script>
     <script src="{{ url_for('static', filename='js/nav.js') }}"></script>

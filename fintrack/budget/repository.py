@@ -6,6 +6,7 @@ from sqlalchemy import Connection, delete, func, insert, select, update
 
 from fintrack.core.coerce import to_date
 from fintrack.core.models import budget_entries
+from fintrack.core.ordering import reorder_by_positions
 from fintrack.core.types import BudgetEntry
 
 
@@ -136,6 +137,13 @@ def move_budget_entry(
         .values(sort_order=order_a)
     )
     conn.commit()
+
+
+def reorder_budget_entries(
+    conn: Connection, snapshot_id: int, new_order: list[int]
+) -> None:
+    """Persist a drag-reordered budget-entry order (see core.ordering)."""
+    reorder_by_positions(conn, budget_entries, snapshot_id, new_order)
 
 
 def _index_to_db_id(conn: Connection, snapshot_id: int, index: int) -> int:

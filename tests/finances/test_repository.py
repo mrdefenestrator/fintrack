@@ -10,6 +10,7 @@ from fintrack.accounts.repository import (
     delete_account,
     get_accounts,
     move_account,
+    reorder_accounts,
     update_account,
 )
 from fintrack.networth.repository import (
@@ -24,6 +25,7 @@ from fintrack.budget.repository import (
     delete_budget_entry,
     get_budget_entries,
     move_budget_entry,
+    reorder_budget_entries,
     update_budget_entry,
 )
 from fintrack.snapshots.repository import (
@@ -325,6 +327,32 @@ def test_move_account_boundary(conn):
     first_id = accs[0]["id"]
     move_account(c, snap_id, first_id, "up")  # no-op at top
     assert get_accounts(c, snap_id)[0]["id"] == first_id
+
+
+def test_reorder_accounts(conn):
+    c, snap_id = conn
+    # Third account so the permutation is non-trivial.
+    add_account(c, snap_id, {"name": "Brokerage", "type": "other", "balance": 0})
+    ids = [a["id"] for a in get_accounts(c, snap_id)]  # positions 0,1,2
+    # Move the last row to the front: new_order[k] = old position now at k.
+    reorder_accounts(c, snap_id, [2, 0, 1])
+    assert [a["id"] for a in get_accounts(c, snap_id)] == [ids[2], ids[0], ids[1]]
+
+
+def test_reorder_accounts_rejects_non_permutation(conn):
+    c, snap_id = conn  # fixture seeds 2 accounts
+    with pytest.raises(ValueError):
+        reorder_accounts(c, snap_id, [0, 0])  # not a permutation of range(2)
+    with pytest.raises(ValueError):
+        reorder_accounts(c, snap_id, [0])  # wrong length
+
+
+def test_reorder_budget_entries(conn):
+    c, snap_id = conn  # fixture seeds 4 budget entries (Salary, Bonus, Rent, Food)
+    before = [e["description"] for e in get_budget_entries(c, snap_id)]
+    reorder_budget_entries(c, snap_id, [3, 2, 1, 0])  # reverse
+    after = [e["description"] for e in get_budget_entries(c, snap_id)]
+    assert after == list(reversed(before))
 
 
 # =============================================================================

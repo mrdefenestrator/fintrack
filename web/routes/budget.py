@@ -13,6 +13,7 @@ from .crud import (
     coerce_value,
     handle_delete,
     handle_move,
+    handle_reorder,
 )
 
 budget_bp = Blueprint("budget", __name__, url_prefix="/s")
@@ -182,6 +183,18 @@ def move(filename: str, index: int):
     engine = current_app.config["engine"]
     return handle_move(
         lambda conn, d: repo_budget.move_budget_entry(conn, snapshot_id, index, d),
+        engine,
+    )
+
+
+@budget_bp.route("/<filename>/budget/reorder", methods=["POST"])
+def reorder(filename: str):
+    snapshot_id = validate_snapshot(filename)
+    engine = current_app.config["engine"]
+    return handle_reorder(
+        lambda conn, order: repo_budget.reorder_budget_entries(
+            conn, snapshot_id, order
+        ),
         engine,
     )
 

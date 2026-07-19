@@ -1,40 +1,31 @@
-{# Shared actions cell: up/down reorder buttons, delete button. No wrap/overflow.
+{# Shared actions cell: drag-to-reorder handle + delete button. No wrap/overflow.
 Parameters:
 - delete_confirm_url: URL for delete confirmation (hx-get)
-- move_url: URL for move action (hx-post, with ?direction=up|down appended)
-- edit_mode: boolean, whether in edit mode (enables buttons)
-#}
+- edit_mode: boolean, whether in edit mode (enables the handle + delete)
+Row drag is wired by web/static/js/row-reorder.js (SortableJS); the handle is
+hidden while a column sort is active (see base.html) so sorting and manual
+order don't fight. #}
 <td class="table-actions-cell px-1.5 py-0.5 border-r border-gray-100 dark:border-gray-700 text-center align-middle">
     <span class="table-actions-inner">
-        <span class="reorder-buttons inline-flex items-center gap-px shrink-0">
-            {% if edit_mode %}
-            <button type="button" class="table-action-btn text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700"
-                title="Move up" hx-post="{{ move_url }}?direction=up" hx-trigger="click" hx-swap="none">
-                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
-                </svg>
-            </button>
-            <button type="button" class="table-action-btn text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700"
-                title="Move down" hx-post="{{ move_url }}?direction=down" hx-trigger="click" hx-swap="none">
-                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-                </svg>
-            </button>
-            {% else %}
-            <span class="table-action-btn text-gray-300 dark:text-gray-600 cursor-default shrink-0"
-                title="Move up (switch to Edit to reorder)" aria-hidden="true">
-                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
-                </svg>
-            </span>
-            <span class="table-action-btn text-gray-300 dark:text-gray-600 cursor-default shrink-0"
-                title="Move down (switch to Edit to reorder)" aria-hidden="true">
-                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-                </svg>
-            </span>
-            {% endif %}
+        {% if edit_mode %}
+        <button type="button" class="drag-handle table-action-btn text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-grab shrink-0"
+            title="Drag to reorder" aria-label="Drag to reorder">
+            <svg fill="currentColor" viewBox="0 0 24 24">
+                <circle cx="9" cy="6" r="1.6" /><circle cx="15" cy="6" r="1.6" />
+                <circle cx="9" cy="12" r="1.6" /><circle cx="15" cy="12" r="1.6" />
+                <circle cx="9" cy="18" r="1.6" /><circle cx="15" cy="18" r="1.6" />
+            </svg>
+        </button>
+        {% else %}
+        <span class="table-action-btn text-gray-300 dark:text-gray-600 cursor-default shrink-0"
+            title="Drag to reorder (switch to Edit)" aria-hidden="true">
+            <svg fill="currentColor" viewBox="0 0 24 24">
+                <circle cx="9" cy="6" r="1.6" /><circle cx="15" cy="6" r="1.6" />
+                <circle cx="9" cy="12" r="1.6" /><circle cx="15" cy="12" r="1.6" />
+                <circle cx="9" cy="18" r="1.6" /><circle cx="15" cy="18" r="1.6" />
+            </svg>
         </span>
+        {% endif %}
         {% if edit_mode %}
         <button type="button" class="table-action-btn text-red-600 dark:text-red-400 shrink-0 hover:text-red-800 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/30"
             title="Delete" hx-get="{{ delete_confirm_url }}" hx-trigger="click" hx-swap="outerHTML"

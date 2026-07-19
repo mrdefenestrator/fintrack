@@ -97,3 +97,30 @@ def handle_move(writer_fn, engine):
     resp = current_app.make_response("")
     resp.headers["HX-Refresh"] = "true"
     return resp
+
+
+def handle_reorder(writer_fn, engine):
+    """Generic drag-reorder handler (QA item 3).
+
+    Reads a comma-separated `order` form field (a permutation of the rows'
+    current 0-based positions) and persists it. Returns 204 with no body: the
+    client (SortableJS) has already moved the DOM into the new order, so there
+    is nothing to swap and no jarring refresh.
+
+    Args:
+        writer_fn: callable(conn, new_order: list[int]) -> None, may raise ValueError
+        engine: SQLAlchemy Engine
+    """
+    raw = request.form.get("order", "")
+    try:
+        new_order = [int(x) for x in raw.split(",") if x != ""]
+    except ValueError:
+        return "", 422
+    if not new_order:
+        return "", 422
+    try:
+        with engine.connect() as conn:
+            writer_fn(conn, new_order)
+    except ValueError:
+        return "", 422
+    return "", 204

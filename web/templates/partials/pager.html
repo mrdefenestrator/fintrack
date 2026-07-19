@@ -8,8 +8,10 @@
    w-48 for "Sep 2025 – Aug 2026").
 
    prev_url / next_url are full hrefs (built by the caller with its filter
-   state). latest_url is optional: when provided and not already latest, a
-   "Latest" button is appended (Trends). is_latest disables the next arrow. #}
+   state). latest_url is optional: when provided, a "Latest" button is always
+   shown (Trends) — disabled at the latest window rather than removed, so the
+   controls don't shift when you page away from latest (QA item 20). is_latest
+   disables the next arrow too. #}
 {%- macro pager(prev_url, next_url, label, is_latest=false, latest_url=none, target='#content', label_width='w-28') -%}
 {% set _btn = 'h-8 w-8 flex items-center justify-center rounded-md border border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer' %}
 {% set _btn_off = 'h-8 w-8 flex items-center justify-center rounded-md border border-gray-200 dark:border-gray-700 text-gray-300 dark:text-gray-600 cursor-not-allowed' %}
@@ -23,9 +25,14 @@
     <a href="{{ next_url }}" hx-get="{{ next_url }}" hx-target="{{ target }}" hx-push-url="true"
        title="Later" class="{{ _btn }}">&#9654;</a>
     {% endif %}
-    {% if latest_url is not none and not is_latest %}
+    {% if latest_url is not none %}
+    {% if is_latest %}
+    <span aria-disabled="true" title="Already at the latest window"
+       class="px-3 h-8 flex items-center text-sm rounded-md border border-gray-200 dark:border-gray-700 text-gray-300 dark:text-gray-600 cursor-not-allowed">Latest</span>
+    {% else %}
     <a href="{{ latest_url }}" hx-get="{{ latest_url }}" hx-target="{{ target }}" hx-push-url="true"
        class="px-3 h-8 flex items-center text-sm rounded-md border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer">Latest</a>
+    {% endif %}
     {% endif %}
 </div>
 {%- endmacro -%}

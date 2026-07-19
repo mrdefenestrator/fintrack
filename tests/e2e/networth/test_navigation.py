@@ -37,14 +37,14 @@ def test_group_tabs_navigate_to_landing_pages(page, flask_server):
     """Group tabs land on the group's default page and get the active marker."""
     page.goto(f"{flask_server}/s/test_finances/accounts")
     finances = page.locator("[data-nav-group='finances']")
-    assert "bg-blue-700" in finances.get_attribute("class").split()
+    assert "border-white" in finances.get_attribute("class").split()
 
     page.click("[data-nav-group='spending']")
     page.wait_for_url("**/transactions**")
     spending = page.locator("[data-nav-group='spending']")
-    assert "bg-blue-700" in spending.get_attribute("class").split()
+    assert "border-white" in spending.get_attribute("class").split()
     assert (
-        "bg-blue-700"
+        "border-white"
         not in page.locator("[data-nav-group='finances']")
         .get_attribute("class")
         .split()

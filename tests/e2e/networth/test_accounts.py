@@ -86,7 +86,7 @@ def test_add_account_row(page, flask_server):
     add_row.locator("input[name='balance']").fill("1000")
 
     # Click + button
-    add_row.locator("button[title='Add']").click()
+    add_row.locator("button[type='submit']").click()
 
     # Wait for the new row to appear
     page.wait_for_timeout(500)
@@ -112,7 +112,7 @@ def test_add_credit_card_account(page, flask_server):
         lambda r: "/accounts/add" in r.url and r.request.method == "POST",
         timeout=5000,
     ):
-        add_row.locator("button[title='Add']").click()
+        add_row.locator("button[type='submit']").click()
 
     page.goto(f"{flask_server}/s/test_finances/accounts")
     assert page.locator("#accounts-tbody").get_by_text("Travel Card").is_visible()

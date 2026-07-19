@@ -33,14 +33,17 @@ def test_transactions_category_filter_present(page, flask_server):
 
 
 def test_transactions_status_filter_present(page, flask_server):
-    """Status dropdown is rendered with the expected options."""
+    """Status dropdown (single-select radio) offers the expected options."""
     page.goto(f"{flask_server}/s/ledger/transactions")
-    status_select = page.locator("select[name='status']")
-    assert status_select.is_visible()
-    options = status_select.locator("option").all_inner_texts()
-    assert "Categorized" in options
-    assert "Uncategorized" in options
-    assert "Corrected" in options
+    assert page.locator(
+        "button.filter-dropdown-trigger:has-text('Status')"
+    ).is_visible()
+    labels = " ".join(
+        page.locator("input[name='status']").locator("xpath=..").all_inner_texts()
+    )
+    assert "Categorized" in labels
+    assert "Uncategorized" in labels
+    assert "Corrected" in labels
 
 
 def test_transactions_search_input_present(page, flask_server):
@@ -77,14 +80,14 @@ def test_transactions_month_label_displayed(page, flask_server):
 def test_transactions_prev_arrow_navigates(page, flask_server):
     """← arrow navigates to the previous month and updates the URL."""
     page.goto(f"{flask_server}/s/ledger/transactions?year=2026&month=4")
-    page.click("a:has-text('←')")
+    page.click("a[title='Earlier']")
     page.wait_for_url("**/transactions**month=3**")
 
 
 def test_transactions_next_arrow_navigates(page, flask_server):
     """→ arrow navigates to the next month and updates the URL."""
     page.goto(f"{flask_server}/s/ledger/transactions?year=2026&month=4")
-    page.click("a:has-text('→')")
+    page.click("a[title='Later']")
     page.wait_for_url("**/transactions**month=5**")
 
 

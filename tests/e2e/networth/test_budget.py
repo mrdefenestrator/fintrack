@@ -35,8 +35,8 @@ def test_scroll_shadows_toggle_with_scroll_position(page, flask_server):
     page.goto(f"{flask_server}/s/test_finances/budget")
 
     container = page.locator("[data-sheet-scroll]")
-    top_shadow = container.locator(".sheet-scroll-shadow--top")
-    bottom_shadow = container.locator(".sheet-scroll-shadow--bottom")
+    top_shadow = page.locator(".sheet-scroll-shadow--top")
+    bottom_shadow = page.locator(".sheet-scroll-shadow--bottom")
 
     # Sanity check the fixture actually overflows this viewport.
     scroll_height = container.evaluate("el => el.scrollHeight")
@@ -117,7 +117,7 @@ def test_budget_add_income(page, flask_server):
     add_row.locator("input[name='description']").fill("Side Gig")
     add_row.locator("input[name='amount']").fill("200")
 
-    add_row.locator("button[title='Add']").click()
+    add_row.locator("button[type='submit']").click()
     page.wait_for_timeout(500)
 
     # Should see the new entry after page refresh (HX-Refresh)
@@ -137,7 +137,7 @@ def test_budget_add_expense(page, flask_server):
     add_row.locator("input[name='description']").fill("Internet")
     add_row.locator("input[name='amount']").fill("80")
 
-    add_row.locator("button[title='Add']").click()
+    add_row.locator("button[type='submit']").click()
     page.wait_for_timeout(500)
 
     page.goto(f"{flask_server}/s/test_finances/budget")

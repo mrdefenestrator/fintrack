@@ -79,7 +79,7 @@ def test_assets_add_asset(page, flask_server):
     add_row.locator("input[name='name']").fill("Bitcoin")
     add_row.locator("input[name='value']").fill("45000")
 
-    add_row.locator("button[title='Add']").click()
+    add_row.locator("button[type='submit']").click()
     page.wait_for_timeout(500)
 
     page.goto(f"{flask_server}/s/test_finances/assets")
@@ -98,7 +98,7 @@ def test_assets_add_debt(page, flask_server):
     add_row.locator("input[name='name']").fill("Car Loan")
     add_row.locator("input[name='balance']").fill("15000")
 
-    add_row.locator("button[title='Add']").click()
+    add_row.locator("button[type='submit']").click()
     page.wait_for_timeout(500)
 
     page.goto(f"{flask_server}/s/test_finances/assets")

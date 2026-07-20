@@ -550,3 +550,23 @@ def test_asset_entry_type_round_trip():
         # BTC is the first entry (sort_order); reclassify it.
         update_asset_entry(c, snap_id, 0, {"type": "retirement"})
         assert get_asset_entries(c, snap_id)[0]["type"] == "retirement"
+
+
+def test_asset_entry_unit_defaults_usd_and_round_trips():
+    """`unit` defaults to USD and can be overridden with a symbol + updated."""
+    engine = create_engine("sqlite:///:memory:", future=True)
+    init_db(engine)
+    with engine.connect() as c:
+        snap_id = create_snapshot(c, "s")
+        add_asset_entry(c, snap_id, {"kind": "asset", "name": "Home", "value": 400000})
+        add_asset_entry(
+            c,
+            snap_id,
+            {"kind": "asset", "name": "BTC", "unit": "BTC", "quantity": 0.4},
+        )
+        by_name = {e["name"]: e for e in get_asset_entries(c, snap_id)}
+        assert by_name["Home"]["unit"] == "USD"  # default
+        assert by_name["BTC"]["unit"] == "BTC"  # override persists
+        # Home is the first entry (sort_order); change its unit.
+        update_asset_entry(c, snap_id, 0, {"unit": "ETH"})
+        assert get_asset_entries(c, snap_id)[0]["unit"] == "ETH"

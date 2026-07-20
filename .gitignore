@@ -20,3 +20,4 @@ docker-compose.yml
 # Local QA tracking, not committed
 issues.md
 notes-category-design.md
+notes-holdings-design.md

@@ -24,6 +24,7 @@ def _row_to_asset_entry(row) -> AssetEntry:
         entry["id"] = r["id"]
     optional_map = {
         "type": "type",
+        "unit": "unit",
         "institution": "institution",
         "value": "value",
         "source": "source",
@@ -187,6 +188,7 @@ def _index_to_db_id(conn: Connection, snapshot_id: int, index: int) -> int:
 _FIELD_TO_COL = {
     "kind": "kind",
     "type": "type",
+    "unit": "unit",
     "name": "name",
     "institution": "institution",
     "value": "value",
@@ -215,6 +217,7 @@ def _entry_dict_to_row(
     }
     optional_map = {
         "type": "type",
+        "unit": "unit",
         "institution": "institution",
         "value": "value",
         "source": "source",

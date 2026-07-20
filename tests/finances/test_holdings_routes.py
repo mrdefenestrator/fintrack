@@ -64,23 +64,31 @@ def test_holdings_view_returns_200_with_columns(client):
     assert resp.status_code == 200
     body = resp.get_data(as_text=True)
     # Sheet column headers (not a bespoke top panel).
-    for header in ("Kind", "Institution", "Amount", "Equity", "LTV"):
+    for header in ("Institution", "Name", "Type", "Amount", "Equity", "LTV"):
         assert header in body
     # Both holdings render.
     assert "Checking" in body
     assert "Visa" in body
 
 
-def test_holdings_view_has_no_tier_surface(client):
-    """Tier is derived from type and drives (deferred) totals only — it should
-    not appear as a column header or a filter."""
+def test_holdings_view_has_no_tier_or_kind_surface(client):
+    """Tier and Kind are both derivable from type, so neither appears as a
+    column header or a filter."""
     resp = client.get("/s/finances/holdings")
     body = resp.get_data(as_text=True)
     rows = _rows_region(body)
-    # No 'Tier' column header, no per-row tier label, no tier filter field.
     assert ">Tier<" not in body
+    assert ">Kind<" not in body
     assert "Semi-liquid" not in rows
     assert 'name="tier"' not in body
+
+
+def test_holdings_view_row_accents_by_asset_liability(client):
+    """Asset rows get the green left accent, liability rows the red one."""
+    resp = client.get("/s/finances/holdings")
+    rows = _rows_region(resp.get_data(as_text=True))
+    assert "border-l-emerald-400" in rows  # the checking account (asset)
+    assert "border-l-rose-400" in rows  # the credit card (liability)
 
 
 def test_holdings_view_shows_bottom_total(client):

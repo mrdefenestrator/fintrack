@@ -34,11 +34,11 @@ _TYPE_LABELS: dict[str, str] = dict(_ALL_TYPE_OPTIONS)
 _BALANCE_LABELS: dict[str, str] = {"asset": "Assets", "liability": "Liabilities"}
 
 # Column order for the holdings sheet. Amount/Equity/LTV are right-aligned.
-# Liquidity tier is intentionally not a column: it is fully derived from type,
-# so a Type filter/column already conveys it; tier's real job is the (deferred)
-# liquid/investable/net-worth totals, not a per-row label.
-_HEADERS = ["Kind", "Institution", "Name", "Type", "Amount", "Equity", "LTV"]
-_RIGHT_ALIGN_COLS = [4, 5, 6]
+# Neither liquidity tier nor a Kind (account/asset/debt) column appears: both
+# are derivable from type, so the Type column/filter already conveys them. The
+# asset-vs-liability distinction is carried by the row accent + Balance filter.
+_HEADERS = ["Institution", "Name", "Type", "Amount", "Equity", "LTV"]
+_RIGHT_ALIGN_COLS = [3, 4, 5]
 
 
 def _type_label(value: str | None) -> str:
@@ -51,18 +51,20 @@ def _fmt_ltv(ltv: Decimal | None) -> str:
     return f"{ltv * 100:.1f}%" if ltv is not None else "—"
 
 
-def _holding(kind_label: str, institution: str, name: str, type_value, amount):
-    """Build one holding record: display cells + sort/filter metadata."""
+def _holding(institution: str, name: str, type_value, amount):
+    """Build one holding record: display cells + sort/filter metadata.
+
+    The left-border accent encodes the asset/liability split by the sign of the
+    holding's net-worth contribution (assets green, liabilities red).
+    """
     is_liability = amount < 0
     return {
-        "kind": kind_label,
         "institution": institution,
         "name": name,
         "type_value": type_value,
         "balance_side": "liability" if is_liability else "asset",
         "amount": amount,
         "cells": [
-            kind_label,
             institution or "—",
             name or "—",
             _type_label(type_value) or "—",
@@ -90,7 +92,6 @@ def holdings_view(filename):
 
     rows = [
         _holding(
-            "Account",
             a.get("institution") or "",
             a.get("name") or "",
             a.get("type"),
@@ -99,9 +100,7 @@ def holdings_view(filename):
         for a in accounts
     ]
     for e in assets:
-        kind_label = "Debt" if e.get("kind") == "debt" else "Asset"
         row = _holding(
-            kind_label,
             e.get("institution") or "",
             e.get("name") or "",
             e.get("type"),
@@ -109,8 +108,8 @@ def holdings_view(filename):
         )
         pair = equity_by_debt.get(id(e))
         if pair is not None:
-            row["cells"][5] = fmt_money(pair["equity"])
-            row["cells"][6] = _fmt_ltv(pair["ltv"])
+            row["cells"][4] = fmt_money(pair["equity"])
+            row["cells"][5] = _fmt_ltv(pair["ltv"])
         rows.append(row)
 
     institutions = sorted({r["institution"] for r in rows if r["institution"]})
@@ -153,7 +152,7 @@ def holdings_view(filename):
 
     # Bottom total = sum of the displayed rows (equals net worth with no filter).
     total = sum((r["amount"] for r in filtered), Decimal("0"))
-    total_cells = ["Total", "", "", "", fmt_money(total), "", ""]
+    total_cells = ["Total", "", "", fmt_money(total), "", ""]
 
     ctx.update(
         {

@@ -96,9 +96,9 @@ Single `MetaData` in `fintrack/core/models.py`.
   moves through), and a nullable `category` linking to the ledger taxonomy so
   projections don't double-count a budgeted expense against estimated
   category spend.
-- **asset_entries** — assets and debts: `kind`, `value`/`quantity`/`balance`,
-  `asset_ref` (e.g. a loan against an asset), `interest_rate`,
-  `next_due_date`.
+- **asset_entries** — assets and debts: `kind`, a liquidity-tier `type` (see
+  below), `value`/`quantity`/`balance`, `asset_ref` (e.g. a loan against an
+  asset, which surfaces as equity/LTV), `interest_rate`, `next_due_date`.
 - **balance_history** — the time series behind `accounts.balance`; see below.
 
 Money columns are `Numeric(12,2)` (asset values `14,2`); date columns are real
@@ -112,6 +112,31 @@ across sources — OFX statements provide a signed ledger balance directly,
 while credit-card editing in the UI works in available/limit terms and derives
 `balance = available − credit_limit` on save. Calculations prefer `balance`
 and fall back to available−limit.
+
+### Liquidity tiers & holdings
+
+Every holding — an `accounts` row or an `asset_entries` row — maps to one of
+three **liquidity tiers**, fixed by its type with no per-holding override
+(`fintrack/core/types.py`: `ACCOUNT_TYPE_TIER`, `ASSET_TYPE_TIER`; unknown
+types default to `illiquid`):
+
+- **liquid** — spendable now: checking, savings, wallets, gift cards, and
+  credit cards (whose negative balance nets against cash).
+- **semi-liquid** — brokerage, crypto, HSA, and `other` accounts.
+- **illiquid** — retirement, real estate, vehicles, other assets, and loans.
+
+`fintrack/networth/calculations.py` reduces each holding to a **signed
+contribution** (assets add, liabilities subtract; credit cards add rewards)
+and sums them per tier. The tiers nest into cumulative totals
+(`tiered_totals`): **liquid ⊂ investable ⊂ net worth**, where investable =
+liquid + semi-liquid and net worth = every holding. A secured debt linked to
+an asset via `asset_ref` also yields an **equity/LTV** pair (`equity_pairs`).
+
+These power the **Holdings** page (`/s/<snapshot>/holdings`), a read-only
+unified view of accounts + assets with the tier totals, equity, and filtering
+by tier / liabilities / institution. The older per-domain key numbers
+(`liquid_minus_cc`, `net_nonliquid_total`, used by the Accounts/Assets pages
+and projections) remain unchanged alongside the tier totals.
 
 ## Merchant classification & privacy
 
@@ -201,10 +226,12 @@ Single Flask app (`web/app.py`), port 5003 (`FINTRACK_PORT`), database from
 `?edit=1` toggling spreadsheet-style edit mode on the net-worth pages.
 
 Navigation is two-tier and task-oriented: a primary row with two group tabs —
-`Finances` (Accounts · Budget · Assets · Projections) and `Spending`
+`Finances` (Accounts · Budget · Assets · Holdings · Projections) and `Spending`
 (Transactions · Trends · Merchants) — and a secondary row showing the active
 group's sub-tabs. Accounts is the landing page; each group tab remembers its
 last-visited sub-tab for the session (sessionStorage, `web/static/js/nav.js`).
+Holdings is a read-only unified view (accounts + assets) and is intended to
+eventually subsume the separate Accounts and Assets pages.
 Import is an icon button in the header rather than a tab, and the edit-mode
 lock is functional only on the pages that honor it (Accounts, Budget,
 Assets — muted elsewhere). The old `/s/<snapshot>/status` dashboard was

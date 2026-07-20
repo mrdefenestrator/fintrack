@@ -55,7 +55,7 @@ degrades to a warning without it).
 - `fintrack/ledger/` — statement importer (OFX/CSV, normalization, dedup), classifier, ledger repositories
 - `fintrack/accounts/` — unified accounts repository, balance_history, OFX account matching
 - `fintrack/budget/` — budget entries, recurrence/proration engine
-- `fintrack/networth/` — assets/debts, key-number and funding calculations
+- `fintrack/networth/` — assets/debts, key-number and funding calculations, liquidity-tier totals + equity pairs
 - `fintrack/projections/` — multi-month balance projection engine + estimators
 - `fintrack/snapshots/`, `fintrack/migrate/` (legacy one-time import), `fintrack/cli/` (one module per command group)
 - `web/` — Flask app, routes/, Jinja2/Tailwind/HTMX templates
@@ -87,6 +87,12 @@ degrades to a warning without it).
 - `accounts.balance` is the canonical signed balance (negative = owed on CCs);
   it is a denormalized cache of the latest balance_history point — always
   write through `record_balance()`, never update the column directly.
+- Liquidity tier (liquid/semi-liquid/illiquid) is fixed by holding **type**
+  with no per-holding override; the type→tier maps in `fintrack/core/types.py`
+  are the single source of truth (add new types there, not ad-hoc). Tier
+  totals nest: liquid ⊂ investable ⊂ net worth (`calculations.tiered_totals`).
+  The read-only Holdings page is meant to grow into a superset of the
+  Accounts + Assets pages before those are retired.
 - Sequence-aware fingerprinting for transaction dedup.
 - SQLite runs with `foreign_keys=ON`; snapshot FKs cascade, ownership refs
   (payment_account_ref, auto_account_ref, asset_ref) do not.

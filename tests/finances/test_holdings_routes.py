@@ -64,11 +64,23 @@ def test_holdings_view_returns_200_with_columns(client):
     assert resp.status_code == 200
     body = resp.get_data(as_text=True)
     # Sheet column headers (not a bespoke top panel).
-    for header in ("Kind", "Institution", "Tier", "Amount", "Equity", "LTV"):
+    for header in ("Kind", "Institution", "Amount", "Equity", "LTV"):
         assert header in body
     # Both holdings render.
     assert "Checking" in body
     assert "Visa" in body
+
+
+def test_holdings_view_has_no_tier_surface(client):
+    """Tier is derived from type and drives (deferred) totals only — it should
+    not appear as a column header or a filter."""
+    resp = client.get("/s/finances/holdings")
+    body = resp.get_data(as_text=True)
+    rows = _rows_region(body)
+    # No 'Tier' column header, no per-row tier label, no tier filter field.
+    assert ">Tier<" not in body
+    assert "Semi-liquid" not in rows
+    assert 'name="tier"' not in body
 
 
 def test_holdings_view_shows_bottom_total(client):
@@ -89,9 +101,18 @@ def test_holdings_view_reuses_shared_filter_bar(client):
     assert "Reset" in body
 
 
-def test_holdings_view_tier_filter_returns_200(client):
-    resp = client.get("/s/finances/holdings?tier=liquid")
+def test_holdings_view_type_filter(client):
+    # The Type filter offers the present types and narrows to the match.
+    resp = client.get("/s/finances/holdings")
+    body = resp.get_data(as_text=True)
+    assert 'name="type"' in body  # Type filter control present
+    assert 'value="credit_card"' in body  # a present type is offered
+
+    resp = client.get("/s/finances/holdings?type=credit_card")
     assert resp.status_code == 200
+    rows = _rows_region(resp.get_data(as_text=True))
+    assert "Visa" in rows
+    assert "Checking" not in rows
 
 
 def test_holdings_view_balance_filter_liabilities(client):

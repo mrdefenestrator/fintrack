@@ -10,7 +10,7 @@
     {% call fb.filter_bar(active_count=active_count,
         reset_url=url_for('holdings.holdings_view', filename=filename, edit=1 if edit_mode else none),
         use_htmx=false) %}
-        {{ fc.multi_select('tier', 'Tier', tier_opts, form_id='holdings-filter-form') }}
+        {{ fc.multi_select('type', 'Type', type_opts, form_id='holdings-filter-form') }}
         {{ fc.multi_select('balance', 'Balance', balance_opts, form_id='holdings-filter-form') }}
         {{ fc.multi_select('institution', 'Institution', institution_opts, form_id='holdings-filter-form') }}
     {% endcall %}

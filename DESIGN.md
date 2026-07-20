@@ -230,8 +230,11 @@ Navigation is two-tier and task-oriented: a primary row with two group tabs —
 (Transactions · Trends · Merchants) — and a secondary row showing the active
 group's sub-tabs. Accounts is the landing page; each group tab remembers its
 last-visited sub-tab for the session (sessionStorage, `web/static/js/nav.js`).
-Holdings is a read-only unified view (accounts + assets) and is intended to
-eventually subsume the separate Accounts and Assets pages.
+Holdings unifies the Accounts and Assets sheets into one dense, spreadsheet-
+style view — it combines them and keeps their columns (dropping only genuinely
+redundant ones), rather than slimming them down, and is intended to eventually
+subsume both. Information density is a deliberate feature of these sheets, not a
+problem to design around.
 Import is an icon button in the header rather than a tab, and the edit-mode
 lock is functional only on the pages that honor it (Accounts, Budget,
 Assets — muted elsewhere). The old `/s/<snapshot>/status` dashboard was

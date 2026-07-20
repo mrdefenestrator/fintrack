@@ -91,8 +91,22 @@ degrades to a warning without it).
   with no per-holding override; the type→tier maps in `fintrack/core/types.py`
   are the single source of truth (add new types there, not ad-hoc). Tier
   totals nest: liquid ⊂ investable ⊂ net worth (`calculations.tiered_totals`).
-  The read-only Holdings page is meant to grow into a superset of the
-  Accounts + Assets pages before those are retired.
+- **Spreadsheet-first UI.** The finances sheets (accounts, budget, assets, and
+  the unified holdings view) are intentionally dense, wide, editable tables —
+  the spreadsheet model is a feature, not a problem to design around. Columns
+  exist to expose known data for entry, editing, and checking completeness/
+  consistency, so favor showing fields over hiding them behind expand/detail
+  drawers. Information density is not a concern and horizontal scroll is fine;
+  be prudent about what data is *relevant*, not about decluttering.
+- **Holdings direction.** Holdings unifies the Accounts and Assets sheets into
+  one spreadsheet for simplicity — it *combines* them and keeps their columns
+  (dropping a column only when genuinely redundant, e.g. a value derivable from
+  another), rather than slimming them down. It is meant to become a superset of
+  both and eventually retire them. Both the web GUI and the Python CLI are
+  first-class; keep them at parity.
+- Core product goals the UI serves: current liquid holdings, net worth,
+  budgeting, spending tracking, deviation from budget, and (eventually)
+  net-worth projections.
 - Sequence-aware fingerprinting for transaction dedup.
 - SQLite runs with `foreign_keys=ON`; snapshot FKs cascade, ownership refs
   (payment_account_ref, auto_account_ref, asset_ref) do not.

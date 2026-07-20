@@ -1,6 +1,7 @@
 """Tests for the holdings blueprint (web/routes/holdings.py): a read-only
-unified view of accounts + asset_entries with liquidity-tier totals,
-secured-pair equity, and filter query params.
+unified view of accounts + asset_entries, reusing the shared sheet chrome
+(filter bar, total row) with liquidity-tier columns, a bottom net-worth total,
+secured-pair equity folded onto the loan row, and multi-select filters.
 """
 
 import pytest
@@ -23,7 +24,7 @@ def db_engine():
 @pytest.fixture()
 def client(db_engine):
     """Flask test client with a 'finances' snapshot, a checking account, and
-    a credit card, so the liquid tier total is checking - cc = 600."""
+    a credit card, so the net-worth total is checking - cc = 600."""
     from web.app import create_app
 
     with db_engine.connect() as conn:
@@ -58,33 +59,48 @@ def client(db_engine):
         yield c
 
 
-def test_holdings_view_returns_200_with_tier_labels(client):
+def test_holdings_view_returns_200_with_columns(client):
     resp = client.get("/s/finances/holdings")
     assert resp.status_code == 200
     body = resp.get_data(as_text=True)
-    assert "Liquid" in body
-    assert "Investable" in body
-    assert "Net worth" in body
+    # Sheet column headers (not a bespoke top panel).
+    for header in ("Kind", "Institution", "Tier", "Amount", "Equity", "LTV"):
+        assert header in body
+    # Both holdings render.
+    assert "Checking" in body
+    assert "Visa" in body
 
 
-def test_holdings_view_shows_liquid_total(client):
+def test_holdings_view_shows_bottom_total(client):
     resp = client.get("/s/finances/holdings")
-    assert resp.status_code == 200
     body = resp.get_data(as_text=True)
-    # checking (+1000) + credit card (-400) = 600
+    # Pinned total row (class picked up by sortable.js) summing displayed rows:
+    # checking (+1000) + credit card (-400) = 600.
+    assert "total-row" in body
     assert "600" in body
+
+
+def test_holdings_view_reuses_shared_filter_bar(client):
+    resp = client.get("/s/finances/holdings")
+    body = resp.get_data(as_text=True)
+    # Shared filter-bar chrome + multi-select dropdowns, not bespoke pills.
+    assert "holdings-filter-form" in body
+    assert "filter-dropdown-trigger" in body
+    assert "Reset" in body
 
 
 def test_holdings_view_tier_filter_returns_200(client):
     resp = client.get("/s/finances/holdings?tier=liquid")
     assert resp.status_code == 200
-    body = resp.get_data(as_text=True)
-    assert "Clear filters" in body
 
 
-def test_holdings_view_liabilities_filter_returns_200(client):
-    resp = client.get("/s/finances/holdings?kind=liabilities")
+def test_holdings_view_balance_filter_liabilities(client):
+    # balance=liability keeps only negative-contribution holdings (the card).
+    resp = client.get("/s/finances/holdings?balance=liability")
     assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    assert "Visa" in body
+    assert "Checking" not in _rows_region(body)
 
 
 def test_holdings_view_institution_filter_returns_200(client):
@@ -92,7 +108,7 @@ def test_holdings_view_institution_filter_returns_200(client):
     assert resp.status_code == 200
 
 
-def test_holdings_view_shows_equity_section(client, db_engine):
+def test_holdings_view_folds_equity_onto_loan_row(client, db_engine):
     with db_engine.connect() as conn:
         asset_id = add_asset_entry(
             conn,
@@ -114,6 +130,15 @@ def test_holdings_view_shows_equity_section(client, db_engine):
     resp = client.get("/s/finances/holdings")
     assert resp.status_code == 200
     body = resp.get_data(as_text=True)
-    assert "Equity" in body
     assert "Home" in body
     assert "Mortgage" in body
+    # Equity (400000 - 300000) and LTV (300000/400000 = 75.0%) fold into the row.
+    assert "100,000" in body
+    assert "75.0%" in body
+
+
+def _rows_region(body: str) -> str:
+    """The <tbody> slice, so header/filter labels don't cause false matches."""
+    start = body.find("<tbody")
+    end = body.find("</tbody>")
+    return body[start:end] if start != -1 and end != -1 else body

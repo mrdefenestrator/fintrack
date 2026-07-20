@@ -1,12 +1,16 @@
 """Holdings blueprint - read-only unified view of accounts + assets/debts.
 
-Lists every holding (account or asset_entries row) together with its
-liquidity tier and signed net-worth contribution. Filtering only — editing
-stays on the existing Accounts/Assets pages.
+Lists every holding (account or asset_entries row) together with its liquidity
+tier and signed net-worth contribution, reusing the shared spreadsheet chrome
+(sheet table, filter bar, total row). Filtering only — editing stays on the
+existing Accounts/Assets pages for now.
 """
 
-from flask import Blueprint, render_template, request, url_for
+from decimal import Decimal
 
+from flask import Blueprint, render_template, request
+
+from fintrack.core.formatting import fmt_money
 from fintrack.core.types import (
     ACCOUNT_TYPE_OPTIONS,
     ASSET_TYPE_OPTIONS,
@@ -18,19 +22,25 @@ from .common import get_common_context, validate_snapshot
 
 holdings_bp = Blueprint("holdings", __name__, url_prefix="/s")
 
-# Combined {value: label} lookup for account and asset-entry types, used to
-# show a friendly "Type" column across both domains.
+# Combined {value: label} lookup for account and asset-entry types.
 _TYPE_LABELS: dict[str, str] = {
     **dict(ACCOUNT_TYPE_OPTIONS),
     **dict(ASSET_TYPE_OPTIONS),
 }
 
-# Friendly labels for liquidity tiers.
 TIER_LABELS: dict[str, str] = {
     "liquid": "Liquid",
     "semi_liquid": "Semi-liquid",
     "illiquid": "Illiquid",
 }
+
+# The two "balance side" filter buckets, keyed by the sign of a holding's
+# contribution (assets add to net worth, liabilities subtract).
+_BALANCE_LABELS: dict[str, str] = {"asset": "Assets", "liability": "Liabilities"}
+
+# Column order for the holdings sheet. Amount/Equity/LTV are right-aligned.
+_HEADERS = ["Kind", "Institution", "Name", "Type", "Tier", "Amount", "Equity", "LTV"]
+_RIGHT_ALIGN_COLS = [5, 6, 7]
 
 
 def _type_label(value: str | None) -> str:
@@ -39,25 +49,31 @@ def _type_label(value: str | None) -> str:
     return _TYPE_LABELS.get(value, value)
 
 
-def _account_row(account: dict) -> dict:
-    return {
-        "source": "account",
-        "institution": account.get("institution") or "",
-        "name": account.get("name") or "",
-        "type_label": _type_label(account.get("type")),
-        "tier": calculations.account_tier(account),
-        "amount": calculations.account_contribution(account),
-    }
+def _fmt_ltv(ltv: Decimal | None) -> str:
+    return f"{ltv * 100:.1f}%" if ltv is not None else "—"
 
 
-def _asset_row(entry: dict) -> dict:
+def _holding(kind_label: str, institution: str, name: str, type_value, tier, amount):
+    """Build one holding record: display cells + sort/filter metadata."""
+    is_liability = amount < 0
     return {
-        "source": "debt" if entry.get("kind") == "debt" else "asset",
-        "institution": entry.get("institution") or "",
-        "name": entry.get("name") or "",
-        "type_label": _type_label(entry.get("type")),
-        "tier": calculations.asset_tier(entry),
-        "amount": calculations.asset_contribution(entry),
+        "kind": kind_label,
+        "institution": institution,
+        "name": name,
+        "tier": tier,
+        "balance_side": "liability" if is_liability else "asset",
+        "amount": amount,
+        "cells": [
+            kind_label,
+            institution or "—",
+            name or "—",
+            _type_label(type_value) or "—",
+            TIER_LABELS.get(tier, tier),
+            fmt_money(amount),
+            "—",  # Equity — filled in for secured loan rows below
+            "—",  # LTV
+        ],
+        "accent": "border-l-rose-400" if is_liability else "border-l-emerald-400",
     }
 
 
@@ -71,75 +87,86 @@ def holdings_view(filename):
     accounts = ctx["accounts"]
     assets = ctx["assets"]
 
-    all_rows = [_account_row(a) for a in accounts] + [_asset_row(e) for e in assets]
+    # Equity/LTV for secured debts, keyed by the debt entry's identity so we can
+    # fold it into that loan's row (per design: equity shows on the loan row).
+    equity_by_debt = {id(p["debt"]): p for p in calculations.equity_pairs(assets)}
 
-    totals = calculations.tiered_totals(accounts, assets)
-    equity = calculations.equity_pairs(assets)
-
-    institutions = sorted({r["institution"] for r in all_rows if r["institution"]})
-
-    tier_filter = request.args.get("tier") or ""
-    if tier_filter not in LIQUIDITY_TIERS:
-        tier_filter = ""
-    liabilities_only = request.args.get("kind") == "liabilities"
-    institution_filter = request.args.get("institution") or ""
-
-    rows = all_rows
-    if tier_filter:
-        rows = [r for r in rows if r["tier"] == tier_filter]
-    if liabilities_only:
-        rows = [r for r in rows if r["amount"] < 0]
-    if institution_filter:
-        rows = [r for r in rows if r["institution"] == institution_filter]
-
-    def _href(**overrides):
-        params = {
-            "tier": tier_filter,
-            "kind": "liabilities" if liabilities_only else "",
-            "institution": institution_filter,
-        }
-        params.update(overrides)
-        params = {k: v for k, v in params.items() if v}
-        if edit_mode:
-            params["edit"] = "1"
-        return url_for("holdings.holdings_view", filename=filename, **params)
-
-    tier_chips = [
-        {
-            "value": tier,
-            "label": TIER_LABELS[tier],
-            "active": tier_filter == tier,
-            "href": _href(tier="" if tier_filter == tier else tier),
-        }
-        for tier in LIQUIDITY_TIERS
+    rows = [
+        _holding(
+            "Account",
+            a.get("institution") or "",
+            a.get("name") or "",
+            a.get("type"),
+            calculations.account_tier(a),
+            calculations.account_contribution(a),
+        )
+        for a in accounts
     ]
-    liabilities_chip = {
-        "label": "Liabilities only",
-        "active": liabilities_only,
-        "href": _href(kind="" if liabilities_only else "liabilities"),
-    }
-    institution_chips = [
-        {
-            "value": inst,
-            "label": inst,
-            "active": institution_filter == inst,
-            "href": _href(institution="" if institution_filter == inst else inst),
-        }
-        for inst in institutions
-    ]
+    for e in assets:
+        kind_label = "Debt" if e.get("kind") == "debt" else "Asset"
+        row = _holding(
+            kind_label,
+            e.get("institution") or "",
+            e.get("name") or "",
+            e.get("type"),
+            calculations.asset_tier(e),
+            calculations.asset_contribution(e),
+        )
+        pair = equity_by_debt.get(id(e))
+        if pair is not None:
+            row["cells"][6] = fmt_money(pair["equity"])
+            row["cells"][7] = _fmt_ltv(pair["ltv"])
+        rows.append(row)
 
-    has_filters = bool(tier_filter or liabilities_only or institution_filter)
+    institutions = sorted({r["institution"] for r in rows if r["institution"]})
 
-    ctx["rows"] = rows
-    ctx["totals"] = totals
-    ctx["equity"] = equity
-    ctx["tier_chips"] = tier_chips
-    ctx["liabilities_chip"] = liabilities_chip
-    ctx["institution_chips"] = institution_chips
-    ctx["has_filters"] = has_filters
-    ctx["clear_filters_href"] = url_for(
-        "holdings.holdings_view", filename=filename, edit=1 if edit_mode else None
+    # --- filters (multi-select, form-submit; mirrors the Assets sheet) ---
+    tier_sel = [t for t in request.args.getlist("tier") if t in LIQUIDITY_TIERS]
+    balance_sel = [b for b in request.args.getlist("balance") if b in _BALANCE_LABELS]
+    inst_sel = [i for i in request.args.getlist("institution") if i in institutions]
+
+    filtered = rows
+    if tier_sel:
+        filtered = [r for r in filtered if r["tier"] in tier_sel]
+    if balance_sel:
+        filtered = [r for r in filtered if r["balance_side"] in balance_sel]
+    if inst_sel:
+        filtered = [r for r in filtered if r["institution"] in inst_sel]
+
+    # A filter group only "counts" as active when it's a proper subset (matching
+    # the Assets sheet: selecting every option is the same as no filter).
+    def _active(sel, total):
+        return len(sel) if 0 < len(sel) < total else 0
+
+    active_count = (
+        _active(tier_sel, len(LIQUIDITY_TIERS))
+        + _active(balance_sel, len(_BALANCE_LABELS))
+        + _active(inst_sel, len(institutions))
     )
-    ctx["tier_labels"] = TIER_LABELS
 
+    def _opts(values_labels, selected):
+        return [
+            {"value": v, "display": lbl, "checked": v in selected}
+            for v, lbl in values_labels
+        ]
+
+    # Bottom total = sum of the displayed rows (equals net worth with no filter;
+    # becomes the tier subtotal when filtered by tier).
+    total = sum((r["amount"] for r in filtered), Decimal("0"))
+    total_cells = ["Total", "", "", "", "", fmt_money(total), "", ""]
+
+    ctx.update(
+        {
+            "headers": _HEADERS,
+            "right_align_cols": _RIGHT_ALIGN_COLS,
+            "holdings_rows": filtered,
+            "total_cells": total_cells,
+            "active_count": active_count,
+            "tier_opts": _opts(
+                [(t, TIER_LABELS[t]) for t in LIQUIDITY_TIERS], tier_sel
+            ),
+            "balance_opts": _opts(list(_BALANCE_LABELS.items()), balance_sel),
+            "institution_opts": _opts([(i, i) for i in institutions], inst_sel),
+        }
+    )
     return render_template("holdings.html", **ctx)

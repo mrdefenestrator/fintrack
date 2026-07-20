@@ -2,100 +2,42 @@
 {% block title %}Holdings — fintrack{% endblock %}
 {% block content %}
 {% import "partials/sheet.html" as sheet %}
+{% import "partials/filter_controls.html" as fc %}
+{% import "partials/sheet_filter_bar.html" as fb %}
 
-<div class="shrink-0 px-4 py-3 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-    <div class="flex flex-wrap gap-6">
-        <div>
-            <div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Liquid</div>
-            <div class="text-lg font-semibold tabular-nums {% if totals.liquid | display_is_negative %}text-red-600 dark:text-red-400{% endif %}">
-                {{ totals.liquid | fmt_money }}</div>
-        </div>
-        <div>
-            <div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Investable</div>
-            <div class="text-lg font-semibold tabular-nums {% if totals.investable | display_is_negative %}text-red-600 dark:text-red-400{% endif %}">
-                {{ totals.investable | fmt_money }}</div>
-        </div>
-        <div>
-            <div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Net worth</div>
-            <div class="text-lg font-semibold tabular-nums {% if totals.net_worth | display_is_negative %}text-red-600 dark:text-red-400{% endif %}">
-                {{ totals.net_worth | fmt_money }}</div>
-        </div>
-    </div>
-</div>
-
-{% if equity %}
-<div class="shrink-0 px-4 py-3 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-    <div class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">Equity</div>
-    <div class="table-scroll-container rounded border border-gray-200 dark:border-gray-700">
-        <table class="w-full text-sm border-collapse bg-white dark:bg-gray-800">
-            <thead>
-                <tr class="bg-gray-100 dark:bg-gray-700 border-b border-gray-300 dark:border-gray-600">
-                    <th class="px-1.5 py-0.5 text-left font-medium text-gray-800 dark:text-gray-100 border-r border-gray-200 dark:border-gray-600">Asset</th>
-                    <th class="px-1.5 py-0.5 text-right font-medium text-gray-800 dark:text-gray-100 border-r border-gray-200 dark:border-gray-600">Value</th>
-                    <th class="px-1.5 py-0.5 text-left font-medium text-gray-800 dark:text-gray-100 border-r border-gray-200 dark:border-gray-600">Loan</th>
-                    <th class="px-1.5 py-0.5 text-right font-medium text-gray-800 dark:text-gray-100 border-r border-gray-200 dark:border-gray-600">Balance</th>
-                    <th class="px-1.5 py-0.5 text-right font-medium text-gray-800 dark:text-gray-100 border-r border-gray-200 dark:border-gray-600">Equity</th>
-                    <th class="px-1.5 py-0.5 text-right font-medium text-gray-800 dark:text-gray-100">LTV</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for pair in equity %}
-                <tr class="border-b border-gray-200 dark:border-b-gray-700 last:border-b-0 hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                    <td class="px-1.5 py-0.5 border-r border-gray-100 dark:border-gray-700">{{ pair.asset.name }}</td>
-                    <td class="px-1.5 py-0.5 text-right tabular-nums border-r border-gray-100 dark:border-gray-700">{{ pair.asset_subtotal | fmt_money }}</td>
-                    <td class="px-1.5 py-0.5 border-r border-gray-100 dark:border-gray-700">{{ pair.debt.name }}</td>
-                    <td class="px-1.5 py-0.5 text-right tabular-nums border-r border-gray-100 dark:border-gray-700">{{ pair.debt_subtotal | fmt_money }}</td>
-                    <td class="px-1.5 py-0.5 text-right tabular-nums border-r border-gray-100 dark:border-gray-700 {% if pair.equity | display_is_negative %}text-red-600 dark:text-red-400{% endif %}">{{ pair.equity | fmt_money }}</td>
-                    <td class="px-1.5 py-0.5 text-right tabular-nums">{{ "%.1f%%" | format(pair.ltv * 100) if pair.ltv is not none else "—" }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-</div>
-{% endif %}
-
-<div class="shrink-0 px-4 py-2 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex flex-wrap items-center gap-2">
-    {% for chip in tier_chips %}
-    <a href="{{ chip.href }}"
-        class="px-2 py-0.5 rounded-full text-xs font-medium border {% if chip.active %}bg-blue-600 text-white border-blue-600{% else %}bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600 hover:bg-gray-200 dark:hover:bg-gray-600{% endif %}">
-        {{ chip.label }}</a>
-    {% endfor %}
-    <a href="{{ liabilities_chip.href }}"
-        class="px-2 py-0.5 rounded-full text-xs font-medium border {% if liabilities_chip.active %}bg-blue-600 text-white border-blue-600{% else %}bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600 hover:bg-gray-200 dark:hover:bg-gray-600{% endif %}">
-        {{ liabilities_chip.label }}</a>
-    {% if institution_chips %}
-    <span class="text-gray-300 dark:text-gray-600">|</span>
-    {% for chip in institution_chips %}
-    <a href="{{ chip.href }}"
-        class="px-2 py-0.5 rounded-full text-xs font-medium border {% if chip.active %}bg-blue-600 text-white border-blue-600{% else %}bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600 hover:bg-gray-200 dark:hover:bg-gray-600{% endif %}">
-        {{ chip.label }}</a>
-    {% endfor %}
-    {% endif %}
-    {% if has_filters %}
-    <span class="text-gray-300 dark:text-gray-600">|</span>
-    <a href="{{ clear_filters_href }}" class="text-xs font-medium text-blue-600 dark:text-blue-400 hover:underline">Clear filters</a>
-    {% endif %}
-</div>
+<form id="holdings-filter-form" method="get" action="{{ url_for('holdings.holdings_view', filename=filename) }}" class="shrink-0">
+    {% if edit_mode %}<input type="hidden" name="edit" value="1">{% endif %}
+    {% call fb.filter_bar(active_count=active_count,
+        reset_url=url_for('holdings.holdings_view', filename=filename, edit=1 if edit_mode else none),
+        use_htmx=false) %}
+        {{ fc.multi_select('tier', 'Tier', tier_opts, form_id='holdings-filter-form') }}
+        {{ fc.multi_select('balance', 'Balance', balance_opts, form_id='holdings-filter-form') }}
+        {{ fc.multi_select('institution', 'Institution', institution_opts, form_id='holdings-filter-form') }}
+    {% endcall %}
+</form>
 
 <div class="table-scroll-container rounded-b-lg border-l border-b border-r border-gray-300 dark:border-gray-600 shadow-sm" data-sheet-scroll>
-<table class="w-full text-sm border-collapse bg-white dark:bg-gray-800">
-    {{ sheet.thead(["Source", "Institution", "Name", "Type", "Tier", "Amount"], [5]) }}
+<table class="editable-table sortable w-full text-sm border-collapse bg-white dark:bg-gray-800">
+    {{ sheet.thead(headers, right_align_cols) }}
     <tbody>
-        {% for row in rows %}
-        <tr class="{{ sheet.row_class() }}">
-            <td class="{{ sheet.cell_class() }}">{{ {"account": "Account", "asset": "Asset", "debt": "Debt"}[row.source] }}</td>
-            <td class="{{ sheet.cell_class() }}">{{ row.institution }}</td>
-            <td class="{{ sheet.cell_class() }}">{{ row.name }}</td>
-            <td class="{{ sheet.cell_class() }}">{{ row.type_label }}</td>
-            <td class="{{ sheet.cell_class() }}">{{ tier_labels[row.tier] }}</td>
-            <td class="{{ sheet.cell_class('text-right tabular-nums', sheet.neg(row.amount | display_is_negative)) }}">{{ row.amount | fmt_money }}</td>
+        {% for row in holdings_rows %}
+        <tr class="{{ sheet.row_class(row.accent) }}">
+            {% for cell in row.cells %}
+            <td class="{{ sheet.cell_class('text-right tabular-nums' if loop.index0 in right_align_cols else '', sheet.neg(cell | display_is_negative)) }}">{{ cell }}</td>
+            {% endfor %}
         </tr>
         {% else %}
         <tr>
-            <td colspan="6" class="px-1.5 py-2 text-center text-gray-500 dark:text-gray-400">No holdings match the current filters.</td>
+            <td colspan="{{ headers | length }}" class="px-1.5 py-2 text-center text-gray-500 dark:text-gray-400">No holdings match the current filters.</td>
         </tr>
         {% endfor %}
+        {% if holdings_rows %}
+        <tr class="total-row bg-gray-100 dark:bg-gray-700 border-t-2 border-gray-300 dark:border-gray-600 font-medium">
+            {% for cell in total_cells %}
+            <td class="{{ sheet.cell_class('text-right tabular-nums' if loop.index0 in right_align_cols else '', sheet.neg(cell | display_is_negative)) }}">{{ cell }}</td>
+            {% endfor %}
+        </tr>
+        {% endif %}
     </tbody>
 </table>
 </div>

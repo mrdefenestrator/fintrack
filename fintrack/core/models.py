@@ -204,6 +204,9 @@ asset_entries = Table(
         nullable=False,
     ),
     Column("kind", String, nullable=False),
+    # Liquidity-tier subtype (see fintrack.core.types.ASSET_TYPE_TIER). Nullable
+    # for legacy rows; classification falls back to DEFAULT_TIER when unset.
+    Column("type", String, nullable=True),
     Column("name", String, nullable=False),
     Column("institution", String, nullable=True),
     Column("value", Numeric(14, 2), nullable=True),

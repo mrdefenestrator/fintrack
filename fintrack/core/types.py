@@ -42,6 +42,85 @@ ACCOUNT_TYPE_OPTIONS: list[tuple[str, str]] = [
 
 ACCOUNT_TYPE_VALUES: list[str] = [value for value, _ in ACCOUNT_TYPE_OPTIONS]
 
+# ---------------------------------------------------------------------------
+# Liquidity tiers (unified holdings taxonomy)
+# ---------------------------------------------------------------------------
+#
+# Every holding (account or asset/debt) falls into exactly one liquidity tier,
+# determined *solely* by its type — there is no per-holding override. The three
+# tiers are nested for cumulative totals:
+#
+#     liquid  ⊂  investable  ⊂  net_worth
+#
+#   - liquid     = spendable now: cash accounts minus credit-card balances.
+#   - investable = liquid + semi-liquid (brokerage, crypto, HSA, "other").
+#   - net_worth  = investable + illiquid (retirement, property, loans).
+#
+# Contributions are signed (assets add, liabilities subtract), so each tier
+# total is a signed prefix sum over the tier ordering.
+LiquidityTier = Literal["liquid", "semi_liquid", "illiquid"]
+
+# Ordered from most to least liquid; the cumulative totals walk this order.
+LIQUIDITY_TIERS: list[LiquidityTier] = ["liquid", "semi_liquid", "illiquid"]
+
+# Account type -> liquidity tier. Credit cards sit in the liquid tier because
+# their (negative) balance nets against spendable cash; loans sit in illiquid.
+ACCOUNT_TYPE_TIER: dict[str, LiquidityTier] = {
+    "checking": "liquid",
+    "savings": "liquid",
+    "gift_card": "liquid",
+    "wallet": "liquid",
+    "digital_wallet": "liquid",
+    "credit_card": "liquid",
+    "other": "semi_liquid",
+    "loan": "illiquid",
+}
+
+# Asset-entry types (the asset_entries.type column). Subtypes the old bare
+# asset/debt `kind` so assets can be classified into liquidity tiers. `loan`
+# is the sole liability type (kind == "debt"); the rest are asset kinds.
+AssetType = Literal[
+    "brokerage",
+    "crypto",
+    "hsa",
+    "retirement",
+    "real_estate",
+    "vehicle",
+    "other_asset",
+    "loan",
+]
+
+# Canonical, ordered (value, display label) list of asset-entry types — the
+# single source of truth for asset-type selects/validation across CLI and web.
+ASSET_TYPE_OPTIONS: list[tuple[str, str]] = [
+    ("brokerage", "Brokerage"),
+    ("crypto", "Crypto"),
+    ("hsa", "HSA"),
+    ("retirement", "Retirement"),
+    ("real_estate", "Real Estate"),
+    ("vehicle", "Vehicle"),
+    ("other_asset", "Other Asset"),
+    ("loan", "Loan"),
+]
+
+ASSET_TYPE_VALUES: list[str] = [value for value, _ in ASSET_TYPE_OPTIONS]
+
+# Asset type -> liquidity tier.
+ASSET_TYPE_TIER: dict[str, LiquidityTier] = {
+    "brokerage": "semi_liquid",
+    "crypto": "semi_liquid",
+    "hsa": "semi_liquid",
+    "retirement": "illiquid",
+    "real_estate": "illiquid",
+    "vehicle": "illiquid",
+    "other_asset": "illiquid",
+    "loan": "illiquid",
+}
+
+# Default tier for a holding whose type is unknown/unset: illiquid, so it still
+# counts toward net worth but never inflates the spendable/investable totals.
+DEFAULT_TIER: LiquidityTier = "illiquid"
+
 # Income types enum
 IncomeType = Literal["salary", "refund", "bonus", "remittance"]
 
@@ -95,6 +174,7 @@ class AssetEntry(TypedDict, total=False):
     """Unified asset/debt entry in finances data."""
 
     kind: Literal["asset", "debt"]  # Required - asset or debt
+    type: AssetType  # Liquidity-tier subtype (brokerage, retirement, loan, …)
     name: str  # Required - display name
     id: int  # For asset entries - unique identifier; referenced by debt assetRef
     institution: str  # Optional provider/lender name

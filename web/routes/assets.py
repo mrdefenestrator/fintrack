@@ -178,7 +178,7 @@ def add(filename: str):
             value = float(value_raw) if value_raw else 0.0
         except ValueError:
             value = 0.0
-        entry = {"kind": "asset", "name": name, "value": value}
+        entry = {"kind": "asset", "name": name, "value": value, "type": "other_asset"}
         for key in ("institution", "source"):
             val = request.form.get(key, "").strip()
             if val:
@@ -190,7 +190,7 @@ def add(filename: str):
             balance = float(balance_raw) if balance_raw else 0.0
         except ValueError:
             balance = 0.0
-        entry = {"kind": "debt", "name": name, "balance": balance}
+        entry = {"kind": "debt", "name": name, "balance": balance, "type": "loan"}
         for key in ("institution", "assetRef", "interestRate"):
             val = request.form.get(key, "").strip()
             if key == "assetRef" and val:

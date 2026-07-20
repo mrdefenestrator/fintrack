@@ -528,3 +528,25 @@ def test_load_finances_from_db(conn):
     # No internal _db_id keys exposed
     for entry in data["budget"] + data["assets"]:
         assert "_db_id" not in entry
+
+
+def test_asset_entry_type_round_trip():
+    """The liquidity-tier `type` persists and can be updated."""
+    engine = create_engine("sqlite:///:memory:", future=True)
+    init_db(engine)
+    with engine.connect() as c:
+        snap_id = create_snapshot(c, "s")
+        add_asset_entry(
+            c, snap_id, {"kind": "asset", "type": "crypto", "name": "BTC", "value": 100}
+        )
+        add_asset_entry(
+            c,
+            snap_id,
+            {"kind": "debt", "type": "loan", "name": "Mortgage", "balance": 50},
+        )
+        by_name = {e["name"]: e for e in get_asset_entries(c, snap_id)}
+        assert by_name["BTC"]["type"] == "crypto"
+        assert by_name["Mortgage"]["type"] == "loan"
+        # BTC is the first entry (sort_order); reclassify it.
+        update_asset_entry(c, snap_id, 0, {"type": "retirement"})
+        assert get_asset_entries(c, snap_id)[0]["type"] == "retirement"

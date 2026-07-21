@@ -564,16 +564,18 @@ def _indexed_by_kind(all_entries: list, kind: str, index: int, label: str):
     "--type",
     "asset_type",
     type=click.Choice(_ASSET_ONLY_TYPES),
-    default="other_asset",
-    show_default=True,
-    help="Liquidity-tier subtype (brokerage/crypto/hsa are semi-liquid).",
+    default=None,
+    help="Holding type (e.g. brokerage, retirement, real_estate). "
+    "Left unclassified if omitted — there is no catch-all type.",
 )
 @click.option("--quantity", type=float, default=None)
 @click.option("--source", default=None)
 @click.option("--institution", default=None)
 @pass_cli
 def assets_add(cli, name, value, asset_type, quantity, source, institution):
-    asset = {"kind": "asset", "name": name, "value": value, "type": asset_type}
+    asset = {"kind": "asset", "name": name, "value": value}
+    if asset_type is not None:
+        asset["type"] = asset_type
     if quantity is not None:
         asset["quantity"] = quantity
     if source:

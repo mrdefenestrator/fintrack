@@ -97,8 +97,9 @@ def test_net_nonliquid_paired_with_debt_quantity():
 def test_account_tier_by_type():
     assert account_tier({"type": "checking"}) == "liquid"
     assert account_tier({"type": "savings"}) == "liquid"
+    assert account_tier({"type": "wallet"}) == "liquid"
+    assert account_tier({"type": "digital_wallet"}) == "liquid"
     assert account_tier({"type": "credit_card"}) == "liquid"
-    assert account_tier({"type": "other"}) == "semi_liquid"
     assert account_tier({"type": "loan"}) == "illiquid"
 
 
@@ -109,16 +110,28 @@ def test_account_tier_unknown_defaults_illiquid():
 
 def test_asset_tier_by_type():
     assert asset_tier({"type": "brokerage"}) == "semi_liquid"
-    assert asset_tier({"type": "crypto"}) == "semi_liquid"
     assert asset_tier({"type": "hsa"}) == "semi_liquid"
     assert asset_tier({"type": "retirement"}) == "illiquid"
     assert asset_tier({"type": "real_estate"}) == "illiquid"
+    assert asset_tier({"type": "vehicle"}) == "illiquid"
     assert asset_tier({"type": "loan"}) == "illiquid"
 
 
 def test_asset_tier_unknown_defaults_illiquid():
-    """Legacy asset rows without a type still count toward net worth only."""
+    """Unclassified asset rows (type NULL) still count toward net worth only."""
     assert asset_tier({"kind": "asset"}) == "illiquid"
+
+
+def test_symbol_unit_caps_liquid_at_semi_liquid():
+    """A non-USD symbol unit caps an otherwise-liquid holding at semi-liquid
+    (crypto in a digital wallet); USD units are unaffected, and illiquid stays
+    illiquid."""
+    # digital_wallet is liquid in USD...
+    assert asset_tier({"type": "digital_wallet", "unit": "USD"}) == "liquid"
+    # ...but semi-liquid when denominated in a symbol (a crypto wallet).
+    assert asset_tier({"type": "digital_wallet", "unit": "BTC"}) == "semi_liquid"
+    # The cap only lifts liquid->semi; it never makes illiquid more liquid.
+    assert asset_tier({"type": "real_estate", "unit": "BTC"}) == "illiquid"
 
 
 def test_account_contribution_cash():
@@ -149,17 +162,18 @@ def test_contributions_by_tier_groups_correctly():
     accounts = [
         {"type": "checking", "balance": 1000},
         {"type": "credit_card", "balance": -400},
-        {"type": "other", "balance": 50},
         {"type": "loan", "balance": -20000},
     ]
     assets = [
-        {"kind": "asset", "type": "crypto", "value": 500},
+        # a crypto wallet: digital_wallet + BTC unit -> capped to semi-liquid
+        {"kind": "asset", "type": "digital_wallet", "unit": "BTC", "value": 500},
+        {"kind": "asset", "type": "brokerage", "value": 50},
         {"kind": "asset", "type": "retirement", "value": 30000},
         {"kind": "debt", "type": "loan", "balance": 5000},
     ]
     by_tier = contributions_by_tier(accounts, assets)
     assert by_tier["liquid"] == 600  # 1000 - 400
-    assert by_tier["semi_liquid"] == 550  # 50 (other) + 500 (crypto)
+    assert by_tier["semi_liquid"] == 550  # 500 (crypto wallet) + 50 (brokerage)
     assert by_tier["illiquid"] == 5000  # -20000 (loan acct) + 30000 - 5000
 
 

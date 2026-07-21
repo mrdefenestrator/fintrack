@@ -18,10 +18,9 @@ from fintrack.budget.recurrence import (
     subtotal_remainder_of_month as _subtotal_remainder_of_month,
 )
 from fintrack.core.types import (
-    ACCOUNT_TYPE_TIER,
     ACCOUNT_TYPE_VALUES,
-    ASSET_TYPE_TIER,
     DEFAULT_TIER,
+    HOLDING_TYPE_TIER,
     LIQUIDITY_TIERS,
     LiquidityTier,
 )
@@ -207,14 +206,28 @@ def net_nonliquid_total(assets: List[Dict[str, Any]]) -> Decimal:
 #     liquid ⊂ investable ⊂ net_worth.
 
 
+def _tier_for(type_value: Any, unit: Any) -> LiquidityTier:
+    """Liquidity tier from a holding's type, with the non-USD symbol cap.
+
+    Tier is fixed by type (unknown/unset -> DEFAULT_TIER). The one exception:
+    a holding denominated in a symbol (unit set and not "USD") has sale friction
+    and is capped at semi-liquid — so a USD digital wallet stays liquid while a
+    BTC digital wallet drops to semi-liquid.
+    """
+    tier = HOLDING_TYPE_TIER.get(type_value, DEFAULT_TIER)
+    if tier == "liquid" and unit and unit != "USD":
+        return "semi_liquid"
+    return tier
+
+
 def account_tier(account: Dict[str, Any]) -> LiquidityTier:
-    """Liquidity tier of an account, from its type (defaults to DEFAULT_TIER)."""
-    return ACCOUNT_TYPE_TIER.get(account.get("type"), DEFAULT_TIER)
+    """Liquidity tier of an account (accounts are USD, so no symbol cap)."""
+    return _tier_for(account.get("type"), account.get("unit"))
 
 
 def asset_tier(entry: Dict[str, Any]) -> LiquidityTier:
-    """Liquidity tier of an asset/debt entry, from its type (defaults to DEFAULT_TIER)."""
-    return ASSET_TYPE_TIER.get(entry.get("type"), DEFAULT_TIER)
+    """Liquidity tier of an asset/debt entry (symbol-capped by its unit)."""
+    return _tier_for(entry.get("type"), entry.get("unit"))
 
 
 def account_contribution(account: Dict[str, Any]) -> Decimal:

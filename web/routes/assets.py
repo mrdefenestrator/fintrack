@@ -178,7 +178,9 @@ def add(filename: str):
             value = float(value_raw) if value_raw else 0.0
         except ValueError:
             value = 0.0
-        entry = {"kind": "asset", "name": name, "value": value, "type": "other_asset"}
+        # New assets start unclassified (no catch-all type); the user picks a
+        # real type. Debts default to loan (the sole liability type) below.
+        entry = {"kind": "asset", "name": name, "value": value}
         for key in ("institution", "source"):
             val = request.form.get(key, "").strip()
             if val:

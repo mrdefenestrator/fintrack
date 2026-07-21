@@ -16,6 +16,19 @@
     #holdings-tbody tr[data-accent="liability"] > td:first-child {
         border-left: 4px solid #fb7185;   /* rose-400 */
     }
+    /* Actions column sticks to the right edge; data scrolls behind it. The
+       background keeps scrolled cells from showing through, and the left shadow
+       reads as the column floating over the sheet. */
+    #holdings-table .table-actions-cell {
+        position: sticky;
+        right: 0;
+        z-index: 6;
+        box-shadow: -6px 0 6px -6px rgba(0, 0, 0, 0.18);
+    }
+    /* The header actions cell has no bg class of its own; match the header row
+       so scrolled data can't show through it. */
+    #holdings-table thead .table-actions-cell { background: #f3f4f6; }   /* gray-100 */
+    .dark #holdings-table thead .table-actions-cell { background: #374151; }  /* gray-700 */
 </style>
 
 <form id="holdings-filter-form" method="get" action="{{ url_for('holdings.holdings_view', filename=filename) }}" class="shrink-0">
@@ -30,8 +43,8 @@
 </form>
 
 <div class="table-scroll-container rounded-b-lg border-l border-b border-r border-gray-300 dark:border-gray-600 shadow-sm" data-sheet-scroll>
-<table class="editable-table sortable w-full text-sm border-collapse bg-white dark:bg-gray-800">
-    {{ sheet.thead(headers, right_align_cols) }}
+<table id="holdings-table" class="editable-table sortable w-full text-sm border-collapse bg-white dark:bg-gray-800">
+    {{ sheet.thead(headers, right_align_cols, actions_col=edit_mode) }}
     <tbody id="holdings-tbody">
         {% include "partials/holdings_tbody.html" %}
     </tbody>

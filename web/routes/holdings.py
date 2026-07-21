@@ -19,7 +19,11 @@ from decimal import Decimal
 
 from flask import Blueprint, abort, current_app, render_template, request
 
-from fintrack.accounts.repository import get_accounts, update_account
+from fintrack.accounts.repository import (
+    delete_account,
+    get_accounts,
+    update_account,
+)
 from fintrack.core.formatting import fmt_day_ordinal, fmt_money
 from fintrack.core.types import (
     ACCOUNT_TYPE_OPTIONS,
@@ -29,10 +33,14 @@ from fintrack.core.types import (
     HOLDING_TYPE_VALUES,
 )
 from fintrack.networth import calculations
-from fintrack.networth.repository import get_asset_entries, update_asset_entry
+from fintrack.networth.repository import (
+    delete_asset_entry,
+    get_asset_entries,
+    update_asset_entry,
+)
 
 from .common import account_field_editable, get_common_context, validate_snapshot
-from .crud import ACCOUNTS_COERCION, ASSETS_COERCION, coerce_value
+from .crud import ACCOUNTS_COERCION, ASSETS_COERCION, coerce_value, handle_delete
 
 holdings_bp = Blueprint("holdings", __name__, url_prefix="/s")
 
@@ -599,3 +607,48 @@ def update(filename: str, source: str, ref: int):
         updated_ref=ref,
         updated_field=field,
     )
+
+
+@holdings_bp.route("/<filename>/holdings/delete-btn/<source>/<int:ref>")
+def delete_btn(filename: str, source: str, ref: int):
+    """Restore the actions cell (cancel of a delete confirm)."""
+    validate_snapshot(filename)
+    if source not in ("account", "asset"):
+        abort(404)
+    return render_template(
+        "partials/holdings_actions_cell.html",
+        filename=filename,
+        source=source,
+        ref=ref,
+        edit_mode=True,
+    )
+
+
+@holdings_bp.route("/<filename>/holdings/delete-confirm/<source>/<int:ref>")
+def delete_confirm(filename: str, source: str, ref: int):
+    """Swap the actions cell for a Yes/No delete confirmation."""
+    validate_snapshot(filename)
+    if source not in ("account", "asset"):
+        abort(404)
+    return render_template(
+        "partials/holdings_delete_confirm.html",
+        filename=filename,
+        source=source,
+        ref=ref,
+    )
+
+
+@holdings_bp.route("/<filename>/holdings/delete/<source>/<int:ref>", methods=["POST"])
+def delete(filename: str, source: str, ref: int):
+    snapshot_id = validate_snapshot(filename)
+    if source not in ("account", "asset"):
+        abort(404)
+    engine = current_app.config["engine"]
+
+    def _do(conn):
+        if source == "account":
+            delete_account(conn, snapshot_id, ref)
+        else:
+            delete_asset_entry(conn, snapshot_id, ref)
+
+    return handle_delete(_do, engine)

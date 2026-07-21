@@ -383,3 +383,41 @@ def test_holdings_update_invalid_number_is_422(client, db_engine):
         data={"field": "balance", "value": "not-a-number"},
     )
     assert resp.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# Delete (sticky actions column), dispatched by row source.
+# ---------------------------------------------------------------------------
+
+
+def test_holdings_edit_mode_shows_delete_actions(client):
+    resp = client.get("/s/finances/holdings?edit=1")
+    body = resp.get_data(as_text=True)
+    assert "table-actions-cell" in body
+    assert "/holdings/delete-confirm/account/" in body
+
+
+def test_holdings_delete_account_dispatches(client, db_engine):
+    from fintrack.accounts.repository import get_accounts
+
+    acc = _account_by_name(db_engine, "Checking")
+    resp = client.post(f"/s/finances/holdings/delete/account/{acc['id']}")
+    assert resp.status_code == 200
+    assert resp.headers.get("HX-Refresh") == "true"
+    with db_engine.connect() as conn:
+        names = [a["name"] for a in get_accounts(conn, 1)]
+    assert "Checking" not in names
+
+
+def test_holdings_delete_asset_dispatches(client, db_engine):
+    from fintrack.networth.repository import add_asset_entry, get_asset_entries
+
+    with db_engine.connect() as conn:
+        add_asset_entry(conn, 1, {"kind": "asset", "name": "Boat", "value": 5000})
+
+    # First (index 0) asset entry.
+    resp = client.post("/s/finances/holdings/delete/asset/0")
+    assert resp.status_code == 200
+    with db_engine.connect() as conn:
+        names = [e["name"] for e in get_asset_entries(conn, 1)]
+    assert "Boat" not in names

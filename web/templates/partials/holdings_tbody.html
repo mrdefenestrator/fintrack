@@ -53,6 +53,9 @@
         <td class="{{ sheet.cell_class('text-right tabular-nums' if right else '', (sheet.neg(cell | display_is_negative) ~ ' ' ~ row.cell_classes[i]) | trim) }}">{{ cell }}</td>
     {% endif %}
     {% endfor %}
+    {% if edit_mode %}
+        {% with source=row.source, ref=row.ref %}{% include "partials/holdings_actions_cell.html" %}{% endwith %}
+    {% endif %}
 </tr>
 {% else %}
 <tr>
@@ -64,5 +67,6 @@
     {% for cell in total_cells %}
     <td class="{{ sheet.cell_class('text-right tabular-nums' if loop.index0 in right_align_cols else '', sheet.neg(cell | display_is_negative)) }}">{{ cell }}</td>
     {% endfor %}
+    {% if edit_mode %}<td class="table-actions-cell px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700"></td>{% endif %}
 </tr>
 {% endif %}

@@ -19,25 +19,8 @@
 <div class="table-scroll-container rounded-b-lg border-l border-b border-r border-gray-300 dark:border-gray-600 shadow-sm" data-sheet-scroll>
 <table class="editable-table sortable w-full text-sm border-collapse bg-white dark:bg-gray-800">
     {{ sheet.thead(headers, right_align_cols) }}
-    <tbody>
-        {% for row in holdings_rows %}
-        <tr class="{{ sheet.row_class(row.accent) }}">
-            {% for cell in row.cells %}
-            <td class="{{ sheet.cell_class('text-right tabular-nums' if loop.index0 in right_align_cols else '', (sheet.neg(cell | display_is_negative) ~ ' ' ~ row.cell_classes[loop.index0]) | trim) }}">{{ cell }}</td>
-            {% endfor %}
-        </tr>
-        {% else %}
-        <tr>
-            <td colspan="{{ headers | length }}" class="px-1.5 py-2 text-center text-gray-500 dark:text-gray-400">No holdings match the current filters.</td>
-        </tr>
-        {% endfor %}
-        {% if holdings_rows %}
-        <tr class="total-row bg-gray-100 dark:bg-gray-700 border-t-2 border-gray-300 dark:border-gray-600 font-medium">
-            {% for cell in total_cells %}
-            <td class="{{ sheet.cell_class('text-right tabular-nums' if loop.index0 in right_align_cols else '', sheet.neg(cell | display_is_negative)) }}">{{ cell }}</td>
-            {% endfor %}
-        </tr>
-        {% endif %}
+    <tbody id="holdings-tbody">
+        {% include "partials/holdings_tbody.html" %}
     </tbody>
 </table>
 </div>

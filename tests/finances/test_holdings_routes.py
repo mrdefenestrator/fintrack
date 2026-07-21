@@ -180,3 +180,83 @@ def _rows_region(body: str) -> str:
     start = body.find("<tbody")
     end = body.find("</tbody>")
     return body[start:end] if start != -1 and end != -1 else body
+
+
+# ---------------------------------------------------------------------------
+# Inline editing (slice 1: Type / Name / Institution / Unit), dispatched to the
+# right repository by row source.
+# ---------------------------------------------------------------------------
+
+
+def _account_by_name(db_engine, name):
+    from fintrack.accounts.repository import get_accounts
+
+    with db_engine.connect() as conn:
+        return next(a for a in get_accounts(conn, 1) if a["name"] == name)
+
+
+def test_holdings_edit_mode_makes_cells_clickable(client):
+    resp = client.get("/s/finances/holdings?edit=1")
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    # Editable cells become hx-get links to the holdings cell_edit route.
+    assert "/holdings/cell/account/" in body
+
+
+def test_holdings_cell_edit_returns_type_select(client, db_engine):
+    acc = _account_by_name(db_engine, "Checking")
+    resp = client.get(f"/s/finances/holdings/cell/account/{acc['id']}?field=type")
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    assert "<select" in body
+
+
+def test_holdings_update_account_type_dispatches_to_accounts(client, db_engine):
+    acc = _account_by_name(db_engine, "Checking")
+    resp = client.post(
+        f"/s/finances/holdings/update/account/{acc['id']}",
+        data={"field": "type", "value": "savings"},
+    )
+    assert resp.status_code == 200
+    assert _account_by_name(db_engine, "Checking")["type"] == "savings"
+
+
+def test_holdings_update_asset_type_and_unit_dispatch_to_assets(client, db_engine):
+    from fintrack.networth.repository import add_asset_entry, get_asset_entries
+
+    with db_engine.connect() as conn:
+        add_asset_entry(conn, 1, {"kind": "asset", "name": "Coins", "value": 100})
+
+    # First (index 0) asset entry.
+    r1 = client.post(
+        "/s/finances/holdings/update/asset/0",
+        data={"field": "type", "value": "digital_wallet"},
+    )
+    r2 = client.post(
+        "/s/finances/holdings/update/asset/0",
+        data={"field": "unit", "value": "btc"},
+    )
+    assert r1.status_code == 200 and r2.status_code == 200
+    with db_engine.connect() as conn:
+        entry = get_asset_entries(conn, 1)[0]
+    assert entry["type"] == "digital_wallet"
+    assert entry["unit"] == "BTC"  # normalized to upper-case
+
+
+def test_holdings_update_empty_name_is_422(client, db_engine):
+    acc = _account_by_name(db_engine, "Checking")
+    resp = client.post(
+        f"/s/finances/holdings/update/account/{acc['id']}",
+        data={"field": "name", "value": ""},
+    )
+    assert resp.status_code == 422
+
+
+def test_holdings_update_rejects_non_editable_field(client, db_engine):
+    acc = _account_by_name(db_engine, "Checking")
+    # `balance` is not editable in slice 1 (identity/classification only).
+    resp = client.post(
+        f"/s/finances/holdings/update/account/{acc['id']}",
+        data={"field": "balance", "value": "999"},
+    )
+    assert resp.status_code == 422

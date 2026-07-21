@@ -1,0 +1,57 @@
+{# Holdings table tbody — full swap after a cell edit. Each row is an account or
+   an asset entry (row.source + row.ref); editable cells (row.fields[i]) become
+   click-to-edit inputs/selects in edit mode, dispatching to the holdings update
+   route which routes to the right repository. #}
+{% import "partials/sheet.html" as sheet %}
+{% from "macros/table.html" import cell_display, cell_edit_input, cell_edit_select %}
+{% set es = editing_source | default(none) %}
+{% set er = editing_ref | default(none) %}
+{% set ef = editing_field | default(none) %}
+{% set us = updated_source | default(none) %}
+{% set ur = updated_ref | default(none) %}
+{% set uf = updated_field | default(none) %}
+{% if error %}
+<tr id="holdings-error-row">
+    <td colspan="{{ headers | length }}" class="px-2 py-1 text-sm text-red-500 bg-red-50 dark:bg-red-950/40 border-b border-red-200 dark:border-red-800">{{ error }}</td>
+</tr>
+{% endif %}
+{% for row in holdings_rows %}
+<tr class="{{ sheet.row_class(row.accent) }}" id="holding-row-{{ row.source }}-{{ row.ref }}">
+    {% for cell in row.cells %}
+    {% set i = loop.index0 %}
+    {% set field = row.fields[i] %}
+    {% set right = i in right_align_cols %}
+    {% if edit_mode and field and es == row.source and er == row.ref and ef == field %}
+        {% set update_url = url_for('holdings.update', filename=filename, source=row.source, ref=row.ref) %}
+        {% set display_url = url_for('holdings.cell_edit', filename=filename, source=row.source, ref=row.ref, field=field, display=1) %}
+        {% if field == 'type' %}
+            {% set opts = account_type_options if row.source == 'account' else asset_type_options %}
+            {% call(caller) cell_edit_select('type', row.edit_raw['type'], right, update_url, display_url, 'holdings-tbody', none, none) %}
+                {% for value, label in opts %}
+                <option value="{{ value }}" {% if value == row.edit_raw['type'] %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            {% endcall %}
+        {% else %}
+            {{ cell_edit_input(field, row.edit_raw[field], right, update_url, display_url, 'holdings-tbody', none) }}
+        {% endif %}
+    {% elif edit_mode and field %}
+        {% set cell_edit_url = url_for('holdings.cell_edit', filename=filename, source=row.source, ref=row.ref, field=field) %}
+        {% set is_updated = us == row.source and ur == row.ref and uf == field %}
+        {{ cell_display(cell, right, cell | display_is_negative, cell_edit_url, 'holdings-tbody', is_updated) }}
+    {% else %}
+        <td class="{{ sheet.cell_class('text-right tabular-nums' if right else '', (sheet.neg(cell | display_is_negative) ~ ' ' ~ row.cell_classes[i]) | trim) }}">{{ cell }}</td>
+    {% endif %}
+    {% endfor %}
+</tr>
+{% else %}
+<tr>
+    <td colspan="{{ headers | length }}" class="px-1.5 py-2 text-center text-gray-500 dark:text-gray-400">No holdings match the current filters.</td>
+</tr>
+{% endfor %}
+{% if holdings_rows %}
+<tr class="total-row bg-gray-100 dark:bg-gray-700 border-t-2 border-gray-300 dark:border-gray-600 font-medium">
+    {% for cell in total_cells %}
+    <td class="{{ sheet.cell_class('text-right tabular-nums' if loop.index0 in right_align_cols else '', sheet.neg(cell | display_is_negative)) }}">{{ cell }}</td>
+    {% endfor %}
+</tr>
+{% endif %}

@@ -368,7 +368,7 @@
         {% set _cur_tab = active_tab if active_tab is defined else none %}
         {% set _active_group = 'finances' if _cur_tab in ('accounts', 'budget', 'assets', 'holdings', 'projections')
             else ('spending' if _cur_tab in ('transactions', 'trends', 'merchants') else none) %}
-        {% set _edit_honoring = _cur_tab in ('accounts', 'budget', 'assets') %}
+        {% set _edit_honoring = _cur_tab in ('accounts', 'budget', 'assets', 'holdings') %}
         <!-- Row 1: title + controls -->
         <div class="flex items-center px-4">
             {% if filename %}

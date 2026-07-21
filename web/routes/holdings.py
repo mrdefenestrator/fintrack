@@ -3,7 +3,7 @@
 Lists every holding (account or asset_entries row) together with its liquidity
 tier and signed net-worth contribution, reusing the shared spreadsheet chrome
 (sheet table, filter bar, total row). One dense sheet that combines the columns
-of the Accounts and Assets pages; type-specific cells are blank ("—") on rows
+of the Accounts and Assets pages; type-specific cells are blank ("-") on rows
 they don't apply to. Filtering only — editing stays on the existing Accounts/
 Assets pages for now.
 """
@@ -66,6 +66,11 @@ _AS_OF_COL = _KEYS.index("as_of")
 _STALE_AMBER_DAYS = 35
 _STALE_RED_DAYS = 95
 
+# Blank-cell marker (plain dash, as the Accounts/Assets tables use) and the
+# muted color that de-emphasizes it so populated cells stand out.
+_BLANK = "-"
+_MUTED = "text-gray-300 dark:text-gray-600"
+
 
 def _type_label(value: str | None) -> str:
     if not value:
@@ -81,7 +86,7 @@ def _fmt_qty(qty) -> str:
     Trailing zeros are stripped; whole numbers show without decimals.
     """
     if qty is None:
-        return "—"
+        return "-"
     d = Decimal(str(qty))
     if d == d.to_integral_value():
         return f"{int(d):,}"
@@ -89,15 +94,15 @@ def _fmt_qty(qty) -> str:
 
 
 def _fmt_ltv(ltv: Decimal | None) -> str:
-    return f"{ltv * 100:.1f}%" if ltv is not None else "—"
+    return f"{ltv * 100:.1f}%" if ltv is not None else "-"
 
 
 def _fmt_pct(rate) -> str:
-    return f"{rate * 100:.2f}%" if rate is not None else "—"
+    return f"{rate * 100:.2f}%" if rate is not None else "-"
 
 
 def _money(x) -> str:
-    return fmt_money(x) if x is not None else "—"
+    return fmt_money(x) if x is not None else "-"
 
 
 def _unit_price(unit: str, price) -> str:
@@ -106,10 +111,10 @@ def _unit_price(unit: str, price) -> str:
     A symbol unit (BTC, AAPL, …) shows the ticker with its per-unit market
     price ("BTC $95,000"), or the bare ticker when no price is cached yet. USD
     rows have no per-unit price — the value is the Amount directly — so they
-    show "—".
+    show "-".
     """
     if not unit or unit == "USD":
-        return "—"
+        return "-"
     return f"{unit} {fmt_money(price)}" if price is not None else unit
 
 
@@ -135,9 +140,13 @@ def _make_row(values: dict, amount: Decimal, type_value, institution, today: dat
     amount (assets green, liabilities red).
     """
     is_liability = amount < 0
-    cells = [values.get(k, "—") for k in _KEYS]
-    cell_classes = [""] * len(_KEYS)
-    cell_classes[_AS_OF_COL] = _staleness_class(values.get("as_of_iso"), today)
+    cells = [values.get(k, _BLANK) for k in _KEYS]
+    # Mute blank cells so populated data stands out; keep the As-of staleness
+    # color where the cell actually carries a date.
+    cell_classes = [_MUTED if c == _BLANK else "" for c in cells]
+    staleness = _staleness_class(values.get("as_of_iso"), today)
+    if staleness:
+        cell_classes[_AS_OF_COL] = staleness
     return {
         "institution": institution,
         "type_value": type_value,
@@ -155,19 +164,19 @@ def _account_row(a: dict, funding_by_id: dict, account_display: dict, today: dat
     pay_ref = a.get("paymentAccountRef")
     funding = funding_by_id.get(a.get("id"))
     values = {
-        "institution": a.get("institution") or "—",
-        "type": _type_label(a.get("type")) or "—",
-        "name": a.get("name") or "—",
+        "institution": a.get("institution") or "-",
+        "type": _type_label(a.get("type")) or "-",
+        "name": a.get("name") or "-",
         "amount": fmt_money(amount),
         "rewards": _money(a.get("rewards_balance")),
         "limit": _money(a.get("limit")),
         "available": _money(a.get("available")),
         "statement": _money(a.get("statement_balance")),
-        "due": fmt_day_ordinal(due_day) if due_day else "—",
-        "payment": account_display.get(pay_ref, "—") if pay_ref else "—",
+        "due": fmt_day_ordinal(due_day) if due_day else "-",
+        "payment": account_display.get(pay_ref, "-") if pay_ref else "-",
         "reserve": _money(a.get("minimum_balance")),
-        "funding": fmt_money(funding) if funding else "—",  # None/0 -> "—"
-        "as_of": a.get("asOfDate") or "—",
+        "funding": fmt_money(funding) if funding else "-",  # None/0 -> "-"
+        "as_of": a.get("asOfDate") or "-",
         "as_of_iso": a.get("asOfDate"),
     }
     return _make_row(values, amount, a.get("type"), a.get("institution") or "", today)
@@ -180,16 +189,16 @@ def _asset_row(e: dict, pair: dict | None, today: date):
     price = e.get("balance") if is_debt else e.get("value")
     amount = calculations.asset_contribution(e)
     values = {
-        "institution": e.get("institution") or "—",
-        "type": _type_label(e.get("type")) or "—",
-        "name": e.get("name") or "—",
+        "institution": e.get("institution") or "-",
+        "type": _type_label(e.get("type")) or "-",
+        "name": e.get("name") or "-",
         "unit_price": _unit_price(e.get("unit") or "USD", price),
         "qty": _fmt_qty(e.get("quantity")),
         "amount": fmt_money(amount),
-        "due": e.get("nextDueDate") if is_debt and e.get("nextDueDate") else "—",
+        "due": e.get("nextDueDate") if is_debt and e.get("nextDueDate") else "-",
         "interest": _fmt_pct(e.get("interestRate")),
-        "source": "—" if is_debt else (e.get("source") or "—"),
-        "as_of": e.get("asOfDate") or "—",
+        "source": "-" if is_debt else (e.get("source") or "-"),
+        "as_of": e.get("asOfDate") or "-",
         "as_of_iso": e.get("asOfDate"),
     }
     if pair is not None:

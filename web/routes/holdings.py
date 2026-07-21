@@ -47,7 +47,7 @@ _COLUMNS: list[tuple[str, str, bool]] = [
     ("available", "Available", True),
     ("statement", "Statement", True),
     ("due", "Due", False),
-    ("payment", "Payment Acct", False),
+    ("linked", "Linked", False),
     ("interest", "Interest", True),
     ("reserve", "Reserve", True),
     ("funding", "Funding", True),
@@ -173,7 +173,8 @@ def _account_row(a: dict, funding_by_id: dict, account_display: dict, today: dat
         "available": _money(a.get("available")),
         "statement": _money(a.get("statement_balance")),
         "due": fmt_day_ordinal(due_day) if due_day else "-",
-        "payment": account_display.get(pay_ref, "-") if pay_ref else "-",
+        # Linked holding: for a credit card, the account that pays it.
+        "linked": account_display.get(pay_ref, "-") if pay_ref else "-",
         "reserve": _money(a.get("minimum_balance")),
         "funding": fmt_money(funding) if funding else "-",  # None/0 -> "-"
         "as_of": a.get("asOfDate") or "-",
@@ -182,7 +183,7 @@ def _account_row(a: dict, funding_by_id: dict, account_display: dict, today: dat
     return _make_row(values, amount, a.get("type"), a.get("institution") or "", today)
 
 
-def _asset_row(e: dict, pair: dict | None, today: date):
+def _asset_row(e: dict, pair: dict | None, linked: str, today: date):
     is_debt = e.get("kind") == "debt"
     # Per-unit price is `value` for an asset, `balance` (owed per unit) for a
     # debt; amount is the signed subtotal (qty × price, liabilities −).
@@ -196,6 +197,9 @@ def _asset_row(e: dict, pair: dict | None, today: date):
         "qty": _fmt_qty(e.get("quantity")),
         "amount": fmt_money(amount),
         "due": e.get("nextDueDate") if is_debt and e.get("nextDueDate") else "-",
+        # Linked holding: for a loan, the asset it is secured by; for an asset,
+        # the loan(s) secured against it.
+        "linked": linked,
         "interest": _fmt_pct(e.get("interestRate")),
         "source": "-" if is_debt else (e.get("source") or "-"),
         "as_of": e.get("asOfDate") or "-",
@@ -233,8 +237,30 @@ def holdings_view(filename):
     # fold it into that loan's row (per design: equity shows on the loan row).
     equity_by_debt = {id(p["debt"]): p for p in calculations.equity_pairs(assets)}
 
+    # Asset ↔ loan links (via asset_ref) for the "Linked" column, both ways:
+    # a debt links to its asset by name; an asset links to the loan(s) against it.
+    asset_name_by_id = {
+        e["id"]: e.get("name") or "-"
+        for e in assets
+        if e.get("kind") == "asset" and e.get("id") is not None
+    }
+    loans_by_asset_id: dict[int, list[str]] = {}
+    for e in assets:
+        ref = e.get("assetRef")
+        if e.get("kind") == "debt" and ref is not None:
+            loans_by_asset_id.setdefault(ref, []).append(e.get("name") or "-")
+
+    def _linked(e: dict) -> str:
+        if e.get("kind") == "debt":
+            ref = e.get("assetRef")
+            return asset_name_by_id.get(ref, "-") if ref is not None else "-"
+        names = loans_by_asset_id.get(e.get("id"), [])
+        return ", ".join(names) if names else "-"
+
     rows = [_account_row(a, funding_by_id, account_display, today) for a in accounts]
-    rows += [_asset_row(e, equity_by_debt.get(id(e)), today) for e in assets]
+    rows += [
+        _asset_row(e, equity_by_debt.get(id(e)), _linked(e), today) for e in assets
+    ]
 
     institutions = sorted({r["institution"] for r in rows if r["institution"]})
     # Type filter options: the canonical types actually present, in canonical

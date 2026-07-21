@@ -226,7 +226,7 @@ Single Flask app (`web/app.py`), port 5003 (`FINTRACK_PORT`), database from
 `?edit=1` toggling spreadsheet-style edit mode on the net-worth pages.
 
 Navigation is two-tier and task-oriented: a primary row with two group tabs —
-`Finances` (Accounts · Budget · Assets · Holdings · Projections) and `Spending`
+`Finances` (Accounts · Assets · Holdings · Budget · Projections) and `Spending`
 (Transactions · Trends · Merchants) — and a secondary row showing the active
 group's sub-tabs. Accounts is the landing page; each group tab remembers its
 last-visited sub-tab for the session (sessionStorage, `web/static/js/nav.js`).

@@ -652,11 +652,6 @@
                 <span>Accounts</span>
                 <span class="{{ _tab_total_cls }} {% if n2 is none %}invisible{% elif n2 | display_is_negative %}text-red-300{% else %}opacity-75{% endif %}" {% if n2 is none %}aria-hidden="true"{% endif %}>{{ (n2 | fmt_money_header) if n2 is not none else ' ' }}</span>
             </a>
-            <a href="{{ url_for('budget.budget_view', filename=filename, edit=1 if edit_mode else none) }}"
-                class="{{ _tab_cls }} {% if _cur_tab == 'budget' %}{{ _tab_active }}{% else %}{{ _tab_idle }}{% endif %}">
-                <span>Budget</span>
-                <span class="{{ _tab_total_cls }} {% if n3 is none %}invisible{% elif n3 | display_is_negative %}text-red-300{% else %}opacity-75{% endif %}" {% if n3 is none %}aria-hidden="true"{% endif %}>{{ (n3 | fmt_money_header) if n3 is not none else ' ' }}</span>
-            </a>
             <a href="{{ url_for('assets.assets_view', filename=filename, edit=1 if edit_mode else none) }}"
                 class="{{ _tab_cls }} {% if _cur_tab == 'assets' %}{{ _tab_active }}{% else %}{{ _tab_idle }}{% endif %}">
                 <span>Assets</span>
@@ -666,6 +661,11 @@
                 class="{{ _tab_cls }} {% if _cur_tab == 'holdings' %}{{ _tab_active }}{% else %}{{ _tab_idle }}{% endif %}">
                 <span>Holdings</span>
                 <span class="{{ _tab_total_cls }} invisible" aria-hidden="true">&nbsp;</span>
+            </a>
+            <a href="{{ url_for('budget.budget_view', filename=filename, edit=1 if edit_mode else none) }}"
+                class="{{ _tab_cls }} {% if _cur_tab == 'budget' %}{{ _tab_active }}{% else %}{{ _tab_idle }}{% endif %}">
+                <span>Budget</span>
+                <span class="{{ _tab_total_cls }} {% if n3 is none %}invisible{% elif n3 | display_is_negative %}text-red-300{% else %}opacity-75{% endif %}" {% if n3 is none %}aria-hidden="true"{% endif %}>{{ (n3 | fmt_money_header) if n3 is not none else ' ' }}</span>
             </a>
             <a href="{{ url_for('projections.projections_view', filename=filename, edit=1 if edit_mode else none) }}"
                 class="{{ _tab_cls }} {% if _cur_tab == 'projections' %}{{ _tab_active }}{% else %}{{ _tab_idle }}{% endif %}">

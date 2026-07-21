@@ -3,7 +3,7 @@
    click-to-edit inputs/selects in edit mode, dispatching to the holdings update
    route which routes to the right repository. #}
 {% import "partials/sheet.html" as sheet %}
-{% from "macros/table.html" import cell_display, cell_edit_input, cell_edit_select %}
+{% from "macros/table.html" import cell_display, cell_edit_input, cell_edit_select, cell_non_editable %}
 {% set es = editing_source | default(none) %}
 {% set er = editing_ref | default(none) %}
 {% set ef = editing_field | default(none) %}
@@ -38,6 +38,9 @@
         {% set cell_edit_url = url_for('holdings.cell_edit', filename=filename, source=row.source, ref=row.ref, field=field) %}
         {% set is_updated = us == row.source and ur == row.ref and uf == field %}
         {{ cell_display(cell, right, cell | display_is_negative, cell_edit_url, 'holdings-tbody', is_updated) }}
+    {% elif edit_mode %}
+        {# Non-editable cell in edit mode: greyed out, like the Accounts/Assets tables. #}
+        {{ cell_non_editable(cell, right, cell | display_is_negative) }}
     {% else %}
         <td class="{{ sheet.cell_class('text-right tabular-nums' if right else '', (sheet.neg(cell | display_is_negative) ~ ' ' ~ row.cell_classes[i]) | trim) }}">{{ cell }}</td>
     {% endif %}

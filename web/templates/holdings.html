@@ -23,7 +23,7 @@
         {% for row in holdings_rows %}
         <tr class="{{ sheet.row_class(row.accent) }}">
             {% for cell in row.cells %}
-            <td class="{{ sheet.cell_class('text-right tabular-nums' if loop.index0 in right_align_cols else '', sheet.neg(cell | display_is_negative)) }}">{{ cell }}</td>
+            <td class="{{ sheet.cell_class('text-right tabular-nums' if loop.index0 in right_align_cols else '', (sheet.neg(cell | display_is_negative) ~ ' ' ~ row.cell_classes[loop.index0]) | trim) }}">{{ cell }}</td>
             {% endfor %}
         </tr>
         {% else %}

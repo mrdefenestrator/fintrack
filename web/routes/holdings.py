@@ -19,7 +19,7 @@ from decimal import Decimal
 
 from flask import Blueprint, abort, current_app, render_template, request
 
-from fintrack.accounts.repository import update_account
+from fintrack.accounts.repository import get_accounts, update_account
 from fintrack.core.formatting import fmt_day_ordinal, fmt_money
 from fintrack.core.types import (
     ACCOUNT_TYPE_OPTIONS,
@@ -29,9 +29,10 @@ from fintrack.core.types import (
     HOLDING_TYPE_VALUES,
 )
 from fintrack.networth import calculations
-from fintrack.networth.repository import update_asset_entry
+from fintrack.networth.repository import get_asset_entries, update_asset_entry
 
-from .common import get_common_context, validate_snapshot
+from .common import account_field_editable, get_common_context, validate_snapshot
+from .crud import ACCOUNTS_COERCION, ASSETS_COERCION, coerce_value
 
 holdings_bp = Blueprint("holdings", __name__, url_prefix="/s")
 
@@ -77,16 +78,59 @@ _AMOUNT_COL = _KEYS.index("amount")
 _AS_OF_COL = _KEYS.index("as_of")
 
 # Editable columns per row source, mapping the display column key to the
-# underlying repository field. Slice 1: identity + classification only.
-_ACCOUNT_EDIT_MAP = {"institution": "institution", "type": "type", "name": "name"}
-_ASSET_EDIT_MAP = {
-    "institution": "institution",
-    "type": "type",
-    "name": "name",
-    "unit_price": "unit",  # the Unit Price cell edits the unit symbol
-}
-_ACCOUNT_EDIT_FIELDS = set(_ACCOUNT_EDIT_MAP.values())
-_ASSET_EDIT_FIELDS = set(_ASSET_EDIT_MAP.values())
+# underlying repository field. Identity/classification fields are always
+# editable; the money/detail fields are gated per row (below), so the sheet's
+# edit behavior matches the Accounts/Assets pages.
+_ACCOUNT_COL_FIELD = [
+    ("institution", "institution"),
+    ("type", "type"),
+    ("name", "name"),
+    ("amount", "balance"),
+    ("rewards", "rewards_balance"),
+    ("limit", "limit"),
+    ("available", "available"),
+    ("statement", "statement_balance"),
+    ("due", "statement_due_day_of_month"),
+    ("reserve", "minimum_balance"),
+]
+_ALWAYS_EDITABLE = ("institution", "type", "name")
+
+
+def _account_col_fields(a: dict) -> dict:
+    """Column key -> account field, gated by account_field_editable (CC vs cash,
+    reserve types), so Holdings matches the Accounts page's editability."""
+    return {
+        key: field
+        for key, field in _ACCOUNT_COL_FIELD
+        if field in _ALWAYS_EDITABLE or account_field_editable(a, field)
+    }
+
+
+def _asset_col_fields(e: dict) -> dict:
+    """Column key -> asset/debt field. `value`/`balance` are editable through
+    the Amount cell only when the row is a single USD unit (amount == the stored
+    value); otherwise Amount is computed (edit qty, or the future price feed)."""
+    is_debt = e.get("kind") == "debt"
+    qty = e.get("quantity")
+    single_unit = qty is None or qty == 1
+    m = {
+        "institution": "institution",
+        "type": "type",
+        "name": "name",
+        "qty": "quantity",
+    }
+    if is_debt:
+        m["interest"] = "interestRate"
+        m["due"] = "nextDueDate"
+        if single_unit:
+            m["amount"] = "balance"
+    else:
+        m["unit_price"] = "unit"
+        m["source"] = "source"
+        if single_unit and (e.get("unit") or "USD") == "USD":
+            m["amount"] = "value"
+    return m
+
 
 # As-of staleness thresholds (days) and colors, matching the accounts sparkline.
 _STALE_AMBER_DAYS = 35
@@ -159,7 +203,14 @@ def _staleness_class(as_of_iso: str | None, today: date) -> str:
     return ""
 
 
-def _make_row(values, amount, type_value, institution, today, source, ref, edit_map):
+def _raw(v) -> str:
+    """Raw scalar as a string for prefilling an edit input (None -> '')."""
+    return "" if v is None else str(v)
+
+
+def _make_row(
+    values, amount, type_value, institution, today, source, ref, col_fields, edit_raw
+):
     """Assemble a row record: display cells, per-cell classes, edit metadata.
 
     The left-border accent encodes the asset/liability split by the sign of the
@@ -183,8 +234,8 @@ def _make_row(values, amount, type_value, institution, today, source, ref, edit_
         "amount": amount,
         "cells": cells,
         "cell_classes": cell_classes,
-        "fields": [edit_map.get(k) for k in _KEYS],
-        "edit_raw": values.get("_edit_raw", {}),
+        "fields": [col_fields.get(k) for k in _KEYS],
+        "edit_raw": edit_raw,
         "accent": "border-l-rose-400" if is_liability else "border-l-emerald-400",
     }
 
@@ -210,11 +261,18 @@ def _account_row(a: dict, funding_by_id: dict, account_display: dict, today: dat
         "funding": fmt_money(funding) if funding else _BLANK,  # None/0 -> blank
         "as_of": a.get("asOfDate") or _BLANK,
         "as_of_iso": a.get("asOfDate"),
-        "_edit_raw": {
-            "institution": a.get("institution") or "",
-            "type": a.get("type") or "",
-            "name": a.get("name") or "",
-        },
+    }
+    edit_raw = {
+        "institution": a.get("institution") or "",
+        "type": a.get("type") or "",
+        "name": a.get("name") or "",
+        "balance": _raw(a.get("balance")),
+        "rewards_balance": _raw(a.get("rewards_balance")),
+        "limit": _raw(a.get("limit")),
+        "available": _raw(a.get("available")),
+        "statement_balance": _raw(a.get("statement_balance")),
+        "statement_due_day_of_month": _raw(a.get("statement_due_day_of_month")),
+        "minimum_balance": _raw(a.get("minimum_balance")),
     }
     return _make_row(
         values,
@@ -224,7 +282,8 @@ def _account_row(a: dict, funding_by_id: dict, account_display: dict, today: dat
         today,
         "account",
         a.get("id"),
-        _ACCOUNT_EDIT_MAP,
+        _account_col_fields(a),
+        edit_raw,
     )
 
 
@@ -249,16 +308,22 @@ def _asset_row(e: dict, pair: dict | None, linked: str, index: int, today: date)
         "source": _BLANK if is_debt else (e.get("source") or _BLANK),
         "as_of": e.get("asOfDate") or _BLANK,
         "as_of_iso": e.get("asOfDate"),
-        "_edit_raw": {
-            "institution": e.get("institution") or "",
-            "type": e.get("type") or "",
-            "name": e.get("name") or "",
-            "unit": e.get("unit") or "USD",
-        },
     }
     if pair is not None:
         values["equity"] = fmt_money(pair["equity"])
         values["ltv"] = _fmt_ltv(pair["ltv"])
+    edit_raw = {
+        "institution": e.get("institution") or "",
+        "type": e.get("type") or "",
+        "name": e.get("name") or "",
+        "unit": e.get("unit") or "USD",
+        "quantity": _raw(e.get("quantity")),
+        "value": _raw(e.get("value")),
+        "balance": _raw(e.get("balance")),
+        "interestRate": _raw(e.get("interestRate")),
+        "nextDueDate": e.get("nextDueDate") or "",
+        "source": e.get("source") or "",
+    }
     return _make_row(
         values,
         amount,
@@ -267,7 +332,8 @@ def _asset_row(e: dict, pair: dict | None, linked: str, index: int, today: date)
         today,
         "asset",
         index,
-        _ASSET_EDIT_MAP,
+        _asset_col_fields(e),
+        edit_raw,
     )
 
 
@@ -406,9 +472,26 @@ def holdings_view(filename):
     return render_template("holdings.html", **ctx)
 
 
-def _edit_field(source: str, col_field: str) -> bool:
-    fields = _ACCOUNT_EDIT_FIELDS if source == "account" else _ASSET_EDIT_FIELDS
-    return col_field in fields
+def _load_entity(snapshot_id: int, source: str, ref: int):
+    """The account (by id) or asset entry (by sort-order index) for a row."""
+    engine = current_app.config["engine"]
+    with engine.connect() as conn:
+        if source == "account":
+            return next(
+                (a for a in get_accounts(conn, snapshot_id) if a.get("id") == ref),
+                None,
+            )
+        entries = get_asset_entries(conn, snapshot_id)
+        return entries[ref] if 0 <= ref < len(entries) else None
+
+
+def _field_editable(source: str, entity: dict | None, field: str) -> bool:
+    """Whether `field` is editable for this specific row (same gating as the
+    per-row column map that drives the sheet's edit cells)."""
+    if entity is None:
+        return False
+    col_fields = _account_col_fields if source == "account" else _asset_col_fields
+    return field in col_fields(entity).values()
 
 
 @holdings_bp.route("/<filename>/holdings/cell/<source>/<int:ref>")
@@ -420,7 +503,7 @@ def cell_edit(filename: str, source: str, ref: int):
     if request.args.get("display") == "1":
         return _render_tbody(snapshot_id, filename)
     field = request.args.get("field", "")
-    if not _edit_field(source, field):
+    if not _field_editable(source, _load_entity(snapshot_id, source, ref), field):
         return _render_tbody(snapshot_id, filename)
     return _render_tbody(
         snapshot_id,
@@ -431,8 +514,8 @@ def cell_edit(filename: str, source: str, ref: int):
     )
 
 
-def _coerce(field: str, value_raw: str) -> tuple:
-    """Validate/normalize a slice-1 edit value. Returns (value, error)."""
+def _coerce(source: str, field: str, value_raw: str) -> tuple:
+    """Validate/normalize an edit value. Returns (value, error)."""
     if field == "type":
         if value_raw == "":
             return None, None  # clear -> unclassified
@@ -446,8 +529,13 @@ def _coerce(field: str, value_raw: str) -> tuple:
     if field == "unit":
         # A holding is always denominated in something; blank means USD.
         return (value_raw.upper() or "USD"), None
-    # institution (and any other text field): blank clears to None.
-    return (value_raw or None), None
+    if field in ("institution", "source", "nextDueDate"):
+        # Free text / ISO date; blank clears to None (repo coerces dates).
+        return (value_raw or None), None
+    # Numeric money/detail fields go through the shared coercion the Accounts/
+    # Assets pages use, so validation and rounding stay identical.
+    cmap = ACCOUNTS_COERCION if source == "account" else ASSETS_COERCION
+    return coerce_value(field, value_raw, cmap)
 
 
 @holdings_bp.route("/<filename>/holdings/update/<source>/<int:ref>", methods=["POST"])
@@ -457,10 +545,10 @@ def update(filename: str, source: str, ref: int):
         abort(404)
     field = request.form.get("field", "").strip()
     value_raw = request.form.get("value", "").strip()
-    if not _edit_field(source, field):
+    if not _field_editable(source, _load_entity(snapshot_id, source, ref), field):
         return _render_tbody(snapshot_id, filename), 422
 
-    value, error = _coerce(field, value_raw)
+    value, error = _coerce(source, field, value_raw)
     if error:
         return _render_tbody(snapshot_id, filename, error=error), 422
 

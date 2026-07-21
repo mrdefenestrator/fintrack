@@ -254,9 +254,93 @@ def test_holdings_update_empty_name_is_422(client, db_engine):
 
 def test_holdings_update_rejects_non_editable_field(client, db_engine):
     acc = _account_by_name(db_engine, "Checking")
-    # `balance` is not editable in slice 1 (identity/classification only).
+    # `limit` is credit-card-only, so it is not editable on a checking account.
     resp = client.post(
         f"/s/finances/holdings/update/account/{acc['id']}",
-        data={"field": "balance", "value": "999"},
+        data={"field": "limit", "value": "999"},
+    )
+    assert resp.status_code == 422
+
+
+def test_holdings_update_cash_balance(client, db_engine):
+    from fintrack.accounts.repository import get_accounts
+
+    acc = _account_by_name(db_engine, "Checking")
+    resp = client.post(
+        f"/s/finances/holdings/update/account/{acc['id']}",
+        data={"field": "balance", "value": "2500"},
+    )
+    assert resp.status_code == 200
+    with db_engine.connect() as conn:
+        updated = next(a for a in get_accounts(conn, 1) if a["id"] == acc["id"])
+    assert updated["balance"] == 2500
+
+
+def test_holdings_update_cc_limit_editable(client, db_engine):
+    from fintrack.accounts.repository import get_accounts
+
+    cc = _account_by_name(db_engine, "Visa")
+    resp = client.post(
+        f"/s/finances/holdings/update/account/{cc['id']}",
+        data={"field": "limit", "value": "1500"},
+    )
+    assert resp.status_code == 200
+    with db_engine.connect() as conn:
+        updated = next(a for a in get_accounts(conn, 1) if a["id"] == cc["id"])
+    assert updated["limit"] == 1500
+
+
+def test_holdings_update_cc_balance_not_editable(client, db_engine):
+    # Credit-card balance is derived from available/limit, so it is read-only.
+    cc = _account_by_name(db_engine, "Visa")
+    resp = client.post(
+        f"/s/finances/holdings/update/account/{cc['id']}",
+        data={"field": "balance", "value": "5"},
+    )
+    assert resp.status_code == 422
+
+
+def test_holdings_update_asset_value_and_qty(client, db_engine):
+    from fintrack.networth.repository import add_asset_entry, get_asset_entries
+
+    with db_engine.connect() as conn:
+        add_asset_entry(conn, 1, {"kind": "asset", "name": "Home", "value": 400000})
+
+    r1 = client.post(
+        "/s/finances/holdings/update/asset/0",
+        data={"field": "value", "value": "450000"},
+    )
+    r2 = client.post(
+        "/s/finances/holdings/update/asset/0",
+        data={"field": "quantity", "value": "2"},
+    )
+    assert r1.status_code == 200 and r2.status_code == 200
+    with db_engine.connect() as conn:
+        entry = get_asset_entries(conn, 1)[0]
+    assert entry["value"] == 450000
+    assert entry["quantity"] == 2
+
+
+def test_holdings_update_debt_interest(client, db_engine):
+    from fintrack.networth.repository import add_asset_entry, get_asset_entries
+
+    with db_engine.connect() as conn:
+        add_asset_entry(conn, 1, {"kind": "debt", "name": "Loan", "balance": 1000})
+
+    resp = client.post(
+        "/s/finances/holdings/update/asset/0",
+        data={"field": "interestRate", "value": "0.055"},
+    )
+    assert resp.status_code == 200
+    with db_engine.connect() as conn:
+        entry = get_asset_entries(conn, 1)[0]
+    assert float(entry["interestRate"]) == 0.055
+
+
+def test_holdings_update_invalid_number_is_422(client, db_engine):
+    acc = _account_by_name(db_engine, "Checking")
+    resp = client.post(
+        f"/s/finances/holdings/update/account/{acc['id']}",
+        data={"field": "balance", "value": "not-a-number"},
     )
     assert resp.status_code == 422

@@ -192,9 +192,10 @@ def test_holdings_view_folds_equity_onto_loan_row(client, db_engine):
 
 
 def _rows_region(body: str) -> str:
-    """The <tbody> slice, so header/filter labels don't cause false matches."""
+    """All table-body content (spanning the grouped tbodies), so filter-bar
+    labels above the table don't cause false matches."""
     start = body.find("<tbody")
-    end = body.find("</tbody>")
+    end = body.rfind("</tbody>")
     return body[start:end] if start != -1 and end != -1 else body
 
 
@@ -422,6 +423,40 @@ def test_holdings_delete_account_dispatches(client, db_engine):
     with db_engine.connect() as conn:
         names = [a["name"] for a in get_accounts(conn, 1)]
     assert "Checking" not in names
+
+
+def test_holdings_reorder_accounts_dispatches(client, db_engine):
+    from fintrack.accounts.repository import get_accounts
+
+    with db_engine.connect() as conn:
+        before = [a["name"] for a in get_accounts(conn, 1)]
+    # Reverse the two seeded accounts.
+    resp = client.post("/s/finances/holdings/reorder/account", data={"order": "1,0"})
+    assert resp.status_code == 204
+    with db_engine.connect() as conn:
+        after = [a["name"] for a in get_accounts(conn, 1)]
+    assert after == list(reversed(before))
+
+
+def test_holdings_add_account(client, db_engine):
+    from fintrack.accounts.repository import get_accounts
+
+    resp = client.post("/s/finances/holdings/add/account")
+    assert resp.status_code == 200
+    assert resp.headers.get("HX-Refresh") == "true"
+    with db_engine.connect() as conn:
+        names = [a["name"] for a in get_accounts(conn, 1)]
+    assert "New account" in names
+
+
+def test_holdings_add_asset(client, db_engine):
+    from fintrack.networth.repository import get_asset_entries
+
+    resp = client.post("/s/finances/holdings/add/asset")
+    assert resp.status_code == 200
+    with db_engine.connect() as conn:
+        names = [e["name"] for e in get_asset_entries(conn, 1)]
+    assert "New asset" in names
 
 
 def test_holdings_delete_asset_dispatches(client, db_engine):

@@ -24,6 +24,10 @@
     // set server-side when some rows are hidden) both make the visible row
     // positions not match the stored order, so reordering must be disabled.
     function reorderDisabled(tbody) {
+        // Grouped Holdings sorts per data-tbody (holdings-sort.js sets
+        // data-sorted on the sorted group's tbody); a sorted group's DOM order
+        // no longer matches its stored order, so its reorder must be off.
+        if (tbody.hasAttribute("data-sorted")) return true;
         var table = tbody.closest("table");
         if (!table) return false;
         var dir = table.getAttribute("data-sort-dir");
@@ -88,6 +92,8 @@
     // its Sortable instance persist); re-scan keeps the disabled state current.
     document.addEventListener("htmx:afterSwap", scan);
     document.addEventListener("htmx:afterSettle", scan);
+    // A per-group Holdings sort toggles that group's reorder on/off.
+    document.addEventListener("holdings:sorted", scan);
 
     if (document.readyState !== "loading") scan();
 })();

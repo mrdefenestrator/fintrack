@@ -21,8 +21,10 @@ from decimal import Decimal
 from flask import Blueprint, abort, current_app, render_template, request
 
 from fintrack.accounts.repository import (
+    add_account,
     delete_account,
     get_accounts,
+    reorder_accounts,
     update_account,
 )
 from fintrack.core.formatting import fmt_day_ordinal, fmt_money
@@ -35,8 +37,10 @@ from fintrack.core.types import (
 )
 from fintrack.networth import calculations
 from fintrack.networth.repository import (
+    add_asset_entry,
     delete_asset_entry,
     get_asset_entries,
+    reorder_asset_entries,
     update_asset_entry,
 )
 
@@ -60,6 +64,9 @@ _BALANCE_LABELS: dict[str, str] = {"asset": "Assets", "liability": "Liabilities"
 # accounts and Unit Price for assets. Each group carries its own header row, so
 # the table stays narrow (4 + max trailing) instead of the union width. Both
 # groups have the same slot count so the grid lines up.
+# The shared columns — Institution/Type/Name/Amount (leading) and Due/Linked/
+# As Of (trailing) — sit in the same slots in both groups so they align down the
+# whole table. The domain-specific columns fill the slots between them.
 _ACCOUNT_COLS: list[tuple[str, str, bool]] = [
     ("institution", "Institution", False),
     ("type", "Type", False),
@@ -69,10 +76,10 @@ _ACCOUNT_COLS: list[tuple[str, str, bool]] = [
     ("limit", "Limit", True),
     ("available", "Available", True),
     ("statement", "Statement", True),
-    ("due", "Due", False),
-    ("linked", "Linked", False),
     ("reserve", "Reserve", True),
     ("funding", "Funding", True),
+    ("due", "Due", False),
+    ("linked", "Linked", False),
     ("as_of", "As Of", False),
 ]
 _ASSET_COLS: list[tuple[str, str, bool]] = [
@@ -83,12 +90,12 @@ _ASSET_COLS: list[tuple[str, str, bool]] = [
     ("unit_price", "Unit Price", True),
     ("qty", "Qty", True),
     ("interest", "Interest", True),
-    ("due", "Due", False),
-    ("linked", "Linked", False),
     ("source", "Source", False),
-    ("as_of", "As Of", False),
     ("equity", "Equity", True),
     ("ltv", "LTV", True),
+    ("due", "Due", False),
+    ("linked", "Linked", False),
+    ("as_of", "As Of", False),
 ]
 _NCOLS = len(_ACCOUNT_COLS)  # same slot count in both groups
 _AMOUNT_POS = 3  # Amount is the 4th (leading) slot in both groups
@@ -730,3 +737,42 @@ def delete(filename: str, source: str, ref: int):
             delete_asset_entry(conn, snapshot_id, ref)
 
     return handle_delete(_do, engine)
+
+
+@holdings_bp.route("/<filename>/holdings/reorder/<source>", methods=["POST"])
+def reorder(filename: str, source: str):
+    """Persist a within-group drag reorder (a permutation of that group's rows)."""
+    snapshot_id = validate_snapshot(filename)
+    if source not in ("account", "asset"):
+        abort(404)
+    try:
+        order = [int(x) for x in request.form.get("order", "").split(",") if x != ""]
+    except ValueError:
+        return "", 400
+    engine = current_app.config["engine"]
+    try:
+        with engine.connect() as conn:
+            if source == "account":
+                reorder_accounts(conn, snapshot_id, order)
+            else:
+                reorder_asset_entries(conn, snapshot_id, order)
+    except ValueError:
+        return "", 400
+    return "", 204
+
+
+@holdings_bp.route("/<filename>/holdings/add/<source>", methods=["POST"])
+def add(filename: str, source: str):
+    """Add a blank holding to a group; the user then edits it inline."""
+    snapshot_id = validate_snapshot(filename)
+    if source not in ("account", "asset"):
+        abort(404)
+    engine = current_app.config["engine"]
+    with engine.connect() as conn:
+        if source == "account":
+            add_account(conn, snapshot_id, {"name": "New account", "type": "checking"})
+        else:
+            add_asset_entry(conn, snapshot_id, {"kind": "asset", "name": "New asset"})
+    resp = current_app.make_response("")
+    resp.headers["HX-Refresh"] = "true"
+    return resp

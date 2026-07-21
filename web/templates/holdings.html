@@ -10,25 +10,27 @@
    collapse tables (especially when the sheet scrolls horizontally), but renders
    cell borders correctly — so this matches the Assets table's look everywhere. #}
 <style>
-    #holdings-tbody tr[data-accent="asset"] > td:first-child {
+    #holdings-table tr[data-accent="asset"] > td:first-child {
         border-left: 4px solid #34d399;   /* emerald-400 */
     }
-    #holdings-tbody tr[data-accent="liability"] > td:first-child {
+    #holdings-table tr[data-accent="liability"] > td:first-child {
         border-left: 4px solid #fb7185;   /* rose-400 */
     }
-    /* Actions column sticks to the right edge; data scrolls behind it. The
-       background keeps scrolled cells from showing through, and the left shadow
-       reads as the column floating over the sheet. */
+    /* Actions column sticks to the right edge; data scrolls behind it. A uniform
+       background (the actions column is chrome, not data) keeps scrolled cells
+       from showing through, and the left shadow reads as the column floating. */
     #holdings-table .table-actions-cell {
         position: sticky;
         right: 0;
         z-index: 6;
+        background: #ffffff;
         box-shadow: -6px 0 6px -6px rgba(0, 0, 0, 0.18);
     }
-    /* The header actions cell has no bg class of its own; match the header row
-       so scrolled data can't show through it. */
-    #holdings-table thead .table-actions-cell { background: #f3f4f6; }   /* gray-100 */
-    .dark #holdings-table thead .table-actions-cell { background: #374151; }  /* gray-700 */
+    .dark #holdings-table .table-actions-cell { background: #1f2937; }  /* gray-800 */
+    /* In edit mode the pinned actions column casts its own left shadow, so
+       suppress the frame's right scroll-shadow (which would sit on top of the
+       pinned column). The overlay is a following sibling of the container. */
+    .table-scroll-container.holdings-edit ~ .sheet-scroll-shadow--right { display: none; }
 </style>
 
 <form id="holdings-filter-form" method="get" action="{{ url_for('holdings.holdings_view', filename=filename) }}" class="shrink-0">
@@ -42,13 +44,13 @@
     {% endcall %}
 </form>
 
-<div class="table-scroll-container rounded-b-lg border-l border-b border-r border-gray-300 dark:border-gray-600 shadow-sm" data-sheet-scroll>
+<div class="table-scroll-container rounded-b-lg border-l border-b border-r border-gray-300 dark:border-gray-600 shadow-sm {% if edit_mode %}holdings-edit{% endif %}" data-sheet-scroll>
 {# One table, two domain groups. Headers are per-group rows inside the tbody
-   (the trailing column slots differ per group), so there is no global thead. #}
-<table id="holdings-table" class="editable-table w-full text-sm border-collapse bg-white dark:bg-gray-800">
-    <tbody id="holdings-tbody">
-        {% include "partials/holdings_tbody.html" %}
-    </tbody>
+   (the trailing column slots differ per group), so there is no global thead.
+   No `w-full`: the table sizes to its content, so toggling edit mode (which adds
+   the actions column) doesn't rescale the data columns. #}
+<table id="holdings-table" class="editable-table text-sm border-collapse bg-white dark:bg-gray-800">
+    {% include "partials/holdings_tbody.html" %}
 </table>
 </div>
 {% endblock %}

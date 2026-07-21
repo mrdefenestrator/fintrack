@@ -5,6 +5,19 @@
 {% import "partials/filter_controls.html" as fc %}
 {% import "partials/sheet_filter_bar.html" as fb %}
 
+{# Asset (green) / liability (red) left accent. Painted as a border on the first
+   *cell*, not the <tr>: WebKit is unreliable about row borders in border-
+   collapse tables (especially when the sheet scrolls horizontally), but renders
+   cell borders correctly — so this matches the Assets table's look everywhere. #}
+<style>
+    #holdings-tbody tr[data-accent="asset"] > td:first-child {
+        border-left: 4px solid #34d399;   /* emerald-400 */
+    }
+    #holdings-tbody tr[data-accent="liability"] > td:first-child {
+        border-left: 4px solid #fb7185;   /* rose-400 */
+    }
+</style>
+
 <form id="holdings-filter-form" method="get" action="{{ url_for('holdings.holdings_view', filename=filename) }}" class="shrink-0">
     {% if edit_mode %}<input type="hidden" name="edit" value="1">{% endif %}
     {% call fb.filter_bar(active_count=active_count,

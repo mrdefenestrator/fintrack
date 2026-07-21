@@ -16,7 +16,7 @@
 </tr>
 {% endif %}
 {% for row in holdings_rows %}
-<tr class="{{ sheet.row_class(row.accent) }}" id="holding-row-{{ row.source }}-{{ row.ref }}">
+<tr class="{{ sheet.row_class() }}" id="holding-row-{{ row.source }}-{{ row.ref }}" data-accent="{{ row.accent_side }}">
     {% for cell in row.cells %}
     {% set i = loop.index0 %}
     {% set field = row.fields[i] %}

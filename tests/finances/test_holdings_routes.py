@@ -93,11 +93,12 @@ def test_holdings_view_has_no_tier_or_kind_surface(client):
 
 
 def test_holdings_view_row_accents_by_asset_liability(client):
-    """Asset rows get the green left accent, liability rows the red one."""
+    """Rows carry a data-accent so the first cell gets the green/red left accent
+    (painted on the cell, not the row, for WebKit border-collapse reliability)."""
     resp = client.get("/s/finances/holdings")
     rows = _rows_region(resp.get_data(as_text=True))
-    assert "border-l-emerald-400" in rows  # the checking account (asset)
-    assert "border-l-rose-400" in rows  # the credit card (liability)
+    assert 'data-accent="asset"' in rows  # the checking account
+    assert 'data-accent="liability"' in rows  # the credit card
 
 
 def test_holdings_view_shows_bottom_total(client):

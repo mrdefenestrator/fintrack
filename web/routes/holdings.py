@@ -236,7 +236,11 @@ def _make_row(
         "cell_classes": cell_classes,
         "fields": [col_fields.get(k) for k in _KEYS],
         "edit_raw": edit_raw,
-        "accent": "border-l-rose-400" if is_liability else "border-l-emerald-400",
+        # Asset/liability left accent. Painted on the first cell via CSS
+        # (data-accent) rather than a <tr> border: WebKit is unreliable about
+        # row borders in border-collapse tables, especially when the sheet
+        # scrolls horizontally.
+        "accent_side": "liability" if is_liability else "asset",
     }
 
 

@@ -104,10 +104,25 @@ def test_holdings_view_row_accents_by_asset_liability(client):
 def test_holdings_view_shows_bottom_total(client):
     resp = client.get("/s/finances/holdings")
     body = resp.get_data(as_text=True)
-    # Pinned total row (class picked up by sortable.js) summing displayed rows:
-    # checking (+1000) + credit card (-400) = 600.
+    # Pinned master total row summing every group: checking (+1000) + card
+    # (-400) = 600 net worth.
     assert "total-row" in body
     assert "600" in body
+
+
+def test_holdings_grouped_layout(client):
+    """One table, two domain groups (Accounts, Assets), each with its own
+    heading + header row, then a master Net-worth total."""
+    resp = client.get("/s/finances/holdings")
+    body = resp.get_data(as_text=True)
+    assert "holdings-group-heading" in body
+    # Group headings + subtotals both use the labels; net worth is the master.
+    assert "Accounts" in body
+    assert "Assets" in body
+    assert "Net worth" in body
+    # Assets-only trailing columns appear (proving per-group headers).
+    assert "Unit Price" in body
+    assert "Equity" in body
 
 
 def test_holdings_view_reuses_shared_filter_bar(client):

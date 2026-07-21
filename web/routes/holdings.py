@@ -1,17 +1,18 @@
 """Holdings blueprint - unified view of accounts + assets/debts.
 
-Lists every holding (account or asset_entries row) together with its liquidity
-tier and signed net-worth contribution, reusing the shared spreadsheet chrome
-(sheet table, filter bar, total row). One dense sheet that combines the columns
-of the Accounts and Assets pages; type-specific cells are blank ("-") on rows
-they don't apply to.
+Renders one table with two domain groups (Accounts, Assets). The leading columns
+— Institution · Type · Name · Amount — are identical in both groups so they align
+down the whole table; the trailing column slots are reused per group (e.g. slot 4
+is Rewards for accounts, Unit Price for assets), so each group carries its own
+header row and the table stays narrow. Each group has a subtotal; a master
+Net-worth total closes the table.
 
 Inline editing mirrors the Accounts/Assets pages (click a cell -> cell_edit
 swaps the tbody with that cell in edit mode -> the input posts to update ->
-tbody re-renders). Because a Holdings row is either an account or an asset
-entry, each row carries a `source` + `ref` so the single update route dispatches
-to update_account or update_asset_entry. Slice 1 makes the identity/
-classification cells editable (Type, Name, Institution, Unit).
+tbody re-renders). Because a Holdings row is either an account or an asset entry,
+each row carries a `source` + `ref` so the single update/delete routes dispatch
+to the right repository. Editable fields, per-row gating, and coercion match the
+Accounts/Assets pages. The actions column (delete) sticks to the right edge.
 """
 
 from datetime import date
@@ -52,18 +53,17 @@ _TYPE_LABELS: dict[str, str] = HOLDING_TYPE_LABELS
 # contribution (assets add to net worth, liabilities subtract).
 _BALANCE_LABELS: dict[str, str] = {"asset": "Assets", "liability": "Liabilities"}
 
-# The full column set for the combined sheet, as (key, header, right_align).
-# It unions the Accounts and Assets columns; each row fills the cells that apply
-# to it and leaves the rest blank. The money block reads qty × unit-price =
-# amount (Unit Price is the combined symbol+price cell; USD rows leave it
-# blank). Neither liquidity tier nor a Kind (account/asset/debt) column appears:
-# both are derivable from type. Asset-vs-liability is carried by the row accent.
-_COLUMNS: list[tuple[str, str, bool]] = [
+# Holdings renders as ONE table with two domain groups (Accounts, Assets). The
+# leading columns — Institution · Type · Name · Amount — are identical in both
+# groups so they align down the whole table (auto width sized across both
+# domains). The trailing column *slots* are reused: e.g. slot 4 is Rewards for
+# accounts and Unit Price for assets. Each group carries its own header row, so
+# the table stays narrow (4 + max trailing) instead of the union width. Both
+# groups have the same slot count so the grid lines up.
+_ACCOUNT_COLS: list[tuple[str, str, bool]] = [
     ("institution", "Institution", False),
     ("type", "Type", False),
     ("name", "Name", False),
-    ("unit_price", "Unit Price", True),
-    ("qty", "Qty", True),
     ("amount", "Amount", True),
     ("rewards", "Rewards", True),
     ("limit", "Limit", True),
@@ -71,19 +71,40 @@ _COLUMNS: list[tuple[str, str, bool]] = [
     ("statement", "Statement", True),
     ("due", "Due", False),
     ("linked", "Linked", False),
-    ("interest", "Interest", True),
     ("reserve", "Reserve", True),
     ("funding", "Funding", True),
+    ("as_of", "As Of", False),
+]
+_ASSET_COLS: list[tuple[str, str, bool]] = [
+    ("institution", "Institution", False),
+    ("type", "Type", False),
+    ("name", "Name", False),
+    ("amount", "Amount", True),
+    ("unit_price", "Unit Price", True),
+    ("qty", "Qty", True),
+    ("interest", "Interest", True),
+    ("due", "Due", False),
+    ("linked", "Linked", False),
     ("source", "Source", False),
     ("as_of", "As Of", False),
     ("equity", "Equity", True),
     ("ltv", "LTV", True),
 ]
-_HEADERS = [h for _, h, _ in _COLUMNS]
-_RIGHT_ALIGN_COLS = [i for i, (_, _, ra) in enumerate(_COLUMNS) if ra]
-_KEYS = [k for k, _, _ in _COLUMNS]
-_AMOUNT_COL = _KEYS.index("amount")
-_AS_OF_COL = _KEYS.index("as_of")
+_NCOLS = len(_ACCOUNT_COLS)  # same slot count in both groups
+_AMOUNT_POS = 3  # Amount is the 4th (leading) slot in both groups
+
+
+def _col_keys(cols):
+    return [k for k, _, _ in cols]
+
+
+def _col_headers(cols):
+    return [h for _, h, _ in cols]
+
+
+def _col_right_align(cols):
+    return [i for i, (_, _, ra) in enumerate(cols) if ra]
+
 
 # Editable columns per row source, mapping the display column key to the
 # underlying repository field. Identity/classification fields are always
@@ -219,22 +240,34 @@ def _raw(v) -> str:
 
 
 def _make_row(
-    values, amount, type_value, institution, today, source, ref, col_fields, edit_raw
+    values,
+    amount,
+    type_value,
+    institution,
+    today,
+    source,
+    ref,
+    cols,
+    col_fields,
+    edit_raw,
 ):
     """Assemble a row record: display cells, per-cell classes, edit metadata.
 
-    The left-border accent encodes the asset/liability split by the sign of the
-    amount (assets green, liabilities red). `fields` gives the editable field
-    per column (or None); `edit_raw` holds raw values to prefill edit inputs.
+    `cols` is the group's column layout (Accounts or Assets); cells/fields are
+    positioned by its keys so the two groups share the leading slots. The
+    left-border accent encodes the asset/liability split by the sign of the
+    amount (assets green, liabilities red).
     """
+    keys = _col_keys(cols)
     is_liability = amount < 0
-    cells = [values.get(k, _BLANK) for k in _KEYS]
+    cells = [values.get(k, _BLANK) for k in keys]
     # Mute blank cells so populated data stands out; keep the As-of staleness
     # color where the cell actually carries a date.
     cell_classes = [_MUTED if c == _BLANK else "" for c in cells]
-    staleness = _staleness_class(values.get("as_of_iso"), today)
-    if staleness:
-        cell_classes[_AS_OF_COL] = staleness
+    if "as_of" in keys:
+        staleness = _staleness_class(values.get("as_of_iso"), today)
+        if staleness:
+            cell_classes[keys.index("as_of")] = staleness
     return {
         "source": source,
         "ref": ref,
@@ -244,7 +277,7 @@ def _make_row(
         "amount": amount,
         "cells": cells,
         "cell_classes": cell_classes,
-        "fields": [col_fields.get(k) for k in _KEYS],
+        "fields": [col_fields.get(k) for k in keys],
         "edit_raw": edit_raw,
         # Asset/liability left accent. Painted on the first cell via CSS
         # (data-accent) rather than a <tr> border: WebKit is unreliable about
@@ -297,6 +330,7 @@ def _account_row(a: dict, funding_by_id: dict, account_display: dict, today: dat
         today,
         "account",
         a.get("id"),
+        _ACCOUNT_COLS,
         _account_col_fields(a),
         edit_raw,
     )
@@ -348,6 +382,7 @@ def _asset_row(e: dict, pair: dict | None, linked: str, index: int, today: date)
         today,
         "asset",
         index,
+        _ASSET_COLS,
         _asset_col_fields(e),
         edit_raw,
     )
@@ -392,21 +427,61 @@ def _all_rows(ctx: dict, today: date) -> list[dict]:
         names = loans_by_asset_id.get(e.get("id"), [])
         return ", ".join(names) if names else _BLANK
 
-    rows = [_account_row(a, funding_by_id, account_display, today) for a in accounts]
-    rows += [
+    account_rows = [
+        _account_row(a, funding_by_id, account_display, today) for a in accounts
+    ]
+    asset_rows = [
         _asset_row(e, equity_by_debt.get(id(e)), _linked(e), idx, today)
         for idx, e in enumerate(assets)
     ]
+    return account_rows, asset_rows
+
+
+def _apply_filters(rows, type_sel, balance_sel, inst_sel):
+    if type_sel:
+        rows = [r for r in rows if r["type_value"] in type_sel]
+    if balance_sel:
+        rows = [r for r in rows if r["balance_side"] in balance_sel]
+    if inst_sel:
+        rows = [r for r in rows if r["institution"] in inst_sel]
     return rows
 
 
-def _total_cells(rows: list[dict]) -> list[str]:
-    """Bottom total row: net worth = sum of the (displayed) rows' amounts."""
+def _subtotal_cells(cols, label, rows):
+    """A group subtotal row (label under Name, sum under Amount) + the sum."""
     total = sum((r["amount"] for r in rows), Decimal("0"))
-    cells = [""] * len(_HEADERS)
-    cells[0] = "Total"
-    cells[_AMOUNT_COL] = fmt_money(total)
-    return cells
+    cells = [""] * len(cols)
+    cells[2] = label  # Name slot
+    cells[_AMOUNT_POS] = fmt_money(total)
+    return cells, total
+
+
+def _groups_ctx(account_rows, asset_rows):
+    """The two domain groups (headers, rows, subtotals) + the net-worth total."""
+    acc_sub, acc_total = _subtotal_cells(_ACCOUNT_COLS, "Accounts", account_rows)
+    ast_sub, ast_total = _subtotal_cells(_ASSET_COLS, "Assets", asset_rows)
+    groups = [
+        {
+            "source": "account",
+            "label": "Accounts",
+            "headers": _col_headers(_ACCOUNT_COLS),
+            "right_align": _col_right_align(_ACCOUNT_COLS),
+            "rows": account_rows,
+            "subtotal": acc_sub,
+        },
+        {
+            "source": "asset",
+            "label": "Assets",
+            "headers": _col_headers(_ASSET_COLS),
+            "right_align": _col_right_align(_ASSET_COLS),
+            "rows": asset_rows,
+            "subtotal": ast_sub,
+        },
+    ]
+    master = [""] * _NCOLS
+    master[2] = "Net worth"
+    master[_AMOUNT_POS] = fmt_money(acc_total + ast_total)
+    return groups, master
 
 
 def _ref_options(ctx: dict) -> tuple[list, list]:
@@ -426,14 +501,15 @@ def _ref_options(ctx: dict) -> tuple[list, list]:
     return account_ref_options, asset_ref_options
 
 
-def _tbody_ctx(rows: list[dict], ctx: dict, **editing) -> dict:
+def _tbody_ctx(account_rows, asset_rows, ctx: dict, **editing) -> dict:
     """Shared context for the tbody partial (page render and edit swaps)."""
     account_ref_options, asset_ref_options = _ref_options(ctx)
+    groups, master_total = _groups_ctx(account_rows, asset_rows)
     return {
-        "holdings_rows": rows,
-        "headers": _HEADERS,
-        "right_align_cols": _RIGHT_ALIGN_COLS,
-        "total_cells": _total_cells(rows),
+        "groups": groups,
+        "master_total": master_total,
+        "ncols": _NCOLS,
+        "amount_pos": _AMOUNT_POS,
         "account_type_options": ACCOUNT_TYPE_OPTIONS,
         "asset_type_options": ASSET_TYPE_OPTIONS,
         "account_ref_options": account_ref_options,
@@ -445,9 +521,15 @@ def _tbody_ctx(rows: list[dict], ctx: dict, **editing) -> dict:
 def _render_tbody(snapshot_id, filename, error=None, **editing):
     """Render just the tbody (for cell_edit / update HTMX swaps), edit mode on."""
     ctx = get_common_context(snapshot_id, filename, edit_mode=True)
-    rows = _all_rows(ctx, date.today())
+    account_rows, asset_rows = _all_rows(ctx, date.today())
     tbody = _tbody_ctx(
-        rows, ctx, edit_mode=True, filename=filename, error=error, **editing
+        account_rows,
+        asset_rows,
+        ctx,
+        edit_mode=True,
+        filename=filename,
+        error=error,
+        **editing,
     )
     return render_template("partials/holdings_tbody.html", **tbody)
 
@@ -459,11 +541,12 @@ def holdings_view(filename):
     ctx = get_common_context(snapshot_id, filename, edit_mode)
     ctx["active_tab"] = "holdings"
 
-    rows = _all_rows(ctx, date.today())
-    institutions = sorted({r["institution"] for r in rows if r["institution"]})
+    account_rows, asset_rows = _all_rows(ctx, date.today())
+    all_rows = account_rows + asset_rows
+    institutions = sorted({r["institution"] for r in all_rows if r["institution"]})
     # Type filter options: the canonical types actually present, in canonical
     # order (not alphabetical), so the dropdown reads sensibly.
-    present_types = {r["type_value"] for r in rows if r["type_value"]}
+    present_types = {r["type_value"] for r in all_rows if r["type_value"]}
     type_values_labels = [
         (v, lbl) for v, lbl in _ALL_TYPE_OPTIONS if v in present_types
     ]
@@ -473,13 +556,8 @@ def holdings_view(filename):
     balance_sel = [b for b in request.args.getlist("balance") if b in _BALANCE_LABELS]
     inst_sel = [i for i in request.args.getlist("institution") if i in institutions]
 
-    filtered = rows
-    if type_sel:
-        filtered = [r for r in filtered if r["type_value"] in type_sel]
-    if balance_sel:
-        filtered = [r for r in filtered if r["balance_side"] in balance_sel]
-    if inst_sel:
-        filtered = [r for r in filtered if r["institution"] in inst_sel]
+    f_accounts = _apply_filters(account_rows, type_sel, balance_sel, inst_sel)
+    f_assets = _apply_filters(asset_rows, type_sel, balance_sel, inst_sel)
 
     # A filter group only "counts" as active when it's a proper subset (matching
     # the Assets sheet: selecting every option is the same as no filter).
@@ -498,7 +576,7 @@ def holdings_view(filename):
             for v, lbl in values_labels
         ]
 
-    ctx.update(_tbody_ctx(filtered, ctx, edit_mode=edit_mode))
+    ctx.update(_tbody_ctx(f_accounts, f_assets, ctx, edit_mode=edit_mode))
     ctx.update(
         {
             "active_count": active_count,

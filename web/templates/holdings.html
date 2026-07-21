@@ -43,8 +43,9 @@
 </form>
 
 <div class="table-scroll-container rounded-b-lg border-l border-b border-r border-gray-300 dark:border-gray-600 shadow-sm" data-sheet-scroll>
-<table id="holdings-table" class="editable-table sortable w-full text-sm border-collapse bg-white dark:bg-gray-800">
-    {{ sheet.thead(headers, right_align_cols, actions_col=edit_mode) }}
+{# One table, two domain groups. Headers are per-group rows inside the tbody
+   (the trailing column slots differ per group), so there is no global thead. #}
+<table id="holdings-table" class="editable-table w-full text-sm border-collapse bg-white dark:bg-gray-800">
     <tbody id="holdings-tbody">
         {% include "partials/holdings_tbody.html" %}
     </tbody>

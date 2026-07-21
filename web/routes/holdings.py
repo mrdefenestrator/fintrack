@@ -11,34 +11,43 @@ from decimal import Decimal
 from flask import Blueprint, render_template, request
 
 from fintrack.core.formatting import fmt_money
-from fintrack.core.types import (
-    ACCOUNT_TYPE_OPTIONS,
-    ASSET_TYPE_OPTIONS,
-)
+from fintrack.core.types import HOLDING_TYPE_LABELS, HOLDING_TYPE_OPTIONS
 from fintrack.networth import calculations
 
 from .common import get_common_context, validate_snapshot
 
 holdings_bp = Blueprint("holdings", __name__, url_prefix="/s")
 
-# Canonical, ordered (value, label) list of every holding type — account types
-# first, then asset-only types (loan is shared, so it isn't repeated). Drives
-# the Type filter's option order and the type-label lookup.
-_ALL_TYPE_OPTIONS: list[tuple[str, str]] = ACCOUNT_TYPE_OPTIONS + [
-    o for o in ASSET_TYPE_OPTIONS if o[0] not in dict(ACCOUNT_TYPE_OPTIONS)
-]
-_TYPE_LABELS: dict[str, str] = dict(_ALL_TYPE_OPTIONS)
+# The one holding-type vocabulary drives the Type filter's options + labels.
+_ALL_TYPE_OPTIONS: list[tuple[str, str]] = HOLDING_TYPE_OPTIONS
+_TYPE_LABELS: dict[str, str] = HOLDING_TYPE_LABELS
 
 # The two "balance side" filter buckets, keyed by the sign of a holding's
 # contribution (assets add to net worth, liabilities subtract).
 _BALANCE_LABELS: dict[str, str] = {"asset": "Assets", "liability": "Liabilities"}
 
-# Column order for the holdings sheet. Amount/Equity/LTV are right-aligned.
-# Neither liquidity tier nor a Kind (account/asset/debt) column appears: both
-# are derivable from type, so the Type column/filter already conveys them. The
-# asset-vs-liability distinction is carried by the row accent + Balance filter.
-_HEADERS = ["Institution", "Name", "Type", "Amount", "Equity", "LTV"]
-_RIGHT_ALIGN_COLS = [3, 4, 5]
+# Column order for the holdings sheet. The money block reads qty × unit-price =
+# amount. Unit and per-unit price are one combined "Unit Price" column showing
+# the symbol and price together ("BTC $95,000"); USD rows leave it blank (the
+# value is the Amount directly). Qty/Unit Price/Amount/Equity/LTV are right-
+# aligned; Equity and LTV are last. Neither liquidity tier nor a Kind (account/
+# asset/debt) column appears: both are derivable from type, so the Type column/
+# filter already conveys them. The asset-vs-liability distinction is carried by
+# the row accent + Balance filter.
+_HEADERS = [
+    "Institution",
+    "Type",
+    "Name",
+    "Unit Price",
+    "Qty",
+    "Amount",
+    "Equity",
+    "LTV",
+]
+_RIGHT_ALIGN_COLS = [3, 4, 5, 6, 7]
+_EQUITY_COL = 6
+_LTV_COL = 7
+_AMOUNT_COL = 5
 
 
 def _type_label(value: str | None) -> str:
@@ -47,15 +56,46 @@ def _type_label(value: str | None) -> str:
     return _TYPE_LABELS.get(value, value)
 
 
+def _fmt_qty(qty) -> str:
+    """Plain quantity for the holdings sheet (coin/share counts).
+
+    Unlike the shared fmt_qty (which renders fractions <1 as a percentage for
+    fractional *ownership*), symbol quantities like 0.4015 BTC read as counts.
+    Trailing zeros are stripped; whole numbers show without decimals.
+    """
+    if qty is None:
+        return "—"
+    d = Decimal(str(qty))
+    if d == d.to_integral_value():
+        return f"{int(d):,}"
+    return format(d.normalize(), "f")
+
+
 def _fmt_ltv(ltv: Decimal | None) -> str:
     return f"{ltv * 100:.1f}%" if ltv is not None else "—"
 
 
-def _holding(institution: str, name: str, type_value, amount):
+def _unit_price(unit: str, price) -> str:
+    """Combined unit + per-unit price cell — only meaningful for symbol units.
+
+    A symbol unit (BTC, AAPL, …) shows the ticker with its per-unit market
+    price ("BTC $95,000"), or the bare ticker when no price is cached yet. USD
+    rows have no per-unit price — the value is the Amount directly — so they
+    show "—".
+    """
+    if not unit or unit == "USD":
+        return "—"
+    return f"{unit} {fmt_money(price)}" if price is not None else unit
+
+
+def _holding(institution, name, type_value, unit, qty, price, amount):
     """Build one holding record: display cells + sort/filter metadata.
 
-    The left-border accent encodes the asset/liability split by the sign of the
-    holding's net-worth contribution (assets green, liabilities red).
+    The money block reads qty × unit-price = amount, where amount is the signed
+    net-worth contribution. Accounts are the trivial USD case (qty/price blank,
+    amount entered directly); assets show their quantity and per-unit price. The
+    left-border accent encodes the asset/liability split by the sign of the
+    amount (assets green, liabilities red).
     """
     is_liability = amount < 0
     return {
@@ -66,8 +106,10 @@ def _holding(institution: str, name: str, type_value, amount):
         "amount": amount,
         "cells": [
             institution or "—",
-            name or "—",
             _type_label(type_value) or "—",
+            name or "—",
+            _unit_price(unit, price),
+            _fmt_qty(qty),
             fmt_money(amount),
             "—",  # Equity — filled in for secured loan rows below
             "—",  # LTV
@@ -90,26 +132,36 @@ def holdings_view(filename):
     # fold it into that loan's row (per design: equity shows on the loan row).
     equity_by_debt = {id(p["debt"]): p for p in calculations.equity_pairs(assets)}
 
+    # Accounts are the trivial USD case: amount entered directly, no qty/price.
     rows = [
         _holding(
             a.get("institution") or "",
             a.get("name") or "",
             a.get("type"),
+            "USD",
+            None,
+            None,
             calculations.account_contribution(a),
         )
         for a in accounts
     ]
     for e in assets:
+        # Per-unit price is `value` for an asset, `balance` (owed per unit) for
+        # a debt; amount is the signed subtotal (qty × price, liabilities −).
+        price = e.get("value") if e.get("kind") == "asset" else e.get("balance")
         row = _holding(
             e.get("institution") or "",
             e.get("name") or "",
             e.get("type"),
+            e.get("unit") or "USD",
+            e.get("quantity"),
+            price,
             calculations.asset_contribution(e),
         )
         pair = equity_by_debt.get(id(e))
         if pair is not None:
-            row["cells"][4] = fmt_money(pair["equity"])
-            row["cells"][5] = _fmt_ltv(pair["ltv"])
+            row["cells"][_EQUITY_COL] = fmt_money(pair["equity"])
+            row["cells"][_LTV_COL] = _fmt_ltv(pair["ltv"])
         rows.append(row)
 
     institutions = sorted({r["institution"] for r in rows if r["institution"]})
@@ -152,7 +204,9 @@ def holdings_view(filename):
 
     # Bottom total = sum of the displayed rows (equals net worth with no filter).
     total = sum((r["amount"] for r in filtered), Decimal("0"))
-    total_cells = ["Total", "", "", fmt_money(total), "", ""]
+    total_cells = [""] * len(_HEADERS)
+    total_cells[0] = "Total"
+    total_cells[_AMOUNT_COL] = fmt_money(total)
 
     ctx.update(
         {

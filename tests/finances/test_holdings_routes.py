@@ -64,7 +64,16 @@ def test_holdings_view_returns_200_with_columns(client):
     assert resp.status_code == 200
     body = resp.get_data(as_text=True)
     # Sheet column headers (not a bespoke top panel).
-    for header in ("Institution", "Name", "Type", "Amount", "Equity", "LTV"):
+    for header in (
+        "Institution",
+        "Name",
+        "Type",
+        "Unit Price",
+        "Qty",
+        "Amount",
+        "Equity",
+        "LTV",
+    ):
         assert header in body
     # Both holdings render.
     assert "Checking" in body

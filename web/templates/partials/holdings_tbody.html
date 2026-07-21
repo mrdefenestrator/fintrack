@@ -31,6 +31,14 @@
                 <option value="{{ value }}" {% if value == row.edit_raw['type'] %}selected{% endif %}>{{ label }}</option>
                 {% endfor %}
             {% endcall %}
+        {% elif field in ('paymentAccountRef', 'assetRef') %}
+            {% set opts = account_ref_options if field == 'paymentAccountRef' else asset_ref_options %}
+            {% call(caller) cell_edit_select(field, row.edit_raw[field], right, update_url, display_url, 'holdings-tbody', none, none) %}
+                <option value="">-</option>
+                {% for value, label in opts %}
+                <option value="{{ value }}" {% if value | string == row.edit_raw[field] %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            {% endcall %}
         {% else %}
             {{ cell_edit_input(field, row.edit_raw[field], right, update_url, display_url, 'holdings-tbody', none) }}
         {% endif %}

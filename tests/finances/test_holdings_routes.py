@@ -338,6 +338,44 @@ def test_holdings_update_debt_interest(client, db_engine):
     assert float(entry["interestRate"]) == 0.055
 
 
+def test_holdings_update_cc_payment_account_ref(client, db_engine):
+    from fintrack.accounts.repository import get_accounts
+
+    checking = _account_by_name(db_engine, "Checking")
+    cc = _account_by_name(db_engine, "Visa")
+    # Point the card's payment account at Checking (Linked ref picker).
+    resp = client.post(
+        f"/s/finances/holdings/update/account/{cc['id']}",
+        data={"field": "paymentAccountRef", "value": str(checking["id"])},
+    )
+    assert resp.status_code == 200
+    with db_engine.connect() as conn:
+        updated = next(a for a in get_accounts(conn, 1) if a["id"] == cc["id"])
+    assert updated["paymentAccountRef"] == checking["id"]
+
+
+def test_holdings_update_debt_asset_ref(client, db_engine):
+    from fintrack.networth.repository import add_asset_entry, get_asset_entries
+
+    with db_engine.connect() as conn:
+        asset_id = add_asset_entry(
+            conn,
+            1,
+            {"kind": "asset", "type": "real_estate", "name": "Home", "value": 1},
+        )
+        add_asset_entry(conn, 1, {"kind": "debt", "name": "Mortgage", "balance": 1})
+
+    # The debt is the 2nd asset entry (index 1); link it to the Home asset.
+    resp = client.post(
+        "/s/finances/holdings/update/asset/1",
+        data={"field": "assetRef", "value": str(asset_id)},
+    )
+    assert resp.status_code == 200
+    with db_engine.connect() as conn:
+        debt = get_asset_entries(conn, 1)[1]
+    assert debt["assetRef"] == asset_id
+
+
 def test_holdings_update_invalid_number_is_422(client, db_engine):
     acc = _account_by_name(db_engine, "Checking")
     resp = client.post(

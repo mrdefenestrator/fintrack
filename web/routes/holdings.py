@@ -91,6 +91,7 @@ _ACCOUNT_COL_FIELD = [
     ("available", "available"),
     ("statement", "statement_balance"),
     ("due", "statement_due_day_of_month"),
+    ("linked", "paymentAccountRef"),
     ("reserve", "minimum_balance"),
 ]
 _ALWAYS_EDITABLE = ("institution", "type", "name")
@@ -122,6 +123,7 @@ def _asset_col_fields(e: dict) -> dict:
     if is_debt:
         m["interest"] = "interestRate"
         m["due"] = "nextDueDate"
+        m["linked"] = "assetRef"  # the asset this debt is secured by
         if single_unit:
             m["amount"] = "balance"
     else:
@@ -276,6 +278,7 @@ def _account_row(a: dict, funding_by_id: dict, account_display: dict, today: dat
         "available": _raw(a.get("available")),
         "statement_balance": _raw(a.get("statement_balance")),
         "statement_due_day_of_month": _raw(a.get("statement_due_day_of_month")),
+        "paymentAccountRef": _raw(a.get("paymentAccountRef")),
         "minimum_balance": _raw(a.get("minimum_balance")),
     }
     return _make_row(
@@ -326,6 +329,7 @@ def _asset_row(e: dict, pair: dict | None, linked: str, index: int, today: date)
         "balance": _raw(e.get("balance")),
         "interestRate": _raw(e.get("interestRate")),
         "nextDueDate": e.get("nextDueDate") or "",
+        "assetRef": _raw(e.get("assetRef")),
         "source": e.get("source") or "",
     }
     return _make_row(
@@ -397,8 +401,26 @@ def _total_cells(rows: list[dict]) -> list[str]:
     return cells
 
 
-def _tbody_ctx(rows: list[dict], **editing) -> dict:
+def _ref_options(ctx: dict) -> tuple[list, list]:
+    """(account, asset) picker options for the Linked column: a credit card's
+    payment account, and a loan's secured asset."""
+    account_display = ctx["account_display_by_id"]
+    account_ref_options = [
+        (a["id"], account_display.get(a["id"], a.get("name") or _BLANK))
+        for a in ctx["accounts"]
+        if a.get("id") is not None
+    ]
+    asset_ref_options = [
+        (e["id"], e.get("name") or _BLANK)
+        for e in ctx["assets"]
+        if e.get("kind") == "asset" and e.get("id") is not None
+    ]
+    return account_ref_options, asset_ref_options
+
+
+def _tbody_ctx(rows: list[dict], ctx: dict, **editing) -> dict:
     """Shared context for the tbody partial (page render and edit swaps)."""
+    account_ref_options, asset_ref_options = _ref_options(ctx)
     return {
         "holdings_rows": rows,
         "headers": _HEADERS,
@@ -406,6 +428,8 @@ def _tbody_ctx(rows: list[dict], **editing) -> dict:
         "total_cells": _total_cells(rows),
         "account_type_options": ACCOUNT_TYPE_OPTIONS,
         "asset_type_options": ASSET_TYPE_OPTIONS,
+        "account_ref_options": account_ref_options,
+        "asset_ref_options": asset_ref_options,
         **editing,
     }
 
@@ -414,7 +438,9 @@ def _render_tbody(snapshot_id, filename, error=None, **editing):
     """Render just the tbody (for cell_edit / update HTMX swaps), edit mode on."""
     ctx = get_common_context(snapshot_id, filename, edit_mode=True)
     rows = _all_rows(ctx, date.today())
-    tbody = _tbody_ctx(rows, edit_mode=True, filename=filename, error=error, **editing)
+    tbody = _tbody_ctx(
+        rows, ctx, edit_mode=True, filename=filename, error=error, **editing
+    )
     return render_template("partials/holdings_tbody.html", **tbody)
 
 
@@ -464,7 +490,7 @@ def holdings_view(filename):
             for v, lbl in values_labels
         ]
 
-    ctx.update(_tbody_ctx(filtered, edit_mode=edit_mode))
+    ctx.update(_tbody_ctx(filtered, ctx, edit_mode=edit_mode))
     ctx.update(
         {
             "active_count": active_count,

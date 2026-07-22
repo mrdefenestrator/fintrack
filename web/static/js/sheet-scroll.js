@@ -87,7 +87,12 @@
             headerH = headingH + (header ? header.offsetHeight : 0);
             frame.style.setProperty("--sheet-heading-h", headingH + "px");
         }
-        var totalRow = container.querySelector("tr.total-row");
+        // Sum every total row (the Holdings footer has two: Liquid + Net worth)
+        // so the side shadows stop above the whole pinned footer.
+        var footerH = 0;
+        container.querySelectorAll("tr.total-row").forEach(function (r) {
+            footerH += r.offsetHeight;
+        });
         // When a sheet pins an actions column to the right edge, keep the right
         // shadow to the left of it (over the scrolling data), not under it.
         var rightW = 0;
@@ -96,7 +101,7 @@
             rightW = actions ? actions.offsetWidth : 0;
         }
         frame.style.setProperty("--sheet-header-h", headerH + "px");
-        frame.style.setProperty("--sheet-footer-h", (totalRow ? totalRow.offsetHeight : 0) + "px");
+        frame.style.setProperty("--sheet-footer-h", footerH + "px");
         frame.style.setProperty("--sheet-right-h", rightW + "px");
     }
 

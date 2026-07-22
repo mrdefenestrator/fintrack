@@ -1,18 +1,28 @@
 """Holdings blueprint - unified view of accounts + assets/debts.
 
-Renders one table with two domain groups (Accounts, Assets). The leading columns
-— Institution · Type · Name · Amount — are identical in both groups so they align
-down the whole table; the trailing column slots are reused per group (e.g. slot 4
-is Rewards for accounts, Unit Price for assets), so each group carries its own
-header row and the table stays narrow. Each group has a subtotal; a master
-Net-worth total closes the table.
+Renders ONE table split into four type-based domain groups:
+
+    Cash · Credit Cards · Loans · Assets
+
+Cash and Credit Cards are two type slices of the `accounts` table (credit cards
+split out from spendable cash); Loans and Assets are the `kind=debt` / `kind=asset`
+slices of the `asset_entries` table. So the split is purely a display grouping —
+there is no data migration, and the debt↔asset equity/LTV pairing is untouched.
+
+The leading columns — Institution · Type · Name · Amount — and the trailing
+Due · Linked · As Of slots sit in the same slot positions in every group so they
+align down the whole table; each group fills the middle slots with its own
+columns (blank slots pad the shorter groups). Each group carries its own header
+row and shows its subtotal in its heading band; a master footer closes the table
+with the two totals that matter — Liquid and Net worth (`calculations.tiered_totals`).
 
 Inline editing mirrors the Accounts/Assets pages (click a cell -> cell_edit
 swaps the tbody with that cell in edit mode -> the input posts to update ->
-tbody re-renders). Because a Holdings row is either an account or an asset entry,
-each row carries a `source` + `ref` so the single update/delete routes dispatch
-to the right repository. Editable fields, per-row gating, and coercion match the
-Accounts/Assets pages. The actions column (delete) sticks to the right edge.
+tbody re-renders). Each row carries a `source` (account/asset) + `ref` so the
+single update/delete routes dispatch to the right repository. Credit-card
+Available is a computed, read-only column (Limit + owed balance), so it never
+drifts from the imported balance. The actions column (delete) sticks to the
+right edge.
 """
 
 from datetime import date
@@ -57,48 +67,97 @@ _TYPE_LABELS: dict[str, str] = HOLDING_TYPE_LABELS
 # contribution (assets add to net worth, liabilities subtract).
 _BALANCE_LABELS: dict[str, str] = {"asset": "Assets", "liability": "Liabilities"}
 
-# Holdings renders as ONE table with two domain groups (Accounts, Assets). The
-# leading columns — Institution · Type · Name · Amount — are identical in both
-# groups so they align down the whole table (auto width sized across both
-# domains). The trailing column *slots* are reused: e.g. slot 4 is Rewards for
-# accounts and Unit Price for assets. Each group carries its own header row, so
-# the table stays narrow (4 + max trailing) instead of the union width. Both
-# groups have the same slot count so the grid lines up.
-# The shared columns — Institution/Type/Name/Amount (leading) and Due/Linked/
-# As Of (trailing) — sit in the same slots in both groups so they align down the
-# whole table. The domain-specific columns fill the slots between them.
-_ACCOUNT_COLS: list[tuple[str, str, bool]] = [
+# ---------------------------------------------------------------------------
+# Column layouts — one per group.
+#
+# Every group shares the leading Institution·Type·Name·Amount slots and the
+# trailing Due·Linked·As Of slots (same slot index in each group so they line up
+# down the table); the middle slots hold each group's own columns. Blank slots
+# ("") pad the shorter groups so every group has the same slot count and the
+# grid — and the sticky right-hand actions column — line up. Each tuple is
+# (key, header, right_align).
+# ---------------------------------------------------------------------------
+_E: tuple[str, str, bool] = ("", "", False)  # structural blank slot
+_LEADING: list[tuple[str, str, bool]] = [
     ("institution", "Institution", False),
     ("type", "Type", False),
     ("name", "Name", False),
     ("amount", "Amount", True),
-    ("rewards", "Rewards", True),
-    ("limit", "Limit", True),
-    ("available", "Available", True),
-    ("statement", "Statement", True),
+]
+_DUE = ("due", "Due", False)
+_LINKED = ("linked", "Linked", False)
+_ASOF = ("as_of", "As Of", False)
+
+# Each group packs its own columns from slot 4; blank slots (_E) pad the shorter
+# groups so As Of lands in the same last slot in every group (aligned down the
+# table), with the blanks sitting contiguously just before it.
+_CASH_COLS = _LEADING + [
     ("reserve", "Reserve", True),
     ("funding", "Funding", True),
-    ("due", "Due", False),
-    ("linked", "Linked", False),
-    ("as_of", "As Of", False),
+    _E,
+    _E,
+    _E,
+    _E,
+    _ASOF,
 ]
-_ASSET_COLS: list[tuple[str, str, bool]] = [
-    ("institution", "Institution", False),
-    ("type", "Type", False),
-    ("name", "Name", False),
-    ("amount", "Amount", True),
-    ("unit_price", "Unit Price", True),
-    ("qty", "Qty", True),
+_CREDIT_COLS = _LEADING + [
+    ("limit", "Limit", True),
+    ("available", "Available", True),
+    ("rewards", "Rewards", True),
+    ("statement", "Statement", True),
+    _DUE,
+    _LINKED,
+    _ASOF,
+]
+_LOAN_COLS = _LEADING + [
     ("interest", "Interest", True),
-    ("source", "Source", False),
     ("equity", "Equity", True),
     ("ltv", "LTV", True),
-    ("due", "Due", False),
-    ("linked", "Linked", False),
-    ("as_of", "As Of", False),
+    _DUE,
+    _LINKED,
+    _E,
+    _ASOF,
 ]
-_NCOLS = len(_ACCOUNT_COLS)  # same slot count in both groups
-_AMOUNT_POS = 3  # Amount is the 4th (leading) slot in both groups
+_ASSET_COLS = _LEADING + [
+    ("unit_price", "Unit Price", True),
+    ("qty", "Qty", True),
+    ("source", "Source", False),
+    _LINKED,
+    _E,
+    _E,
+    _ASOF,
+]
+_NCOLS = len(_CASH_COLS)  # same slot count in every group
+_AMOUNT_POS = 3  # Amount is the 4th (leading) slot in every group
+
+# Group definitions: key -> (label, source, singular noun for the add button,
+# column layout). Order here is the top-to-bottom render order.
+_GROUPS: list[tuple[str, str, str, str, list]] = [
+    ("cash", "Cash", "account", "account", _CASH_COLS),
+    ("credit", "Credit Cards", "account", "credit card", _CREDIT_COLS),
+    ("loan", "Loans", "asset", "loan", _LOAN_COLS),
+    ("asset", "Assets", "asset", "asset", _ASSET_COLS),
+]
+_GROUP_COLS = {key: cols for key, _, _, _, cols in _GROUPS}
+
+
+def _account_group_key(a: dict) -> str:
+    """Which group an account row belongs to (by type)."""
+    t = a.get("type")
+    if t == "credit_card":
+        return "credit"
+    if t == "loan":
+        return "loan"
+    return "cash"
+
+
+def _asset_group_key(e: dict) -> str:
+    """Which group an asset/debt entry belongs to (by kind)."""
+    return "loan" if e.get("kind") == "debt" else "asset"
+
+
+def _entity_group_key(source: str, entity: dict) -> str:
+    return _account_group_key(entity) if source == "account" else _asset_group_key(entity)
 
 
 def _col_keys(cols):
@@ -113,33 +172,63 @@ def _col_right_align(cols):
     return [i for i, (_, _, ra) in enumerate(cols) if ra]
 
 
-# Editable columns per row source, mapping the display column key to the
-# underlying repository field. Identity/classification fields are always
-# editable; the money/detail fields are gated per row (below), so the sheet's
-# edit behavior matches the Accounts/Assets pages.
-_ACCOUNT_COL_FIELD = [
+# Editable columns per account group, mapping the display column key to the
+# underlying repository field. Available is deliberately absent: it is a
+# computed, read-only column (Limit + owed balance), so it can never drift from
+# the imported balance. Identity/classification fields are always editable; the
+# money/detail fields are gated per row (below).
+_CASH_COL_FIELD = [
     ("institution", "institution"),
     ("type", "type"),
     ("name", "name"),
     ("amount", "balance"),
-    ("rewards", "rewards_balance"),
+    ("reserve", "minimum_balance"),
+]
+_CREDIT_COL_FIELD = [
+    ("institution", "institution"),
+    ("type", "type"),
+    ("name", "name"),
+    ("amount", "balance"),
     ("limit", "limit"),
-    ("available", "available"),
+    ("rewards", "rewards_balance"),
     ("statement", "statement_balance"),
     ("due", "statement_due_day_of_month"),
     ("linked", "paymentAccountRef"),
-    ("reserve", "minimum_balance"),
 ]
 _ALWAYS_EDITABLE = ("institution", "type", "name")
 
 
 def _account_col_fields(a: dict) -> dict:
     """Column key -> account field, gated by account_field_editable (CC vs cash,
-    reserve types), so Holdings matches the Accounts page's editability."""
+    reserve types), so Holdings matches the Accounts page's editability. The map
+    depends on the account's group (cash vs credit vs loan)."""
+    key = _account_group_key(a)
+    # Credit cards + account-loans edit the balance directly (Amount), since
+    # Available is the computed column now (QA #10) — so `balance` is always
+    # editable for them, overriding account_field_editable's Accounts-sheet rule
+    # that treats a credit-card balance as derived/read-only.
+    always = _ALWAYS_EDITABLE
+    if key == "credit":
+        col_field = _CREDIT_COL_FIELD
+        always = _ALWAYS_EDITABLE + ("balance",)
+    elif key == "loan":
+        # A loan tracked as an account: Due + Linked activated (QA #9), amount
+        # editable; no interest/equity/LTV (those are debt-entry concepts).
+        col_field = [
+            ("institution", "institution"),
+            ("type", "type"),
+            ("name", "name"),
+            ("amount", "balance"),
+            ("due", "statement_due_day_of_month"),
+            ("linked", "paymentAccountRef"),
+        ]
+        always = _ALWAYS_EDITABLE + ("balance",)
+    else:
+        col_field = _CASH_COL_FIELD
     return {
-        key: field
-        for key, field in _ACCOUNT_COL_FIELD
-        if field in _ALWAYS_EDITABLE or account_field_editable(a, field)
+        col_key: field
+        for col_key, field in col_field
+        if field in always or account_field_editable(a, field)
     }
 
 
@@ -154,7 +243,6 @@ def _asset_col_fields(e: dict) -> dict:
         "institution": "institution",
         "type": "type",
         "name": "name",
-        "qty": "quantity",
     }
     if is_debt:
         m["interest"] = "interestRate"
@@ -164,6 +252,7 @@ def _asset_col_fields(e: dict) -> dict:
             m["amount"] = "balance"
     else:
         m["unit_price"] = "unit"
+        m["qty"] = "quantity"
         m["source"] = "source"
         if single_unit and (e.get("unit") or "USD") == "USD":
             m["amount"] = "value"
@@ -187,12 +276,7 @@ def _type_label(value: str | None) -> str:
 
 
 def _fmt_qty(qty) -> str:
-    """Plain quantity for the holdings sheet (coin/share counts).
-
-    Unlike the shared fmt_qty (which renders fractions <1 as a percentage for
-    fractional *ownership*), symbol quantities like 0.4015 BTC read as counts.
-    Trailing zeros are stripped; whole numbers show without decimals.
-    """
+    """Plain quantity for the holdings sheet (coin/share counts)."""
     if qty is None:
         return _BLANK
     d = Decimal(str(qty))
@@ -214,16 +298,25 @@ def _money(x) -> str:
 
 
 def _unit_price(unit: str, price) -> str:
-    """Combined unit + per-unit price cell — only meaningful for symbol units.
-
-    A symbol unit (BTC, AAPL, …) shows the ticker with its per-unit market
-    price ("BTC $95,000"), or the bare ticker when no price is cached yet. USD
-    rows have no per-unit price — the value is the Amount directly — so they
-    show blank.
-    """
+    """Combined unit + per-unit price cell — only meaningful for symbol units."""
     if not unit or unit == "USD":
         return _BLANK
     return f"{unit} {fmt_money(price)}" if price is not None else unit
+
+
+def _cc_available(a: dict) -> str:
+    """Computed, read-only credit available = credit limit + owed balance (QA
+    #10). Blank when no limit is set. Rewards don't affect the credit line, so
+    this uses the signed owed balance, not the net Amount."""
+    limit = a.get("limit")
+    if limit is None:
+        return _BLANK
+    owed = calculations._credit_card_balance_owed(a)  # signed (negative = owed)
+    return fmt_money(_money_dec(limit) + owed)
+
+
+def _money_dec(x) -> Decimal:
+    return Decimal(str(x)) if x is not None else Decimal("0")
 
 
 def _staleness_class(as_of_iso: str | None, today: date) -> str:
@@ -260,17 +353,18 @@ def _make_row(
 ):
     """Assemble a row record: display cells, per-cell classes, edit metadata.
 
-    `cols` is the group's column layout (Accounts or Assets); cells/fields are
-    positioned by its keys so the two groups share the leading slots. The
-    left-border accent encodes the asset/liability split by the sign of the
-    amount (assets green, liabilities red).
+    `cols` is the group's column layout; cells/fields are positioned by its keys
+    so groups share their aligned slots. Structural blank slots (key "") render
+    as truly empty cells (not a muted dash). The left-border accent encodes the
+    asset/liability split by the sign of the amount (assets green, debts red).
     """
     keys = _col_keys(cols)
     is_liability = amount < 0
-    cells = [values.get(k, _BLANK) for k in keys]
-    # Mute blank cells so populated data stands out; keep the As-of staleness
-    # color where the cell actually carries a date.
-    cell_classes = [_MUTED if c == _BLANK else "" for c in cells]
+    # Blank structural slots ("") are empty; real columns fall back to a dash.
+    cells = ["" if k == "" else values.get(k, _BLANK) for k in keys]
+    cell_classes = [
+        "" if (k == "" or cells[i] != _BLANK) else _MUTED for i, k in enumerate(keys)
+    ]
     if "as_of" in keys:
         staleness = _staleness_class(values.get("as_of_iso"), today)
         if staleness:
@@ -284,12 +378,9 @@ def _make_row(
         "amount": amount,
         "cells": cells,
         "cell_classes": cell_classes,
-        "fields": [col_fields.get(k) for k in keys],
+        # Blank slots carry no field (never editable).
+        "fields": [None if k == "" else col_fields.get(k) for k in keys],
         "edit_raw": edit_raw,
-        # Asset/liability left accent. Painted on the first cell via CSS
-        # (data-accent) rather than a <tr> border: WebKit is unreliable about
-        # row borders in border-collapse tables, especially when the sheet
-        # scrolls horizontally.
         "accent_side": "liability" if is_liability else "asset",
     }
 
@@ -299,6 +390,7 @@ def _account_row(a: dict, funding_by_id: dict, account_display: dict, today: dat
     due_day = a.get("statement_due_day_of_month")
     pay_ref = a.get("paymentAccountRef")
     funding = funding_by_id.get(a.get("id"))
+    group_key = _account_group_key(a)
     values = {
         "institution": a.get("institution") or _BLANK,
         "type": _type_label(a.get("type")) or _BLANK,
@@ -306,7 +398,7 @@ def _account_row(a: dict, funding_by_id: dict, account_display: dict, today: dat
         "amount": fmt_money(amount),
         "rewards": _money(a.get("rewards_balance")),
         "limit": _money(a.get("limit")),
-        "available": _money(a.get("available")),
+        "available": _cc_available(a),  # computed, read-only (QA #10)
         "statement": _money(a.get("statement_balance")),
         "due": fmt_day_ordinal(due_day) if due_day else _BLANK,
         # Linked holding: for a credit card, the account that pays it.
@@ -323,13 +415,12 @@ def _account_row(a: dict, funding_by_id: dict, account_display: dict, today: dat
         "balance": _raw(a.get("balance")),
         "rewards_balance": _raw(a.get("rewards_balance")),
         "limit": _raw(a.get("limit")),
-        "available": _raw(a.get("available")),
         "statement_balance": _raw(a.get("statement_balance")),
         "statement_due_day_of_month": _raw(a.get("statement_due_day_of_month")),
         "paymentAccountRef": _raw(a.get("paymentAccountRef")),
         "minimum_balance": _raw(a.get("minimum_balance")),
     }
-    return _make_row(
+    return group_key, _make_row(
         values,
         amount,
         a.get("type"),
@@ -337,7 +428,7 @@ def _account_row(a: dict, funding_by_id: dict, account_display: dict, today: dat
         today,
         "account",
         a.get("id"),
-        _ACCOUNT_COLS,
+        _GROUP_COLS[group_key],
         _account_col_fields(a),
         edit_raw,
     )
@@ -345,10 +436,9 @@ def _account_row(a: dict, funding_by_id: dict, account_display: dict, today: dat
 
 def _asset_row(e: dict, pair: dict | None, linked: str, index: int, today: date):
     is_debt = e.get("kind") == "debt"
-    # Per-unit price is `value` for an asset, `balance` (owed per unit) for a
-    # debt; amount is the signed subtotal (qty × price, liabilities −).
     price = e.get("balance") if is_debt else e.get("value")
     amount = calculations.asset_contribution(e)
+    group_key = _asset_group_key(e)
     values = {
         "institution": e.get("institution") or _BLANK,
         "type": _type_label(e.get("type")) or _BLANK,
@@ -357,8 +447,8 @@ def _asset_row(e: dict, pair: dict | None, linked: str, index: int, today: date)
         "qty": _fmt_qty(e.get("quantity")),
         "amount": fmt_money(amount),
         "due": e.get("nextDueDate") if is_debt and e.get("nextDueDate") else _BLANK,
-        # Linked holding: for a loan, the asset it is secured by; for an asset,
-        # the loan(s) secured against it.
+        # Linked: for a loan, the asset it is secured by; for an asset, the
+        # loan(s) secured against it.
         "linked": linked,
         "interest": _fmt_pct(e.get("interestRate")),
         "source": _BLANK if is_debt else (e.get("source") or _BLANK),
@@ -381,7 +471,7 @@ def _asset_row(e: dict, pair: dict | None, linked: str, index: int, today: date)
         "assetRef": _raw(e.get("assetRef")),
         "source": e.get("source") or "",
     }
-    return _make_row(
+    return group_key, _make_row(
         values,
         amount,
         e.get("type"),
@@ -389,14 +479,14 @@ def _asset_row(e: dict, pair: dict | None, linked: str, index: int, today: date)
         today,
         "asset",
         index,
-        _ASSET_COLS,
+        _GROUP_COLS[group_key],
         _asset_col_fields(e),
         edit_raw,
     )
 
 
-def _all_rows(ctx: dict, today: date) -> list[dict]:
-    """Build every holding row (accounts then assets), unfiltered."""
+def _all_rows(ctx: dict, today: date) -> dict[str, list[dict]]:
+    """Build every holding row, bucketed by group key."""
     accounts = ctx["accounts"]
     assets = ctx["assets"]
     budget = ctx["budget"]
@@ -434,14 +524,14 @@ def _all_rows(ctx: dict, today: date) -> list[dict]:
         names = loans_by_asset_id.get(e.get("id"), [])
         return ", ".join(names) if names else _BLANK
 
-    account_rows = [
-        _account_row(a, funding_by_id, account_display, today) for a in accounts
-    ]
-    asset_rows = [
-        _asset_row(e, equity_by_debt.get(id(e)), _linked(e), idx, today)
-        for idx, e in enumerate(assets)
-    ]
-    return account_rows, asset_rows
+    rows: dict[str, list[dict]] = {key: [] for key, *_ in _GROUPS}
+    for a in accounts:
+        key, row = _account_row(a, funding_by_id, account_display, today)
+        rows[key].append(row)
+    for idx, e in enumerate(assets):
+        key, row = _asset_row(e, equity_by_debt.get(id(e)), _linked(e), idx, today)
+        rows[key].append(row)
+    return rows
 
 
 def _apply_filters(rows, type_sel, balance_sel, inst_sel):
@@ -454,35 +544,45 @@ def _apply_filters(rows, type_sel, balance_sel, inst_sel):
     return rows
 
 
-def _groups_ctx(account_rows, asset_rows):
-    """The two domain groups (headers, rows, group total) + the net-worth total.
+def _groups_ctx(rows_by_group: dict[str, list[dict]], accounts, assets):
+    """The four domain groups (headers, rows, group total, reorder wiring) + the
+    master footer (Liquid + Net worth).
 
-    Each group's total is shown inline in its heading band (under Amount), so
-    there is no separate subtotal row.
+    A group's rows can only be drag-reordered when they all share one source
+    table (the normal case); a mixed group (e.g. an account-loan sitting beside
+    debt-entry loans) is left non-reorderable rather than trying to permute two
+    tables at once.
     """
-    acc_total = sum((r["amount"] for r in account_rows), Decimal("0"))
-    ast_total = sum((r["amount"] for r in asset_rows), Decimal("0"))
-    groups = [
-        {
-            "source": "account",
-            "label": "Accounts",
-            "headers": _col_headers(_ACCOUNT_COLS),
-            "right_align": _col_right_align(_ACCOUNT_COLS),
-            "rows": account_rows,
-            "total": fmt_money(acc_total),
-        },
-        {
-            "source": "asset",
-            "label": "Assets",
-            "headers": _col_headers(_ASSET_COLS),
-            "right_align": _col_right_align(_ASSET_COLS),
-            "rows": asset_rows,
-            "total": fmt_money(ast_total),
-        },
-    ]
-    master = [""] * _NCOLS
-    master[2] = "Net worth"
-    master[_AMOUNT_POS] = fmt_money(acc_total + ast_total)
+    groups = []
+    for key, label, source, add_noun, cols in _GROUPS:
+        grp_rows = rows_by_group.get(key, [])
+        total = sum((r["amount"] for r in grp_rows), Decimal("0"))
+        sources = {r["source"] for r in grp_rows}
+        reorderable = len(sources) == 1
+        groups.append(
+            {
+                "key": key,
+                "label": label,
+                "source": source,
+                "add_noun": add_noun,
+                "headers": _col_headers(cols),
+                "right_align": _col_right_align(cols),
+                "rows": grp_rows,
+                "total": fmt_money(total),
+                "reorderable": reorderable,
+            }
+        )
+
+    totals = calculations.tiered_totals(accounts, assets)
+    master = []
+    for label, value in (
+        ("Liquid", totals["liquid"]),
+        ("Net worth", totals["net_worth"]),
+    ):
+        cells = [""] * _NCOLS
+        cells[2] = label
+        cells[_AMOUNT_POS] = fmt_money(value)
+        master.append(cells)
     return groups, master
 
 
@@ -503,10 +603,10 @@ def _ref_options(ctx: dict) -> tuple[list, list]:
     return account_ref_options, asset_ref_options
 
 
-def _tbody_ctx(account_rows, asset_rows, ctx: dict, **editing) -> dict:
+def _tbody_ctx(rows_by_group, ctx: dict, **editing) -> dict:
     """Shared context for the tbody partial (page render and edit swaps)."""
     account_ref_options, asset_ref_options = _ref_options(ctx)
-    groups, master_total = _groups_ctx(account_rows, asset_rows)
+    groups, master_total = _groups_ctx(rows_by_group, ctx["accounts"], ctx["assets"])
     return {
         "groups": groups,
         "master_total": master_total,
@@ -523,10 +623,9 @@ def _tbody_ctx(account_rows, asset_rows, ctx: dict, **editing) -> dict:
 def _render_tbody(snapshot_id, filename, error=None, **editing):
     """Render just the tbody (for cell_edit / update HTMX swaps), edit mode on."""
     ctx = get_common_context(snapshot_id, filename, edit_mode=True)
-    account_rows, asset_rows = _all_rows(ctx, date.today())
+    rows_by_group = _all_rows(ctx, date.today())
     tbody = _tbody_ctx(
-        account_rows,
-        asset_rows,
+        rows_by_group,
         ctx,
         edit_mode=True,
         filename=filename,
@@ -543,11 +642,9 @@ def holdings_view(filename):
     ctx = get_common_context(snapshot_id, filename, edit_mode)
     ctx["active_tab"] = "holdings"
 
-    account_rows, asset_rows = _all_rows(ctx, date.today())
-    all_rows = account_rows + asset_rows
+    rows_by_group = _all_rows(ctx, date.today())
+    all_rows = [r for rows in rows_by_group.values() for r in rows]
     institutions = sorted({r["institution"] for r in all_rows if r["institution"]})
-    # Type filter options: the canonical types actually present, in canonical
-    # order (not alphabetical), so the dropdown reads sensibly.
     present_types = {r["type_value"] for r in all_rows if r["type_value"]}
     type_values_labels = [
         (v, lbl) for v, lbl in _ALL_TYPE_OPTIONS if v in present_types
@@ -558,11 +655,11 @@ def holdings_view(filename):
     balance_sel = [b for b in request.args.getlist("balance") if b in _BALANCE_LABELS]
     inst_sel = [i for i in request.args.getlist("institution") if i in institutions]
 
-    f_accounts = _apply_filters(account_rows, type_sel, balance_sel, inst_sel)
-    f_assets = _apply_filters(asset_rows, type_sel, balance_sel, inst_sel)
+    filtered = {
+        key: _apply_filters(rows, type_sel, balance_sel, inst_sel)
+        for key, rows in rows_by_group.items()
+    }
 
-    # A filter group only "counts" as active when it's a proper subset (matching
-    # the Assets sheet: selecting every option is the same as no filter).
     def _active(sel, total):
         return len(sel) if 0 < len(sel) < total else 0
 
@@ -578,7 +675,7 @@ def holdings_view(filename):
             for v, lbl in values_labels
         ]
 
-    ctx.update(_tbody_ctx(f_accounts, f_assets, ctx, edit_mode=edit_mode))
+    ctx.update(_tbody_ctx(filtered, ctx, edit_mode=edit_mode))
     ctx.update(
         {
             "active_count": active_count,
@@ -645,13 +742,9 @@ def _coerce(source: str, field: str, value_raw: str) -> tuple:
             return None, "Name is required"
         return value_raw, None
     if field == "unit":
-        # A holding is always denominated in something; blank means USD.
         return (value_raw.upper() or "USD"), None
     if field in ("institution", "source", "nextDueDate"):
-        # Free text / ISO date; blank clears to None (repo coerces dates).
         return (value_raw or None), None
-    # Numeric money/detail fields go through the shared coercion the Accounts/
-    # Assets pages use, so validation and rounding stay identical.
     cmap = ACCOUNTS_COERCION if source == "account" else ASSETS_COERCION
     return coerce_value(field, value_raw, cmap)
 
@@ -734,38 +827,74 @@ def delete(filename: str, source: str, ref: int):
     return handle_delete(_do, engine)
 
 
-@holdings_bp.route("/<filename>/holdings/reorder/<source>", methods=["POST"])
-def reorder(filename: str, source: str):
-    """Persist a within-group drag reorder (a permutation of that group's rows)."""
+@holdings_bp.route("/<filename>/holdings/reorder/<group>", methods=["POST"])
+def reorder(filename: str, group: str):
+    """Persist a within-group drag reorder.
+
+    The posted `order` is a permutation of the group's own 0-based row positions
+    (local to the group). Because two groups can share one table (Cash/Credit in
+    `accounts`; Loans/Assets in `asset_entries`), the local permutation is mapped
+    onto the group's *global* slots in that table, leaving the other group's rows
+    fixed, then persisted as a full table permutation.
+    """
     snapshot_id = validate_snapshot(filename)
-    if source not in ("account", "asset"):
+    if group not in _GROUP_COLS:
         abort(404)
+    source = "account" if group in ("cash", "credit") else "asset"
     try:
-        order = [int(x) for x in request.form.get("order", "").split(",") if x != ""]
+        local_order = [
+            int(x) for x in request.form.get("order", "").split(",") if x != ""
+        ]
     except ValueError:
         return "", 400
+
     engine = current_app.config["engine"]
-    try:
-        with engine.connect() as conn:
+    with engine.connect() as conn:
+        entities = (
+            get_accounts(conn, snapshot_id)
+            if source == "account"
+            else get_asset_entries(conn, snapshot_id)
+        )
+        positions = [
+            i
+            for i, ent in enumerate(entities)
+            if _entity_group_key(source, ent) == group
+        ]
+        if sorted(local_order) != list(range(len(positions))):
+            return "", 400
+        # Map the group's local permutation onto its global slots; other rows
+        # keep their positions.
+        full = list(range(len(entities)))
+        for new_local, old_local in enumerate(local_order):
+            full[positions[new_local]] = positions[old_local]
+        try:
             if source == "account":
-                reorder_accounts(conn, snapshot_id, order)
+                reorder_accounts(conn, snapshot_id, full)
             else:
-                reorder_asset_entries(conn, snapshot_id, order)
-    except ValueError:
-        return "", 400
+                reorder_asset_entries(conn, snapshot_id, full)
+        except ValueError:
+            return "", 400
     return "", 204
 
 
-@holdings_bp.route("/<filename>/holdings/add/<source>", methods=["POST"])
-def add(filename: str, source: str):
+@holdings_bp.route("/<filename>/holdings/add/<group>", methods=["POST"])
+def add(filename: str, group: str):
     """Add a blank holding to a group; the user then edits it inline."""
     snapshot_id = validate_snapshot(filename)
-    if source not in ("account", "asset"):
+    if group not in _GROUP_COLS:
         abort(404)
     engine = current_app.config["engine"]
     with engine.connect() as conn:
-        if source == "account":
+        if group == "cash":
             add_account(conn, snapshot_id, {"name": "New account", "type": "checking"})
+        elif group == "credit":
+            add_account(
+                conn, snapshot_id, {"name": "New card", "type": "credit_card"}
+            )
+        elif group == "loan":
+            add_asset_entry(
+                conn, snapshot_id, {"kind": "debt", "type": "loan", "name": "New loan"}
+            )
         else:
             add_asset_entry(conn, snapshot_id, {"kind": "asset", "name": "New asset"})
     resp = current_app.make_response("")

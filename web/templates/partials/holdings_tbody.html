@@ -1,11 +1,13 @@
-{# Holdings table body — ONE table, two domain groups. Each group is a single
-   <tbody> (heading + sticky header + data rows + add-row + subtotal) so its
-   header can stick over its own data rows and get replaced by the next group's
-   header on scroll. The data rows carry data-reorder-index (drag-reorder scoped
-   to the group via data-reorder-url); sort/reorder operate only on those rows.
-   The leading Institution/Type/Name/Amount and trailing Due/Linked/As Of slots
-   align across groups; the middle slots are reused per group. Cell edits swap
-   the whole table body (#holdings-table innerHTML). #}
+{# Holdings table body — ONE table, four type-based domain groups (Cash, Credit
+   Cards, Loans, Assets). Each group is a single <tbody> (heading + sticky header
+   + data rows + add-row) so its header can stick over its own data rows and get
+   replaced by the next group's header on scroll. Reorderable groups' data rows
+   carry data-reorder-index (drag-reorder scoped to the group via
+   data-reorder-url). The leading Institution/Type/Name/Amount and trailing
+   As Of slots align across groups; the middle slots are group-specific, and
+   blank structural slots (cell == "") pad the shorter groups. Cell edits swap
+   the whole table body (#holdings-table innerHTML). A two-line master footer
+   (Liquid + Net worth) closes the table. #}
 {% import "partials/sheet.html" as sheet %}
 {% from "macros/table.html" import cell_display, cell_edit_input, cell_edit_select, cell_non_editable %}
 {% set es = editing_source | default(none) %}
@@ -23,36 +25,40 @@
 </tbody>
 {% endif %}
 {% for group in groups %}
-<tbody class="holdings-group" data-group="{{ group.source }}"{% if edit_mode %} data-reorder-url="{{ url_for('holdings.reorder', filename=filename, source=group.source) }}"{% endif %}>
+<tbody class="holdings-group" data-group="{{ group.key }}"{% if edit_mode and group.reorderable %} data-reorder-url="{{ url_for('holdings.reorder', filename=filename, group=group.key) }}"{% endif %}>
     {# Opaque backgrounds: the band rows are sticky, so translucency would let
-       scrolled data show through them. #}
-    {# Underline drawn as box-shadow in holdings.html (border-collapse borders
-       scroll away when the band is sticky — QA #5), so no border-b here. #}
+       scrolled data show through them. Underline + left accent are drawn as
+       box-shadows in holdings.html (border-collapse borders scroll away / shift
+       when the band is sticky — QA #5). #}
     {% set _band = 'bg-blue-50 dark:bg-blue-950' %}
     <tr class="holdings-group-heading">
-        {# blue-500 left accent is drawn as a box-shadow in holdings.html (a
-           border-collapse border shifts out of place when the band is sticky). #}
         <td colspan="3" class="{{ _band }} px-2 py-1.5 text-xs font-semibold uppercase tracking-wide text-blue-800 dark:text-blue-200">{{ group.label }}</td>
         <td class="{{ _band }} px-1.5 py-1.5 text-right tabular-nums text-sm font-semibold text-blue-900 dark:text-blue-100 {% if group.total | display_is_negative %}!text-red-600 dark:!text-red-400{% endif %}">{{ group.total }}</td>
         <td colspan="{{ span - 4 }}" class="{{ _band }}"></td>
     </tr>
     <tr class="holdings-group-header bg-gray-100 dark:bg-gray-700">
         {% for h in group.headers %}
-        {# No border-r here: the inter-column divider is a box-shadow on the
-           sticky header cell (holdings.html) — a collapsed border scrolls away
-           when the header sticks, and doubles up with the shadow at rest. #}
+        {# No border-r here: inter-column dividers are box-shadows on the sticky
+           header cell (holdings.html). Blank structural slots are non-sortable. #}
+        {% if h %}
         <th class="sortable-th px-1.5 py-0.5 font-medium text-gray-800 dark:text-gray-100 cursor-pointer select-none hover:bg-gray-200 dark:hover:bg-gray-600 {% if loop.index0 in group.right_align %}text-right{% else %}text-left{% endif %}"
             data-col="{{ loop.index0 }}" role="button" tabindex="0" title="Sort by this column">{{ h }} <span class="sort-indicator"></span></th>
+        {% else %}
+        <th class="holdings-blank-slot px-1.5 py-0.5"></th>
+        {% endif %}
         {% endfor %}
         <th class="table-actions-cell px-1.5 py-0.5"></th>
     </tr>
     {% for row in group.rows %}
-    <tr class="{{ sheet.row_class() }}" id="holding-row-{{ row.source }}-{{ row.ref }}" data-accent="{{ row.accent_side }}" data-reorder-index="{{ loop.index0 }}">
+    <tr class="{{ sheet.row_class() }}" id="holding-row-{{ row.source }}-{{ row.ref }}" data-accent="{{ row.accent_side }}"{% if group.reorderable %} data-reorder-index="{{ loop.index0 }}"{% endif %}>
         {% for cell in row.cells %}
         {% set i = loop.index0 %}
         {% set field = row.fields[i] %}
         {% set right = i in group.right_align %}
-        {% if edit_mode and field and es == row.source and er == row.ref and ef == field %}
+        {% if cell == "" %}
+            {# blank structural slot: empty, borderless #}
+            <td class="holdings-blank-slot px-1.5 py-px"></td>
+        {% elif edit_mode and field and es == row.source and er == row.ref and ef == field %}
             {% set update_url = url_for('holdings.update', filename=filename, source=row.source, ref=row.ref) %}
             {% set display_url = url_for('holdings.cell_edit', filename=filename, source=row.source, ref=row.ref, field=field, display=1) %}
             {% if field == 'type' %}
@@ -94,8 +100,8 @@
     <tr data-add-row>
         <td colspan="{{ span }}" class="px-1.5 py-1 border-b border-gray-200 dark:border-gray-700">
             <button type="button" class="text-xs font-medium text-blue-600 dark:text-blue-400 hover:underline"
-                hx-post="{{ url_for('holdings.add', filename=filename, source=group.source) }}" hx-trigger="click" hx-swap="none">
-                + Add {{ group.source }}
+                hx-post="{{ url_for('holdings.add', filename=filename, group=group.key) }}" hx-trigger="click" hx-swap="none">
+                + Add {{ group.add_noun }}
             </button>
         </td>
     </tr>
@@ -103,10 +109,18 @@
 </tbody>
 {% endfor %}
 <tbody>
-    <tr class="total-row bg-gray-100 dark:bg-gray-700 border-t-2 border-gray-400 dark:border-gray-500 font-semibold">
-        {% for cell in master_total %}
+    {# Master footer: Liquid (upper, pinned one row above the bottom) and Net
+       worth (bottom). Both stick to the sheet's bottom edge. #}
+    {% for total_row in master_total %}
+    <tr class="total-row {% if not loop.last %}total-upper{% endif %} bg-gray-100 dark:bg-gray-700 {% if loop.first %}border-t-2 border-gray-400 dark:border-gray-500{% endif %} font-semibold">
+        {% for cell in total_row %}
+        {% if cell == "" %}
+        <td class="holdings-blank-slot px-1.5 py-px"></td>
+        {% else %}
         <td class="{{ sheet.cell_class('text-right tabular-nums' if loop.index0 == amount_pos else '', sheet.neg(cell | display_is_negative)) }}">{{ cell }}</td>
+        {% endif %}
         {% endfor %}
         <td class="table-actions-cell px-1.5 py-0.5"></td>
     </tr>
+    {% endfor %}
 </tbody>

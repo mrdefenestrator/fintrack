@@ -58,6 +58,15 @@
         box-shadow: inset 0 -1px 0 #bfdbfe;
     }
     .dark #holdings-table .holdings-group-heading > td { box-shadow: inset 0 -1px 0 #1e3a8a; }  /* blue-900 */
+    /* The band's blue-500 left accent, also a box-shadow (see above): a
+       collapsed border-left shifted out of place when the sticky band scrolled.
+       Combined with the underline on the first cell. */
+    #holdings-table .holdings-group-heading > td:first-child {
+        box-shadow: inset 4px 0 0 #3b82f6, inset 0 -1px 0 #bfdbfe;
+    }
+    .dark #holdings-table .holdings-group-heading > td:first-child {
+        box-shadow: inset 4px 0 0 #3b82f6, inset 0 -1px 0 #1e3a8a;
+    }
     #holdings-table .holdings-group-header > th {
         position: sticky;
         top: var(--sheet-heading-h, 1.75rem);

@@ -43,11 +43,15 @@ border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gra
        sticky — the underline would vanish on scroll (QA #5). Every sheet.thead
        consumer sits inside a .table-scroll-container, so the shadow applies. #}
     <tr class="bg-gray-100 dark:bg-gray-700">
+        {# No border-r on the header cells: the inter-column dividers are drawn
+           as a box-shadow on the sticky <thead> cells (base.html), because a
+           border-collapse border scrolls away when the header sticks and doubles
+           up with the shadow at rest. #}
         {% for h in headers -%}
-        <th class="sortable-th px-1.5 py-0.5 {% if loop.index0 in right_align_cols %}text-right{% else %}text-left{% endif %} font-medium text-gray-800 dark:text-gray-100 border-r border-gray-200 dark:border-gray-600 last:border-r-0 cursor-pointer select-none hover:bg-gray-200 dark:hover:bg-gray-600"
+        <th class="sortable-th px-1.5 py-0.5 {% if loop.index0 in right_align_cols %}text-right{% else %}text-left{% endif %} font-medium text-gray-800 dark:text-gray-100 cursor-pointer select-none hover:bg-gray-200 dark:hover:bg-gray-600"
             data-col="{{ loop.index0 }}" role="button" tabindex="0" title="Sort by this column">{{ h }} <span class="sort-indicator"></span></th>
         {% endfor -%}
-        {% if actions_col %}<th class="table-actions-cell px-1.5 py-0.5 border-r border-gray-200 dark:border-gray-600" aria-label="Actions"></th>{% endif %}
+        {% if actions_col %}<th class="table-actions-cell px-1.5 py-0.5" aria-label="Actions"></th>{% endif %}
     </tr>
 </thead>
 {%- endmacro -%}

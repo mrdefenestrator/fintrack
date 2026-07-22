@@ -277,17 +277,21 @@
             z-index: 6;
         }
 
+        /* The four overlays frame the scrollable data region: inset past the
+           sticky header (top), the sticky total row (bottom), and any pinned
+           actions column (right), so a shadow never bleeds over the sticky
+           chrome. The vars default to 0, so simple sheets are unaffected. */
         .sheet-scroll-shadow--top,
         .sheet-scroll-shadow--bottom {
             left: 0;
-            right: 0;
+            right: var(--sheet-right-h, 0px);
             height: 1.75rem;
         }
 
         .sheet-scroll-shadow--left,
         .sheet-scroll-shadow--right {
-            top: 0;
-            bottom: 0;
+            top: var(--sheet-header-h, 0px);
+            bottom: var(--sheet-footer-h, 0px);
             width: 1.75rem;
         }
 

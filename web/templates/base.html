@@ -177,17 +177,17 @@
         .row-reorder-ghost { opacity: 0.4; }
         .row-reorder-chosen { background: rgba(59, 130, 246, 0.08); }
 
-        /* Action column: no wrap, no overflow, fixed width for icon row. Two
-           icons now (drag handle + delete, or the ✓/✗ delete-confirm pair), so
-           it's narrower than when it held the old up/down/delete trio. */
+        /* Action column: no wrap, no overflow, fixed width for icon row. Holds
+           two 1.25rem icons (drag handle + delete, or the ✓/✗ delete-confirm
+           pair) — sized snug at 2.75rem with tight side padding (QA #4). */
         table .table-actions-cell {
             width: 1%;
-            min-width: 3.5rem;
-            max-width: 3.5rem;
+            min-width: 2.75rem;
+            max-width: 2.75rem;
             white-space: nowrap;
             overflow: hidden;
-            padding-left: 0.25rem;
-            padding-right: 0.25rem;
+            padding-left: 0.125rem;
+            padding-right: 0.125rem;
         }
 
         table .table-actions-cell .table-actions-inner {
@@ -206,8 +206,8 @@
         /* Actions column: fixed width to stay compact */
         table.editable-table .table-actions-cell,
         table.editable-table thead th.table-actions-cell {
-            width: 3.5rem;
-            min-width: 3.5rem;
+            width: 2.75rem;
+            min-width: 2.75rem;
         }
 
         /* Scrollable table container: data rows scroll, header/footer rows stick */

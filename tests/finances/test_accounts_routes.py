@@ -169,7 +169,7 @@ def test_reserve_editable_only_for_cash_like_types():
 
     for t in ("checking", "savings", "wallet", "digital_wallet"):
         assert account_field_editable({"type": t}, "minimum_balance"), t
-    for t in ("credit_card", "gift_card", "loan", "other"):
+    for t in ("credit_card", "gift_card", "loan"):
         assert not account_field_editable({"type": t}, "minimum_balance"), t
 
 

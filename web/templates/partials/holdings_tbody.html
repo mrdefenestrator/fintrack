@@ -1,0 +1,105 @@
+{# Holdings table body — ONE table, two domain groups. Each group is a single
+   <tbody> (heading + sticky header + data rows + add-row + subtotal) so its
+   header can stick over its own data rows and get replaced by the next group's
+   header on scroll. The data rows carry data-reorder-index (drag-reorder scoped
+   to the group via data-reorder-url); sort/reorder operate only on those rows.
+   The leading Institution/Type/Name/Amount and trailing Due/Linked/As Of slots
+   align across groups; the middle slots are reused per group. Cell edits swap
+   the whole table body (#holdings-table innerHTML). #}
+{% import "partials/sheet.html" as sheet %}
+{% from "macros/table.html" import cell_display, cell_edit_input, cell_edit_select, cell_non_editable %}
+{% set es = editing_source | default(none) %}
+{% set er = editing_ref | default(none) %}
+{% set ef = editing_field | default(none) %}
+{% set us = updated_source | default(none) %}
+{% set ur = updated_ref | default(none) %}
+{% set uf = updated_field | default(none) %}
+{% set span = ncols + 1 %}{# the actions column is always present (inert in view mode) #}
+{% if error %}
+<tbody>
+    <tr id="holdings-error-row">
+        <td colspan="{{ span }}" class="px-2 py-1 text-sm text-red-500 bg-red-50 dark:bg-red-950/40 border-b border-red-200 dark:border-red-800">{{ error }}</td>
+    </tr>
+</tbody>
+{% endif %}
+{% for group in groups %}
+<tbody class="holdings-group" data-group="{{ group.source }}"{% if edit_mode %} data-reorder-url="{{ url_for('holdings.reorder', filename=filename, source=group.source) }}"{% endif %}>
+    {# Opaque backgrounds: the band rows are sticky, so translucency would let
+       scrolled data show through them. #}
+    {% set _band = 'bg-blue-50 dark:bg-blue-950 border-b border-blue-200 dark:border-blue-900' %}
+    <tr class="holdings-group-heading">
+        <td colspan="3" class="{{ _band }} border-l-4 border-l-blue-500 px-2 py-1.5 text-xs font-semibold uppercase tracking-wide text-blue-800 dark:text-blue-200">{{ group.label }}</td>
+        <td class="{{ _band }} px-1.5 py-1.5 text-right tabular-nums text-sm font-semibold text-blue-900 dark:text-blue-100 {% if group.total | display_is_negative %}!text-red-600 dark:!text-red-400{% endif %}">{{ group.total }}</td>
+        <td colspan="{{ span - 4 }}" class="{{ _band }}"></td>
+    </tr>
+    <tr class="holdings-group-header bg-gray-100 dark:bg-gray-700 border-b-2 border-gray-300 dark:border-gray-600">
+        {% for h in group.headers %}
+        <th class="sortable-th px-1.5 py-0.5 font-medium text-gray-800 dark:text-gray-100 border-r border-gray-200 dark:border-gray-600 last:border-r-0 cursor-pointer select-none hover:bg-gray-200 dark:hover:bg-gray-600 {% if loop.index0 in group.right_align %}text-right{% else %}text-left{% endif %}"
+            data-col="{{ loop.index0 }}" role="button" tabindex="0" title="Sort by this column">{{ h }} <span class="sort-indicator"></span></th>
+        {% endfor %}
+        <th class="table-actions-cell px-1.5 py-0.5"></th>
+    </tr>
+    {% for row in group.rows %}
+    <tr class="{{ sheet.row_class() }}" id="holding-row-{{ row.source }}-{{ row.ref }}" data-accent="{{ row.accent_side }}" data-reorder-index="{{ loop.index0 }}">
+        {% for cell in row.cells %}
+        {% set i = loop.index0 %}
+        {% set field = row.fields[i] %}
+        {% set right = i in group.right_align %}
+        {% if edit_mode and field and es == row.source and er == row.ref and ef == field %}
+            {% set update_url = url_for('holdings.update', filename=filename, source=row.source, ref=row.ref) %}
+            {% set display_url = url_for('holdings.cell_edit', filename=filename, source=row.source, ref=row.ref, field=field, display=1) %}
+            {% if field == 'type' %}
+                {% set opts = account_type_options if row.source == 'account' else asset_type_options %}
+                {% call(caller) cell_edit_select('type', row.edit_raw['type'], right, update_url, display_url, 'holdings-table', none, none) %}
+                    {% for value, label in opts %}
+                    <option value="{{ value }}" {% if value == row.edit_raw['type'] %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                {% endcall %}
+            {% elif field in ('paymentAccountRef', 'assetRef') %}
+                {% set opts = account_ref_options if field == 'paymentAccountRef' else asset_ref_options %}
+                {% call(caller) cell_edit_select(field, row.edit_raw[field], right, update_url, display_url, 'holdings-table', none, none) %}
+                    <option value="">-</option>
+                    {% for value, label in opts %}
+                    <option value="{{ value }}" {% if value | string == row.edit_raw[field] %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                {% endcall %}
+            {% else %}
+                {{ cell_edit_input(field, row.edit_raw[field], right, update_url, display_url, 'holdings-table', none) }}
+            {% endif %}
+        {% elif edit_mode and field %}
+            {% set cell_edit_url = url_for('holdings.cell_edit', filename=filename, source=row.source, ref=row.ref, field=field) %}
+            {% set is_updated = us == row.source and ur == row.ref and uf == field %}
+            {{ cell_display(cell, right, cell | display_is_negative, cell_edit_url, 'holdings-table', is_updated) }}
+        {% elif edit_mode %}
+            {{ cell_non_editable(cell, right, cell | display_is_negative) }}
+        {% else %}
+            <td class="{{ sheet.cell_class('text-right tabular-nums' if right else '', (sheet.neg(cell | display_is_negative) ~ ' ' ~ row.cell_classes[i]) | trim) }}">{{ cell }}</td>
+        {% endif %}
+        {% endfor %}
+        {% with source=row.source, ref=row.ref %}{% include "partials/holdings_actions_cell.html" %}{% endwith %}
+    </tr>
+    {% else %}
+    <tr>
+        <td colspan="{{ span }}" class="px-1.5 py-2 text-center text-gray-500 dark:text-gray-400">No {{ group.label | lower }} match the current filters.</td>
+    </tr>
+    {% endfor %}
+    {% if edit_mode %}
+    <tr data-add-row>
+        <td colspan="{{ span }}" class="px-1.5 py-1 border-b border-gray-200 dark:border-gray-700">
+            <button type="button" class="text-xs font-medium text-blue-600 dark:text-blue-400 hover:underline"
+                hx-post="{{ url_for('holdings.add', filename=filename, source=group.source) }}" hx-trigger="click" hx-swap="none">
+                + Add {{ group.source }}
+            </button>
+        </td>
+    </tr>
+    {% endif %}
+</tbody>
+{% endfor %}
+<tbody>
+    <tr class="total-row bg-gray-100 dark:bg-gray-700 border-t-2 border-gray-400 dark:border-gray-500 font-semibold">
+        {% for cell in master_total %}
+        <td class="{{ sheet.cell_class('text-right tabular-nums' if loop.index0 == amount_pos else '', sheet.neg(cell | display_is_negative)) }}">{{ cell }}</td>
+        {% endfor %}
+        <td class="table-actions-cell px-1.5 py-0.5"></td>
+    </tr>
+</tbody>

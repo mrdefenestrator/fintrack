@@ -1,0 +1,8 @@
+{# Holdings row actions cell (sticky to the right edge via #holdings-table CSS):
+   drag-to-reorder handle + delete. Delegates to the shared actions cell; the
+   delete confirm/route are holdings-specific (source + ref). Reorder is scoped
+   per group because each group's data rows live in their own <tbody
+   data-reorder-url>. #}
+{% with delete_confirm_url=url_for('holdings.delete_confirm', filename=filename, source=source, ref=ref) %}
+{% include "partials/editable_table_delete_icon.html" %}
+{% endwith %}

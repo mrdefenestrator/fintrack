@@ -17,7 +17,13 @@ from fintrack.budget.recurrence import (
     semiannual_other_month as _semiannual_other_month,  # noqa: F401
     subtotal_remainder_of_month as _subtotal_remainder_of_month,
 )
-from fintrack.core.types import ACCOUNT_TYPE_VALUES
+from fintrack.core.types import (
+    ACCOUNT_TYPE_VALUES,
+    DEFAULT_TIER,
+    HOLDING_TYPE_TIER,
+    LIQUIDITY_TIERS,
+    LiquidityTier,
+)
 
 _ZERO = Decimal("0")
 
@@ -188,6 +194,142 @@ def net_nonliquid_total(assets: List[Dict[str, Any]]) -> Decimal:
         elif entry.get("kind") == "debt":
             total -= _entry_subtotal(entry)
     return total
+
+
+# ---------------------------------------------------------------------------
+# Unified holdings: liquidity tiers + signed net-worth contributions
+# ---------------------------------------------------------------------------
+#
+# Every holding contributes a signed amount to net worth and belongs to exactly
+# one liquidity tier (fixed by its type — no per-holding override). The three
+# cumulative totals below are signed prefix sums over LIQUIDITY_TIERS:
+#     liquid ⊂ investable ⊂ net_worth.
+
+
+def _tier_for(type_value: Any, unit: Any) -> LiquidityTier:
+    """Liquidity tier from a holding's type, with the non-USD symbol cap.
+
+    Tier is fixed by type (unknown/unset -> DEFAULT_TIER). The one exception:
+    a holding denominated in a symbol (unit set and not "USD") has sale friction
+    and is capped at semi-liquid — so a USD digital wallet stays liquid while a
+    BTC digital wallet drops to semi-liquid.
+    """
+    tier = HOLDING_TYPE_TIER.get(type_value, DEFAULT_TIER)
+    if tier == "liquid" and unit and unit != "USD":
+        return "semi_liquid"
+    return tier
+
+
+def account_tier(account: Dict[str, Any]) -> LiquidityTier:
+    """Liquidity tier of an account (accounts are USD, so no symbol cap)."""
+    return _tier_for(account.get("type"), account.get("unit"))
+
+
+def asset_tier(entry: Dict[str, Any]) -> LiquidityTier:
+    """Liquidity tier of an asset/debt entry (symbol-capped by its unit)."""
+    return _tier_for(entry.get("type"), entry.get("unit"))
+
+
+def account_contribution(account: Dict[str, Any]) -> Decimal:
+    """Signed net-worth contribution of an account.
+
+    `balance` is already signed (negative = owed on credit cards), so most
+    accounts contribute their balance directly. Credit cards additionally add
+    their rewards balance and fall back to available - limit when the canonical
+    balance is absent.
+    """
+    if _ACCOUNT_TYPE_TO_CALCULATION.get(account.get("type")) == "credit_card":
+        return _credit_card_balance_owed(account) + _money(
+            account.get("rewards_balance")
+        )
+    return _money(account.get("balance"))
+
+
+def asset_contribution(entry: Dict[str, Any]) -> Decimal:
+    """Signed net-worth contribution of an asset/debt entry (assets +, debts -)."""
+    subtotal = _entry_subtotal(entry)
+    return subtotal if entry.get("kind") == "asset" else -subtotal
+
+
+def contributions_by_tier(
+    accounts: List[Dict[str, Any]],
+    assets: List[Dict[str, Any]],
+) -> Dict[LiquidityTier, Decimal]:
+    """Sum of signed contributions grouped by liquidity tier."""
+    totals: Dict[LiquidityTier, Decimal] = {tier: _ZERO for tier in LIQUIDITY_TIERS}
+    for account in accounts:
+        totals[account_tier(account)] += account_contribution(account)
+    for entry in assets:
+        totals[asset_tier(entry)] += asset_contribution(entry)
+    return totals
+
+
+def tiered_totals(
+    accounts: List[Dict[str, Any]],
+    assets: List[Dict[str, Any]],
+) -> Dict[str, Decimal]:
+    """Cumulative liquidity totals: liquid ⊂ investable ⊂ net_worth.
+
+    - liquid     = spendable now (cash minus credit-card balances).
+    - investable = liquid + semi-liquid holdings.
+    - net_worth  = investable + illiquid holdings (all assets minus all loans).
+    """
+    by_tier = contributions_by_tier(accounts, assets)
+    liquid = by_tier["liquid"]
+    investable = liquid + by_tier["semi_liquid"]
+    net_worth = investable + by_tier["illiquid"]
+    return {
+        "liquid": liquid,
+        "investable": investable,
+        "net_worth": net_worth,
+    }
+
+
+def net_worth_total(
+    accounts: List[Dict[str, Any]],
+    assets: List[Dict[str, Any]],
+) -> Decimal:
+    """Total net worth: signed sum across every account and asset/debt."""
+    by_tier = contributions_by_tier(accounts, assets)
+    return by_tier["liquid"] + by_tier["semi_liquid"] + by_tier["illiquid"]
+
+
+def equity_pairs(assets: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Equity for each secured debt linked to an asset via assetRef.
+
+    Returns one dict per linked debt: asset entry, debt entry, the asset and
+    debt subtotals, `equity` (asset - debt), and `ltv` (debt / asset, or None
+    when the asset subtotal is zero).
+    """
+    asset_by_id = {
+        e["id"]: e
+        for e in assets
+        if e.get("kind") == "asset" and e.get("id") is not None
+    }
+    pairs: List[Dict[str, Any]] = []
+    for entry in assets:
+        if entry.get("kind") != "debt":
+            continue
+        ref = entry.get("assetRef")
+        if ref is None:
+            continue
+        asset = asset_by_id.get(ref)
+        if not asset:
+            continue
+        asset_subtotal = _entry_subtotal(asset)
+        debt_subtotal = _entry_subtotal(entry)
+        ltv = (debt_subtotal / asset_subtotal) if asset_subtotal else None
+        pairs.append(
+            {
+                "asset": asset,
+                "debt": entry,
+                "asset_subtotal": asset_subtotal,
+                "debt_subtotal": debt_subtotal,
+                "equity": asset_subtotal - debt_subtotal,
+                "ltv": ltv,
+            }
+        )
+    return pairs
 
 
 def account_funding_needed(

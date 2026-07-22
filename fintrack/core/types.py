@@ -13,34 +13,122 @@ from typing import Literal, TypedDict
 # Net-worth / budget domain (from finances)
 # ---------------------------------------------------------------------------
 
-# Account types enum
-AccountType = Literal[
-    "credit_card",
+# ---------------------------------------------------------------------------
+# Liquidity tiers + the unified holding-type taxonomy
+# ---------------------------------------------------------------------------
+#
+# Every holding (account or asset/debt) falls into exactly one liquidity tier,
+# determined by its **type** with one exception — a holding denominated in a
+# non-USD symbol (unit != "USD") is capped at semi-liquid, because a symbol has
+# sale friction (see calculations._tier_for). The three tiers nest for the
+# cumulative totals:
+#
+#     liquid  ⊂  investable  ⊂  net_worth
+#
+#   - liquid     = spendable now: cash accounts minus credit-card balances.
+#   - investable = liquid + semi-liquid (brokerage, HSA, symbol wallets).
+#   - net_worth  = investable + illiquid (retirement, property, loans).
+#
+# Contributions are signed (assets add, liabilities subtract), so each tier
+# total is a signed prefix sum over the tier ordering.
+LiquidityTier = Literal["liquid", "semi_liquid", "illiquid"]
+
+# Ordered from most to least liquid; the cumulative totals walk this order.
+LIQUIDITY_TIERS: list[LiquidityTier] = ["liquid", "semi_liquid", "illiquid"]
+
+# The single holding-type vocabulary, shared by accounts and asset_entries.
+# There is deliberately no catch-all ("other"): a holding either has a
+# meaningful type or is left unclassified (NULL). "crypto" is not a type — a
+# crypto holding is a digital wallet denominated in a symbol unit (unit=BTC),
+# so its liquidity comes from the symbol cap, not a dedicated type.
+HoldingType = Literal[
     "checking",
     "savings",
-    "gift_card",
     "wallet",
     "digital_wallet",
+    "gift_card",
+    "credit_card",
     "loan",
-    "other",
+    "brokerage",
+    "hsa",
+    "retirement",
+    "real_estate",
+    "vehicle",
 ]
+AccountType = HoldingType  # backwards-compatible aliases
+AssetType = HoldingType
 
-# Canonical, ordered (value, display label) list of account types. This is
-# the single source of truth for every account-type select/validation in the
-# app (import quick-create, accounts page type editor, CLI --type choices).
-# Must stay a superset of every account_type value that appears in the DB.
-ACCOUNT_TYPE_OPTIONS: list[tuple[str, str]] = [
+# type -> base liquidity tier (before the non-USD symbol cap). Credit cards are
+# liquid because their (negative) balance nets against spendable cash.
+HOLDING_TYPE_TIER: dict[str, LiquidityTier] = {
+    "checking": "liquid",
+    "savings": "liquid",
+    "wallet": "liquid",  # physical cash and uncashed checks in hand
+    "digital_wallet": "liquid",  # symbol-denominated wallets drop via the cap
+    "gift_card": "liquid",
+    "credit_card": "liquid",
+    "loan": "illiquid",
+    "brokerage": "semi_liquid",
+    "hsa": "semi_liquid",
+    "retirement": "illiquid",
+    "real_estate": "illiquid",
+    "vehicle": "illiquid",
+}
+
+# Canonical (value, label) for every type — the source of truth for display
+# labels app-wide.
+HOLDING_TYPE_OPTIONS: list[tuple[str, str]] = [
     ("checking", "Checking"),
     ("savings", "Savings"),
-    ("credit_card", "Credit Card"),
-    ("gift_card", "Gift Card"),
     ("wallet", "Wallet"),
     ("digital_wallet", "Digital Wallet"),
+    ("gift_card", "Gift Card"),
+    ("credit_card", "Credit Card"),
     ("loan", "Loan"),
-    ("other", "Other"),
+    ("brokerage", "Brokerage"),
+    ("hsa", "HSA"),
+    ("retirement", "Retirement"),
+    ("real_estate", "Real Estate"),
+    ("vehicle", "Vehicle"),
 ]
+HOLDING_TYPE_LABELS: dict[str, str] = dict(HOLDING_TYPE_OPTIONS)
+HOLDING_TYPE_VALUES: list[str] = [value for value, _ in HOLDING_TYPE_OPTIONS]
 
-ACCOUNT_TYPE_VALUES: list[str] = [value for value, _ in ACCOUNT_TYPE_OPTIONS]
+# Curated per-context views onto the one vocabulary: which types the Accounts
+# vs Assets selectors offer. Both draw from HOLDING_TYPE_* (one taxonomy, one
+# tier map); the split is only about which choices make sense where. (loan and
+# digital_wallet appear in both: a loan account or a mortgage debt; a Venmo
+# wallet or a crypto wallet.)
+_ACCOUNT_TYPE_KEYS = [
+    "checking",
+    "savings",
+    "wallet",
+    "digital_wallet",
+    "gift_card",
+    "credit_card",
+    "loan",
+]
+_ASSET_TYPE_KEYS = [
+    "brokerage",
+    "hsa",
+    "retirement",
+    "real_estate",
+    "vehicle",
+    "digital_wallet",
+    "loan",
+]
+ACCOUNT_TYPE_OPTIONS: list[tuple[str, str]] = [
+    (v, HOLDING_TYPE_LABELS[v]) for v in _ACCOUNT_TYPE_KEYS
+]
+ACCOUNT_TYPE_VALUES: list[str] = list(_ACCOUNT_TYPE_KEYS)
+ASSET_TYPE_OPTIONS: list[tuple[str, str]] = [
+    (v, HOLDING_TYPE_LABELS[v]) for v in _ASSET_TYPE_KEYS
+]
+ASSET_TYPE_VALUES: list[str] = list(_ASSET_TYPE_KEYS)
+
+# Default tier for a holding whose type is unknown/unset: illiquid, so it still
+# counts toward net worth but never inflates the spendable/investable totals.
+DEFAULT_TIER: LiquidityTier = "illiquid"
 
 # Income types enum
 IncomeType = Literal["salary", "refund", "bonus", "remittance"]
@@ -95,6 +183,8 @@ class AssetEntry(TypedDict, total=False):
     """Unified asset/debt entry in finances data."""
 
     kind: Literal["asset", "debt"]  # Required - asset or debt
+    type: AssetType  # Liquidity-tier subtype (brokerage, retirement, loan, …)
+    unit: str  # Denomination of quantity: "USD" (default) or a ticker/symbol
     name: str  # Required - display name
     id: int  # For asset entries - unique identifier; referenced by debt assetRef
     institution: str  # Optional provider/lender name

@@ -332,7 +332,7 @@ def test_move_account_boundary(conn):
 def test_reorder_accounts(conn):
     c, snap_id = conn
     # Third account so the permutation is non-trivial.
-    add_account(c, snap_id, {"name": "Brokerage", "type": "other", "balance": 0})
+    add_account(c, snap_id, {"name": "Third", "type": "savings", "balance": 0})
     ids = [a["id"] for a in get_accounts(c, snap_id)]  # positions 0,1,2
     # Move the last row to the front: new_order[k] = old position now at k.
     reorder_accounts(c, snap_id, [2, 0, 1])
@@ -528,3 +528,47 @@ def test_load_finances_from_db(conn):
     # No internal _db_id keys exposed
     for entry in data["budget"] + data["assets"]:
         assert "_db_id" not in entry
+
+
+def test_asset_entry_type_round_trip():
+    """The liquidity-tier `type` persists and can be updated."""
+    engine = create_engine("sqlite:///:memory:", future=True)
+    init_db(engine)
+    with engine.connect() as c:
+        snap_id = create_snapshot(c, "s")
+        add_asset_entry(
+            c,
+            snap_id,
+            {"kind": "asset", "type": "brokerage", "name": "BTC", "value": 100},
+        )
+        add_asset_entry(
+            c,
+            snap_id,
+            {"kind": "debt", "type": "loan", "name": "Mortgage", "balance": 50},
+        )
+        by_name = {e["name"]: e for e in get_asset_entries(c, snap_id)}
+        assert by_name["BTC"]["type"] == "brokerage"
+        assert by_name["Mortgage"]["type"] == "loan"
+        # BTC is the first entry (sort_order); reclassify it.
+        update_asset_entry(c, snap_id, 0, {"type": "retirement"})
+        assert get_asset_entries(c, snap_id)[0]["type"] == "retirement"
+
+
+def test_asset_entry_unit_defaults_usd_and_round_trips():
+    """`unit` defaults to USD and can be overridden with a symbol + updated."""
+    engine = create_engine("sqlite:///:memory:", future=True)
+    init_db(engine)
+    with engine.connect() as c:
+        snap_id = create_snapshot(c, "s")
+        add_asset_entry(c, snap_id, {"kind": "asset", "name": "Home", "value": 400000})
+        add_asset_entry(
+            c,
+            snap_id,
+            {"kind": "asset", "name": "BTC", "unit": "BTC", "quantity": 0.4},
+        )
+        by_name = {e["name"]: e for e in get_asset_entries(c, snap_id)}
+        assert by_name["Home"]["unit"] == "USD"  # default
+        assert by_name["BTC"]["unit"] == "BTC"  # override persists
+        # Home is the first entry (sort_order); change its unit.
+        update_asset_entry(c, snap_id, 0, {"unit": "ETH"})
+        assert get_asset_entries(c, snap_id)[0]["unit"] == "ETH"

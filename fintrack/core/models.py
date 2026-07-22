@@ -204,6 +204,13 @@ asset_entries = Table(
         nullable=False,
     ),
     Column("kind", String, nullable=False),
+    # Holding type (see fintrack.core.types.HOLDING_TYPE_TIER). Nullable: an
+    # unclassified holding falls back to DEFAULT_TIER until the user types it.
+    Column("type", String, nullable=True),
+    # Denomination of the row's quantity: "USD" (the default — price is 1, so
+    # amount == quantity) or a ticker/symbol (AAPL, BTC, …) whose per-unit price
+    # comes from the price cache. amount = quantity * unit price.
+    Column("unit", String, nullable=False, server_default="USD"),
     Column("name", String, nullable=False),
     Column("institution", String, nullable=True),
     Column("value", Numeric(14, 2), nullable=True),

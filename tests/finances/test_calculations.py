@@ -2,6 +2,8 @@
 
 from datetime import date
 
+from decimal import Decimal
+
 from fintrack.networth.calculations import (
     _amount_annual,
     _budget_entry_in_month,
@@ -10,9 +12,17 @@ from fintrack.networth.calculations import (
     _quarter_months,
     _semiannual_other_month,
     _subtotal_remainder_of_month,
+    account_contribution,
     account_funding_needed,
+    account_tier,
+    asset_contribution,
+    asset_tier,
+    contributions_by_tier,
+    equity_pairs,
     net_nonliquid_paired,
     net_nonliquid_total,
+    net_worth_total,
+    tiered_totals,
 )
 
 
@@ -77,6 +87,175 @@ def test_net_nonliquid_paired_with_debt_quantity():
     ]
     # paired = asset_subtotal - debt_subtotal = 400000 - 200000 = 200000
     assert net_nonliquid_paired(assets) == 200000.0
+
+
+# ---------------------------------------------------------------------------
+# Liquidity tiers + signed contributions + tiered totals
+# ---------------------------------------------------------------------------
+
+
+def test_account_tier_by_type():
+    assert account_tier({"type": "checking"}) == "liquid"
+    assert account_tier({"type": "savings"}) == "liquid"
+    assert account_tier({"type": "wallet"}) == "liquid"
+    assert account_tier({"type": "digital_wallet"}) == "liquid"
+    assert account_tier({"type": "credit_card"}) == "liquid"
+    assert account_tier({"type": "loan"}) == "illiquid"
+
+
+def test_account_tier_unknown_defaults_illiquid():
+    assert account_tier({"type": "mystery"}) == "illiquid"
+    assert account_tier({}) == "illiquid"
+
+
+def test_asset_tier_by_type():
+    assert asset_tier({"type": "brokerage"}) == "semi_liquid"
+    assert asset_tier({"type": "hsa"}) == "semi_liquid"
+    assert asset_tier({"type": "retirement"}) == "illiquid"
+    assert asset_tier({"type": "real_estate"}) == "illiquid"
+    assert asset_tier({"type": "vehicle"}) == "illiquid"
+    assert asset_tier({"type": "loan"}) == "illiquid"
+
+
+def test_asset_tier_unknown_defaults_illiquid():
+    """Unclassified asset rows (type NULL) still count toward net worth only."""
+    assert asset_tier({"kind": "asset"}) == "illiquid"
+
+
+def test_symbol_unit_caps_liquid_at_semi_liquid():
+    """A non-USD symbol unit caps an otherwise-liquid holding at semi-liquid
+    (crypto in a digital wallet); USD units are unaffected, and illiquid stays
+    illiquid."""
+    # digital_wallet is liquid in USD...
+    assert asset_tier({"type": "digital_wallet", "unit": "USD"}) == "liquid"
+    # ...but semi-liquid when denominated in a symbol (a crypto wallet).
+    assert asset_tier({"type": "digital_wallet", "unit": "BTC"}) == "semi_liquid"
+    # The cap only lifts liquid->semi; it never makes illiquid more liquid.
+    assert asset_tier({"type": "real_estate", "unit": "BTC"}) == "illiquid"
+
+
+def test_account_contribution_cash():
+    assert account_contribution({"type": "checking", "balance": 1000}) == 1000
+
+
+def test_account_contribution_credit_card_signed_balance_plus_rewards():
+    # balance is stored negative (owed); rewards add back
+    acc = {"type": "credit_card", "balance": -400, "rewards_balance": 25}
+    assert account_contribution(acc) == -375
+
+
+def test_account_contribution_credit_card_fallback_available_minus_limit():
+    acc = {"type": "credit_card", "limit": 5000, "available": 4000}
+    assert account_contribution(acc) == -1000
+
+
+def test_account_contribution_loan_negative_balance():
+    assert account_contribution({"type": "loan", "balance": -20000}) == -20000
+
+
+def test_asset_contribution_sign():
+    assert asset_contribution({"kind": "asset", "value": 100, "quantity": 3}) == 300
+    assert asset_contribution({"kind": "debt", "balance": 200}) == -200
+
+
+def test_contributions_by_tier_groups_correctly():
+    accounts = [
+        {"type": "checking", "balance": 1000},
+        {"type": "credit_card", "balance": -400},
+        {"type": "loan", "balance": -20000},
+    ]
+    assets = [
+        # a crypto wallet: digital_wallet + BTC unit -> capped to semi-liquid
+        {"kind": "asset", "type": "digital_wallet", "unit": "BTC", "value": 500},
+        {"kind": "asset", "type": "brokerage", "value": 50},
+        {"kind": "asset", "type": "retirement", "value": 30000},
+        {"kind": "debt", "type": "loan", "balance": 5000},
+    ]
+    by_tier = contributions_by_tier(accounts, assets)
+    assert by_tier["liquid"] == 600  # 1000 - 400
+    assert by_tier["semi_liquid"] == 550  # 500 (crypto wallet) + 50 (brokerage)
+    assert by_tier["illiquid"] == 5000  # -20000 (loan acct) + 30000 - 5000
+
+
+def test_tiered_totals_are_cumulative():
+    accounts = [
+        {"type": "checking", "balance": 1000},
+        {"type": "credit_card", "balance": -400},
+    ]
+    assets = [
+        {"kind": "asset", "type": "brokerage", "value": 2000},
+        {"kind": "asset", "type": "real_estate", "value": 300000},
+        {"kind": "debt", "type": "loan", "balance": 200000},
+    ]
+    totals = tiered_totals(accounts, assets)
+    assert totals["liquid"] == 600  # 1000 - 400
+    assert totals["investable"] == 2600  # + 2000 brokerage
+    assert totals["net_worth"] == 102600  # + 300000 - 200000
+
+
+def test_net_worth_total_matches_tiered():
+    accounts = [{"type": "checking", "balance": 1000}]
+    assets = [{"kind": "asset", "type": "retirement", "value": 5000}]
+    assert net_worth_total(accounts, assets) == 6000
+    assert (
+        net_worth_total(accounts, assets)
+        == tiered_totals(accounts, assets)["net_worth"]
+    )
+
+
+def test_tiered_totals_empty():
+    totals = tiered_totals([], [])
+    assert totals == {
+        "liquid": Decimal("0"),
+        "investable": Decimal("0"),
+        "net_worth": Decimal("0"),
+    }
+
+
+# ---------------------------------------------------------------------------
+# equity_pairs
+# ---------------------------------------------------------------------------
+
+
+def test_equity_pairs_computes_equity_and_ltv():
+    assets = [
+        {
+            "kind": "asset",
+            "id": 1,
+            "name": "Home",
+            "type": "real_estate",
+            "value": 400000,
+        },
+        {
+            "kind": "debt",
+            "name": "Mortgage",
+            "type": "loan",
+            "balance": 300000,
+            "assetRef": 1,
+        },
+    ]
+    pairs = equity_pairs(assets)
+    assert len(pairs) == 1
+    assert pairs[0]["equity"] == 100000
+    assert pairs[0]["ltv"] == Decimal("300000") / Decimal("400000")
+
+
+def test_equity_pairs_ignores_unlinked_debt():
+    assets = [
+        {"kind": "asset", "id": 1, "name": "Home", "value": 400000},
+        {"kind": "debt", "name": "Card", "balance": 500},  # no assetRef
+    ]
+    assert equity_pairs(assets) == []
+
+
+def test_equity_pairs_zero_asset_value_ltv_none():
+    assets = [
+        {"kind": "asset", "id": 1, "name": "Land", "value": 0},
+        {"kind": "debt", "name": "Loan", "balance": 100, "assetRef": 1},
+    ]
+    pairs = equity_pairs(assets)
+    assert pairs[0]["ltv"] is None
+    assert pairs[0]["equity"] == -100
 
 
 # ---------------------------------------------------------------------------

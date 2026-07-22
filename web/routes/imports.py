@@ -221,7 +221,7 @@ def create_account():
     institution = request.form.get("acct_institution", "").strip()
     account_type = request.form.get("acct_type", "checking")
     if account_type not in VALID_ACCOUNT_TYPES:
-        account_type = "other"
+        account_type = "checking"
 
     engine = current_app.config["engine"]
 

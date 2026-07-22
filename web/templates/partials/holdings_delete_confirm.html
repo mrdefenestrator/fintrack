@@ -1,0 +1,7 @@
+{# Holdings delete confirm - delegates to the shared confirm cell. #}
+{% with
+delete_url=url_for('holdings.delete', filename=filename, source=source, ref=ref),
+cancel_url=url_for('holdings.delete_btn', filename=filename, source=source, ref=ref)
+%}
+{% include "partials/editable_table_delete_confirm.html" %}
+{% endwith %}

@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}Holdings — fintrack{% endblock %}
+{% block content %}
+{% import "partials/sheet.html" as sheet %}
+{% import "partials/filter_controls.html" as fc %}
+{% import "partials/sheet_filter_bar.html" as fb %}
+
+{# Asset (green) / liability (red) left accent. Painted as a border on the first
+   *cell*, not the <tr>: WebKit is unreliable about row borders in border-
+   collapse tables (especially when the sheet scrolls horizontally), but renders
+   cell borders correctly — so this matches the Assets table's look everywhere. #}
+<style>
+    #holdings-table tr[data-accent="asset"] > td:first-child {
+        border-left: 4px solid #34d399;   /* emerald-400 */
+    }
+    #holdings-table tr[data-accent="liability"] > td:first-child {
+        border-left: 4px solid #fb7185;   /* rose-400 */
+    }
+    /* Actions column sticks to the right edge; data scrolls behind it. A uniform
+       background (the actions column is chrome, not data) keeps scrolled cells
+       from showing through. The scroll shadow that reads as "data behind here"
+       is the frame's --right overlay, positioned just left of this column (see
+       data-sticky-actions + --sheet-right-h). */
+    #holdings-table .table-actions-cell {
+        position: sticky;
+        right: 0;
+        z-index: 6;
+        background: #ffffff;
+    }
+    .dark #holdings-table .table-actions-cell { background: #1f2937; }  /* gray-800 */
+    /* The sticky total row (z-7) must sit above the sticky actions column (z-6)
+       so data rows — including their action buttons — clip under it when they
+       scroll past, instead of poking above the total. */
+    #holdings-table .total-row { z-index: 7; }
+    /* The total row's actions cell is part of the total band, not the white
+       actions chrome — fill it with the band color (gray-100/gray-700) so the
+       total styling runs the full width instead of stopping at the edit column. */
+    #holdings-table .total-row .table-actions-cell { z-index: 7; background: #f3f4f6; }
+    .dark #holdings-table .total-row .table-actions-cell { background: #374151; }
+    /* Sticky group section headers: each group's heading band + column header
+       stick to the top while its rows scroll, then the next group's header
+       replaces them. Sticky is confined to the <tbody>, which is why each group
+       is a single tbody. Rows are 1.75rem tall, so the column header sits just
+       below the heading band. z-7 keeps them above data + the sticky actions
+       column (z-6); the header rule's higher specificity also wins the corner
+       actions cell. */
+    #holdings-table .holdings-group-heading > td {
+        position: sticky;
+        top: 0;
+        z-index: 7;
+    }
+    #holdings-table .holdings-group-header > th {
+        position: sticky;
+        top: var(--sheet-heading-h, 1.75rem);
+        z-index: 7;
+        background: #f3f4f6;   /* gray-100 */
+    }
+    .dark #holdings-table .holdings-group-header > th { background: #374151; }  /* gray-700 */
+</style>
+
+<form id="holdings-filter-form" method="get" action="{{ url_for('holdings.holdings_view', filename=filename) }}" class="shrink-0">
+    {% if edit_mode %}<input type="hidden" name="edit" value="1">{% endif %}
+    {% call fb.filter_bar(active_count=active_count,
+        reset_url=url_for('holdings.holdings_view', filename=filename, edit=1 if edit_mode else none),
+        use_htmx=false) %}
+        {{ fc.multi_select('type', 'Type', type_opts, form_id='holdings-filter-form') }}
+        {{ fc.multi_select('balance', 'Balance', balance_opts, form_id='holdings-filter-form') }}
+        {{ fc.multi_select('institution', 'Institution', institution_opts, form_id='holdings-filter-form') }}
+    {% endcall %}
+</form>
+
+<div class="table-scroll-container rounded-b-lg border-l border-b border-r border-gray-300 dark:border-gray-600 shadow-sm" data-sheet-scroll data-sticky-actions>
+{# One table, two domain groups. Headers are per-group rows inside the tbody
+   (the trailing column slots differ per group), so there is no global thead.
+   The actions column is always present (inert in view mode) so toggling edit
+   never changes the column count — the columns keep their widths, and w-full
+   still lets the table fill the pane. #}
+<table id="holdings-table" class="editable-table w-full text-sm border-collapse bg-white dark:bg-gray-800">
+    {% include "partials/holdings_tbody.html" %}
+</table>
+</div>
+{% endblock %}

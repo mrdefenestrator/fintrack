@@ -29,6 +29,7 @@ from fintrack.cli.helpers import (
     sort_items,
     sort_options,
 )
+from fintrack.core.types import ASSET_TYPE_VALUES
 from fintrack.networth import repository as repo_assets
 from fintrack.networth.calculations import (
     _ACCOUNT_TYPE_TO_CALCULATION,
@@ -57,6 +58,10 @@ _BUDGET_COLALIGN = (
     "left",
 )
 _ASSETS_COLALIGN = ("left", "left", "left", "right", "right", "right", "left", "right")
+
+# Asset-entry types selectable for the `asset` kind (everything but `loan`,
+# which is the liability type used by debts). Drives --type choices.
+_ASSET_ONLY_TYPES = [t for t in ASSET_TYPE_VALUES if t != "loan"]
 
 
 def _load(cli, conn):
@@ -555,12 +560,22 @@ def _indexed_by_kind(all_entries: list, kind: str, index: int, label: str):
 @assets.command("add")
 @click.option("--name", required=True)
 @click.option("--value", type=float, required=True)
+@click.option(
+    "--type",
+    "asset_type",
+    type=click.Choice(_ASSET_ONLY_TYPES),
+    default=None,
+    help="Holding type (e.g. brokerage, retirement, real_estate). "
+    "Left unclassified if omitted — there is no catch-all type.",
+)
 @click.option("--quantity", type=float, default=None)
 @click.option("--source", default=None)
 @click.option("--institution", default=None)
 @pass_cli
-def assets_add(cli, name, value, quantity, source, institution):
+def assets_add(cli, name, value, asset_type, quantity, source, institution):
     asset = {"kind": "asset", "name": name, "value": value}
+    if asset_type is not None:
+        asset["type"] = asset_type
     if quantity is not None:
         asset["quantity"] = quantity
     if source:
@@ -580,6 +595,7 @@ def assets_add(cli, name, value, quantity, source, institution):
 @click.argument("index", type=int)
 @click.option("--name", default=None)
 @click.option("--value", type=float, default=None)
+@click.option("--type", "type", type=click.Choice(_ASSET_ONLY_TYPES), default=None)
 @click.option("--quantity", type=float, default=None)
 @click.option("--source", default=None)
 @click.option("--institution", default=None)
@@ -669,7 +685,7 @@ def debts_add(
     as_of,
     institution,
 ):
-    entry = {"kind": "debt", "name": name, "balance": balance}
+    entry = {"kind": "debt", "name": name, "balance": balance, "type": "loan"}
     for field, value in (
         ("quantity", quantity),
         ("assetRef", asset_ref),

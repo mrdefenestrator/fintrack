@@ -7,6 +7,7 @@ __pycache__/
 .ruff_cache
 .pytest_cache
 *.db
+*.db.bak-*
 *.egg-info/
 data/*
 source/
@@ -18,3 +19,5 @@ docker-compose.yml
 
 # Local QA tracking, not committed
 issues.md
+notes-category-design.md
+notes-holdings-design.md

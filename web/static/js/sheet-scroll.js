@@ -75,15 +75,29 @@
     // (their positioned ancestor) so they inherit down.
     function measure(frame, container) {
         var thead = container.querySelector("thead");
+        var headerH = thead ? thead.offsetHeight : 0;
+        if (!thead) {
+            // Grouped sheet (no thead): the sticky heading + column-header rows
+            // form the pinned top region (same height for every group). The
+            // column header sticks just below the heading, so publish the
+            // heading height too (its CSS `top`).
+            var heading = container.querySelector(".holdings-group-heading");
+            var header = container.querySelector(".holdings-group-header");
+            var headingH = heading ? heading.offsetHeight : 0;
+            headerH = headingH + (header ? header.offsetHeight : 0);
+            frame.style.setProperty("--sheet-heading-h", headingH + "px");
+        }
         var totalRow = container.querySelector("tr.total-row");
-        frame.style.setProperty(
-            "--sheet-header-h",
-            (thead ? thead.offsetHeight : 0) + "px"
-        );
-        frame.style.setProperty(
-            "--sheet-footer-h",
-            (totalRow ? totalRow.offsetHeight : 0) + "px"
-        );
+        // When a sheet pins an actions column to the right edge, keep the right
+        // shadow to the left of it (over the scrolling data), not under it.
+        var rightW = 0;
+        if (container.hasAttribute("data-sticky-actions")) {
+            var actions = container.querySelector(".table-actions-cell");
+            rightW = actions ? actions.offsetWidth : 0;
+        }
+        frame.style.setProperty("--sheet-header-h", headerH + "px");
+        frame.style.setProperty("--sheet-footer-h", (totalRow ? totalRow.offsetHeight : 0) + "px");
+        frame.style.setProperty("--sheet-right-h", rightW + "px");
     }
 
     var ROW_H = 28; // 1.75rem data-row height
@@ -160,6 +174,30 @@
         els.right.classList.toggle("is-visible", isScrollableX && !atRight);
     }
 
+    // Persist the scroll position per page so it survives a full reload (delete
+    // / add do HX-Refresh). Cell-edit swaps only replace the table's innerHTML,
+    // so the container scroll is already kept there.
+    function scrollKey() {
+        return "sheetScroll:" + window.location.pathname;
+    }
+    function saveScroll(container) {
+        try {
+            sessionStorage.setItem(
+                scrollKey(),
+                JSON.stringify({ x: container.scrollLeft, y: container.scrollTop })
+            );
+        } catch (e) { /* ignore */ }
+    }
+    function restoreScroll(container) {
+        try {
+            var s = JSON.parse(sessionStorage.getItem(scrollKey()));
+            if (s) {
+                container.scrollLeft = s.x || 0;
+                container.scrollTop = s.y || 0;
+            }
+        } catch (e) { /* ignore */ }
+    }
+
     function init(container) {
         if (container.dataset.sheetScrollBound) {
             update(container);
@@ -168,10 +206,12 @@
         container.dataset.sheetScrollBound = "true";
         var frame = ensureFrame(container);
         ensureShadowEls(frame);
+        restoreScroll(container);
 
-        container.addEventListener("scroll", function () { update(container); }, {
-            passive: true,
-        });
+        container.addEventListener("scroll", function () {
+            update(container);
+            saveScroll(container);
+        }, { passive: true });
 
         if (typeof ResizeObserver !== "undefined") {
             var ro = new ResizeObserver(function () { update(container); });

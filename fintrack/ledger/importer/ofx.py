@@ -80,7 +80,10 @@ def extract_ofx_metadata(file_path: str | Path) -> AccountMeta | None:
             institution = account.institution.organization
 
         raw_type = (account.account_type or "").upper()
-        account_type = _ACCOUNT_TYPE_MAP.get(raw_type, "other")
+        # Fall back to checking for unrecognized OFX types: imports are bank
+        # accounts and the user confirms/edits the type at import time. There is
+        # no catch-all "other" type.
+        account_type = _ACCOUNT_TYPE_MAP.get(raw_type, "checking")
 
         account_id = account.account_id or ""
         last4 = account_id[-4:] if len(account_id) >= 4 else account_id

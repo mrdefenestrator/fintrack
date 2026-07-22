@@ -107,12 +107,12 @@
     {% endcall %}
 </form>
 
-<div class="table-scroll-container rounded-b-lg border-l border-b border-r border-gray-300 dark:border-gray-600 shadow-sm" data-sheet-scroll data-sticky-actions>
-{# One table, two domain groups. Headers are per-group rows inside the tbody
+<div class="table-scroll-container rounded-b-lg border-l border-b border-r border-gray-300 dark:border-gray-600 shadow-sm" data-sheet-scroll{% if edit_mode %} data-sticky-actions{% endif %}>
+{# One table, four type-based groups. Headers are per-group rows inside the tbody
    (the trailing column slots differ per group), so there is no global thead.
-   The actions column is always present (inert in view mode) so toggling edit
-   never changes the column count — the columns keep their widths, and w-full
-   still lets the table fill the pane. #}
+   The sticky right-hand actions column (drag + delete) renders only in edit mode
+   — in view mode it is dropped so it doesn't eat horizontal space (esp. on
+   mobile); w-full lets the remaining columns fill the pane in either mode. #}
 <table id="holdings-table" class="editable-table w-full text-sm border-collapse bg-white dark:bg-gray-800">
     {% include "partials/holdings_tbody.html" %}
 </table>

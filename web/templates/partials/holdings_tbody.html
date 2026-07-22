@@ -16,7 +16,9 @@
 {% set us = updated_source | default(none) %}
 {% set ur = updated_ref | default(none) %}
 {% set uf = updated_field | default(none) %}
-{% set span = ncols + 1 %}{# the actions column is always present (inert in view mode) #}
+{# The actions column (drag + delete) exists only in edit mode — in view mode it
+   is dropped entirely so it stops eating horizontal space (esp. on mobile). #}
+{% set span = ncols + 1 if edit_mode else ncols %}
 {% if error %}
 <tbody>
     <tr id="holdings-error-row">
@@ -49,7 +51,7 @@
         <th class="holdings-blank-slot px-1.5 py-0.5"{% if colspan > 1 %} colspan="{{ colspan }}"{% endif %}></th>
         {% endif %}
         {% endfor %}
-        <th class="table-actions-cell px-1.5 py-0.5"></th>
+        {% if edit_mode %}<th class="table-actions-cell px-1.5 py-0.5"></th>{% endif %}
     </tr>
     {% for row in group.rows %}
     <tr class="{{ sheet.row_class() }}" id="holding-row-{{ row.source }}-{{ row.ref }}" data-accent="{{ row.accent_side }}"{% if group.reorderable %} data-reorder-index="{{ loop.index0 }}"{% endif %}>
@@ -93,7 +95,7 @@
             <td class="{{ sheet.cell_class('text-right tabular-nums' if right else '', (sheet.neg(cell | display_is_negative) ~ ' ' ~ row.cell_classes[i]) | trim) }}"{% if colspan > 1 %} colspan="{{ colspan }}"{% endif %}>{{ cell }}</td>
         {% endif %}
         {% endfor %}
-        {% with source=row.source, ref=row.ref %}{% include "partials/holdings_actions_cell.html" %}{% endwith %}
+        {% if edit_mode %}{% with source=row.source, ref=row.ref %}{% include "partials/holdings_actions_cell.html" %}{% endwith %}{% endif %}
     </tr>
     {% else %}
     <tr>
@@ -124,7 +126,7 @@
         <td class="{{ sheet.cell_class('text-right tabular-nums' if loop.index0 == amount_pos else '', sheet.neg(cell | display_is_negative)) }}">{{ cell }}</td>
         {% endif %}
         {% endfor %}
-        <td class="table-actions-cell px-1.5 py-0.5"></td>
+        {% if edit_mode %}<td class="table-actions-cell px-1.5 py-0.5"></td>{% endif %}
     </tr>
     {% endfor %}
 </tbody>

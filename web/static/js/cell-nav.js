@@ -85,6 +85,32 @@
             // (transactions, merchants, accounts, budget, assets).
             if (!e.target.closest("#holdings-table")) return;
 
+            // Escape: abandon the edit and restore the original value. Reset the
+            // field to its original (defaultValue / defaultSelected) first so the
+            // cell's own `focusout changed` trigger sees no change and won't save,
+            // then re-render the cell in display mode via the form's hx-get.
+            if (e.key === "Escape") {
+                e.preventDefault();
+                e.stopImmediatePropagation();
+                var el = e.target;
+                if (el.tagName === "SELECT") {
+                    for (var oi = 0; oi < el.options.length; oi++) {
+                        el.options[oi].selected = el.options[oi].defaultSelected;
+                    }
+                } else {
+                    el.value = el.defaultValue;
+                }
+                var cancelForm = el.closest("form");
+                var displayUrl = cancelForm && cancelForm.getAttribute("hx-get");
+                if (displayUrl) {
+                    htmx.ajax("GET", displayUrl, {
+                        target: "#holdings-table",
+                        swap: "innerHTML",
+                    });
+                }
+                return;
+            }
+
             var dir = null;
             if (e.key === "Tab") dir = e.shiftKey ? "left" : "right";
             else if (e.key === "Enter") dir = e.shiftKey ? "up" : "down";

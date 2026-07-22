@@ -6,6 +6,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#1e40af">
     <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+    {# PWA / Add-to-Home-Screen. iOS ignores the SVG favicon for the home-screen
+       icon and uses apple-touch-icon (a 180×180 PNG); the manifest drives the
+       Android/desktop install + icons. The apple-mobile-web-app tags make an
+       installed iOS icon launch standalone (no Safari chrome). #}
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.webmanifest') }}">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="fintrack">
     <title>{% block title %}fintrack{% endblock %}</title>
 
     <!-- Tailwind CSS via CDN -->

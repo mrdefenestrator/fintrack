@@ -71,6 +71,12 @@
         tbody._rowReorder = Sortable.create(tbody, {
             handle: ".drag-handle",
             draggable: "[data-reorder-index]",
+            // Keep dragged rows within the contiguous data block — don't cross a
+            // non-draggable row (group header / add-row / subtotal). Matters for
+            // the grouped Holdings sheet, where those share the group's tbody.
+            onMove: function (evt) {
+                return !!(evt.related && evt.related.hasAttribute("data-reorder-index"));
+            },
             // No swap animation: animating <tr> transforms makes rows visually
             // "bunch up" / overlap when you drag fast over several rows (the
             // slide of one swap hasn't finished before the next begins). Instant

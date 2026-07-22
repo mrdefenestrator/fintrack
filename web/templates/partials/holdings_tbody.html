@@ -1,10 +1,11 @@
-{# Holdings table body — ONE table, two domain groups. Each group is three
-   <tbody>s: a static heading+header tbody, a data tbody (its own
-   data-reorder-url so drag-reorder is scoped per group), and a static add-row +
-   subtotal tbody. A final tbody holds the master Net-worth total. The leading
-   Institution/Type/Name/Amount slots align across groups (shared column grid);
-   trailing slots are reused per group and labeled by each group's header row.
-   Cell edits swap the whole table body (#holdings-table innerHTML). #}
+{# Holdings table body — ONE table, two domain groups. Each group is a single
+   <tbody> (heading + sticky header + data rows + add-row + subtotal) so its
+   header can stick over its own data rows and get replaced by the next group's
+   header on scroll. The data rows carry data-reorder-index (drag-reorder scoped
+   to the group via data-reorder-url); sort/reorder operate only on those rows.
+   The leading Institution/Type/Name/Amount and trailing Due/Linked/As Of slots
+   align across groups; the middle slots are reused per group. Cell edits swap
+   the whole table body (#holdings-table innerHTML). #}
 {% import "partials/sheet.html" as sheet %}
 {% from "macros/table.html" import cell_display, cell_edit_input, cell_edit_select, cell_non_editable %}
 {% set es = editing_source | default(none) %}
@@ -22,7 +23,7 @@
 </tbody>
 {% endif %}
 {% for group in groups %}
-<tbody data-sort-target="holdings-{{ group.source }}-data" data-group="{{ group.source }}">
+<tbody class="holdings-group" data-group="{{ group.source }}"{% if edit_mode %} data-reorder-url="{{ url_for('holdings.reorder', filename=filename, source=group.source) }}"{% endif %}>
     <tr class="holdings-group-heading">
         <td colspan="{{ span }}" class="px-2 py-1 bg-gray-200 dark:bg-gray-700 text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300">{{ group.label }}</td>
     </tr>
@@ -33,8 +34,6 @@
         {% endfor %}
         <th class="table-actions-cell px-1.5 py-0.5"></th>
     </tr>
-</tbody>
-<tbody id="holdings-{{ group.source }}-data"{% if edit_mode %} data-reorder-url="{{ url_for('holdings.reorder', filename=filename, source=group.source) }}"{% endif %}>
     {% for row in group.rows %}
     <tr class="{{ sheet.row_class() }}" id="holding-row-{{ row.source }}-{{ row.ref }}" data-accent="{{ row.accent_side }}" data-reorder-index="{{ loop.index0 }}">
         {% for cell in row.cells %}
@@ -79,8 +78,6 @@
         <td colspan="{{ span }}" class="px-1.5 py-2 text-center text-gray-500 dark:text-gray-400">No {{ group.label | lower }} match the current filters.</td>
     </tr>
     {% endfor %}
-</tbody>
-<tbody>
     {% if edit_mode %}
     <tr data-add-row>
         <td colspan="{{ span }}" class="px-1.5 py-1 border-b border-gray-200 dark:border-gray-700">

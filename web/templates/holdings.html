@@ -18,19 +18,35 @@
     }
     /* Actions column sticks to the right edge; data scrolls behind it. A uniform
        background (the actions column is chrome, not data) keeps scrolled cells
-       from showing through, and the left shadow reads as the column floating. */
+       from showing through. The scroll shadow that reads as "data behind here"
+       is the frame's --right overlay, positioned just left of this column (see
+       data-sticky-actions + --sheet-right-h). */
     #holdings-table .table-actions-cell {
         position: sticky;
         right: 0;
         z-index: 6;
         background: #ffffff;
-        box-shadow: -6px 0 6px -6px rgba(0, 0, 0, 0.18);
     }
     .dark #holdings-table .table-actions-cell { background: #1f2937; }  /* gray-800 */
-    /* The pinned actions column casts its own left shadow, so suppress the
-       frame's right scroll-shadow (which would sit on top of the pinned
-       column). The overlay is a following sibling of the container. */
-    .table-scroll-container ~ .sheet-scroll-shadow--right { display: none; }
+    /* Sticky group section headers: each group's heading band + column header
+       stick to the top while its rows scroll, then the next group's header
+       replaces them. Sticky is confined to the <tbody>, which is why each group
+       is a single tbody. Rows are 1.75rem tall, so the column header sits just
+       below the heading band. z-7 keeps them above data + the sticky actions
+       column (z-6); the header rule's higher specificity also wins the corner
+       actions cell. */
+    #holdings-table .holdings-group-heading > td {
+        position: sticky;
+        top: 0;
+        z-index: 7;
+    }
+    #holdings-table .holdings-group-header > th {
+        position: sticky;
+        top: 1.75rem;
+        z-index: 7;
+        background: #f3f4f6;   /* gray-100 */
+    }
+    .dark #holdings-table .holdings-group-header > th { background: #374151; }  /* gray-700 */
 </style>
 
 <form id="holdings-filter-form" method="get" action="{{ url_for('holdings.holdings_view', filename=filename) }}" class="shrink-0">
@@ -44,7 +60,7 @@
     {% endcall %}
 </form>
 
-<div class="table-scroll-container rounded-b-lg border-l border-b border-r border-gray-300 dark:border-gray-600 shadow-sm" data-sheet-scroll>
+<div class="table-scroll-container rounded-b-lg border-l border-b border-r border-gray-300 dark:border-gray-600 shadow-sm" data-sheet-scroll data-sticky-actions>
 {# One table, two domain groups. Headers are per-group rows inside the tbody
    (the trailing column slots differ per group), so there is no global thead.
    The actions column is always present (inert in view mode) so toggling edit

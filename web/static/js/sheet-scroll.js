@@ -75,15 +75,25 @@
     // (their positioned ancestor) so they inherit down.
     function measure(frame, container) {
         var thead = container.querySelector("thead");
+        var headerH = thead ? thead.offsetHeight : 0;
+        if (!thead) {
+            // Grouped sheet (no thead): the sticky heading + column-header rows
+            // form the pinned top region (same height for every group).
+            var heading = container.querySelector(".holdings-group-heading");
+            var header = container.querySelector(".holdings-group-header");
+            headerH = (heading ? heading.offsetHeight : 0) + (header ? header.offsetHeight : 0);
+        }
         var totalRow = container.querySelector("tr.total-row");
-        frame.style.setProperty(
-            "--sheet-header-h",
-            (thead ? thead.offsetHeight : 0) + "px"
-        );
-        frame.style.setProperty(
-            "--sheet-footer-h",
-            (totalRow ? totalRow.offsetHeight : 0) + "px"
-        );
+        // When a sheet pins an actions column to the right edge, keep the right
+        // shadow to the left of it (over the scrolling data), not under it.
+        var rightW = 0;
+        if (container.hasAttribute("data-sticky-actions")) {
+            var actions = container.querySelector(".table-actions-cell");
+            rightW = actions ? actions.offsetWidth : 0;
+        }
+        frame.style.setProperty("--sheet-header-h", headerH + "px");
+        frame.style.setProperty("--sheet-footer-h", (totalRow ? totalRow.offsetHeight : 0) + "px");
+        frame.style.setProperty("--sheet-right-h", rightW + "px");
     }
 
     function update(container) {

@@ -1,13 +1,14 @@
 /**
  * Per-group column sorting for the grouped Holdings table.
  *
- * The sheet is one <table> with several <tbody>s. A header <tbody> carries
- * data-sort-target="<id of the group's data tbody>"; clicking a `.sortable-th`
- * in it sorts that data tbody's rows (asc -> desc -> none), independently of the
- * other group. While a group is sorted its data tbody gets `data-sorted`, which
- * disables drag-reorder for that group (see row-reorder.js) so the two don't
- * fight. This is deliberately separate from the shared sortable.js, which only
- * handles single-tbody tables.
+ * Each group is one <tbody data-group="..."> containing a heading, a header row
+ * (`.holdings-group-header` with `.sortable-th` cells), the data rows (carrying
+ * data-reorder-index), an add-row, and a subtotal. Clicking a header cell sorts
+ * only that group's data rows (asc -> desc -> none), re-inserting them ahead of
+ * the add-row/subtotal so the header and footer stay put. State is persisted in
+ * the URL (sort_<group>_col / sort_<group>_dir) so it survives reloads and tbody
+ * swaps. While a group is sorted its tbody gets `data-sorted`, which disables
+ * that group's drag-reorder (see row-reorder.js).
  */
 (function () {
     "use strict";
@@ -23,16 +24,15 @@
         return { num: isNaN(num) ? NaN : num, str: s };
     }
 
-    // Data rows only (skip an empty-state row, which is a single colspan cell).
-    function dataRows(tbody) {
-        return Array.prototype.filter.call(tbody.children, function (tr) {
-            return tr.hasAttribute("data-reorder-index") || (tr.cells && tr.cells.length > 1);
-        });
+    function dataRows(groupTbody) {
+        return Array.prototype.slice.call(
+            groupTbody.querySelectorAll(":scope > tr[data-reorder-index]")
+        );
     }
 
-    function apply(dataTbody, col, dir) {
-        if (!dataTbody._origOrder) dataTbody._origOrder = dataRows(dataTbody);
-        var rows = dataTbody._origOrder.slice();
+    function apply(groupTbody, col, dir) {
+        if (!groupTbody._origOrder) groupTbody._origOrder = dataRows(groupTbody);
+        var rows = groupTbody._origOrder.slice();
         if (dir === "asc" || dir === "desc") {
             rows.sort(function (a, b) {
                 var va = parseSortValue(a.cells[col] && a.cells[col].textContent);
@@ -42,24 +42,25 @@
                 else cmp = (va.str || "").localeCompare(vb.str || "", undefined, { numeric: true });
                 return dir === "asc" ? cmp : -cmp;
             });
-            dataTbody.setAttribute("data-sorted", "1");
+            groupTbody.setAttribute("data-sorted", "1");
         } else {
-            dataTbody.removeAttribute("data-sorted");
+            groupTbody.removeAttribute("data-sorted");
         }
-        rows.forEach(function (r) { dataTbody.appendChild(r); });
-        // Let row-reorder.js refresh its disabled state for this group.
+        // Re-insert the (sorted) data rows before the add-row / subtotal so the
+        // header and footer rows stay in place.
+        var anchor = groupTbody.querySelector(":scope > [data-add-row]")
+            || groupTbody.querySelector(":scope > .holdings-subtotal");
+        rows.forEach(function (r) { groupTbody.insertBefore(r, anchor); });
         document.dispatchEvent(new CustomEvent("holdings:sorted"));
     }
 
-    function updateIndicators(headerTbody, col, dir) {
-        headerTbody.querySelectorAll(".sortable-th").forEach(function (th, i) {
+    function updateIndicators(headerRow, col, dir) {
+        headerRow.querySelectorAll(".sortable-th").forEach(function (th, i) {
             var ind = th.querySelector(".sort-indicator");
             if (ind) ind.textContent = i === col && dir !== "none" ? (dir === "asc" ? " ↑" : " ↓") : "";
         });
     }
 
-    // Sort state is persisted per group in the URL as sort_<group>_col /
-    // sort_<group>_dir, so it survives reloads and tbody swaps (cell edits).
     function writeUrl(group, col, dir) {
         var url = new URL(window.location);
         if (dir === "none") {
@@ -80,36 +81,35 @@
         return { col: col, dir: dir };
     }
 
-    function init(headerTbody) {
-        var group = headerTbody.getAttribute("data-group");
-        var dataTbody = document.getElementById(headerTbody.getAttribute("data-sort-target"));
-        if (!dataTbody) return;
+    function init(groupTbody) {
+        var group = groupTbody.getAttribute("data-group");
+        var headerRow = groupTbody.querySelector(".holdings-group-header");
+        if (!headerRow) return;
 
-        // Re-apply a persisted sort (fresh load, or after a tbody swap replaced
-        // these elements).
+        // Re-apply a persisted sort (fresh load, or after a tbody swap).
         var saved = readUrl(group);
         if (saved) {
-            headerTbody._sortCol = saved.col;
-            headerTbody._sortDir = saved.dir;
-            apply(dataTbody, saved.col, saved.dir);
-            updateIndicators(headerTbody, saved.col, saved.dir);
+            groupTbody._sortCol = saved.col;
+            groupTbody._sortDir = saved.dir;
+            apply(groupTbody, saved.col, saved.dir);
+            updateIndicators(headerRow, saved.col, saved.dir);
         }
 
-        if (headerTbody._holdingsSort) return;
-        headerTbody._holdingsSort = true;
-        headerTbody.querySelectorAll(".sortable-th").forEach(function (th) {
+        if (groupTbody._holdingsSort) return;
+        groupTbody._holdingsSort = true;
+        headerRow.querySelectorAll(".sortable-th").forEach(function (th) {
             var col = parseInt(th.getAttribute("data-col"), 10);
             if (isNaN(col)) return;
             function doSort() {
                 var dir;
-                if (headerTbody._sortCol !== col) dir = "asc";
-                else if (headerTbody._sortDir === "asc") dir = "desc";
-                else if (headerTbody._sortDir === "desc") dir = "none";
+                if (groupTbody._sortCol !== col) dir = "asc";
+                else if (groupTbody._sortDir === "asc") dir = "desc";
+                else if (groupTbody._sortDir === "desc") dir = "none";
                 else dir = "asc";
-                headerTbody._sortCol = col;
-                headerTbody._sortDir = dir;
-                apply(dataTbody, col, dir);
-                updateIndicators(headerTbody, col, dir);
+                groupTbody._sortCol = col;
+                groupTbody._sortDir = dir;
+                apply(groupTbody, col, dir);
+                updateIndicators(headerRow, col, dir);
                 writeUrl(group, col, dir);
             }
             th.addEventListener("click", doSort);
@@ -120,12 +120,13 @@
     }
 
     function scan() {
-        document.querySelectorAll("[data-sort-target]").forEach(init);
+        document.querySelectorAll("tbody[data-group]").forEach(init);
     }
 
     document.addEventListener("DOMContentLoaded", scan);
-    // Cell edits swap the whole table body; the tbodies are new elements, so drop
-    // any cached original order and re-wire.
-    document.addEventListener("htmx:afterSwap", scan);
+    document.addEventListener("htmx:afterSwap", function () {
+        document.querySelectorAll("tbody[data-group]").forEach(function (t) { delete t._origOrder; });
+        scan();
+    });
     if (document.readyState !== "loading") scan();
 })();

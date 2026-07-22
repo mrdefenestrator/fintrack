@@ -192,10 +192,10 @@ def test_holdings_view_folds_equity_onto_loan_row(client, db_engine):
 
 
 def _rows_region(body: str) -> str:
-    """All table-body content (spanning the grouped tbodies), so filter-bar
-    labels above the table don't cause false matches."""
-    start = body.find("<tbody")
-    end = body.rfind("</tbody>")
+    """The holdings <table> content only, so filter-bar option labels above the
+    table (e.g. a Type option named "Checking") don't cause false matches."""
+    start = body.find('id="holdings-table"')
+    end = body.find("</table>", start)
     return body[start:end] if start != -1 and end != -1 else body
 
 

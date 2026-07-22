@@ -228,12 +228,10 @@
             z-index: 10;
         }
 
-        /* Add row sticks one row-height above the bottom edge */
-        .table-scroll-container tbody tr[data-add-row] {
-            position: sticky;
-            bottom: 1.75rem;
-            z-index: 5;
-        }
+        /* The add ("+ Add …") row flows inline as the last row of its group and
+           scrolls with the data — it is deliberately NOT pinned (only the total
+           row sticks to the bottom). The grid canvas (sheet-scroll.js) fills the
+           space beneath it so it still sits just under the last data row. */
 
         /* Total row sticks to the bottom edge */
         .table-scroll-container tbody tr.total-row {

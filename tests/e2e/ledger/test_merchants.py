@@ -3,11 +3,46 @@
 The Merchants list uses the same spreadsheet-style inline editing as the
 accounts/budget/assets sheets: click the Category cell → it becomes a <select>
 that auto-saves on change (no far-right edit button, no far-left Save button).
+
+Row selectors deliberately exclude `.sheet-grid-filler` — the aria-hidden
+spacer row that sheet-scroll.js injects to paint grid lines over empty space.
+It is a real <tbody><tr>, so a bare `table tbody tr` counts it as a data row;
+on an empty sheet that makes the count 1 (never 0), which broke the seed-on-
+empty fallback and made these tests flaky depending on whether the filler had
+been injected yet.
 """
 
 import pytest
 
 pytestmark = pytest.mark.e2e
+
+
+def _open_inline_editor(page, cell):
+    """Click a display cell to open its inline editor, blocking until htmx has
+    both swapped in AND settled the new content.
+
+    The inline editors save on the swapped-in control's own hx-trigger (a
+    <select>'s `change`, an <input>'s `focusout`/Enter). htmx wires those
+    triggers while processing the swap, which happens *after* the /cell
+    response is received. So `expect_response('/cell')` returning does NOT mean
+    the editor is interactive — selecting/typing in that gap fires a change
+    event that htmx isn't listening for yet, the POST never goes out, and the
+    test times out. This was the source of the flaky merchants tests.
+
+    Waiting for htmx's `afterSettle` event (fired only after the swap is
+    processed and triggers are wired) makes opening the editor deterministic,
+    regardless of machine speed. Uses a document-level settle counter so a
+    swap that completes between arming and the wait is still observed.
+    """
+    page.evaluate(
+        "() => { if (!window.__hxSettleHooked) { window.__hxSettleHooked = true;"
+        " window.__hxSettleCount = 0;"
+        " document.addEventListener('htmx:afterSettle',"
+        " () => { window.__hxSettleCount++; }); } }"
+    )
+    before = page.evaluate("() => window.__hxSettleCount || 0")
+    cell.click()
+    page.wait_for_function("(b) => (window.__hxSettleCount || 0) > b", arg=before)
 
 
 # ---------------------------------------------------------------------------
@@ -51,7 +86,7 @@ def test_merchants_table_has_expected_columns(page, flask_server):
 def test_merchants_empty_db_has_no_data_rows(page, flask_server):
     """With no merchant cache entries the table body is empty."""
     page.goto(f"{flask_server}/s/ledger/merchants")
-    assert page.locator("table tbody tr").count() == 0
+    assert page.locator("table tbody tr:not(.sheet-grid-filler)").count() == 0
 
 
 def test_merchants_uses_sheet_style_sortable_table(page, flask_server):
@@ -70,28 +105,21 @@ def test_merchants_uses_sheet_style_sortable_table(page, flask_server):
 def test_merchants_empty_after_import_before_categorization(page, confirmed_server):
     """Merchants table is empty right after import since the API is disabled."""
     page.goto(f"{confirmed_server}/s/ledger/merchants")
-    assert page.locator("table tbody tr").count() == 0
+    assert page.locator("table tbody tr:not(.sheet-grid-filler)").count() == 0
 
 
 def _seed_merchant_via_transaction(page, base_url, category="Groceries"):
     """Populate the merchant cache by categorizing a transaction with the
     inline Category editor's apply-to-merchant option checked."""
     page.goto(f"{base_url}/s/ledger/transactions?year=2026&month=4")
-    page.wait_for_selector("table tbody tr")
+    page.wait_for_selector("table tbody tr:not(.sheet-grid-filler)")
 
-    # Open the Category cell (5th column) on the first row.
-    first_row = page.locator("table tbody tr").first
-    cat_cell = first_row.locator("td").nth(4)
-    with page.expect_response(lambda r: "/cell" in r.url and "category" in r.url):
-        cat_cell.click()
-    # Let the swap fully settle before interacting further: under heavier
-    # load (e.g. after driving the categories panel elsewhere on the page)
-    # the response event can fire slightly before htmx finishes processing
-    # the newly-swapped row, so an immediate select_option's change event
-    # would be missed.
-    page.wait_for_load_state("networkidle")
+    # Open the Category cell (5th column) on the first row, waiting until htmx
+    # has wired the swapped-in editor (see _open_inline_editor).
+    first_row = page.locator("table tbody tr:not(.sheet-grid-filler)").first
+    _open_inline_editor(page, first_row.locator("td").nth(4))
 
-    edit_row = page.locator("table tbody tr").first
+    edit_row = page.locator("table tbody tr:not(.sheet-grid-filler)").first
     # apply-to-merchant is checked by default; selecting a category saves and
     # (because it's merchant-wide) redirects/reloads the list.
     edit_row.locator("input[name='apply_to_merchant']").check()
@@ -105,7 +133,7 @@ def test_merchants_appear_after_transaction_correction(page, confirmed_server):
     _seed_merchant_via_transaction(page, confirmed_server)
 
     page.goto(f"{confirmed_server}/s/ledger/merchants")
-    rows = page.locator("table tbody tr")
+    rows = page.locator("table tbody tr:not(.sheet-grid-filler)")
     assert rows.count() >= 1
     row_text = rows.first.inner_text()
     assert "Groceries" in row_text
@@ -115,59 +143,57 @@ def test_merchants_appear_after_transaction_correction(page, confirmed_server):
 def test_merchants_category_cell_opens_inline_select(page, confirmed_server):
     """Clicking a merchant's Category cell swaps it to an inline <select>."""
     page.goto(f"{confirmed_server}/s/ledger/merchants")
-    if page.locator("table tbody tr").count() == 0:
+    if page.locator("table tbody tr:not(.sheet-grid-filler)").count() == 0:
         _seed_merchant_via_transaction(page, confirmed_server)
         page.goto(f"{confirmed_server}/s/ledger/merchants")
 
-    first_row = page.locator("table tbody tr").first
-    cat_cell = first_row.locator("td").nth(1)  # Category is the 2nd column
-    with page.expect_response(lambda r: "/cell" in r.url):
-        cat_cell.click()
+    first_row = page.locator("table tbody tr:not(.sheet-grid-filler)").first
+    _open_inline_editor(page, first_row.locator("td").nth(1))  # Category column
 
-    edit_row = page.locator("table tbody tr").first
+    edit_row = page.locator("table tbody tr:not(.sheet-grid-filler)").first
     assert edit_row.locator("select[name='value']").is_visible()
 
 
 def test_merchants_category_inline_edit_saves(page, confirmed_server):
     """Selecting a new category in the inline editor persists it."""
     page.goto(f"{confirmed_server}/s/ledger/merchants")
-    if page.locator("table tbody tr").count() == 0:
+    if page.locator("table tbody tr:not(.sheet-grid-filler)").count() == 0:
         _seed_merchant_via_transaction(page, confirmed_server)
         page.goto(f"{confirmed_server}/s/ledger/merchants")
 
-    first_row = page.locator("table tbody tr").first
-    cat_cell = first_row.locator("td").nth(1)
-    with page.expect_response(lambda r: "/cell" in r.url):
-        cat_cell.click()
-    # Let the swap fully settle before selecting: the /cell response can fire
-    # slightly before htmx finishes wiring the newly-swapped <select>'s hx-post,
-    # so an immediate select_option's change event would be missed and no POST
-    # sent (same race the seed helper guards against above).
-    page.wait_for_load_state("networkidle")
+    first_row = page.locator("table tbody tr:not(.sheet-grid-filler)").first
+    _open_inline_editor(page, first_row.locator("td").nth(1))  # Category column
 
-    edit_row = page.locator("table tbody tr").first
+    edit_row = page.locator("table tbody tr:not(.sheet-grid-filler)").first
     with page.expect_response(lambda r: r.request.method == "POST"):
         edit_row.locator("select[name='value']").select_option("Dining")
 
     # Row reverts to display showing the new category.
-    page.wait_for_selector("table tbody tr td:has-text('Dining')")
-    assert "Dining" in page.locator("table tbody tr").first.inner_text()
+    page.wait_for_selector(
+        "table tbody tr:not(.sheet-grid-filler) td:has-text('Dining')"
+    )
+    assert (
+        "Dining"
+        in page.locator("table tbody tr:not(.sheet-grid-filler)").first.inner_text()
+    )
 
 
 def test_merchants_search_filters_results(page, confirmed_server):
     """Search parameter filters merchant rows by name."""
     page.goto(f"{confirmed_server}/s/ledger/merchants")
-    if page.locator("table tbody tr").count() == 0:
+    if page.locator("table tbody tr:not(.sheet-grid-filler)").count() == 0:
         _seed_merchant_via_transaction(page, confirmed_server)
         page.goto(f"{confirmed_server}/s/ledger/merchants")
 
-    total_before = page.locator("table tbody tr").count()
+    total_before = page.locator("table tbody tr:not(.sheet-grid-filler)").count()
 
     page.goto(f"{confirmed_server}/s/ledger/merchants?search=XYZZY_NO_MATCH_9999")
-    assert page.locator("table tbody tr").count() == 0
+    assert page.locator("table tbody tr:not(.sheet-grid-filler)").count() == 0
 
     page.goto(f"{confirmed_server}/s/ledger/merchants")
-    assert page.locator("table tbody tr").count() == total_before
+    assert (
+        page.locator("table tbody tr:not(.sheet-grid-filler)").count() == total_before
+    )
 
 
 # ---------------------------------------------------------------------------

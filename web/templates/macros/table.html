@@ -43,7 +43,12 @@
         hx-target="#{{ tbody_id }}"
         onkeydown="if(event.keyCode===13) event.preventDefault();">
         <input type="hidden" name="field" value="{{ field }}" />
-        <input type="{{ input_type }}" name="value" value="{{ editing_value }}"
+        {# size="1": in an auto-layout table the browser sizes a column to its
+           input's *intrinsic* width (the default size≈20 characters) whenever
+           the table has horizontal slack, so entering edit mode would balloon
+           narrow columns to a uniform ~20ch. size="1" drops the intrinsic width
+           to ~1ch; width:100% (from .table-cell-input) still fills the cell. #}
+        <input type="{{ input_type }}" name="value" value="{{ editing_value }}" size="1"
             class="table-cell-input {% if right_align %}text-right tabular-nums{% endif %}" style="min-width:0"
             {% if inputmode %}inputmode="{{ inputmode }}"{% endif %}
             hx-post="{{ update_url }}"

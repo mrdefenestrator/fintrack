@@ -107,7 +107,7 @@ def test_transactions_table_has_expected_columns(page, flask_server):
 def test_transactions_rows_visible_with_data(page, confirmed_server):
     """Transaction rows appear after a confirmed import."""
     page.goto(f"{confirmed_server}/s/ledger/transactions?year=2026&month=4")
-    rows = page.locator("table tbody tr:not(.total-row)")
+    rows = page.locator("table tbody tr:not(.total-row):not(.sheet-grid-filler)")
     assert rows.count() == 4
 
 
@@ -158,7 +158,9 @@ def test_transactions_sort_by_amount_is_numeric(page, confirmed_server):
 def test_transactions_row_shows_date_and_amount(page, confirmed_server):
     """Each row contains a date (column 0) and a dollar amount (column 5)."""
     page.goto(f"{confirmed_server}/s/ledger/transactions?year=2026&month=4")
-    first_row = page.locator("table tbody tr:not(.total-row)").first
+    first_row = page.locator(
+        "table tbody tr:not(.total-row):not(.sheet-grid-filler)"
+    ).first
     cells = first_row.locator("td").all_inner_texts()
     assert "2026" in cells[0]  # date column
     assert "$" in cells[5]  # amount column
@@ -245,7 +247,7 @@ def test_transactions_filter_by_status_uncategorized(page, confirmed_server):
     page.goto(
         f"{confirmed_server}/s/ledger/transactions?year=2026&month=4&status=uncategorized"
     )
-    rows = page.locator("table tbody tr:not(.total-row)")
+    rows = page.locator("table tbody tr:not(.total-row):not(.sheet-grid-filler)")
     assert rows.count() == 4
 
 
@@ -254,7 +256,10 @@ def test_transactions_filter_by_status_categorized_empty(page, confirmed_server)
     page.goto(
         f"{confirmed_server}/s/ledger/transactions?year=2026&month=4&status=categorized"
     )
-    rows = page.locator("table tbody tr:not(.total-row)")
+    # Exclude .sheet-grid-filler: sheet-scroll.js injects an aria-hidden spacer
+    # <tr> to paint grid lines over empty space, so a bare row count sees 1 on
+    # an empty (fully-filtered-out) sheet.
+    rows = page.locator("table tbody tr:not(.total-row):not(.sheet-grid-filler)")
     assert rows.count() == 0
 
 
@@ -263,7 +268,7 @@ def test_transactions_search_filters_rows(page, confirmed_server):
     page.goto(
         f"{confirmed_server}/s/ledger/transactions?year=2026&month=4&search=WHOLE+FOODS"
     )
-    rows = page.locator("table tbody tr:not(.total-row)")
+    rows = page.locator("table tbody tr:not(.total-row):not(.sheet-grid-filler)")
     assert rows.count() == 1
     assert "WHOLE FOODS" in rows.first.inner_text().upper()
 
@@ -271,20 +276,29 @@ def test_transactions_search_filters_rows(page, confirmed_server):
 def test_transactions_amount_filter_range_filters_rows(page, confirmed_server):
     """Amount range filter narrows the transaction list."""
     page.goto(f"{confirmed_server}/s/ledger/transactions?year=2026&month=4")
-    all_rows = page.locator("table tbody tr:not(.total-row)").count()
+    all_rows = page.locator(
+        "table tbody tr:not(.total-row):not(.sheet-grid-filler)"
+    ).count()
     page.goto(f"{confirmed_server}/s/ledger/transactions?year=2026&month=4&amount=0-1")
-    filtered_rows = page.locator("table tbody tr:not(.total-row)").count()
+    filtered_rows = page.locator(
+        "table tbody tr:not(.total-row):not(.sheet-grid-filler)"
+    ).count()
     assert filtered_rows <= all_rows
 
 
 def test_transactions_amount_filter_invalid_input_ignored(page, confirmed_server):
     """Invalid amount text is ignored rather than erroring."""
     page.goto(f"{confirmed_server}/s/ledger/transactions?year=2026&month=4")
-    all_rows = page.locator("table tbody tr:not(.total-row)").count()
+    all_rows = page.locator(
+        "table tbody tr:not(.total-row):not(.sheet-grid-filler)"
+    ).count()
     page.goto(
         f"{confirmed_server}/s/ledger/transactions?year=2026&month=4&amount=garbage"
     )
-    assert page.locator("table tbody tr:not(.total-row)").count() == all_rows
+    assert (
+        page.locator("table tbody tr:not(.total-row):not(.sheet-grid-filler)").count()
+        == all_rows
+    )
 
 
 # ---------------------------------------------------------------------------

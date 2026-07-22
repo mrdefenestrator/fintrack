@@ -226,26 +226,27 @@ Single Flask app (`web/app.py`), port 5003 (`FINTRACK_PORT`), database from
 `?edit=1` toggling spreadsheet-style edit mode on the net-worth pages.
 
 Navigation is two-tier and task-oriented: a primary row with two group tabs —
-`Finances` (Accounts · Assets · Holdings · Budget · Projections) and `Spending`
+`Finances` (Holdings · Budget · Projections) and `Spending`
 (Transactions · Trends · Merchants) — and a secondary row showing the active
-group's sub-tabs. Accounts is the landing page; each group tab remembers its
+group's sub-tabs. Holdings is the landing page; each group tab remembers its
 last-visited sub-tab for the session (sessionStorage, `web/static/js/nav.js`).
-Holdings unifies the Accounts and Assets sheets into one dense, spreadsheet-
-style view and is intended to eventually subsume both. Information density is a
-deliberate feature of these sheets, not a problem to design around. Its
-structure and the invariants that keep the sticky chrome correct are documented
-under [Holdings sheet](#holdings-sheet) below.
+Holdings subsumes the old standalone Accounts and Assets sheets, which were
+retired — it is one dense, spreadsheet-style view over the same tables.
+Information density is a deliberate feature of these sheets, not a problem to
+design around. Net worth shows under the Holdings sub-tab (the "fintrack" title
+carries no figure). Holdings' structure and the invariants that keep the sticky
+chrome correct are documented under [Holdings sheet](#holdings-sheet) below.
 Import is an icon button in the header rather than a tab, and the edit-mode
-lock is functional only on the pages that honor it (Accounts, Budget,
-Assets — muted elsewhere). The old `/s/<snapshot>/status` dashboard was
-removed; its URL redirects to the Accounts view.
+lock is functional only on the pages that honor it (Holdings, Budget — muted
+elsewhere). The old `/s/<snapshot>/status` dashboard was removed; its URL
+redirects to Holdings.
 
 Two HTMX idioms coexist by design: ledger pages (transactions, trends,
 merchants, import) use `HX-Request` partial swaps and are snapshot-scoped via
-a `url_value_preprocessor` (`g.snapshot_id`); net-worth pages (accounts,
-budget, assets) use finances-style spreadsheet cell editing with
-explicit template names. One `base.html` carries Tailwind, HTMX, Alpine.js,
-and the light/dark theme toggle.
+a `url_value_preprocessor` (`g.snapshot_id`); the net-worth pages (holdings,
+budget) use finances-style spreadsheet cell editing with explicit template
+names. One `base.html` carries Tailwind, HTMX, Alpine.js, and the light/dark
+theme toggle.
 
 ### Holdings sheet
 

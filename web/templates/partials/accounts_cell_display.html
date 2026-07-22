@@ -1,9 +1,0 @@
-{# Single cell in display mode; click to edit (HTMX). focus_next=true when returning from save/collapse so script
-focuses cell below. #}
-{% import "partials/sheet.html" as sheet %}
-<td class="{{ sheet.display_cell_class('text-right tabular-nums' if right_align else '', sheet.neg(value is not none and value | display_is_negative)) }}"
-    {% if focus_next %}data-focus-next="{{ focus_next }}" {% endif %}
-    hx-get="{{ url_for('accounts.cell_edit', filename=filename, account_id=account_id, field=field) }}" hx-trigger="click"
-    hx-swap="outerHTML" role="button" tabindex="0" title="Click to edit (Tab/Enter/Esc)">
-    {{ value }}
-</td>

@@ -25,6 +25,6 @@ def status_view():
 
 @status_bp.route("/s/<string:filename>/status")
 def snapshot_status(filename):
-    """Legacy status-page URL. The Status page was removed (QA issue 6);
-    redirect old bookmarks to the Accounts view."""
-    return redirect(url_for("accounts.accounts_view", filename=filename))
+    """Legacy status-page URL. The Status page was removed (QA issue 6) and the
+    Accounts page has since been retired; redirect old bookmarks to Holdings."""
+    return redirect(url_for("holdings.holdings_view", filename=filename))

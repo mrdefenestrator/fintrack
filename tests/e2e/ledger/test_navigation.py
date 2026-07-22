@@ -54,9 +54,9 @@ def test_tab_navigation(page, flask_server):
     page.click("[data-import-link]")
     page.wait_for_url("**/import**")
 
-    # From import (no active group) the Finances group tab lands on Accounts
+    # From import (no active group) the Finances group tab lands on Holdings
     page.click("[data-nav-group='finances']")
-    page.wait_for_url("**/accounts**")
+    page.wait_for_url("**/holdings**")
 
     # Spending group tab remembers the last-visited sub-tab (merchants)
     page.click("[data-nav-group='spending']")

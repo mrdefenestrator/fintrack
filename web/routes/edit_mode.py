@@ -18,7 +18,7 @@ def toggle():
     # Reject off-site referrers
     if parsed.netloc and parsed.netloc != request.host:
         return redirect(
-            url_for("accounts.accounts_view", filename=get_default_filename())
+            url_for("holdings.holdings_view", filename=get_default_filename())
         )
 
     params = parse_qs(parsed.query, keep_blank_values=True)
@@ -38,5 +38,5 @@ def toggle():
         new_url = parsed.path + ("?" + new_query if new_query else "")
 
     return redirect(
-        new_url or url_for("accounts.accounts_view", filename=get_default_filename())
+        new_url or url_for("holdings.holdings_view", filename=get_default_filename())
     )

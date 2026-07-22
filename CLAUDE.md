@@ -103,12 +103,13 @@ degrades to a warning without it).
   Loans · Assets — each with its own tight column set (a group only shows the
   columns that apply to it; blank slots pad to align As Of). Grouping is a
   display concern over the same two tables (`accounts`; `asset_entries` by
-  `kind`) — no data migration. It is meant to eventually retire the Accounts and
-  Assets sheets. See DESIGN.md "Holdings sheet" for the columns, the Liquid/Net
-  worth footer, computed CC Available, per-group reorder, and the **sticky-row
-  border invariant** (sticky rows must use box-shadow, never border-collapse
-  borders). Both the web GUI and the Python CLI are first-class; keep them at
-  parity.
+  `kind`) — no data migration. The standalone Accounts and Assets **web pages**
+  have been retired; Holdings is the finances landing page. See DESIGN.md
+  "Holdings sheet" for the columns, the Liquid/Net worth footer, computed CC
+  Available, per-group reorder, and the **sticky-row border invariant** (sticky
+  rows must use box-shadow, never border-collapse borders). The web GUI (Holdings)
+  and the Python CLI (which keeps separate `accounts`/`assets`/`debts` commands)
+  are both first-class; keep them at parity.
 - Core product goals the UI serves: current liquid holdings, net worth,
   budgeting, spending tracking, deviation from budget, and (eventually)
   net-worth projections.

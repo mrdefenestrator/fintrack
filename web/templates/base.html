@@ -298,11 +298,22 @@
             height: 1.75rem;
         }
 
+        /* The side (left/right) shadows signal horizontally-hidden columns, so
+           they cover the column-header row too — but not the group *title* band
+           above it (QA #6): a grouped sheet publishes --sheet-heading-h (title
+           band height only), so the shadows start just below it. Standard sheets
+           have no title band and never set --sheet-heading-h, so they fall back
+           to --sheet-header-h (below their <thead>) — unchanged. */
         .sheet-scroll-shadow--left,
         .sheet-scroll-shadow--right {
-            top: var(--sheet-header-h, 0px);
+            top: var(--sheet-heading-h, var(--sheet-header-h, 0px));
             bottom: var(--sheet-footer-h, 0px);
             width: 1.75rem;
+            /* Above the sticky column header (z-7) so the side shadow shows over
+               the header row too (QA #6), not just the data. Its `top` already
+               keeps it below the group title band, so a higher z never lets it
+               bleed onto the band. Base .sheet-scroll-shadow is z-6. */
+            z-index: 8;
         }
 
         .sheet-scroll-shadow--top {

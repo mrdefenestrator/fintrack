@@ -78,10 +78,14 @@
         var headerH = thead ? thead.offsetHeight : 0;
         if (!thead) {
             // Grouped sheet (no thead): the sticky heading + column-header rows
-            // form the pinned top region (same height for every group).
+            // form the pinned top region (same height for every group). The
+            // column header sticks just below the heading, so publish the
+            // heading height too (its CSS `top`).
             var heading = container.querySelector(".holdings-group-heading");
             var header = container.querySelector(".holdings-group-header");
-            headerH = (heading ? heading.offsetHeight : 0) + (header ? header.offsetHeight : 0);
+            var headingH = heading ? heading.offsetHeight : 0;
+            headerH = headingH + (header ? header.offsetHeight : 0);
+            frame.style.setProperty("--sheet-heading-h", headingH + "px");
         }
         var totalRow = container.querySelector("tr.total-row");
         // When a sheet pins an actions column to the right edge, keep the right

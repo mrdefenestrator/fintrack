@@ -454,19 +454,14 @@ def _apply_filters(rows, type_sel, balance_sel, inst_sel):
     return rows
 
 
-def _subtotal_cells(cols, label, rows):
-    """A group subtotal row (label under Name, sum under Amount) + the sum."""
-    total = sum((r["amount"] for r in rows), Decimal("0"))
-    cells = [""] * len(cols)
-    cells[2] = label  # Name slot
-    cells[_AMOUNT_POS] = fmt_money(total)
-    return cells, total
-
-
 def _groups_ctx(account_rows, asset_rows):
-    """The two domain groups (headers, rows, subtotals) + the net-worth total."""
-    acc_sub, acc_total = _subtotal_cells(_ACCOUNT_COLS, "Accounts", account_rows)
-    ast_sub, ast_total = _subtotal_cells(_ASSET_COLS, "Assets", asset_rows)
+    """The two domain groups (headers, rows, group total) + the net-worth total.
+
+    Each group's total is shown inline in its heading band (under Amount), so
+    there is no separate subtotal row.
+    """
+    acc_total = sum((r["amount"] for r in account_rows), Decimal("0"))
+    ast_total = sum((r["amount"] for r in asset_rows), Decimal("0"))
     groups = [
         {
             "source": "account",
@@ -474,7 +469,7 @@ def _groups_ctx(account_rows, asset_rows):
             "headers": _col_headers(_ACCOUNT_COLS),
             "right_align": _col_right_align(_ACCOUNT_COLS),
             "rows": account_rows,
-            "subtotal": acc_sub,
+            "total": fmt_money(acc_total),
         },
         {
             "source": "asset",
@@ -482,7 +477,7 @@ def _groups_ctx(account_rows, asset_rows):
             "headers": _col_headers(_ASSET_COLS),
             "right_align": _col_right_align(_ASSET_COLS),
             "rows": asset_rows,
-            "subtotal": ast_sub,
+            "total": fmt_money(ast_total),
         },
     ]
     master = [""] * _NCOLS

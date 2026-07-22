@@ -24,7 +24,9 @@
 {% endif %}
 {% for group in groups %}
 <tbody class="holdings-group" data-group="{{ group.source }}"{% if edit_mode %} data-reorder-url="{{ url_for('holdings.reorder', filename=filename, source=group.source) }}"{% endif %}>
-    {% set _band = 'bg-blue-50 dark:bg-blue-950/40 border-b border-blue-200 dark:border-blue-900/60' %}
+    {# Opaque backgrounds: the band rows are sticky, so translucency would let
+       scrolled data show through them. #}
+    {% set _band = 'bg-blue-50 dark:bg-blue-950 border-b border-blue-200 dark:border-blue-900' %}
     <tr class="holdings-group-heading">
         <td colspan="3" class="{{ _band }} border-l-4 border-l-blue-500 px-2 py-1.5 text-xs font-semibold uppercase tracking-wide text-blue-800 dark:text-blue-200">{{ group.label }}</td>
         <td class="{{ _band }} px-1.5 py-1.5 text-right tabular-nums text-sm font-semibold text-blue-900 dark:text-blue-100 {% if group.total | display_is_negative %}!text-red-600 dark:!text-red-400{% endif %}">{{ group.total }}</td>

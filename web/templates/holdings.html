@@ -27,10 +27,10 @@
         box-shadow: -6px 0 6px -6px rgba(0, 0, 0, 0.18);
     }
     .dark #holdings-table .table-actions-cell { background: #1f2937; }  /* gray-800 */
-    /* In edit mode the pinned actions column casts its own left shadow, so
-       suppress the frame's right scroll-shadow (which would sit on top of the
-       pinned column). The overlay is a following sibling of the container. */
-    .table-scroll-container.holdings-edit ~ .sheet-scroll-shadow--right { display: none; }
+    /* The pinned actions column casts its own left shadow, so suppress the
+       frame's right scroll-shadow (which would sit on top of the pinned
+       column). The overlay is a following sibling of the container. */
+    .table-scroll-container ~ .sheet-scroll-shadow--right { display: none; }
 </style>
 
 <form id="holdings-filter-form" method="get" action="{{ url_for('holdings.holdings_view', filename=filename) }}" class="shrink-0">
@@ -44,12 +44,13 @@
     {% endcall %}
 </form>
 
-<div class="table-scroll-container rounded-b-lg border-l border-b border-r border-gray-300 dark:border-gray-600 shadow-sm {% if edit_mode %}holdings-edit{% endif %}" data-sheet-scroll>
+<div class="table-scroll-container rounded-b-lg border-l border-b border-r border-gray-300 dark:border-gray-600 shadow-sm" data-sheet-scroll>
 {# One table, two domain groups. Headers are per-group rows inside the tbody
    (the trailing column slots differ per group), so there is no global thead.
-   No `w-full`: the table sizes to its content, so toggling edit mode (which adds
-   the actions column) doesn't rescale the data columns. #}
-<table id="holdings-table" class="editable-table text-sm border-collapse bg-white dark:bg-gray-800">
+   The actions column is always present (inert in view mode) so toggling edit
+   never changes the column count — the columns keep their widths, and w-full
+   still lets the table fill the pane. #}
+<table id="holdings-table" class="editable-table w-full text-sm border-collapse bg-white dark:bg-gray-800">
     {% include "partials/holdings_tbody.html" %}
 </table>
 </div>

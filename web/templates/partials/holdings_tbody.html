@@ -13,7 +13,7 @@
 {% set us = updated_source | default(none) %}
 {% set ur = updated_ref | default(none) %}
 {% set uf = updated_field | default(none) %}
-{% set span = ncols + (1 if edit_mode else 0) %}
+{% set span = ncols + 1 %}{# the actions column is always present (inert in view mode) #}
 {% if error %}
 <tbody>
     <tr id="holdings-error-row">
@@ -22,7 +22,7 @@
 </tbody>
 {% endif %}
 {% for group in groups %}
-<tbody data-sort-target="holdings-{{ group.source }}-data">
+<tbody data-sort-target="holdings-{{ group.source }}-data" data-group="{{ group.source }}">
     <tr class="holdings-group-heading">
         <td colspan="{{ span }}" class="px-2 py-1 bg-gray-200 dark:bg-gray-700 text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300">{{ group.label }}</td>
     </tr>
@@ -31,7 +31,7 @@
         <th class="sortable-th px-1.5 py-0.5 font-medium text-gray-800 dark:text-gray-100 border-r border-gray-200 dark:border-gray-600 last:border-r-0 cursor-pointer select-none hover:bg-gray-200 dark:hover:bg-gray-600 {% if loop.index0 in group.right_align %}text-right{% else %}text-left{% endif %}"
             data-col="{{ loop.index0 }}" role="button" tabindex="0" title="Sort by this column">{{ h }} <span class="sort-indicator"></span></th>
         {% endfor %}
-        {% if edit_mode %}<th class="table-actions-cell px-1.5 py-0.5"></th>{% endif %}
+        <th class="table-actions-cell px-1.5 py-0.5"></th>
     </tr>
 </tbody>
 <tbody id="holdings-{{ group.source }}-data"{% if edit_mode %} data-reorder-url="{{ url_for('holdings.reorder', filename=filename, source=group.source) }}"{% endif %}>
@@ -72,9 +72,7 @@
             <td class="{{ sheet.cell_class('text-right tabular-nums' if right else '', (sheet.neg(cell | display_is_negative) ~ ' ' ~ row.cell_classes[i]) | trim) }}">{{ cell }}</td>
         {% endif %}
         {% endfor %}
-        {% if edit_mode %}
-            {% with source=row.source, ref=row.ref %}{% include "partials/holdings_actions_cell.html" %}{% endwith %}
-        {% endif %}
+        {% with source=row.source, ref=row.ref %}{% include "partials/holdings_actions_cell.html" %}{% endwith %}
     </tr>
     {% else %}
     <tr>
@@ -97,7 +95,7 @@
         {% for cell in group.subtotal %}
         <td class="{{ sheet.cell_class('text-right tabular-nums' if loop.index0 in group.right_align else '', sheet.neg(cell | display_is_negative)) }}">{{ cell }}</td>
         {% endfor %}
-        {% if edit_mode %}<td class="table-actions-cell px-1.5 py-0.5"></td>{% endif %}
+        <td class="table-actions-cell px-1.5 py-0.5"></td>
     </tr>
 </tbody>
 {% endfor %}
@@ -106,6 +104,6 @@
         {% for cell in master_total %}
         <td class="{{ sheet.cell_class('text-right tabular-nums' if loop.index0 == amount_pos else '', sheet.neg(cell | display_is_negative)) }}">{{ cell }}</td>
         {% endfor %}
-        {% if edit_mode %}<td class="table-actions-cell px-1.5 py-0.5"></td>{% endif %}
+        <td class="table-actions-cell px-1.5 py-0.5"></td>
     </tr>
 </tbody>

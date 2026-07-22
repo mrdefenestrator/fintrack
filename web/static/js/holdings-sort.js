@@ -58,11 +58,45 @@
         });
     }
 
+    // Sort state is persisted per group in the URL as sort_<group>_col /
+    // sort_<group>_dir, so it survives reloads and tbody swaps (cell edits).
+    function writeUrl(group, col, dir) {
+        var url = new URL(window.location);
+        if (dir === "none") {
+            url.searchParams.delete("sort_" + group + "_col");
+            url.searchParams.delete("sort_" + group + "_dir");
+        } else {
+            url.searchParams.set("sort_" + group + "_col", col);
+            url.searchParams.set("sort_" + group + "_dir", dir);
+        }
+        window.history.replaceState({}, "", url);
+    }
+
+    function readUrl(group) {
+        var params = new URL(window.location).searchParams;
+        var col = parseInt(params.get("sort_" + group + "_col"), 10);
+        var dir = params.get("sort_" + group + "_dir");
+        if (isNaN(col) || (dir !== "asc" && dir !== "desc")) return null;
+        return { col: col, dir: dir };
+    }
+
     function init(headerTbody) {
-        if (headerTbody._holdingsSort) return;
-        headerTbody._holdingsSort = true;
+        var group = headerTbody.getAttribute("data-group");
         var dataTbody = document.getElementById(headerTbody.getAttribute("data-sort-target"));
         if (!dataTbody) return;
+
+        // Re-apply a persisted sort (fresh load, or after a tbody swap replaced
+        // these elements).
+        var saved = readUrl(group);
+        if (saved) {
+            headerTbody._sortCol = saved.col;
+            headerTbody._sortDir = saved.dir;
+            apply(dataTbody, saved.col, saved.dir);
+            updateIndicators(headerTbody, saved.col, saved.dir);
+        }
+
+        if (headerTbody._holdingsSort) return;
+        headerTbody._holdingsSort = true;
         headerTbody.querySelectorAll(".sortable-th").forEach(function (th) {
             var col = parseInt(th.getAttribute("data-col"), 10);
             if (isNaN(col)) return;
@@ -76,6 +110,7 @@
                 headerTbody._sortDir = dir;
                 apply(dataTbody, col, dir);
                 updateIndicators(headerTbody, col, dir);
+                writeUrl(group, col, dir);
             }
             th.addEventListener("click", doSort);
             th.addEventListener("keydown", function (e) {

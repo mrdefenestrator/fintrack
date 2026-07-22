@@ -20,23 +20,24 @@
     {{ cell_value }}</td>
 {% endmacro %}
 
-{# --- Display cell (editable, clickable to open edit) --- #}
-{% macro cell_display(cell_value, right_align, is_negative, cell_edit_url, tbody_id, is_updated) %}
+{# --- Display cell (editable, clickable to open edit). `colspan` lets a cell
+      span several table slots (the Holdings "Source" column spans two). --- #}
+{% macro cell_display(cell_value, right_align, is_negative, cell_edit_url, tbody_id, is_updated, colspan=1) %}
 <td class="{{ sheet.display_cell_class('text-right tabular-nums' if right_align else '', sheet.neg(is_negative)) }}"
-    hx-get="{{ cell_edit_url }}" hx-trigger="click" hx-swap="innerHTML" hx-target="#{{ tbody_id }}" role="button" tabindex="0">
+    {% if colspan > 1 %}colspan="{{ colspan }}" {% endif %}hx-get="{{ cell_edit_url }}" hx-trigger="click" hx-swap="innerHTML" hx-target="#{{ tbody_id }}" role="button" tabindex="0">
     {{ cell_value }}</td>
 {% endmacro %}
 
 {# --- Non-editable cell (greyed out) --- #}
-{% macro cell_non_editable(cell_value, right_align, is_negative) %}
+{% macro cell_non_editable(cell_value, right_align, is_negative, colspan=1) %}
 {% set _muted = ('text-red-400 dark:text-red-500' if is_negative else 'text-gray-400 dark:text-gray-500') ~ ' bg-gray-100 dark:bg-gray-700' %}
-<td class="{{ sheet.cell_class('text-right tabular-nums' if right_align else '', _muted) }}">
+<td class="{{ sheet.cell_class('text-right tabular-nums' if right_align else '', _muted) }}"{% if colspan > 1 %} colspan="{{ colspan }}"{% endif %}>
     {{ cell_value }}</td>
 {% endmacro %}
 
 {# --- Edit cell: text input --- #}
-{% macro cell_edit_input(field, editing_value, right_align, update_url, display_url, tbody_id, inputmode, input_type='text') %}
-<td class="cell-editing {{ sheet.cell_class('text-right tabular-nums' if right_align else '') }}">
+{% macro cell_edit_input(field, editing_value, right_align, update_url, display_url, tbody_id, inputmode, input_type='text', colspan=1) %}
+<td class="cell-editing {{ sheet.cell_class('text-right tabular-nums' if right_align else '') }}"{% if colspan > 1 %} colspan="{{ colspan }}"{% endif %}>
     <form method="post" action="{{ update_url }}" class="inline"
         hx-get="{{ display_url }}"
         hx-trigger="focusout from:input delay:150ms" hx-swap="innerHTML"
@@ -59,8 +60,8 @@
 {% endmacro %}
 
 {# --- Edit cell: select dropdown --- #}
-{% macro cell_edit_select(field, editing_value, right_align, update_url, display_url, tbody_id, options, format_fn) %}
-<td class="cell-editing {{ sheet.cell_class('text-right tabular-nums' if right_align else '') }}">
+{% macro cell_edit_select(field, editing_value, right_align, update_url, display_url, tbody_id, options, format_fn, colspan=1) %}
+<td class="cell-editing {{ sheet.cell_class('text-right tabular-nums' if right_align else '') }}"{% if colspan > 1 %} colspan="{{ colspan }}"{% endif %}>
     <form method="post" action="{{ update_url }}" class="inline"
         hx-get="{{ display_url }}"
         hx-trigger="focusout from:select delay:150ms" hx-swap="innerHTML"

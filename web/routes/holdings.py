@@ -68,32 +68,34 @@ _TYPE_LABELS: dict[str, str] = HOLDING_TYPE_LABELS
 _BALANCE_LABELS: dict[str, str] = {"asset": "Assets", "liability": "Liabilities"}
 
 # ---------------------------------------------------------------------------
-# Column layouts — one per group.
+# Column layouts — one per group. Each tuple is (key, header, right_align, span).
 #
-# Every group shares the leading Institution·Type·Name·Amount slots and the
-# trailing Due·Linked·As Of slots (same slot index in each group so they line up
-# down the table); the middle slots hold each group's own columns. Blank slots
-# ("") pad the shorter groups so every group has the same slot count and the
-# grid — and the sticky right-hand actions column — line up. Each tuple is
-# (key, header, right_align).
+# The leading Institution·Type·Name·Amount and the trailing Due·Linked·As Of
+# columns occupy the same *slot* (physical column) in every group so they line up
+# down the table; blank slots (_E) pad the shorter groups. `span` lets one cell
+# cover several slots — the Assets "Source" cell spans two so its long valuation
+# text (e.g. "KBB Private Party Very Good") borrows the neighbouring slot's width
+# instead of forcing the Rewards / Statement / LTV columns wide in other groups.
+# Every group's spans sum to the same slot count so the grid — and the sticky
+# right-hand actions column — line up.
 # ---------------------------------------------------------------------------
-_E: tuple[str, str, bool] = ("", "", False)  # structural blank slot
-_LEADING: list[tuple[str, str, bool]] = [
-    ("institution", "Institution", False),
-    ("type", "Type", False),
-    ("name", "Name", False),
-    ("amount", "Amount", True),
+_E: tuple[str, str, bool, int] = ("", "", False, 1)  # structural blank slot
+_LEADING: list[tuple[str, str, bool, int]] = [
+    ("institution", "Institution", False, 1),
+    ("type", "Type", False, 1),
+    ("name", "Name", False, 1),
+    ("amount", "Amount", True, 1),
 ]
-_DUE = ("due", "Due", False)
-_LINKED = ("linked", "Linked", False)
-_ASOF = ("as_of", "As Of", False)
+_DUE = ("due", "Due", False, 1)
+_LINKED = ("linked", "Linked", False, 1)
+_ASOF = ("as_of", "As Of", False, 1)
 
-# Each group packs its own columns from slot 4; blank slots (_E) pad the shorter
-# groups so As Of lands in the same last slot in every group (aligned down the
-# table), with the blanks sitting contiguously just before it.
+# Slots (after the leading 4): each group's own columns first, then aligned
+# Due (slot 8) · Linked (slot 9) · As Of (slot 10); blank slots pad to keep them
+# aligned across groups.
 _CASH_COLS = _LEADING + [
-    ("reserve", "Reserve", True),
-    ("funding", "Funding", True),
+    ("reserve", "Reserve", True, 1),
+    ("funding", "Funding", True, 1),
     _E,
     _E,
     _E,
@@ -101,33 +103,31 @@ _CASH_COLS = _LEADING + [
     _ASOF,
 ]
 _CREDIT_COLS = _LEADING + [
-    ("limit", "Limit", True),
-    ("available", "Available", True),
-    ("rewards", "Rewards", True),
-    ("statement", "Statement", True),
+    ("limit", "Limit", True, 1),
+    ("available", "Available", True, 1),
+    ("rewards", "Rewards", True, 1),
+    ("statement", "Statement", True, 1),
     _DUE,
     _LINKED,
     _ASOF,
 ]
 _LOAN_COLS = _LEADING + [
-    ("interest", "Interest", True),
-    ("equity", "Equity", True),
-    ("ltv", "LTV", True),
+    ("interest", "Interest", True, 1),
+    ("equity", "Equity", True, 1),
+    ("ltv", "LTV", True, 1),
+    _E,
     _DUE,
     _LINKED,
-    _E,
     _ASOF,
 ]
 _ASSET_COLS = _LEADING + [
-    ("unit_price", "Unit Price", True),
-    ("qty", "Qty", True),
-    ("source", "Source", False),
+    ("unit_price", "Unit Price", True, 1),
+    ("qty", "Qty", True, 1),
+    ("source", "Source", False, 3),  # spans three slots (see note above)
     _LINKED,
-    _E,
-    _E,
     _ASOF,
 ]
-_NCOLS = len(_CASH_COLS)  # same slot count in every group
+_NCOLS = sum(span for _, _, _, span in _CASH_COLS)  # slot count (same per group)
 _AMOUNT_POS = 3  # Amount is the 4th (leading) slot in every group
 
 # Group definitions: key -> (label, source, singular noun for the add button,
@@ -161,15 +161,19 @@ def _entity_group_key(source: str, entity: dict) -> str:
 
 
 def _col_keys(cols):
-    return [k for k, _, _ in cols]
+    return [k for k, _, _, _ in cols]
 
 
 def _col_headers(cols):
-    return [h for _, h, _ in cols]
+    return [h for _, h, _, _ in cols]
 
 
 def _col_right_align(cols):
-    return [i for i, (_, _, ra) in enumerate(cols) if ra]
+    return [i for i, (_, _, ra, _) in enumerate(cols) if ra]
+
+
+def _col_spans(cols):
+    return [span for _, _, _, span in cols]
 
 
 # Editable columns per account group, mapping the display column key to the
@@ -350,16 +354,19 @@ def _make_row(
     cols,
     col_fields,
     edit_raw,
+    liability,
 ):
     """Assemble a row record: display cells, per-cell classes, edit metadata.
 
     `cols` is the group's column layout; cells/fields are positioned by its keys
     so groups share their aligned slots. Structural blank slots (key "") render
-    as truly empty cells (not a muted dash). The left-border accent encodes the
-    asset/liability split by the sign of the amount (assets green, debts red).
+    as truly empty cells (not a muted dash). The left accent encodes the asset/
+    liability split by the holding's *group* — Credit Cards and Loans are
+    liabilities (red) even at a zero balance; Cash and Assets are green — rather
+    than by the sign of the current amount.
     """
     keys = _col_keys(cols)
-    is_liability = amount < 0
+    is_liability = liability
     # Blank structural slots ("") are empty; real columns fall back to a dash.
     cells = ["" if k == "" else values.get(k, _BLANK) for k in keys]
     cell_classes = [
@@ -431,6 +438,7 @@ def _account_row(a: dict, funding_by_id: dict, account_display: dict, today: dat
         _GROUP_COLS[group_key],
         _account_col_fields(a),
         edit_raw,
+        liability=group_key in ("credit", "loan"),
     )
 
 
@@ -482,6 +490,7 @@ def _asset_row(e: dict, pair: dict | None, linked: str, index: int, today: date)
         _GROUP_COLS[group_key],
         _asset_col_fields(e),
         edit_raw,
+        liability=group_key == "loan",
     )
 
 
@@ -567,6 +576,7 @@ def _groups_ctx(rows_by_group: dict[str, list[dict]], accounts, assets):
                 "add_noun": add_noun,
                 "headers": _col_headers(cols),
                 "right_align": _col_right_align(cols),
+                "spans": _col_spans(cols),
                 "rows": grp_rows,
                 "total": fmt_money(total),
                 "reorderable": reorderable,
@@ -603,13 +613,14 @@ def _ref_options(ctx: dict) -> tuple[list, list]:
     return account_ref_options, asset_ref_options
 
 
-def _tbody_ctx(rows_by_group, ctx: dict, **editing) -> dict:
+def _tbody_ctx(rows_by_group, ctx: dict, filters_active=False, **editing) -> dict:
     """Shared context for the tbody partial (page render and edit swaps)."""
     account_ref_options, asset_ref_options = _ref_options(ctx)
     groups, master_total = _groups_ctx(rows_by_group, ctx["accounts"], ctx["assets"])
     return {
         "groups": groups,
         "master_total": master_total,
+        "filters_active": filters_active,
         "ncols": _NCOLS,
         "amount_pos": _AMOUNT_POS,
         "account_type_options": ACCOUNT_TYPE_OPTIONS,
@@ -675,7 +686,14 @@ def holdings_view(filename):
             for v, lbl in values_labels
         ]
 
-    ctx.update(_tbody_ctx(filtered, ctx, edit_mode=edit_mode))
+    ctx.update(
+        _tbody_ctx(
+            filtered,
+            ctx,
+            filters_active=bool(type_sel or balance_sel or inst_sel),
+            edit_mode=edit_mode,
+        )
+    )
     ctx.update(
         {
             "active_count": active_count,

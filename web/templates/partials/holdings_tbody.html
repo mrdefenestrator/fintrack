@@ -39,12 +39,14 @@
     <tr class="holdings-group-header bg-gray-100 dark:bg-gray-700">
         {% for h in group.headers %}
         {# No border-r here: inter-column dividers are box-shadows on the sticky
-           header cell (holdings.html). Blank structural slots are non-sortable. #}
+           header cell (holdings.html). Blank structural slots are non-sortable;
+           `spans` lets one column cover several slots (Assets "Source"). #}
+        {% set colspan = group.spans[loop.index0] %}
         {% if h %}
         <th class="sortable-th px-1.5 py-0.5 font-medium text-gray-800 dark:text-gray-100 cursor-pointer select-none hover:bg-gray-200 dark:hover:bg-gray-600 {% if loop.index0 in group.right_align %}text-right{% else %}text-left{% endif %}"
-            data-col="{{ loop.index0 }}" role="button" tabindex="0" title="Sort by this column">{{ h }} <span class="sort-indicator"></span></th>
+            {% if colspan > 1 %}colspan="{{ colspan }}" {% endif %}data-col="{{ loop.index0 }}" role="button" tabindex="0" title="Sort by this column">{{ h }} <span class="sort-indicator"></span></th>
         {% else %}
-        <th class="holdings-blank-slot px-1.5 py-0.5"></th>
+        <th class="holdings-blank-slot px-1.5 py-0.5"{% if colspan > 1 %} colspan="{{ colspan }}"{% endif %}></th>
         {% endif %}
         {% endfor %}
         <th class="table-actions-cell px-1.5 py-0.5"></th>
@@ -55,45 +57,47 @@
         {% set i = loop.index0 %}
         {% set field = row.fields[i] %}
         {% set right = i in group.right_align %}
+        {% set colspan = group.spans[i] %}
         {% if cell == "" %}
-            {# blank structural slot: empty, borderless #}
-            <td class="holdings-blank-slot px-1.5 py-px"></td>
+            {# blank structural slot: an empty cell, but with the normal right
+               divider so the gap reads as empty columns and As Of stays separated #}
+            <td class="{{ sheet.cell_class() }}"{% if colspan > 1 %} colspan="{{ colspan }}"{% endif %}></td>
         {% elif edit_mode and field and es == row.source and er == row.ref and ef == field %}
             {% set update_url = url_for('holdings.update', filename=filename, source=row.source, ref=row.ref) %}
             {% set display_url = url_for('holdings.cell_edit', filename=filename, source=row.source, ref=row.ref, field=field, display=1) %}
             {% if field == 'type' %}
                 {% set opts = account_type_options if row.source == 'account' else asset_type_options %}
-                {% call(caller) cell_edit_select('type', row.edit_raw['type'], right, update_url, display_url, 'holdings-table', none, none) %}
+                {% call(caller) cell_edit_select('type', row.edit_raw['type'], right, update_url, display_url, 'holdings-table', none, none, colspan=colspan) %}
                     {% for value, label in opts %}
                     <option value="{{ value }}" {% if value == row.edit_raw['type'] %}selected{% endif %}>{{ label }}</option>
                     {% endfor %}
                 {% endcall %}
             {% elif field in ('paymentAccountRef', 'assetRef') %}
                 {% set opts = account_ref_options if field == 'paymentAccountRef' else asset_ref_options %}
-                {% call(caller) cell_edit_select(field, row.edit_raw[field], right, update_url, display_url, 'holdings-table', none, none) %}
+                {% call(caller) cell_edit_select(field, row.edit_raw[field], right, update_url, display_url, 'holdings-table', none, none, colspan=colspan) %}
                     <option value="">-</option>
                     {% for value, label in opts %}
                     <option value="{{ value }}" {% if value | string == row.edit_raw[field] %}selected{% endif %}>{{ label }}</option>
                     {% endfor %}
                 {% endcall %}
             {% else %}
-                {{ cell_edit_input(field, row.edit_raw[field], right, update_url, display_url, 'holdings-table', none) }}
+                {{ cell_edit_input(field, row.edit_raw[field], right, update_url, display_url, 'holdings-table', none, colspan=colspan) }}
             {% endif %}
         {% elif edit_mode and field %}
             {% set cell_edit_url = url_for('holdings.cell_edit', filename=filename, source=row.source, ref=row.ref, field=field) %}
             {% set is_updated = us == row.source and ur == row.ref and uf == field %}
-            {{ cell_display(cell, right, cell | display_is_negative, cell_edit_url, 'holdings-table', is_updated) }}
+            {{ cell_display(cell, right, cell | display_is_negative, cell_edit_url, 'holdings-table', is_updated, colspan=colspan) }}
         {% elif edit_mode %}
-            {{ cell_non_editable(cell, right, cell | display_is_negative) }}
+            {{ cell_non_editable(cell, right, cell | display_is_negative, colspan=colspan) }}
         {% else %}
-            <td class="{{ sheet.cell_class('text-right tabular-nums' if right else '', (sheet.neg(cell | display_is_negative) ~ ' ' ~ row.cell_classes[i]) | trim) }}">{{ cell }}</td>
+            <td class="{{ sheet.cell_class('text-right tabular-nums' if right else '', (sheet.neg(cell | display_is_negative) ~ ' ' ~ row.cell_classes[i]) | trim) }}"{% if colspan > 1 %} colspan="{{ colspan }}"{% endif %}>{{ cell }}</td>
         {% endif %}
         {% endfor %}
         {% with source=row.source, ref=row.ref %}{% include "partials/holdings_actions_cell.html" %}{% endwith %}
     </tr>
     {% else %}
     <tr>
-        <td colspan="{{ span }}" class="px-1.5 py-2 text-center text-gray-500 dark:text-gray-400">No {{ group.label | lower }} match the current filters.</td>
+        <td colspan="{{ span }}" class="px-1.5 py-2 text-center text-gray-500 dark:text-gray-400">{% if filters_active %}No {{ group.label | lower }} match the current filters.{% else %}No {{ group.label | lower }} yet.{% endif %}</td>
     </tr>
     {% endfor %}
     {% if edit_mode %}
@@ -115,7 +119,7 @@
     <tr class="total-row {% if not loop.last %}total-upper{% endif %} bg-gray-100 dark:bg-gray-700 {% if loop.first %}border-t-2 border-gray-400 dark:border-gray-500{% endif %} font-semibold">
         {% for cell in total_row %}
         {% if cell == "" %}
-        <td class="holdings-blank-slot px-1.5 py-px"></td>
+        <td class="{{ sheet.cell_class() }}"></td>
         {% else %}
         <td class="{{ sheet.cell_class('text-right tabular-nums' if loop.index0 == amount_pos else '', sheet.neg(cell | display_is_negative)) }}">{{ cell }}</td>
         {% endif %}

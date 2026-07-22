@@ -89,15 +89,6 @@
     .dark #holdings-table .holdings-group-header > th:not(:last-child) {
         box-shadow: inset -1px 0 0 #4b5563, inset 0 -2px 0 #4b5563;
     }
-    /* Blank structural slots pad the shorter groups. Keep the header underline
-       continuous across them but drop the right divider (they aren't columns);
-       after the divider rule so it wins the equal-specificity match. */
-    #holdings-table .holdings-group-header > th.holdings-blank-slot {
-        box-shadow: inset 0 -2px 0 #d1d5db;
-    }
-    .dark #holdings-table .holdings-group-header > th.holdings-blank-slot {
-        box-shadow: inset 0 -2px 0 #4b5563;
-    }
     /* Two-line master footer: Liquid (total-upper) pins one row above Net worth,
        which pins to the bottom edge; both are sticky via the base .total-row. */
     #holdings-table .total-row.total-upper {

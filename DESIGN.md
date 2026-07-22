@@ -258,12 +258,20 @@ equity/LTV pairing (`calculations.equity_pairs`) is unchanged.
 
 - **Columns are per-group and tight.** Each group carries its own header row and
   fills only its own columns; the leading Institution·Type·Name·Amount and the
-  trailing As Of slots sit in the same slot index in every group so they align
-  down the table, and blank structural slots pad the shorter groups (table width
-  = the widest group, not the union). Cash: Reserve·Funding. Credit Cards:
+  trailing Due·Linked·As Of slots sit in the same slot index in every group so
+  they align down the table, and blank structural slots (rendered as empty cells
+  with the normal gridline) pad the shorter groups — table width = the widest
+  group, not the union. Cash: Reserve·Funding. Credit Cards:
   Limit·Available·Rewards·Statement·Due·Linked. Loans:
   Interest·Equity·LTV·Due·Linked. Assets: Unit Price·Qty·Source·Linked. Equity
-  and LTV show on the **loan** row (the debt side of a secured pair).
+  and LTV show on the **loan** row (the debt side of a secured pair). A column
+  may carry a `span` so one cell covers several slots — the Assets "Source" cell
+  spans three so its long valuation text borrows neighbouring slots instead of
+  forcing the Rewards / Statement / LTV columns wide in the other groups.
+- **Row accent by group, not sign.** The left asset/liability accent is green for
+  Cash + Assets and red for Credit Cards + Loans — a credit card reads as a
+  liability even at a zero balance — rather than keyed off the current amount's
+  sign.
 - **Totals.** Each group shows its own subtotal in its heading band; a master
   footer shows **Liquid** and **Net worth** (`calculations.tiered_totals`).
   Liquidity is a cross-cutting property, so it is reported independently of the

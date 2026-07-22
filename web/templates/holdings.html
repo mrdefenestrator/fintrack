@@ -32,7 +32,11 @@
        so data rows — including their action buttons — clip under it when they
        scroll past, instead of poking above the total. */
     #holdings-table .total-row { z-index: 7; }
-    #holdings-table .total-row .table-actions-cell { z-index: 7; }
+    /* The total row's actions cell is part of the total band, not the white
+       actions chrome — fill it with the band color (gray-100/gray-700) so the
+       total styling runs the full width instead of stopping at the edit column. */
+    #holdings-table .total-row .table-actions-cell { z-index: 7; background: #f3f4f6; }
+    .dark #holdings-table .total-row .table-actions-cell { background: #374151; }
     /* Sticky group section headers: each group's heading band + column header
        stick to the top while its rows scroll, then the next group's header
        replaces them. Sticky is confined to the <tbody>, which is why each group

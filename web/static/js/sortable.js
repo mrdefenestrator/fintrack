@@ -30,6 +30,16 @@
         var rows = Array.from(tbody.querySelectorAll('tr'));
         var addRow = null;
         var totalRow = null;
+        var filler = null;
+
+        // The sheet-scroll grid-filler row (QA item 17) is not data — pull it
+        // out so it never sorts, and re-append it before the add/total rows.
+        for (var f = rows.length - 1; f >= 0; f--) {
+            if (rows[f].classList && rows[f].classList.contains('sheet-grid-filler')) {
+                filler = rows.splice(f, 1)[0];
+                break;
+            }
+        }
 
         for (var i = rows.length - 1; i >= 0; i--) {
             if (isAddRow(rows[i])) {
@@ -45,6 +55,15 @@
         table._originalRowOrder = rows;
         table._originalTotalRow = totalRow;
         table._originalAddRow = addRow;
+        table._originalFiller = filler;
+    }
+
+    // Re-append the non-data trailing rows (grid filler, then add row, then
+    // total row) after a sort/restore has re-ordered the data rows.
+    function appendTrailingRows(table, tbody) {
+        if (table._originalFiller) tbody.appendChild(table._originalFiller);
+        if (table._originalAddRow) tbody.appendChild(table._originalAddRow);
+        if (table._originalTotalRow) tbody.appendChild(table._originalTotalRow);
     }
 
     function restoreOriginalOrder(table) {
@@ -52,8 +71,7 @@
         var tbody = table.querySelector('tbody');
         if (!tbody || !table._originalRowOrder) return;
         table._originalRowOrder.forEach(function (r) { tbody.appendChild(r); });
-        if (table._originalAddRow) tbody.appendChild(table._originalAddRow);
-        if (table._originalTotalRow) tbody.appendChild(table._originalTotalRow);
+        appendTrailingRows(table, tbody);
     }
 
     function sortTable(table, colIndex, dir) {
@@ -76,8 +94,7 @@
             return dir === 'asc' ? cmp : -cmp;
         });
         rows.forEach(function (r) { tbody.appendChild(r); });
-        if (table._originalAddRow) tbody.appendChild(table._originalAddRow);
-        if (table._originalTotalRow) tbody.appendChild(table._originalTotalRow);
+        appendTrailingRows(table, tbody);
     }
 
     function updateIndicators(table, colIndex, dir) {
@@ -164,6 +181,7 @@
             delete t._originalRowOrder;
             delete t._originalTotalRow;
             delete t._originalAddRow;
+            delete t._originalFiller;
         });
         scan();
     }

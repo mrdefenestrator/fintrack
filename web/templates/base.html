@@ -331,6 +331,28 @@
             background: linear-gradient(to left, rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0));
         }
 
+        /* Empty "grid canvas" (QA item 17): sheet-scroll.js injects one filler
+           row below the last data row and sizes it to fill the gap so the total
+           (and add) rows pin to the sheet's bottom, with faint horizontal
+           gridlines (aligned to the data row height) filling the space. */
+        .sheet-grid-filler {
+            border: 0;
+            pointer-events: none;
+        }
+
+        .sheet-grid-filler-cell {
+            padding: 0;
+            background-image: repeating-linear-gradient(to bottom,
+                transparent 0, transparent calc(1.75rem - 1px),
+                rgba(0, 0, 0, 0.05) calc(1.75rem - 1px), rgba(0, 0, 0, 0.05) 1.75rem);
+        }
+
+        .dark .sheet-grid-filler-cell {
+            background-image: repeating-linear-gradient(to bottom,
+                transparent 0, transparent calc(1.75rem - 1px),
+                rgba(255, 255, 255, 0.06) calc(1.75rem - 1px), rgba(255, 255, 255, 0.06) 1.75rem);
+        }
+
         /* Import submit button busy state: while htmx is uploading (hx-indicator
            puts `.htmx-request` on the button), swap the label for a spinner and
            keep the button looking active-busy rather than greyed-out-disabled. */
@@ -698,7 +720,7 @@
         {% endif %}
     </header>
 
-    <main class="flex-1 min-h-0 flex flex-col px-4 py-4">
+    <main class="flex-1 min-h-0 flex flex-col px-2 py-2">
         {% block content %}{% endblock %}
     </main>
 

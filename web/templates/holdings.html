@@ -28,6 +28,11 @@
         background: #ffffff;
     }
     .dark #holdings-table .table-actions-cell { background: #1f2937; }  /* gray-800 */
+    /* The sticky total row (z-7) must sit above the sticky actions column (z-6)
+       so data rows — including their action buttons — clip under it when they
+       scroll past, instead of poking above the total. */
+    #holdings-table .total-row { z-index: 7; }
+    #holdings-table .total-row .table-actions-cell { z-index: 7; }
     /* Sticky group section headers: each group's heading band + column header
        stick to the top while its rows scroll, then the next group's header
        replaces them. Sticky is confined to the <tbody>, which is why each group

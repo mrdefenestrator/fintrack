@@ -32,7 +32,7 @@
           hx-target="#{{ row_id }}" hx-swap="outerHTML"
           onkeydown="if(event.keyCode===13) event.preventDefault();">
         <input type="hidden" name="field" value="{{ field }}">
-        <input type="text" name="value" value="{{ value }}"
+        <input type="text" name="value" value="{{ value }}" size="1"
                class="table-cell-input {{ align_class }}"
                hx-post="{{ update_url }}"
                hx-trigger="focusout changed, keydown[keyCode==13]"

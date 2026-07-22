@@ -26,13 +26,15 @@
 <tbody class="holdings-group" data-group="{{ group.source }}"{% if edit_mode %} data-reorder-url="{{ url_for('holdings.reorder', filename=filename, source=group.source) }}"{% endif %}>
     {# Opaque backgrounds: the band rows are sticky, so translucency would let
        scrolled data show through them. #}
-    {% set _band = 'bg-blue-50 dark:bg-blue-950 border-b border-blue-200 dark:border-blue-900' %}
+    {# Underline drawn as box-shadow in holdings.html (border-collapse borders
+       scroll away when the band is sticky — QA #5), so no border-b here. #}
+    {% set _band = 'bg-blue-50 dark:bg-blue-950' %}
     <tr class="holdings-group-heading">
         <td colspan="3" class="{{ _band }} border-l-4 border-l-blue-500 px-2 py-1.5 text-xs font-semibold uppercase tracking-wide text-blue-800 dark:text-blue-200">{{ group.label }}</td>
         <td class="{{ _band }} px-1.5 py-1.5 text-right tabular-nums text-sm font-semibold text-blue-900 dark:text-blue-100 {% if group.total | display_is_negative %}!text-red-600 dark:!text-red-400{% endif %}">{{ group.total }}</td>
         <td colspan="{{ span - 4 }}" class="{{ _band }}"></td>
     </tr>
-    <tr class="holdings-group-header bg-gray-100 dark:bg-gray-700 border-b-2 border-gray-300 dark:border-gray-600">
+    <tr class="holdings-group-header bg-gray-100 dark:bg-gray-700">
         {% for h in group.headers %}
         <th class="sortable-th px-1.5 py-0.5 font-medium text-gray-800 dark:text-gray-100 border-r border-gray-200 dark:border-gray-600 last:border-r-0 cursor-pointer select-none hover:bg-gray-200 dark:hover:bg-gray-600 {% if loop.index0 in group.right_align %}text-right{% else %}text-left{% endif %}"
             data-col="{{ loop.index0 }}" role="button" tabindex="0" title="Sort by this column">{{ h }} <span class="sort-indicator"></span></th>

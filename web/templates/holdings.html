@@ -48,14 +48,25 @@
         position: sticky;
         top: 0;
         z-index: 7;
+        /* Borders are drawn as box-shadow, not border-collapse borders: a
+           collapsed border belongs to the table's paint layer and scrolls away
+           when the row is sticky, so the heading/header borders would vanish on
+           scroll (QA #5). A box-shadow is painted with the sticky cell and stays
+           put. Heading band: blue-200 underline. */
+        box-shadow: inset 0 -1px 0 #bfdbfe;
     }
+    .dark #holdings-table .holdings-group-heading > td { box-shadow: inset 0 -1px 0 #1e3a8a; }  /* blue-900 */
     #holdings-table .holdings-group-header > th {
         position: sticky;
         top: var(--sheet-heading-h, 1.75rem);
         z-index: 7;
         background: #f3f4f6;   /* gray-100 */
+        box-shadow: inset 0 -2px 0 #d1d5db;   /* gray-300 underline (see above) */
     }
-    .dark #holdings-table .holdings-group-header > th { background: #374151; }  /* gray-700 */
+    .dark #holdings-table .holdings-group-header > th {
+        background: #374151;   /* gray-700 */
+        box-shadow: inset 0 -2px 0 #4b5563;   /* gray-600 */
+    }
 </style>
 
 <form id="holdings-filter-form" method="get" action="{{ url_for('holdings.holdings_view', filename=filename) }}" class="shrink-0">

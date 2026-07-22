@@ -139,6 +139,11 @@ def test_merchants_category_inline_edit_saves(page, confirmed_server):
     cat_cell = first_row.locator("td").nth(1)
     with page.expect_response(lambda r: "/cell" in r.url):
         cat_cell.click()
+    # Let the swap fully settle before selecting: the /cell response can fire
+    # slightly before htmx finishes wiring the newly-swapped <select>'s hx-post,
+    # so an immediate select_option's change event would be missed and no POST
+    # sent (same race the seed helper guards against above).
+    page.wait_for_load_state("networkidle")
 
     edit_row = page.locator("table tbody tr").first
     with page.expect_response(lambda r: r.request.method == "POST"):

@@ -79,6 +79,12 @@
         "keydown",
         function (e) {
             if (!isEditField(e.target)) return;
+            // This grid navigation is holdings-only: it drives htmx swaps against
+            // #holdings-table and would otherwise hijack Enter/Escape (and suppress
+            // the native save) on every other sheet that reuses .table-cell-input
+            // (transactions, merchants, accounts, budget, assets).
+            if (!e.target.closest("#holdings-table")) return;
+
             var dir = null;
             if (e.key === "Tab") dir = e.shiftKey ? "left" : "right";
             else if (e.key === "Enter") dir = e.shiftKey ? "up" : "down";

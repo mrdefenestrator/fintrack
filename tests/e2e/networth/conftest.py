@@ -120,7 +120,8 @@ def _set_default_timeout(page):
 
 def enable_edit_mode(page):
     """Click the global lock button to enter edit mode."""
-    page.locator("button[title='Enter edit mode']").click()
-    page.locator("button[title='Exit edit mode']").wait_for(
+    # Prefix-match the title so the tooltip's shortcut hint (" (⌘E)") is ignored.
+    page.locator("button[title^='Enter edit mode']").click()
+    page.locator("button[title^='Exit edit mode']").wait_for(
         state="visible", timeout=5000
     )

@@ -94,7 +94,7 @@ def test_import_icon_in_header(page, flask_server):
 
     icon = page.locator("[data-import-link]")
     assert icon.is_visible()
-    assert icon.get_attribute("title") == "Import statements"
+    assert icon.get_attribute("title").startswith("Import statements")
     assert icon.get_attribute("aria-current") is None
 
     icon.click()
@@ -114,14 +114,14 @@ def test_lock_scoped_to_edit_pages(page, flask_server):
     (non-interactive) on pages that don't honor edit mode."""
     for path in ("accounts", "budget", "assets"):
         page.goto(f"{flask_server}/s/test_finances/{path}")
-        assert page.locator("button[title='Enter edit mode']").is_visible(), path
+        assert page.locator("button[title^='Enter edit mode']").is_visible(), path
         assert page.locator("[data-lock-muted]").count() == 0, path
 
     for path in ("transactions", "projections", "import"):
         page.goto(f"{flask_server}/s/test_finances/{path}")
         assert page.locator("[data-lock-muted]").is_visible(), path
-        assert page.locator("button[title='Enter edit mode']").count() == 0, path
-        assert page.locator("button[title='Exit edit mode']").count() == 0, path
+        assert page.locator("button[title^='Enter edit mode']").count() == 0, path
+        assert page.locator("button[title^='Exit edit mode']").count() == 0, path
 
 
 def test_global_edit_mode_toggle(page, flask_server):
@@ -130,7 +130,7 @@ def test_global_edit_mode_toggle(page, flask_server):
     page.goto(f"{flask_server}/s/test_finances/accounts")
 
     # Initially locked: button shows 'Locked' (muted style)
-    locked_btn = page.locator("button[title='Enter edit mode']")
+    locked_btn = page.locator("button[title^='Enter edit mode']")
     assert locked_btn.is_visible()
 
     # Add row should not be visible when locked
@@ -142,7 +142,7 @@ def test_global_edit_mode_toggle(page, flask_server):
     page.wait_for_timeout(200)
 
     # Should now show 'Editing' (amber pill)
-    editing_btn = page.locator("button[title='Exit edit mode']")
+    editing_btn = page.locator("button[title^='Exit edit mode']")
     assert editing_btn.is_visible()
 
     # Add row should appear in edit mode
@@ -151,9 +151,9 @@ def test_global_edit_mode_toggle(page, flask_server):
     # Navigate to Budget — still in edit mode
     page.click("[data-nav-sub] >> text=Budget")
     page.wait_for_url("**/budget**")
-    assert page.locator("button[title='Exit edit mode']").is_visible()
+    assert page.locator("button[title^='Exit edit mode']").is_visible()
 
     # Click to lock again
-    page.locator("button[title='Exit edit mode']").click()
+    page.locator("button[title^='Exit edit mode']").click()
     page.wait_for_timeout(200)
-    assert page.locator("button[title='Enter edit mode']").is_visible()
+    assert page.locator("button[title^='Enter edit mode']").is_visible()

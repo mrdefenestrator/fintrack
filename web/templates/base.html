@@ -437,30 +437,15 @@
                visually consistent and shrink to icon-only on narrow screens. #}
             {% set _hdr_pill = 'flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors' %}
             <div class="flex items-center ml-auto gap-2 shrink-0">
-            <!-- Import statements (the Import page is not a tab) -->
-            {% if filename %}
-            <div class="flex items-center py-2">
-                <a href="/s/{{ filename }}/import" data-import-link title="Import statements"
-                    {% if _cur_tab == 'import' %}aria-current="page"{% endif %}
-                    class="{{ _hdr_pill }} {% if _cur_tab == 'import' %}bg-blue-700 text-white{% else %}text-blue-200 hover:text-white hover:bg-blue-700{% endif %}">
-                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
-                    </svg>
-                    <span class="hidden md:inline">Import</span>
-                </a>
-            </div>
-            {% endif %}
-
             <!-- Lock/Unlock edit mode: functional only on pages that honor
                  edit mode (accounts, budget, assets); elsewhere a same-size
                  muted, non-interactive lock keeps the controls from
                  shifting. -->
             {% if filename %}
             {% if _edit_honoring %}
-            <form method="POST" action="{{ url_for('edit_mode.toggle') }}" class="flex items-center py-2">
+            <form method="POST" action="{{ url_for('edit_mode.toggle') }}" class="flex items-center py-2" data-edit-toggle>
                 {% if edit_mode %}
-                <button type="submit" title="Exit edit mode"
+                <button type="submit" title="Exit edit mode (⌘E)"
                     class="{{ _hdr_pill }} bg-amber-400 text-amber-900 hover:bg-amber-300">
                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -469,7 +454,7 @@
                     <span class="hidden md:inline">Editing</span>
                 </button>
                 {% else %}
-                <button type="submit" title="Enter edit mode"
+                <button type="submit" title="Enter edit mode (⌘E)"
                     class="{{ _hdr_pill }} text-blue-200 hover:text-white hover:bg-blue-700">
                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -491,6 +476,21 @@
                 </span>
             </div>
             {% endif %}
+            {% endif %}
+
+            <!-- Import statements (the Import page is not a tab) -->
+            {% if filename %}
+            <div class="flex items-center py-2">
+                <a href="/s/{{ filename }}/import" data-import-link title="Import statements (⌘I)"
+                    {% if _cur_tab == 'import' %}aria-current="page"{% endif %}
+                    class="{{ _hdr_pill }} {% if _cur_tab == 'import' %}bg-blue-700 text-white{% else %}text-blue-200 hover:text-white hover:bg-blue-700{% endif %}">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
+                    </svg>
+                    <span class="hidden md:inline">Import</span>
+                </a>
+            </div>
             {% endif %}
 
             <!-- Theme toggle -->
@@ -741,6 +741,7 @@
     <script src="{{ url_for('static', filename='js/ledger.js') }}"></script>
     <script src="{{ url_for('static', filename='js/sheet-scroll.js') }}"></script>
     <script src="{{ url_for('static', filename='js/nav.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/shortcuts.js') }}"></script>
 </body>
 
 </html>

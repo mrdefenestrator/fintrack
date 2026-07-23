@@ -53,8 +53,8 @@
            as block). #}
         <div class="sm:flex flex-wrap items-center gap-1.5 p-2 border-t border-gray-200 dark:border-gray-700 sm:border-t-0"
             :class="{ 'hidden': !open, 'flex': open }">
-            <svg class="hidden sm:block w-4 h-4 shrink-0 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" role="img" aria-label="Filters">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M7 12h10M10 18h4" />
+            <svg class="hidden sm:block w-4 h-4 shrink-0 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" role="img" aria-label="{{ label }}">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="{{ icon }}" />
             </svg>
             {{ caller() }}
             {# Reset: shown in the bar on sm+ (desktop); on mobile it lives in the

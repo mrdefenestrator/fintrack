@@ -52,7 +52,8 @@ def test_liquid_minus_cc():
     ]
     assert liquid_minus_cc(accounts) == 800  # 1000 + (4800 - 5000) = 1000 + (-200)
 
-    # With rewards_balance (adds to CC adjustment)
+    # Rewards balances are excluded from calculations for now (QA #2), so a
+    # rewards_balance no longer moves the total.
     accounts_with_rewards = [
         {"name": "Checking", "type": "checking", "balance": 1000},
         {
@@ -63,7 +64,7 @@ def test_liquid_minus_cc():
             "rewards_balance": 10,
         },
     ]
-    assert liquid_minus_cc(accounts_with_rewards) == 810  # 1000 + (-200 + 10)
+    assert liquid_minus_cc(accounts_with_rewards) == 800  # rewards excluded
 
 
 def test_projected_change_to_eom():

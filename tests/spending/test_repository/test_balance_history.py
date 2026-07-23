@@ -121,6 +121,33 @@ def test_manual_balance_edit_writes_history(conn):
     assert len(get_balance_history(conn, account_id)) == len(rows)
 
 
+def test_manual_balance_edit_stamps_client_today(conn):
+    """A caller-supplied `today` (the browser's local date, QA #6) dates the new
+    balance-history point instead of the server's local date."""
+    snapshot_id = create_snapshot(conn, "client-today")
+    account_id = fin_add_account(
+        conn,
+        snapshot_id,
+        {
+            "name": "Cash",
+            "type": "wallet",
+            "balance": Decimal("50"),
+            "asOfDate": date(2026, 1, 1),
+        },
+    )
+    update_account(
+        conn,
+        snapshot_id,
+        account_id,
+        {"balance": Decimal("75")},
+        today=date(2026, 6, 5),
+    )
+    point = latest_point(conn, account_id)
+    assert point["as_of"] == date(2026, 6, 5)
+    assert point["balance"] == Decimal("75")
+    assert get_account_by_id(conn, account_id)["as_of_date"] == date(2026, 6, 5)
+
+
 def test_cc_available_edit_derives_balance_and_writes_history(conn):
     snapshot_id = create_snapshot(conn, "cc-edit")
     account_id = fin_add_account(

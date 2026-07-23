@@ -1,5 +1,5 @@
 """Tests for the categories blueprint (web/routes/categories.py): the
-"Manage categories" panel on the Merchants page — add / rename (inline,
+dedicated Categories page (shared sheet UI) — add / rename (inline,
 cascading) / delete (blocked when in use)."""
 
 import pytest
@@ -41,25 +41,28 @@ def _add(db_engine, name):
         ).scalar()
 
 
-def test_panel_lists_categories(client, db_engine):
+def test_page_lists_categories(client, db_engine):
     _add(db_engine, "Groceries")
-    resp = client.get("/s/ledger/merchants")
+    resp = client.get("/s/ledger/categories")
     assert resp.status_code == 200
     body = resp.get_data(as_text=True)
-    assert "Manage categories" in body
     assert "No categories yet." not in body
-    # The panel itself must actually list the category, not merely coincide
-    # with the unrelated Category *filter* dropdown that also says
-    # "Groceries" (that's populated by a separate query).
-    panel_start = body.index('id="categories-panel-body"')
-    panel_html = body[panel_start : panel_start + 2000]
-    assert "Groceries" in panel_html
+    # The sheet lists the category inside its tbody.
+    tbody_start = body.index('id="categories-tbody"')
+    tbody_html = body[tbody_start : tbody_start + 2000]
+    assert "Groceries" in tbody_html
+
+
+def test_merchants_page_no_longer_embeds_categories(client, db_engine):
+    _add(db_engine, "Groceries")
+    body = client.get("/s/ledger/merchants").get_data(as_text=True)
+    assert "Manage categories" not in body
+    assert "categories-panel-body" not in body
 
 
 def test_add_category_success(client, db_engine):
     resp = client.post("/s/ledger/categories/add", data={"name": "Pets"})
     assert resp.status_code == 200
-    assert resp.headers.get("HX-Refresh") == "true"
     assert "Pets" in resp.get_data(as_text=True)
     with db_engine.connect() as conn:
         assert conn.execute(
@@ -105,11 +108,10 @@ def test_row_reverts_to_display(client, db_engine):
     assert "Groceries" in body
 
 
-def test_rename_persists_and_refreshes(client, db_engine):
+def test_rename_persists(client, db_engine):
     cat_id = _add(db_engine, "Groceries")
     resp = client.post(f"/s/ledger/categories/{cat_id}/rename", data={"value": "Food"})
     assert resp.status_code == 200
-    assert resp.headers.get("HX-Refresh") == "true"
     assert "Food" in resp.get_data(as_text=True)
     with db_engine.connect() as conn:
         assert conn.execute(
@@ -181,7 +183,6 @@ def test_delete_unused_category_succeeds(client, db_engine):
     cat_id = _add(db_engine, "Groceries")
     resp = client.post(f"/s/ledger/categories/{cat_id}/delete")
     assert resp.status_code == 200
-    assert resp.headers.get("HX-Refresh") == "true"
     with db_engine.connect() as conn:
         assert not conn.execute(
             select(categories.c.id).where(categories.c.name == "Groceries")

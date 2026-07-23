@@ -273,6 +273,23 @@ def test_transactions_search_filters_rows(page, confirmed_server):
     assert "WHOLE FOODS" in rows.first.inner_text().upper()
 
 
+def test_transactions_search_keeps_focus_after_reload(page, confirmed_server):
+    """Typing in the search box keeps the caret there across the htmx content
+    swap (QA #4) — the input is inside #content, so without focus restoration
+    the reload would drop focus mid-type."""
+    page.goto(f"{confirmed_server}/s/ledger/transactions?year=2026&month=4")
+    box = page.locator("#txn-search")
+    box.click()
+    box.type("WHOLE", delay=50)
+    # Wait for the debounced (400ms) filter reload to land and settle.
+    page.wait_for_url("**q=WHOLE**")
+    rows = page.locator("table tbody tr:not(.total-row):not(.sheet-grid-filler)")
+    assert rows.count() == 1
+    # Focus is still in the (re-rendered) search input, with its typed value.
+    assert page.evaluate("() => document.activeElement.id") == "txn-search"
+    assert box.input_value() == "WHOLE"
+
+
 def test_transactions_amount_filter_range_filters_rows(page, confirmed_server):
     """Amount range filter narrows the transaction list."""
     page.goto(f"{confirmed_server}/s/ledger/transactions?year=2026&month=4")

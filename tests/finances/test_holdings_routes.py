@@ -295,6 +295,26 @@ def test_holdings_update_cash_balance(client, db_engine):
     assert updated["balance"] == 2500
 
 
+def test_holdings_update_balance_stamps_client_date(client, db_engine):
+    """A balance edit dates its balance-history point from the browser's
+    X-Local-Date header (QA #6), not the server's timezone."""
+    from datetime import date
+
+    from fintrack.accounts.balance_history import get_balance_history
+
+    acc = _account_by_name(db_engine, "Checking")
+    resp = client.post(
+        f"/s/finances/holdings/update/account/{acc['id']}",
+        data={"field": "balance", "value": "2600"},
+        headers={"X-Local-Date": "2026-03-04"},
+    )
+    assert resp.status_code == 200
+    with db_engine.connect() as conn:
+        points = get_balance_history(conn, acc["id"])
+    stamped = [p for p in points if p["balance"] == 2600]
+    assert stamped and stamped[-1]["as_of"] == date(2026, 3, 4)
+
+
 def test_holdings_update_cc_limit_editable(client, db_engine):
     from fintrack.accounts.repository import get_accounts
 

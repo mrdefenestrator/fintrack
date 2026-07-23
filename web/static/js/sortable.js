@@ -41,6 +41,18 @@
             }
         }
 
+        // Expandable detail rows (e.g. the Trends per-category drill-down) are not
+        // independent data: each `data-detail-row` belongs to the row above it.
+        // Attach it to that row so the pair moves as one unit and the detail never
+        // sorts on its own. Backward-compatible: sheets without detail rows are
+        // unaffected.
+        for (var d = rows.length - 1; d >= 0; d--) {
+            if (rows[d].hasAttribute && rows[d].hasAttribute('data-detail-row')) {
+                var detail = rows.splice(d, 1)[0];
+                if (d - 1 >= 0) rows[d - 1]._detailRow = detail;
+            }
+        }
+
         for (var i = rows.length - 1; i >= 0; i--) {
             if (isAddRow(rows[i])) {
                 addRow = rows.splice(i, 1)[0];
@@ -66,11 +78,18 @@
         if (table._originalTotalRow) tbody.appendChild(table._originalTotalRow);
     }
 
+    // Append a data row followed by its attached detail row (if any), so an
+    // expandable pair stays contiguous after a sort.
+    function appendRow(tbody, r) {
+        tbody.appendChild(r);
+        if (r._detailRow) tbody.appendChild(r._detailRow);
+    }
+
     function restoreOriginalOrder(table) {
         getOriginalRowOrder(table);
         var tbody = table.querySelector('tbody');
         if (!tbody || !table._originalRowOrder) return;
-        table._originalRowOrder.forEach(function (r) { tbody.appendChild(r); });
+        table._originalRowOrder.forEach(function (r) { appendRow(tbody, r); });
         appendTrailingRows(table, tbody);
     }
 
@@ -93,7 +112,7 @@
             }
             return dir === 'asc' ? cmp : -cmp;
         });
-        rows.forEach(function (r) { tbody.appendChild(r); });
+        rows.forEach(function (r) { appendRow(tbody, r); });
         appendTrailingRows(table, tbody);
     }
 

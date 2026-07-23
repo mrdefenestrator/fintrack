@@ -197,155 +197,112 @@ def test_merchants_search_filters_results(page, confirmed_server):
 
 
 # ---------------------------------------------------------------------------
-# Manage categories panel (add / rename / blocked delete)
+# Categories page — dedicated sheet (add / rename / blocked delete)
 # ---------------------------------------------------------------------------
 #
-# These tests add categories with names unique to this file (TempCat,
-# RenamedCat, ProtectedCat) rather than touching any of the seeded defaults
-# (Groceries, Dining, ...) that earlier tests in this module rely on, since
-# confirmed_server is module-scoped and shared across the whole file.
+# Categories management moved off the Merchants page onto its own sidebar page
+# using the shared sheet UI. These tests add categories with names unique to
+# this file (TempCat, DupCat, RenameMeCat, ProtectedCat) rather than touching
+# any seeded defaults (Groceries, Dining, ...) that earlier tests rely on,
+# since confirmed_server is module-scoped and shared across the whole file.
 
 
-def _open_categories_panel(page, base_url):
-    page.goto(f"{base_url}/s/ledger/merchants")
-    page.get_by_role("button", name="Manage categories").click()
-    page.wait_for_selector("#categories-panel-body input[name='name']")
-
-
-def test_categories_panel_collapsed_by_default(page, confirmed_server):
-    """The Manage-categories panel starts collapsed; its add form is hidden
-    until the toggle is clicked."""
-    page.goto(f"{confirmed_server}/s/ledger/merchants")
-    assert page.get_by_role("button", name="Manage categories").is_visible()
-    assert not page.locator("#categories-panel-body input[name='name']").is_visible()
-
-
-def test_categories_panel_add_new_category(page, confirmed_server):
-    """Adding a category via the panel makes it available in the Category
-    filter dropdown (which reads live from the categories table)."""
-    _open_categories_panel(page, confirmed_server)
-
-    name_input = page.locator("#categories-panel-body input[name='name']")
-    name_input.fill("TempCat")
+def _add_category(page, base_url, name):
+    """Add a category via the Categories page add row; returns once it lands."""
+    page.goto(f"{base_url}/s/ledger/categories")
+    add_input = page.locator("#categories-tbody input[name='name']")
+    add_input.fill(name)
     with page.expect_response(
         lambda r: "/categories/add" in r.url and r.request.method == "POST"
     ):
-        name_input.press("Enter")
+        add_input.press("Enter")
     page.wait_for_load_state("networkidle")
 
-    # The Category filter is now a custom radio dropdown; its option labels
-    # read live from the categories table.
+
+def test_categories_moved_off_merchants_page(page, confirmed_server):
+    """The Merchants page no longer embeds category management, and the sidebar
+    links to the dedicated Categories page instead."""
+    page.goto(f"{confirmed_server}/s/ledger/merchants")
+    assert page.get_by_role("button", name="Manage categories").count() == 0
+    assert page.get_by_role("link", name="Categories").count() >= 1
+
+
+def test_categories_page_renders_sheet(page, confirmed_server):
+    """The Categories page renders the shared sheet: a Category column header
+    and an add row."""
+    page.goto(f"{confirmed_server}/s/ledger/categories")
+    assert page.locator("#categories-table thead th", has_text="Category").is_visible()
+    assert page.locator("#categories-tbody input[name='name']").is_visible()
+
+
+def test_categories_add_new_category(page, confirmed_server):
+    """Adding a category adds a row and makes it available in the Merchants
+    Category filter (which reads live from the categories table)."""
+    _add_category(page, confirmed_server, "TempCat")
+    assert page.locator("#categories-tbody", has_text="TempCat").is_visible()
+
+    page.goto(f"{confirmed_server}/s/ledger/merchants")
     labels = (
         page.locator("input[name='category']").locator("xpath=..").all_inner_texts()
     )
     assert any("TempCat" in t for t in labels)
 
 
-def test_categories_panel_add_duplicate_shows_inline_error(page, confirmed_server):
-    """Adding a category name that already exists shows an inline error
-    instead of navigating away, and does not create a duplicate."""
-    _open_categories_panel(page, confirmed_server)
-    name_input = page.locator("#categories-panel-body input[name='name']")
-    name_input.fill("DupCat")
-    with page.expect_response(
-        lambda r: "/categories/add" in r.url and r.request.method == "POST"
-    ):
-        name_input.press("Enter")
-    page.wait_for_load_state("networkidle")
+def test_categories_add_duplicate_shows_inline_error(page, confirmed_server):
+    """Adding a name that already exists shows an inline error row instead of
+    creating a duplicate."""
+    _add_category(page, confirmed_server, "DupCat")
 
-    _open_categories_panel(page, confirmed_server)
-    name_input = page.locator("#categories-panel-body input[name='name']")
-    name_input.fill("DupCat")
+    add_input = page.locator("#categories-tbody input[name='name']")
+    add_input.fill("DupCat")
     with page.expect_response(
         lambda r: "/categories/add" in r.url and r.request.method == "POST"
     ) as resp_info:
-        name_input.press("Enter")
+        add_input.press("Enter")
     assert resp_info.value.status == 422
-    assert "already exists" in page.locator("#categories-panel-body").inner_text()
-    labels = [
-        t.strip()
-        for t in page.locator("input[name='category']")
-        .locator("xpath=..")
-        .all_inner_texts()
-    ]
-    assert labels.count("DupCat") == 1
+    assert "already exists" in page.locator("#categories-tbody").inner_text()
 
 
-def test_categories_panel_rename_cascades_to_filter(page, confirmed_server):
-    """Renaming a category updates the Category filter options (cascade
-    through the categories table the filter reads from)."""
-    _open_categories_panel(page, confirmed_server)
-    name_input = page.locator("#categories-panel-body input[name='name']")
-    name_input.fill("RenameMeCat")
-    with page.expect_response(
-        lambda r: "/categories/add" in r.url and r.request.method == "POST"
-    ):
-        name_input.press("Enter")
-    page.wait_for_load_state("networkidle")
+def test_categories_rename(page, confirmed_server):
+    """Clicking a category cell opens its inline editor; saving renames it."""
+    _add_category(page, confirmed_server, "RenameMeCat")
 
-    _open_categories_panel(page, confirmed_server)
-    row = page.locator("#categories-panel-body li", has_text="RenameMeCat")
+    cell = page.locator("#categories-tbody td", has_text="RenameMeCat").first
     with page.expect_response(lambda r: "/edit" in r.url):
-        row.get_by_text("RenameMeCat", exact=True).click()
-    page.wait_for_load_state("networkidle")
+        cell.click()
 
-    rename_input = page.locator("#categories-panel-body input[name='value']")
+    rename_input = page.locator("#categories-tbody input[name='value']")
     rename_input.wait_for()
     rename_input.fill("RenamedCat")
     with page.expect_response(
         lambda r: "/rename" in r.url and r.request.method == "POST"
     ):
         rename_input.press("Enter")
-    # A successful rename carries HX-Refresh, which triggers a full page
-    # reload; wait for that navigation to complete (networkidle can resolve
-    # mid-navigation and race the reload) before reading the refreshed page.
-    page.wait_for_load_state("load")
-    # The Category radios live inside a collapsed (display:none) dropdown, so
-    # wait for them to be attached rather than visible.
-    page.wait_for_selector("input[name='category']", state="attached")
-
-    labels = [
-        t.strip()
-        for t in page.locator("input[name='category']")
-        .locator("xpath=..")
-        .all_inner_texts()
-    ]
-    assert "RenamedCat" in labels
-    assert "RenameMeCat" not in labels
-
-
-def test_categories_panel_blocked_delete_shows_breakdown(page, confirmed_server):
-    """Deleting a category still referenced by a merchant is blocked and
-    shows the usage breakdown instead of silently failing or deleting it."""
-    _open_categories_panel(page, confirmed_server)
-    name_input = page.locator("#categories-panel-body input[name='name']")
-    name_input.fill("ProtectedCat")
-    with page.expect_response(
-        lambda r: "/categories/add" in r.url and r.request.method == "POST"
-    ):
-        name_input.press("Enter")
     page.wait_for_load_state("networkidle")
 
+    assert page.locator("#categories-tbody", has_text="RenamedCat").is_visible()
+    assert page.locator("#categories-tbody td", has_text="RenameMeCat").count() == 0
+
+
+def test_categories_blocked_delete_shows_breakdown(page, confirmed_server):
+    """Deleting a category still referenced by a merchant is blocked and shows
+    the usage breakdown instead of silently failing or deleting it."""
+    _add_category(page, confirmed_server, "ProtectedCat")
     _seed_merchant_via_transaction(page, confirmed_server, category="ProtectedCat")
 
-    _open_categories_panel(page, confirmed_server)
-    row = page.locator("#categories-panel-body li", has_text="ProtectedCat")
-    row.get_by_title("Delete category").click()
+    page.goto(f"{confirmed_server}/s/ledger/categories")
+    row = page.locator("#categories-tbody tr", has_text="ProtectedCat")
+    with page.expect_response(lambda r: "/delete-confirm" in r.url):
+        row.get_by_title("Delete category").click()
     with page.expect_response(
-        lambda r: "/delete" in r.url and r.request.method == "POST"
+        lambda r: r.url.endswith("/delete") and r.request.method == "POST"
     ) as resp_info:
-        row.get_by_title("Confirm delete").click()
+        page.locator("#categories-tbody").get_by_title("Confirm delete").click()
     assert resp_info.value.status == 422
 
-    panel_text = page.locator("#categories-panel-body").inner_text()
-    assert "In use by" in panel_text
-    assert "1 merchant" in panel_text
+    tbody_text = page.locator("#categories-tbody").inner_text()
+    assert "In use by" in tbody_text
+    assert "1 merchant" in tbody_text
 
     # Category must still exist (delete was blocked).
-    labels = [
-        t.strip()
-        for t in page.locator("input[name='category']")
-        .locator("xpath=..")
-        .all_inner_texts()
-    ]
-    assert "ProtectedCat" in labels
+    assert page.locator("#categories-tbody", has_text="ProtectedCat").is_visible()

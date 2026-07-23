@@ -138,15 +138,18 @@ def test_account_contribution_cash():
     assert account_contribution({"type": "checking", "balance": 1000}) == 1000
 
 
-def test_account_contribution_credit_card_signed_balance_plus_rewards():
-    # balance is stored negative (owed); rewards add back
+def test_account_contribution_credit_card_is_entered_balance():
+    # The contribution is the entered (signed) balance; rewards are excluded
+    # from calculations for now (QA #2), so 25 in rewards does not move it.
     acc = {"type": "credit_card", "balance": -400, "rewards_balance": 25}
-    assert account_contribution(acc) == -375
+    assert account_contribution(acc) == -400
 
 
-def test_account_contribution_credit_card_fallback_available_minus_limit():
+def test_account_contribution_credit_card_no_balance_is_zero():
+    # No entered balance → contributes 0; there is no available−limit fallback
+    # anymore (the amount must be the entered number, QA #2).
     acc = {"type": "credit_card", "limit": 5000, "available": 4000}
-    assert account_contribution(acc) == -1000
+    assert account_contribution(acc) == 0
 
 
 def test_account_contribution_loan_negative_balance():
@@ -515,12 +518,13 @@ def test_funding_cc_with_statement_balance():
 
 
 def test_funding_cc_without_statement_balance():
-    """CC lacking statement_balance falls back to limit - available."""
+    """CC lacking a statement balance is skipped entirely (QA #7): no fallback
+    to the card's current balance."""
     result = account_funding_needed(
         _CHECKING, [_CHECKING, _CC_NO_STMT], [], _TODAY, default_reserve=0.0
     )
-    # limit=3000, available=2700 → owed = 300
-    assert result["cc_total"] == 300.0
+    assert result["cc_total"] == 0.0
+    assert result["cc_items"] == []
 
 
 def test_funding_cc_not_linked_to_account():

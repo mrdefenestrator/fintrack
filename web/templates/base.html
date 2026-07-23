@@ -3,7 +3,12 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    {# viewport-fit=cover lets the standalone (black-translucent) web view fill
+       the whole screen. Without it iOS letterboxes the layout inside the safe
+       area, leaving a blank band above the app — most visible in landscape
+       (QA #1). The header is then padded past the notch via env() safe-area
+       insets below. #}
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="theme-color" content="#1e40af">
     <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
     {# PWA / Add-to-Home-Screen. iOS ignores the SVG favicon for the home-screen
@@ -53,10 +58,64 @@
                 evt.detail.isError = false;
             }
         });
+        // Stamp every htmx request with the browser's LOCAL date so server-side
+        // "today" (e.g. the As Of on a manual balance edit) matches the user's
+        // day, not the server's timezone (QA #6). The header is read by the
+        // edit routes; absent/malformed falls back to the server's local date.
+        document.addEventListener('htmx:configRequest', (evt) => {
+            const d = new Date();
+            evt.detail.headers['X-Local-Date'] =
+                d.getFullYear() + '-' +
+                String(d.getMonth() + 1).padStart(2, '0') + '-' +
+                String(d.getDate()).padStart(2, '0');
+        });
+        // Keep the caret in a search box across htmx content swaps (QA #4). The
+        // search inputs live inside the swapped #content, so a filter reload
+        // replaces the element and would drop focus mid-type. Record the
+        // focused search field + caret before the swap and restore them after
+        // it settles (the server echoes the typed value, so the offsets hold).
+        (function () {
+            let saved = null;
+            document.addEventListener('htmx:beforeSwap', (evt) => {
+                const a = document.activeElement;
+                saved = (a && a.matches && a.matches('input[type="search"][id]') &&
+                         evt.detail.target && evt.detail.target.contains(a))
+                    ? { id: a.id, start: a.selectionStart, end: a.selectionEnd }
+                    : null;
+            });
+            document.addEventListener('htmx:afterSettle', () => {
+                if (!saved) return;
+                const el = document.getElementById(saved.id);
+                if (el) {
+                    el.focus();
+                    try { el.setSelectionRange(saved.start, saved.end); } catch (_) {}
+                }
+                saved = null;
+            });
+        })();
     </script>
     <style>
         /* Hide Alpine-controlled elements until Alpine initializes (prevents flash) */
         [x-cloak] { display: none !important; }
+
+        /* PWA standalone safe-area (QA #1). With viewport-fit=cover the web view
+           fills the whole screen (removing iOS's blank letterbox band above the
+           app), so pad the header past the notch/status bar, and drop the fixed
+           nav + scrim by the same top inset so they still sit right under the
+           header. In landscape the top inset is ~0 (the notch is on the side,
+           handled by the left/right insets), so this only removes the band
+           there; the top padding matters in portrait. */
+        @supports (padding: env(safe-area-inset-top)) {
+            #main-header {
+                padding-top: env(safe-area-inset-top);
+                padding-left: env(safe-area-inset-left);
+                padding-right: env(safe-area-inset-right);
+            }
+            [data-nav-sidebar],
+            [data-nav-scrim] {
+                top: calc(3rem + env(safe-area-inset-top));
+            }
+        }
 
         /* Consistent row height for all tables (accounts, budget, assets) */
         table {
@@ -64,6 +123,17 @@
         }
 
         table tbody tr {
+            height: 1.75rem;
+        }
+
+        /* Footer rows in a scroll-container sheet (e.g. the Projections
+           (unassigned)/Liquid total/Net worth <tfoot> rows) get the same fixed
+           height as data rows — otherwise the two-line sticky footer's
+           `total-upper { bottom: 1.75rem }` offset wouldn't line up with the
+           shorter natural row height, leaving a gap where a data row peeks
+           between the pinned totals. The grid-filler tr is sized by JS, so it's
+           excluded. */
+        .table-scroll-container tfoot tr:not(.sheet-grid-filler) {
             height: 1.75rem;
         }
 
@@ -264,12 +334,81 @@
            row sticks to the bottom). The grid canvas (sheet-scroll.js) fills the
            space beneath it so it still sits just under the last data row. */
 
-        /* Total row sticks to the bottom edge */
-        .table-scroll-container tbody tr.total-row {
+        /* Total row sticks to the bottom edge. Applies to a .total-row in either
+           the <tbody> (accounts/budget/transactions) or a <tfoot> (projections,
+           whose data rows are sorted so the summary rows live in tfoot). */
+        .table-scroll-container tbody tr.total-row,
+        .table-scroll-container tfoot tr.total-row {
             position: sticky;
             bottom: 0;
             z-index: 5;
         }
+        /* Two-line sticky footer: a .total-row also marked .total-upper pins one
+           data-row height above the bottom, so it sits directly above the
+           bottom-pinned total (the Holdings Liquid/Net-worth footer, and the
+           Projections Liquid total / Net worth footer). */
+        .table-scroll-container tr.total-row.total-upper {
+            bottom: 1.75rem;
+        }
+        /* Total-row inter-column dividers are drawn as a box-shadow, not a
+           border-collapse border: the row is sticky, and a collapsed border on a
+           sticky row scrolls out of view / mispaints (the sticky-border
+           invariant). Matches the header's `last:border-r-0` (skip the last cell,
+           e.g. the actions column). */
+        .table-scroll-container tr.total-row td:not(:last-child) {
+            border-right-width: 0;
+            box-shadow: inset -1px 0 0 #e5e7eb;   /* gray-200, same as the header */
+        }
+        .dark .table-scroll-container tr.total-row td:not(:last-child) {
+            box-shadow: inset -1px 0 0 #4b5563;   /* gray-600 */
+        }
+
+        /* Frozen first column (opt-in): add `sheet-freeze-col` to a
+           border-collapse sheet <table> inside a .table-scroll-container to pin
+           the first cell of every row to the left edge as the data scrolls
+           horizontally (e.g. the Projections accounts×months matrix). Dividers on
+           the pinned cells are box-shadows, not border-collapse borders, so they
+           survive the sticky (same invariant as the header/footer). Composes with
+           a sticky header (the corner cell pins in both axes) and .total-row
+           footers. */
+        .table-scroll-container table.sheet-freeze-col tbody td:first-child,
+        .table-scroll-container table.sheet-freeze-col tfoot td:first-child {
+            position: sticky;
+            left: 0;
+            z-index: 4;
+            background: #ffffff;
+            border-right-width: 0;
+            box-shadow: inset -1px 0 0 #e5e7eb;   /* gray-200 column divider */
+        }
+        .dark .table-scroll-container table.sheet-freeze-col tbody td:first-child,
+        .dark .table-scroll-container table.sheet-freeze-col tfoot td:first-child {
+            background: #1f2937;                  /* gray-800 */
+            box-shadow: inset -1px 0 0 #4b5563;   /* gray-600 */
+        }
+        /* Corner header cell: sticky in both axes, above every other header cell
+           and the frozen column so it owns the top-left corner. */
+        .table-scroll-container table.sheet-freeze-col thead th:first-child {
+            position: sticky;
+            left: 0;
+            z-index: 12;
+            background: #f3f4f6;                  /* gray-100 */
+        }
+        .dark .table-scroll-container table.sheet-freeze-col thead th:first-child {
+            background: #374151;                  /* gray-700 */
+        }
+        /* Frozen first cell of a total-row band: the total-band background + above
+           the data column. Declared after the generic frozen-cell rule so it wins
+           the background for this cell (the divider box-shadow is identical). */
+        .table-scroll-container table.sheet-freeze-col tbody tr.total-row td:first-child,
+        .table-scroll-container table.sheet-freeze-col tfoot tr.total-row td:first-child {
+            z-index: 8;
+            background: #f3f4f6;                  /* gray-100 */
+        }
+        .dark .table-scroll-container table.sheet-freeze-col tbody tr.total-row td:first-child,
+        .dark .table-scroll-container table.sheet-freeze-col tfoot tr.total-row td:first-child {
+            background: #374151;                  /* gray-700 */
+        }
+
         /* File picker row: reveal action buttons on hover */
         .file-row-actions { opacity: 0; pointer-events: none; transition: opacity 0.1s ease; }
         .file-row:hover .file-row-actions { opacity: 1; pointer-events: auto; }
@@ -433,7 +572,7 @@
            snapshot picker). #}
         {% set _cur_tab = active_tab if active_tab is defined else none %}
         {% set _edit_honoring = _cur_tab in ('holdings', 'budget') %}
-        {% set _page_names = {'holdings':'Holdings','budget':'Budget','projections':'Projections','trends':'Trends','transactions':'Transactions','merchants':'Merchants','import':'Import'} %}
+        {% set _page_names = {'holdings':'Holdings','budget':'Budget','projections':'Projections','trends':'Trends','transactions':'Transactions','merchants':'Merchants','categories':'Categories','import':'Import'} %}
         {% set _page_name = _page_names.get(_cur_tab, '') %}
         <div class="flex items-center h-12 px-2 gap-1">
             {% if filename %}
@@ -660,7 +799,7 @@
     <div class="flex flex-1 min-h-0">
         {% if filename %}
         <!-- Scrim behind the mobile drawer -->
-        <div x-show="navOpen" x-transition.opacity @click="navOpen = false"
+        <div x-show="navOpen" x-transition.opacity @click="navOpen = false" data-nav-scrim
             class="fixed inset-0 top-12 bg-black/40 z-30 lg:hidden"></div>
 
         {# Primary navigation: docked sidebar on wide screens (>=lg), overlay
@@ -682,6 +821,7 @@
                 <a href="/s/{{ filename }}/trends" class="{{ _side }} {% if _cur_tab == 'trends' %}{{ _side_active }}{% else %}{{ _side_idle }}{% endif %}"{% if _cur_tab == 'trends' %} aria-current="page"{% endif %}>Trends</a>
                 <a href="/s/{{ filename }}/transactions" class="{{ _side }} {% if _cur_tab == 'transactions' %}{{ _side_active }}{% else %}{{ _side_idle }}{% endif %}"{% if _cur_tab == 'transactions' %} aria-current="page"{% endif %}>Transactions</a>
                 <a href="/s/{{ filename }}/merchants" class="{{ _side }} {% if _cur_tab == 'merchants' %}{{ _side_active }}{% else %}{{ _side_idle }}{% endif %}"{% if _cur_tab == 'merchants' %} aria-current="page"{% endif %}>Merchants</a>
+                <a href="/s/{{ filename }}/categories" class="{{ _side }} {% if _cur_tab == 'categories' %}{{ _side_active }}{% else %}{{ _side_idle }}{% endif %}"{% if _cur_tab == 'categories' %} aria-current="page"{% endif %}>Categories</a>
             </div>
         </nav>
         {% endif %}

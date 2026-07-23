@@ -118,19 +118,14 @@ def credit_card_total(accounts: List[Dict[str, Any]]) -> Decimal:
     )
 
 
-def _credit_card_total_with_rewards(accounts: List[Dict[str, Any]]) -> Decimal:
-    """Sum of (balance owed + rewards_balance) per credit card. Used for (2) and table total."""
-    total = _ZERO
-    for a in accounts:
-        if _ACCOUNT_TYPE_TO_CALCULATION.get(a.get("type")) != "credit_card":
-            continue
-        total += _credit_card_balance_owed(a) + _money(a.get("rewards_balance"))
-    return total
-
-
 def liquid_minus_cc(accounts: List[Dict[str, Any]]) -> Decimal:
-    """(2) Liquid total minus credit card debts, plus CC rewards. Same as table total."""
-    return liquid_total(accounts) + _credit_card_total_with_rewards(accounts)
+    """(2) Liquid total minus credit-card debts.
+
+    Rewards balances are intentionally excluded from calculations for now
+    (they stay display-only, QA #2) — so this is simply the liquid total plus
+    the summed (signed) credit-card balances.
+    """
+    return liquid_total(accounts) + credit_card_total(accounts)
 
 
 def projected_change_to_eom(
@@ -233,15 +228,12 @@ def asset_tier(entry: Dict[str, Any]) -> LiquidityTier:
 def account_contribution(account: Dict[str, Any]) -> Decimal:
     """Signed net-worth contribution of an account.
 
-    `balance` is already signed (negative = owed on credit cards), so most
-    accounts contribute their balance directly. Credit cards additionally add
-    their rewards balance and fall back to available - limit when the canonical
-    balance is absent.
+    `balance` is already signed (negative = owed on credit cards), so every
+    account — credit cards included — contributes its entered balance directly.
+    Credit-card rewards and the old available−limit fallback are intentionally
+    excluded for now (QA #2): the displayed amount is the entered number, not a
+    computed one.
     """
-    if _ACCOUNT_TYPE_TO_CALCULATION.get(account.get("type")) == "credit_card":
-        return _credit_card_balance_owed(account) + _money(
-            account.get("rewards_balance")
-        )
     return _money(account.get("balance"))
 
 
@@ -343,6 +335,8 @@ def account_funding_needed(
 
     Obligations:
     - CC statement balances for cards where paymentAccountRef == account.id
+      (cards without a statement balance are skipped — no fallback to the
+      card's current balance, QA #7)
     - Budget expenses where autoAccountRef == account.id that apply this month
 
     Reserve: account.minimum_balance if set, else default_reserve.
@@ -361,12 +355,12 @@ def account_funding_needed(
         if acc.get("paymentAccountRef") != account_id:
             continue
         stmt_bal = acc.get("statement_balance")
-        if stmt_bal is not None:
-            amount = _money(stmt_bal)
-        else:
-            # fallback: limit - available (positive = amount owed)
-            amount = -_credit_card_balance_owed(acc)
-        cc_items.append((acc, amount))
+        if stmt_bal is None:
+            # No statement balance → the card contributes nothing to funding.
+            # Funding is driven only by linked budget items and CC statement
+            # balances, never by the card's current balance (QA #7).
+            continue
+        cc_items.append((acc, _money(stmt_bal)))
     cc_total = sum((amt for _, amt in cc_items), _ZERO)
 
     # Direct expense items: budget expenses where autoAccountRef == this account's id

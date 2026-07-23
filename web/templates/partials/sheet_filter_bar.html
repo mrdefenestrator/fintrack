@@ -19,8 +19,12 @@
      Reset shows)
    - reset_url:    href/hx-get URL that clears the filters
    - use_htmx:     True (default) for htmx partial-swap pages; False for the
-                   form-submit Finances sheets (Reset becomes a plain link) #}
-{%- macro filter_bar(active_count=0, reset_url='', hx_target='#content', use_htmx=true) -%}
+                   form-submit Finances sheets (Reset becomes a plain link)
+   - label / icon: the mobile trigger label + leading icon path. Default to the
+                   "Filters" funnel; override for a bar that fuses the same card
+                   to a table but holds non-filter view controls (e.g. the
+                   Projections Months / Estimate toggles). #}
+{%- macro filter_bar(active_count=0, reset_url='', hx_target='#content', use_htmx=true, label='Filters', icon='M4 6h16M7 12h10M10 18h4') -%}
 <div class="shrink-0 relative z-20" x-data="{ open: false }">
     <div class="bg-white dark:bg-gray-800 rounded-t-lg border border-gray-300 dark:border-gray-600 text-sm text-gray-600 dark:text-gray-300">
         {# Mobile: compact trigger row #}
@@ -28,9 +32,9 @@
             <button type="button" @click="open = !open"
                 class="flex-1 flex items-center gap-2 px-2 py-2 text-left min-w-0">
                 <svg class="w-4 h-4 shrink-0 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M7 12h10M10 18h4" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="{{ icon }}" />
                 </svg>
-                <span class="font-medium text-gray-700 dark:text-gray-200">Filters</span>
+                <span class="font-medium text-gray-700 dark:text-gray-200">{{ label }}</span>
                 {% if active_count %}<span class="bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 text-xs font-medium rounded-full px-1.5 py-0.5 tabular-nums">{{ active_count }}</span>{% endif %}
                 <svg class="w-4 h-4 ml-auto shrink-0 transition-transform duration-150 text-gray-400 dark:text-gray-500"
                     :class="{ 'rotate-180': open }" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -63,15 +63,20 @@
 
 
 <div class="overflow-x-auto">
-<table class="w-full bg-white dark:bg-gray-800 rounded-lg shadow-sm text-sm">
+{# Client-side column sort (web/static/js/sortable.js) via the `sortable` class +
+   `sortable-th`/`data-col` header hooks. The <tfoot> (Total + excluded rows) is
+   outside <tbody>, so the sorter never touches it; each category row keeps its
+   following `data-detail-row` expander glued to it through a sort. #}
+<table class="sortable w-full bg-white dark:bg-gray-800 rounded-lg shadow-sm text-sm">
+    {% set _sortable_th = 'sortable-th cursor-pointer select-none hover:text-gray-600 dark:hover:text-gray-300' %}
     <thead>
         <tr class="border-b dark:border-gray-700 text-left text-xs text-gray-400 dark:text-gray-500 uppercase tracking-wide">
-            <th class="px-4 py-3">Category</th>
+            <th class="{{ _sortable_th }} px-4 py-3" data-col="0" role="button" tabindex="0" title="Sort by this column">Category <span class="sort-indicator"></span></th>
             {% for label in month_labels %}
-            <th class="px-3 py-3 text-right">{{ label }}</th>
+            <th class="{{ _sortable_th }} px-3 py-3 text-right" data-col="{{ loop.index }}" role="button" tabindex="0" title="Sort by this column">{{ label }} <span class="sort-indicator"></span></th>
             {% endfor %}
-            <th class="px-4 py-3 text-right">Avg/mo</th>
-            <th class="px-4 py-3 text-right">Change</th>
+            <th class="{{ _sortable_th }} px-4 py-3 text-right" data-col="{{ month_labels | length + 1 }}" role="button" tabindex="0" title="Sort by this column">Avg/mo <span class="sort-indicator"></span></th>
+            <th class="{{ _sortable_th }} px-4 py-3 text-right" data-col="{{ month_labels | length + 2 }}" role="button" tabindex="0" title="Sort by this column">Change <span class="sort-indicator"></span></th>
         </tr>
     </thead>
     <tbody>
@@ -88,7 +93,7 @@
             </td>
             {{ change_cell(row.pct_change, row.total < 0) }}
         </tr>
-        <tr id="trend-detail-{{ loop.index }}" class="hidden">
+        <tr id="trend-detail-{{ loop.index }}" class="hidden" data-detail-row>
             <td colspan="{{ month_labels|length + 3 }}" class="p-0 bg-gray-50 dark:bg-gray-700 border-b dark:border-gray-600">
                 <div class="p-4 text-xs text-gray-400 italic">Loading...</div>
             </td>

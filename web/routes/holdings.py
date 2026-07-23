@@ -59,6 +59,21 @@ from .crud import ACCOUNTS_COERCION, ASSETS_COERCION, coerce_value, handle_delet
 
 holdings_bp = Blueprint("holdings", __name__, url_prefix="/s")
 
+
+def _client_today() -> date | None:
+    """The browser's local date, sent on every htmx request as X-Local-Date
+    (base.html). Used to stamp a manual balance edit's As Of with the user's
+    day rather than the server's timezone (QA #6). None if absent/malformed,
+    in which case the repository falls back to the server's local date."""
+    raw = request.headers.get("X-Local-Date")
+    if not raw:
+        return None
+    try:
+        return date.fromisoformat(raw)
+    except ValueError:
+        return None
+
+
 # The one holding-type vocabulary drives the Type filter's options + labels.
 _ALL_TYPE_OPTIONS: list[tuple[str, str]] = HOLDING_TYPE_OPTIONS
 _TYPE_LABELS: dict[str, str] = HOLDING_TYPE_LABELS
@@ -787,7 +802,9 @@ def update(filename: str, source: str, ref: int):
     try:
         with engine.connect() as conn:
             if source == "account":
-                update_account(conn, snapshot_id, ref, {field: value})
+                update_account(
+                    conn, snapshot_id, ref, {field: value}, today=_client_today()
+                )
             else:
                 update_asset_entry(conn, snapshot_id, ref, {field: value})
     except ValueError:
@@ -904,11 +921,22 @@ def add(filename: str, group: str):
     if group not in _GROUP_COLS:
         abort(404)
     engine = current_app.config["engine"]
+    today = _client_today()
     with engine.connect() as conn:
         if group == "cash":
-            add_account(conn, snapshot_id, {"name": "New account", "type": "checking"})
+            add_account(
+                conn,
+                snapshot_id,
+                {"name": "New account", "type": "checking"},
+                today=today,
+            )
         elif group == "credit":
-            add_account(conn, snapshot_id, {"name": "New card", "type": "credit_card"})
+            add_account(
+                conn,
+                snapshot_id,
+                {"name": "New card", "type": "credit_card"},
+                today=today,
+            )
         elif group == "loan":
             add_asset_entry(
                 conn, snapshot_id, {"kind": "debt", "type": "loan", "name": "New loan"}

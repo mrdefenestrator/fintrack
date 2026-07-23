@@ -45,16 +45,8 @@
        columns clear their divider. */
     #holdings-table th:first-child,
     #holdings-table td:first-child { padding-left: 0.625rem; }
-    /* Total (footer) rows: match the column-header cells' dividers — drawn as a
-       box-shadow (not a border-collapse border, which is faint/vanishes on the
-       sticky footer) so the footer grid lines up with the header's. */
-    #holdings-table .total-row td:not(:last-child) {
-        border-right-width: 0;
-        box-shadow: inset -1px 0 0 #e5e7eb;   /* gray-200, same as the header */
-    }
-    .dark #holdings-table .total-row td:not(:last-child) {
-        box-shadow: inset -1px 0 0 #4b5563;   /* gray-600 */
-    }
+    /* Total-row divider box-shadows (footer grid matching the header) are shared
+       in base.html: `.table-scroll-container tr.total-row td:not(:last-child)`. */
     /* Sticky group section headers: each group's heading band + column header
        stick to the top while its rows scroll, then the next group's header
        replaces them. Sticky is confined to the <tbody>, which is why each group
@@ -105,11 +97,8 @@
     .dark #holdings-table .holdings-group-header > th:not(:last-child) {
         box-shadow: inset -1px 0 0 #4b5563, inset 0 -2px 0 #4b5563;
     }
-    /* Two-line master footer: Liquid (total-upper) pins one row above Net worth,
-       which pins to the bottom edge; both are sticky via the base .total-row. */
-    #holdings-table .total-row.total-upper {
-        bottom: 1.75rem;
-    }
+    /* Two-line master footer (Liquid `total-upper` pinned above Net worth) is
+       shared in base.html: `.table-scroll-container tr.total-row.total-upper`. */
 </style>
 
 <form id="holdings-filter-form" method="get" action="{{ url_for('holdings.holdings_view', filename=filename) }}" class="shrink-0">

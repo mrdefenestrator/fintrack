@@ -1,7 +1,6 @@
 {% import "partials/filter_controls.html" as fc %}
 {% import "partials/sheet_filter_bar.html" as fb %}
 {% set _url = "/s/%s/merchants" | format(filename) %}
-{% include "partials/categories_panel.html" %}
 
 {% set category_opts = [] %}
 {% for c in categories %}{% set _ = category_opts.append({'value': c, 'display': c}) %}{% endfor %}
@@ -13,9 +12,9 @@
 {% call fb.filter_bar(active_count=_active, reset_url=_url) %}
     {{ fc.single_select('category', 'Category', category_opts, selected_category or '', _url, any_label='Any category') }}
     {{ fc.single_select('source', 'Source', source_opts, selected_source or '', _url, any_label='Any source') }}
-    <input type="search" name="search" value="{{ search }}" placeholder="Search merchants..."
+    <input type="search" id="merchant-search" name="search" value="{{ search }}" placeholder="Search merchants..."
            hx-get="{{ _url }}" hx-target="#content" hx-include="[name]" hx-push-url="true"
-           hx-trigger="keyup changed delay:300ms"
+           hx-trigger="keyup changed delay:400ms"
            class="w-56 bg-white dark:bg-gray-700 px-2 py-1 rounded border border-gray-200 dark:border-gray-600 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500">
 {% endcall %}
 

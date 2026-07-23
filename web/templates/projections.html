@@ -1,31 +1,23 @@
 {% extends "base.html" %}
 {% block title %}Projections — fintrack{% endblock %}
 {% block content %}
-{# Single scroll container for the whole page. Without it the sections below
-   are direct flex children of the flex-column <main>, so when their combined
-   height exceeds the viewport they get flex-shrunk and visually overlap (the
-   estimate table colliding with the projection table) with nothing scrollable
-   — QA item 11.2 / 11.3. #}
-<div class="flex-1 min-h-0 overflow-y-auto">
+{% import "partials/sheet.html" as sheet %}
+{% import "partials/sheet_filter_bar.html" as fb %}
 
-<!-- Controls: horizon + estimator toggles (linkable query params) -->
-<div class="flex flex-wrap items-center gap-4 mb-4 text-sm">
-    <div class="flex items-center gap-1">
-        <span class="text-gray-500 dark:text-gray-400 mr-1">Months:</span>
-        {% for choice in month_choices %}
-        <a href="{{ url_for('projections.projections_view', filename=filename, months=choice, estimate=1 if estimate else none, edit=1 if edit_mode else none) }}"
-            class="px-2 py-0.5 rounded {% if months == choice %}bg-blue-600 text-white{% else %}bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700{% endif %}">
-            {{ choice }}
-        </a>
-        {% endfor %}
-    </div>
-    <a href="{{ url_for('projections.projections_view', filename=filename, months=months, estimate=none if estimate else 1, edit=1 if edit_mode else none) }}"
-        data-estimate-toggle
-        class="flex items-center gap-1.5 px-2 py-0.5 rounded {% if estimate %}bg-blue-600 text-white{% else %}bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700{% endif %}">
-        <span class="inline-block w-3 h-3 rounded-sm border {% if estimate %}bg-white border-white{% else %}border-gray-400 dark:border-gray-500{% endif %}"></span>
-        Estimate unscheduled spend
-    </a>
-</div>
+{# The accounts×months grid uses the shared sheet chrome: `.table-scroll-container`
+   + `data-sheet-scroll` (sticky header, edge shadows, grid canvas, bottom-pinned
+   totals) and the opt-in `sheet-freeze-col` frozen first column — all defined in
+   base.html, no page-specific table CSS here. The only content-specific rule is
+   that month labels shouldn't wrap. #}
+<style>
+    [data-projection-table] thead th { white-space: nowrap; }
+</style>
+
+{# Non-scrolling top band: warnings, chart, and the (opt-in) estimate breakdown.
+   The horizon/estimate controls live in a filter bar fused to the table below;
+   the accounts×months grid is the flex-filling sheet (its own scroll viewport),
+   matching Holdings/Budget/Transactions. #}
+<div class="shrink-0">
 
 {% if result.warnings %}
 <div class="mb-4 max-w-2xl rounded border border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-900/20 px-3 py-2 text-sm text-red-700 dark:text-red-300">
@@ -45,7 +37,7 @@
         <span class="flex items-center gap-1"><span class="inline-block w-3 h-0.5" style="background:#10B981"></span>
             Net worth</span>
     </div>
-    <svg data-projection-chart viewBox="0 0 {{ chart.width }} {{ chart.height }}" class="w-full max-w-3xl bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded shadow-sm"
+    <svg data-projection-chart viewBox="0 0 {{ chart.width }} {{ chart.height }}" class="w-full max-w-3xl max-h-52 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded shadow-sm"
         preserveAspectRatio="xMinYMin meet">
         <!-- Horizontal gridlines + y-axis value labels -->
         {% for g in chart.gridlines %}
@@ -86,78 +78,97 @@
 </section>
 {% endif %}
 
-<!-- Accounts × months ending balances -->
-<section class="mb-6">
-    <div class="overflow-x-auto max-w-full border border-gray-300 dark:border-gray-600 rounded shadow-sm">
-        <table data-projection-table class="text-sm border-collapse bg-white dark:bg-gray-800 w-full">
-            <thead>
-                <tr class="bg-gray-100 dark:bg-gray-700 border-b border-gray-300 dark:border-gray-600">
-                    <th class="px-1.5 py-1 text-left font-medium text-gray-800 dark:text-gray-100 sticky left-0 bg-gray-100 dark:bg-gray-700">Account</th>
-                    {% for m in result.months %}
-                    <th class="px-1.5 py-1 text-right font-medium text-gray-800 dark:text-gray-100 tabular-nums whitespace-nowrap">{{ m.label }}</th>
-                    {% endfor %}
-                </tr>
-            </thead>
-            <tbody>
-                {% for row in result.rows %}
-                <tr class="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                    <td class="px-1.5 py-0.5 whitespace-nowrap sticky left-0 bg-white dark:bg-gray-800">{{ row.account.name }}</td>
-                    {% for bal in row.balances %}
-                    <td class="px-1.5 py-0.5 text-right tabular-nums whitespace-nowrap
-                        {%- if row.below[loop.index0] %} bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 font-medium
-                        {%- elif bal | display_is_negative %} text-red-600 dark:text-red-400{% endif %}">
-                        {{ bal | fmt_money }}</td>
-                    {% endfor %}
-                </tr>
-                {% endfor %}
-                {% if result.has_unassigned %}
-                <tr class="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 italic text-gray-600 dark:text-gray-300">
-                    <td class="px-1.5 py-0.5 whitespace-nowrap sticky left-0 bg-white dark:bg-gray-800">(unassigned)</td>
-                    {% for v in result.unassigned %}
-                    <td class="px-1.5 py-0.5 text-right tabular-nums whitespace-nowrap{% if v | display_is_negative %} text-red-600 dark:text-red-400{% endif %}">
-                        {{ v | fmt_money }}</td>
-                    {% endfor %}
-                </tr>
-                {% endif %}
-                <tr class="bg-gray-100 dark:bg-gray-700 border-t-2 border-gray-300 dark:border-gray-600 font-medium">
-                    <td class="px-1.5 py-1 whitespace-nowrap sticky left-0 bg-gray-100 dark:bg-gray-700">Liquid total</td>
-                    {% for v in result.liquid %}
-                    <td class="px-1.5 py-1 text-right tabular-nums whitespace-nowrap{% if v | display_is_negative %} text-red-600 dark:text-red-400{% endif %}">
-                        {{ v | fmt_money }}</td>
-                    {% endfor %}
-                </tr>
-                <tr class="bg-gray-100 dark:bg-gray-700 font-medium">
-                    <td class="px-1.5 py-1 whitespace-nowrap sticky left-0 bg-gray-100 dark:bg-gray-700">Net worth</td>
-                    {% for v in result.net_worth %}
-                    <td class="px-1.5 py-1 text-right tabular-nums whitespace-nowrap{% if v | display_is_negative %} text-red-600 dark:text-red-400{% endif %}">
-                        {{ v | fmt_money }}</td>
-                    {% endfor %}
-                </tr>
-            </tbody>
-        </table>
-    </div>
-</section>
-
 {% if result.estimate is not none %}
-<section class="mb-6 max-w-md text-sm">
+<section class="mb-4 max-w-md text-sm">
     <h2 class="font-medium text-gray-800 dark:text-gray-100 mb-1">
         Estimated unscheduled spend: {{ result.estimate.monthly | fmt_money }}/month
     </h2>
     <p class="text-xs text-gray-500 dark:text-gray-400 mb-2">
         Trailing 3-month category averages, excluding categories claimed by budget entries.
     </p>
-    <table class="w-full border-collapse border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 shadow-sm">
+    <div class="max-h-48 overflow-y-auto border border-gray-300 dark:border-gray-600 rounded shadow-sm">
+    <table class="w-full border-collapse bg-white dark:bg-gray-800">
         <tbody>
             {% for category, avg in result.estimate.by_category | dictsort(by='value') %}
-            <tr class="border-b border-gray-200 dark:border-gray-700">
-                <td class="px-1.5 py-0.5">{{ category }}</td>
-                <td class="px-1.5 py-0.5 text-right tabular-nums text-red-600 dark:text-red-400">{{ avg | fmt_money }}</td>
+            <tr class="{{ sheet.row_class() }}">
+                <td class="{{ sheet.cell_class() }}">{{ category }}</td>
+                <td class="{{ sheet.cell_class('text-right tabular-nums', 'text-red-600 dark:text-red-400') }}">{{ avg | fmt_money }}</td>
             </tr>
             {% endfor %}
         </tbody>
     </table>
+    </div>
 </section>
 {% endif %}
 
+</div><!-- end top band -->
+
+{# Horizon + estimate controls, fused to the top of the grid via the shared
+   filter-bar card (view controls, not filters — hence the custom label/icon and
+   no Reset). Matches the Holdings/Budget/Transactions filter card. #}
+{% call fb.filter_bar(active_count=0, reset_url='', label='Options',
+    icon='M10.5 6h9.75M10.5 6a1.5 1.5 0 1 1-3 0m3 0a1.5 1.5 0 1 0-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-9.75 0h9.75') %}
+    <div class="flex items-center gap-1">
+        <span class="text-gray-500 dark:text-gray-400 mr-1">Months:</span>
+        {% for choice in month_choices %}
+        <a href="{{ url_for('projections.projections_view', filename=filename, months=choice, estimate=1 if estimate else none, edit=1 if edit_mode else none) }}"
+            class="px-2 py-0.5 rounded {% if months == choice %}bg-blue-600 text-white{% else %}bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700{% endif %}">
+            {{ choice }}
+        </a>
+        {% endfor %}
+    </div>
+    {# View toggle styled as an emphasized button — colored (like the active
+       Months button) when on, outlined when off (QA: estimate toggle). #}
+    <a href="{{ url_for('projections.projections_view', filename=filename, months=months, estimate=none if estimate else 1, edit=1 if edit_mode else none) }}"
+        data-estimate-toggle role="button" aria-pressed="{{ 'true' if estimate else 'false' }}"
+        class="px-2 py-0.5 rounded {% if estimate %}bg-blue-600 text-white{% else %}bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700{% endif %}">
+        Estimate unscheduled spend
+    </a>
+{% endcall %}
+
+<!-- Accounts × months ending balances (the sheet). The filter bar above supplies
+     the card's top edge + rounding, so the table carries only the sides/bottom. -->
+<div class="table-scroll-container rounded-b-lg border-l border-b border-r border-gray-300 dark:border-gray-600 shadow-sm" data-sheet-scroll>
+{# Client-side column sort (web/static/js/sortable.js) via `sortable` + the
+   sheet.thead hooks; the (unassigned)/Liquid/Net-worth rows live in <tfoot> so
+   the sorter (tbody-only) leaves them pinned in place. #}
+<table data-projection-table class="sortable sheet-freeze-col w-full text-sm border-collapse bg-white dark:bg-gray-800">
+    {{ sheet.thead(["Account"] + (result.months | map(attribute='label') | list),
+                   right_align_cols=range(1, (result.months | length) + 1) | list) }}
+    <tbody>
+        {% for row in result.rows %}
+        <tr class="{{ sheet.row_class() }}">
+            <td class="{{ sheet.cell_class('', 'whitespace-nowrap') }}">{{ row.account.name }}</td>
+            {% for bal in row.balances %}
+            <td class="{{ sheet.cell_class('text-right tabular-nums whitespace-nowrap',
+                'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 font-medium' if row.below[loop.index0]
+                else sheet.neg(bal | display_is_negative)) }}">{{ bal | fmt_money }}</td>
+            {% endfor %}
+        </tr>
+        {% endfor %}
+    </tbody>
+    <tfoot>
+        {% if result.has_unassigned %}
+        <tr class="italic text-gray-600 dark:text-gray-300 border-b border-gray-200 dark:border-gray-700">
+            <td class="{{ sheet.cell_class('', 'whitespace-nowrap') }}">(unassigned)</td>
+            {% for v in result.unassigned %}
+            <td class="{{ sheet.cell_class('text-right tabular-nums whitespace-nowrap', sheet.neg(v | display_is_negative)) }}">{{ v | fmt_money }}</td>
+            {% endfor %}
+        </tr>
+        {% endif %}
+        <tr class="total-row total-upper bg-gray-100 dark:bg-gray-700 border-t-2 border-gray-300 dark:border-gray-600 font-medium">
+            <td class="{{ sheet.cell_class('', 'whitespace-nowrap') }}">Liquid total</td>
+            {% for v in result.liquid %}
+            <td class="{{ sheet.cell_class('text-right tabular-nums whitespace-nowrap', sheet.neg(v | display_is_negative)) }}">{{ v | fmt_money }}</td>
+            {% endfor %}
+        </tr>
+        <tr class="total-row bg-gray-100 dark:bg-gray-700 font-medium">
+            <td class="{{ sheet.cell_class('', 'whitespace-nowrap') }}">Net worth</td>
+            {% for v in result.net_worth %}
+            <td class="{{ sheet.cell_class('text-right tabular-nums whitespace-nowrap', sheet.neg(v | display_is_negative)) }}">{{ v | fmt_money }}</td>
+            {% endfor %}
+        </tr>
+    </tfoot>
+</table>
 </div>
 {% endblock %}

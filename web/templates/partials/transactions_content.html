@@ -53,9 +53,9 @@
     {{ fc.multi_select('account_id', 'Account', account_opts, _url) }}
     {{ fc.multi_select('category', 'Category', category_opts, _url) }}
     {{ fc.single_select('status', 'Status', status_opts, selected_status or '', _url) }}
-    <input type="search" name="q" value="{{ q }}" placeholder="Search or amount (e.g. netflix, &gt;50, 10-20)"
+    <input type="search" id="txn-search" name="q" value="{{ q }}" placeholder="Search or amount (e.g. netflix, &gt;50, 10-20)"
            hx-get="{{ _url }}" hx-target="#content" hx-include="[name]" hx-push-url="true"
-           hx-trigger="keyup changed delay:300ms"
+           hx-trigger="keyup changed delay:400ms"
            class="w-64 bg-white dark:bg-gray-700 px-2 py-1 rounded border border-gray-200 dark:border-gray-600 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500">
     <input type="hidden" name="year" value="{{ year }}">
     <input type="hidden" name="month" value="{{ month }}">

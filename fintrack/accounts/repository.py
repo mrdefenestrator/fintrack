@@ -9,6 +9,7 @@ accounts.balance is the canonical signed balance for every account type
 card recomputes balance = available - credit_limit.
 """
 
+from datetime import date
 from typing import Any
 
 from sqlalchemy import Connection, delete, insert, select, update
@@ -104,7 +105,13 @@ def _derive_cc_available(row: dict[str, Any]) -> None:
         row["available"] = credit_limit + balance
 
 
-def add_account(conn: Connection, snapshot_id: int, account: dict[str, Any]) -> int:
+def add_account(
+    conn: Connection,
+    snapshot_id: int,
+    account: dict[str, Any],
+    *,
+    today: date | None = None,
+) -> int:
     from fintrack.accounts.balance_history import record_balance
 
     sort_order = _next_sort_order(conn, snapshot_id)
@@ -119,15 +126,25 @@ def add_account(conn: Connection, snapshot_id: int, account: dict[str, Any]) -> 
             conn,
             account_id=account_id,
             balance=row["balance"],
-            as_of=row.get("as_of_date"),
+            # An explicit asOfDate wins; otherwise the caller's local date
+            # (browser's, QA #6), falling back to the server's in record_balance.
+            as_of=row.get("as_of_date") or today,
             source="manual",
         )
     return account_id
 
 
 def update_account(
-    conn: Connection, snapshot_id: int, account_id: int, updates: dict[str, Any]
+    conn: Connection,
+    snapshot_id: int,
+    account_id: int,
+    updates: dict[str, Any],
+    *,
+    today: date | None = None,
 ) -> None:
+    """Update an account. A balance change records a new manual balance-history
+    point; `today` (the caller's local date — e.g. the browser's, QA #6) dates
+    that point, falling back to the server's local date when omitted."""
     row = (
         conn.execute(
             select(accounts).where(
@@ -171,6 +188,7 @@ def update_account(
             conn,
             account_id=account_id,
             balance=merged["balance"],
+            as_of=today,
             source="manual",
         )
 

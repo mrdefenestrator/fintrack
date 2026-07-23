@@ -114,6 +114,37 @@ def test_trends_ytd_grand_total_in_footer(page, confirmed_server):
     assert "132" in tfoot_text
 
 
+def test_trends_columns_are_sortable(page, confirmed_server):
+    """Trends headers are wired for the shared client-side sort, and an
+    expanded per-category detail row stays glued to its category row across a
+    sort (the pair moves as one unit)."""
+    page.goto(f"{confirmed_server}/s/ledger/trends?period=ytd")
+    table = page.locator("table.sortable")
+    assert table.count() == 1
+    assert table.locator("thead th.sortable-th").count() >= 1
+
+    # Expand the first category's drill-down. Click the Category cell (not the
+    # row center, whose month links stopPropagation) to fire the row's onclick.
+    first_cat = table.locator("tbody tr:not([data-detail-row])").first
+    cat_name = first_cat.get_attribute("data-category")
+    first_cat.locator("td").first.click()
+    page.wait_for_selector("table.sortable tbody tr[data-detail-row]:not(.hidden)")
+
+    # Sort by the Category column; the visible detail row must still sit
+    # immediately after its own category row.
+    table.locator("thead th[data-col='0']").click()
+    parent = page.evaluate(
+        """() => {
+            const rows = [...document.querySelectorAll('table.sortable tbody tr')];
+            const i = rows.findIndex(
+                (r) => r.hasAttribute('data-detail-row') && !r.classList.contains('hidden')
+            );
+            return i > 0 ? rows[i - 1].getAttribute('data-category') : null;
+        }"""
+    )
+    assert parent == cat_name
+
+
 def test_trends_quarterly_shows_data_rows(page, current_quarter_server):
     """Quarterly view shows data rows when transactions exist in the quarter."""
     page.goto(f"{current_quarter_server}/s/ledger/trends?period=quarterly")

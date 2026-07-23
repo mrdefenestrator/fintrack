@@ -39,6 +39,22 @@
        total styling runs the full width instead of stopping at the edit column. */
     #holdings-table .total-row .table-actions-cell { z-index: 7; background: #f3f4f6; }
     .dark #holdings-table .total-row .table-actions-cell { background: #374151; }
+    /* First column (Institution / group label): the 4px asset/liability accent
+       eats into the normal cell padding, so give the leading cells a touch more
+       left padding — content then clears the accent by the same ~6px other
+       columns clear their divider. */
+    #holdings-table th:first-child,
+    #holdings-table td:first-child { padding-left: 0.625rem; }
+    /* Total (footer) rows: match the column-header cells' dividers — drawn as a
+       box-shadow (not a border-collapse border, which is faint/vanishes on the
+       sticky footer) so the footer grid lines up with the header's. */
+    #holdings-table .total-row td:not(:last-child) {
+        border-right-width: 0;
+        box-shadow: inset -1px 0 0 #e5e7eb;   /* gray-200, same as the header */
+    }
+    .dark #holdings-table .total-row td:not(:last-child) {
+        box-shadow: inset -1px 0 0 #4b5563;   /* gray-600 */
+    }
     /* Sticky group section headers: each group's heading band + column header
        stick to the top while its rows scroll, then the next group's header
        replaces them. Sticky is confined to the <tbody>, which is why each group

@@ -107,6 +107,8 @@ def index():
         next_year=next_year,
         next_month=next_month,
         is_latest=is_latest,
+        latest_year=today.year,
+        latest_month=today.month,
         month_label=month_label,
         selected_categories=selected_categories,
         selected_accounts=selected_accounts,

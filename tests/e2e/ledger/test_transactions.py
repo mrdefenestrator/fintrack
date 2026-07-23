@@ -92,6 +92,22 @@ def test_transactions_next_arrow_navigates(page, flask_server):
     page.wait_for_url("**/transactions**month=5**")
 
 
+def test_transactions_latest_button_jumps_to_current_month(page, flask_server):
+    """The Latest button navigates to the current calendar month.
+
+    Regression guard: the global htmx:configRequest handler injects the
+    currently-viewed month into any /transactions request missing year/month, so
+    a bare Latest URL used to bounce right back to the month you were on. Latest
+    must carry the current month explicitly so it actually lands there.
+    """
+    from datetime import date
+
+    page.goto(f"{flask_server}/s/ledger/transactions?year=2020&month=1")
+    page.click("a:has-text('Latest')")
+    today = date.today()
+    page.wait_for_url(f"**/transactions?year={today.year}&month={today.month}**")
+
+
 def test_transactions_table_has_expected_columns(page, flask_server):
     """Table header renders the expected columns."""
     page.goto(f"{flask_server}/s/ledger/transactions")

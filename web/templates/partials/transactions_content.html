@@ -33,13 +33,17 @@
          'label': 'This month', 'active': not all_months},
         {'url': "%s?all_months=true%s" | format(_url, filter_qs),
          'label': 'All time', 'active': all_months}]) }}
+    {# Latest carries the current month explicitly (not a bare URL): the global
+       htmx:configRequest handler (ledger.js) injects the currently-viewed month
+       into any /transactions request missing year/month, which would otherwise
+       send Latest right back to the month you're on. #}
     {% if not all_months %}
     {{ nav.pager(
         prev_url="%s?year=%s&month=%s%s" | format(_url, prev_year, prev_month, filter_qs),
         next_url="%s?year=%s&month=%s%s" | format(_url, next_year, next_month, filter_qs),
         label=month_label,
         is_latest=is_latest,
-        latest_url="%s%s" | format(_url, ('?' + filter_qs[1:]) if filter_qs else ''),
+        latest_url="%s?year=%s&month=%s%s" | format(_url, latest_year, latest_month, filter_qs),
         label_width='w-24') }}
     {% endif %}
 </div>

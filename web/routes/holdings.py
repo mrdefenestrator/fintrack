@@ -157,7 +157,9 @@ def _asset_group_key(e: dict) -> str:
 
 
 def _entity_group_key(source: str, entity: dict) -> str:
-    return _account_group_key(entity) if source == "account" else _asset_group_key(entity)
+    return (
+        _account_group_key(entity) if source == "account" else _asset_group_key(entity)
+    )
 
 
 def _col_keys(cols):
@@ -906,9 +908,7 @@ def add(filename: str, group: str):
         if group == "cash":
             add_account(conn, snapshot_id, {"name": "New account", "type": "checking"})
         elif group == "credit":
-            add_account(
-                conn, snapshot_id, {"name": "New card", "type": "credit_card"}
-            )
+            add_account(conn, snapshot_id, {"name": "New card", "type": "credit_card"})
         elif group == "loan":
             add_asset_entry(
                 conn, snapshot_id, {"kind": "debt", "type": "loan", "name": "New loan"}

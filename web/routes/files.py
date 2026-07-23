@@ -32,7 +32,7 @@ def _sanitize_name(raw: str) -> str:
 
 
 def _navigate_to_snapshot(name: str):
-    target = url_for("accounts.accounts_view", filename=name)
+    target = url_for("holdings.holdings_view", filename=name)
     if request.headers.get("HX-Request"):
         resp = current_app.make_response("")
         resp.headers["HX-Redirect"] = target

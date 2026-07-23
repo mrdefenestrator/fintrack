@@ -225,27 +225,91 @@ Single Flask app (`web/app.py`), port 5003 (`FINTRACK_PORT`), database from
 `/s/<snapshot>/<section>`, with
 `?edit=1` toggling spreadsheet-style edit mode on the net-worth pages.
 
-Navigation is two-tier and task-oriented: a primary row with two group tabs —
-`Finances` (Accounts · Assets · Holdings · Budget · Projections) and `Spending`
-(Transactions · Trends · Merchants) — and a secondary row showing the active
-group's sub-tabs. Accounts is the landing page; each group tab remembers its
-last-visited sub-tab for the session (sessionStorage, `web/static/js/nav.js`).
-Holdings unifies the Accounts and Assets sheets into one dense, spreadsheet-
-style view — it combines them and keeps their columns (dropping only genuinely
-redundant ones), rather than slimming them down, and is intended to eventually
-subsume both. Information density is a deliberate feature of these sheets, not a
-problem to design around.
-Import is an icon button in the header rather than a tab, and the edit-mode
-lock is functional only on the pages that honor it (Accounts, Budget,
-Assets — muted elsewhere). The old `/s/<snapshot>/status` dashboard was
-removed; its URL redirects to the Accounts view.
+Navigation is a **single-row top bar plus a collapsible side navigation**. The
+top bar carries only a nav toggle (`☰`), the current page name, and the always-
+visible utility controls — the lock/edit toggle, Import, the theme cycle, and
+the snapshot picker. Primary navigation lives in a grouped outline
+(`Finances`: Holdings · Budget · Projections; `Spending`: Trends ·
+Transactions · Merchants — group headings are labels, only the destinations are
+links). On wide screens (≥`lg`, 1024px) that outline is a docked left sidebar;
+the `☰` collapses it to reclaim horizontal width for the dense sheets. Below the
+breakpoint it collapses to a hamburger that opens the same outline as an overlay
+drawer, so a narrow header never clips. It is one responsive component (Alpine
+state on `<body>`), not two nav systems — which is why it reads consistently
+across desktop, mobile portrait, and mobile landscape (where the single top bar
+is the big vertical reclaim). Holdings is the landing page. Holdings subsumes the
+old standalone Accounts and Assets sheets, which were retired — it is one dense,
+spreadsheet-style view over the same tables; information density is a deliberate
+feature of these sheets, not a problem to design around. Net worth shows in the
+Holdings sheet's footer (the header carries no figures). Holdings' structure and
+the invariants that keep the sticky chrome correct are documented under
+[Holdings sheet](#holdings-sheet) below. Import is a header icon; the edit-mode
+lock is functional only on the pages that honor it (Holdings, Budget — muted
+elsewhere). The old `/s/<snapshot>/status` dashboard was removed; its URL
+redirects to Holdings.
 
 Two HTMX idioms coexist by design: ledger pages (transactions, trends,
 merchants, import) use `HX-Request` partial swaps and are snapshot-scoped via
-a `url_value_preprocessor` (`g.snapshot_id`); net-worth pages (accounts,
-budget, assets) use finances-style spreadsheet cell editing with
-explicit template names. One `base.html` carries Tailwind, HTMX, Alpine.js,
-and the light/dark theme toggle.
+a `url_value_preprocessor` (`g.snapshot_id`); the net-worth pages (holdings,
+budget) use finances-style spreadsheet cell editing with explicit template
+names. One `base.html` carries Tailwind, HTMX, Alpine.js, and the light/dark
+theme toggle.
+
+### Holdings sheet
+
+Holdings is one table split into four **type-based** groups, rendered top to
+bottom: **Cash · Credit Cards · Loans · Assets**. Cash and Credit Cards are type
+slices of the `accounts` table (credit cards split from spendable cash); Loans
+and Assets are the `kind=debt` / `kind=asset` slices of `asset_entries`. The
+split is a display grouping only — no data migration, and the debt↔asset
+equity/LTV pairing (`calculations.equity_pairs`) is unchanged.
+
+- **Columns are per-group and tight.** Each group carries its own header row and
+  fills only its own columns; the leading Institution·Type·Name·Amount and the
+  trailing Due·Linked·As Of slots sit in the same slot index in every group so
+  they align down the table, and blank structural slots (rendered as empty cells
+  with the normal gridline) pad the shorter groups — table width = the widest
+  group, not the union. Cash: Reserve·Funding. Credit Cards:
+  Limit·Available·Rewards·Statement·Due·Linked. Loans:
+  Interest·Equity·LTV·Due·Linked. Assets: Unit Price·Qty·Source·Linked. Equity
+  and LTV show on the **loan** row (the debt side of a secured pair). A column
+  may carry a `span` so one cell covers several slots — the Assets "Source" cell
+  spans three so its long valuation text borrows neighbouring slots instead of
+  forcing the Rewards / Statement / LTV columns wide in the other groups.
+- **Row accent by group, not sign.** The left asset/liability accent is green for
+  Cash + Assets and red for Credit Cards + Loans — a credit card reads as a
+  liability even at a zero balance — rather than keyed off the current amount's
+  sign.
+- **Totals.** Each group shows its own subtotal in its heading band; a master
+  footer shows **Liquid** and **Net worth** (`calculations.tiered_totals`).
+  Liquidity is a cross-cutting property, so it is reported independently of the
+  row grouping rather than read off one group's subtotal.
+- **Credit-card Available is computed and read-only** = `credit_limit + balance`.
+  balance is the canonical input (kept current by statement imports); editing the
+  limit or balance recomputes Available and preserves the balance
+  (`accounts.repository._derive_cc_available`), while an `available` edit on the
+  Accounts sheet still derives balance. Available ignores pending holds, so it
+  reads slightly high — the deliberate tradeoff for never drifting from the
+  imported balance.
+- **Reorder is scoped per group.** Because two groups can share one table, a
+  group's local drag permutation is mapped onto that group's *global* slots in
+  the table, leaving the other group's rows fixed; a group whose rows span two
+  tables is left non-reorderable rather than permuting both at once.
+
+**Sticky spreadsheet chrome — the border invariant.** These sheets use
+`border-collapse`, whose borders are painted in the *table's* own layer. When a
+row is `position: sticky` — the group heading bands, the column-header rows, the
+pinned total rows, and the left asset/liability accent — a collapsed border
+scrolls out of view or paints over/beside the sticky cell (reproduced in both
+WebKit and Chromium). **So no border on a sticky row may be a border-collapse
+border**: draw it as a `box-shadow` on the cell instead (it paints with the
+sticky element and stays put). Header underline + inter-column dividers, the
+heading band's blue accent, and the row asset/liability accents are all
+box-shadows (`web/templates/holdings.html`, `base.html`). Only the total row
+stays pinned to the bottom; the add ("+ Add …") row flows inline as the last row
+of its group. `web/static/js/sheet-scroll.js` pins the total(s) to the bottom
+with a faint grid canvas and drives the four edge scroll-shadows (the side
+shadows cover the column header but stop at the group title band).
 
 ## CLI
 

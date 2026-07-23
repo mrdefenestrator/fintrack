@@ -87,7 +87,12 @@
             headerH = headingH + (header ? header.offsetHeight : 0);
             frame.style.setProperty("--sheet-heading-h", headingH + "px");
         }
-        var totalRow = container.querySelector("tr.total-row");
+        // Sum every total row (the Holdings footer has two: Liquid + Net worth)
+        // so the side shadows stop above the whole pinned footer.
+        var footerH = 0;
+        container.querySelectorAll("tr.total-row").forEach(function (r) {
+            footerH += r.offsetHeight;
+        });
         // When a sheet pins an actions column to the right edge, keep the right
         // shadow to the left of it (over the scrolling data), not under it.
         var rightW = 0;
@@ -96,19 +101,27 @@
             rightW = actions ? actions.offsetWidth : 0;
         }
         frame.style.setProperty("--sheet-header-h", headerH + "px");
-        frame.style.setProperty("--sheet-footer-h", (totalRow ? totalRow.offsetHeight : 0) + "px");
+        frame.style.setProperty("--sheet-footer-h", footerH + "px");
         frame.style.setProperty("--sheet-right-h", rightW + "px");
     }
 
     var ROW_H = 28; // 1.75rem data-row height
 
-    // Inject (once) a single filler row below the last data row, positioned
-    // just before the add row / total row, so we can grow it to push those
-    // rows to the sheet's bottom (QA item 17). Kept in place on every call.
+    // Inject (once) a single filler row and grow it to push the total row to the
+    // sheet's bottom (QA item 17), with a grid canvas filling the gap. It sits
+    // just above the total row, in the total row's OWN tbody: on the grouped
+    // Holdings sheet the total lives in a trailing tbody of its own, so this
+    // keeps the canvas below the last group instead of wedging it between groups
+    // (and lets each group's add row flow inline right under its data). Kept in
+    // place on every call.
     function ensureFiller(container) {
-        var tbody = container.querySelector("tbody");
+        var totalRow = container.querySelector("tr.total-row");
+        var anchor = totalRow;
+        var tbody = anchor
+            ? anchor.parentElement
+            : container.querySelector("tbody:last-of-type");
         if (!tbody) return null;
-        var filler = tbody.querySelector(":scope > .sheet-grid-filler");
+        var filler = container.querySelector(".sheet-grid-filler");
         if (!filler) {
             filler = document.createElement("tr");
             filler.className = "sheet-grid-filler";
@@ -118,12 +131,12 @@
             td.colSpan = container.querySelectorAll("thead th").length || 100;
             filler.appendChild(td);
         }
-        // Keep it directly before the add row (or the total row if no add row).
-        var anchor =
-            tbody.querySelector(":scope > [data-add-row]") ||
-            tbody.querySelector(":scope > .total-row");
+        // Keep it directly before the total row (or at the end when there is no
+        // total row — then it just fills the sheet's bottom).
         if (anchor) {
-            if (filler.nextElementSibling !== anchor) tbody.insertBefore(filler, anchor);
+            if (filler.parentElement !== tbody || filler.nextElementSibling !== anchor) {
+                tbody.insertBefore(filler, anchor);
+            }
         } else if (filler.parentElement !== tbody) {
             tbody.appendChild(filler);
         }

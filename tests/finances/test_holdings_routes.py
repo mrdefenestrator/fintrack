@@ -111,18 +111,20 @@ def test_holdings_view_shows_bottom_total(client):
 
 
 def test_holdings_grouped_layout(client):
-    """One table, two domain groups (Accounts, Assets), each with its own
-    heading + header row, then a master Net-worth total."""
+    """One table, four type-based groups (Cash, Credit Cards, Loans, Assets),
+    each with its own heading + header row; a master footer closes with
+    Liquid + Net worth."""
     resp = client.get("/s/finances/holdings")
     body = resp.get_data(as_text=True)
     assert "holdings-group-heading" in body
-    # Group headings + subtotals both use the labels; net worth is the master.
-    assert "Accounts" in body
-    assert "Assets" in body
+    # Every group heading renders (empty groups included).
+    for label in ("Cash", "Credit Cards", "Loans", "Assets"):
+        assert label in body
+    assert "Liquid" in body
     assert "Net worth" in body
-    # Assets-only trailing columns appear (proving per-group headers).
-    assert "Unit Price" in body
-    assert "Equity" in body
+    # Group-specific columns appear, proving per-group headers.
+    assert "Unit Price" in body  # Assets
+    assert "Equity" in body  # Loans
 
 
 def test_holdings_view_reuses_shared_filter_bar(client):
@@ -307,12 +309,29 @@ def test_holdings_update_cc_limit_editable(client, db_engine):
     assert updated["limit"] == 1500
 
 
-def test_holdings_update_cc_balance_not_editable(client, db_engine):
-    # Credit-card balance is derived from available/limit, so it is read-only.
+def test_holdings_update_cc_balance_editable(client, db_engine):
+    # QA #10: the credit-card balance (Amount) is the editable input; available
+    # is the computed column, recomputed as credit_limit + balance.
+    from fintrack.accounts.repository import get_accounts
+
     cc = _account_by_name(db_engine, "Visa")
     resp = client.post(
         f"/s/finances/holdings/update/account/{cc['id']}",
-        data={"field": "balance", "value": "5"},
+        data={"field": "balance", "value": "-200"},
+    )
+    assert resp.status_code == 200
+    with db_engine.connect() as conn:
+        updated = next(a for a in get_accounts(conn, 1) if a["id"] == cc["id"])
+    assert updated["balance"] == -200
+    assert updated["available"] == updated["limit"] + updated["balance"]
+
+
+def test_holdings_update_cc_available_not_editable(client, db_engine):
+    # QA #10: Available is computed (credit_limit + balance), so it is read-only.
+    cc = _account_by_name(db_engine, "Visa")
+    resp = client.post(
+        f"/s/finances/holdings/update/account/{cc['id']}",
+        data={"field": "available", "value": "500"},
     )
     assert resp.status_code == 422
 
@@ -426,22 +445,25 @@ def test_holdings_delete_account_dispatches(client, db_engine):
 
 
 def test_holdings_reorder_accounts_dispatches(client, db_engine):
-    from fintrack.accounts.repository import get_accounts
+    from fintrack.accounts.repository import add_account, get_accounts
 
+    # Add a second cash account so the Cash group has two rows to reorder; the
+    # Visa credit card sits between them (global position 1) and must not move.
     with db_engine.connect() as conn:
-        before = [a["name"] for a in get_accounts(conn, 1)]
-    # Reverse the two seeded accounts.
-    resp = client.post("/s/finances/holdings/reorder/account", data={"order": "1,0"})
+        add_account(conn, 1, {"name": "Savings", "type": "savings", "balance": 50})
+    # Reverse the two Cash rows (local order 1,0). Their global slots are 0 and
+    # 2 (Checking, Savings) with Visa at slot 1.
+    resp = client.post("/s/finances/holdings/reorder/cash", data={"order": "1,0"})
     assert resp.status_code == 204
     with db_engine.connect() as conn:
         after = [a["name"] for a in get_accounts(conn, 1)]
-    assert after == list(reversed(before))
+    assert after == ["Savings", "Visa", "Checking"]
 
 
 def test_holdings_add_account(client, db_engine):
     from fintrack.accounts.repository import get_accounts
 
-    resp = client.post("/s/finances/holdings/add/account")
+    resp = client.post("/s/finances/holdings/add/cash")
     assert resp.status_code == 200
     assert resp.headers.get("HX-Refresh") == "true"
     with db_engine.connect() as conn:

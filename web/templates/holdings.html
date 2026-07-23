@@ -5,16 +5,18 @@
 {% import "partials/filter_controls.html" as fc %}
 {% import "partials/sheet_filter_bar.html" as fb %}
 
-{# Asset (green) / liability (red) left accent. Painted as a border on the first
-   *cell*, not the <tr>: WebKit is unreliable about row borders in border-
-   collapse tables (especially when the sheet scrolls horizontally), but renders
-   cell borders correctly — so this matches the Assets table's look everywhere. #}
 <style>
+    /* Asset (green) / liability (red) left accent. Drawn as an inset box-shadow
+       on the first *cell*, not a border: a border-collapse border is painted in
+       the table's own layer, which WebKit renders over/beside the sticky header,
+       heading, and total rows — so the accent of a data row scrolling behind
+       them leaked out in the gaps. A box-shadow paints with the cell in the
+       data row's (z-auto) layer, so the z-7 sticky chrome reliably covers it. */
     #holdings-table tr[data-accent="asset"] > td:first-child {
-        border-left: 4px solid #34d399;   /* emerald-400 */
+        box-shadow: inset 4px 0 0 #34d399;   /* emerald-400 */
     }
     #holdings-table tr[data-accent="liability"] > td:first-child {
-        border-left: 4px solid #fb7185;   /* rose-400 */
+        box-shadow: inset 4px 0 0 #fb7185;   /* rose-400 */
     }
     /* Actions column sticks to the right edge; data scrolls behind it. A uniform
        background (the actions column is chrome, not data) keeps scrolled cells
@@ -37,6 +39,22 @@
        total styling runs the full width instead of stopping at the edit column. */
     #holdings-table .total-row .table-actions-cell { z-index: 7; background: #f3f4f6; }
     .dark #holdings-table .total-row .table-actions-cell { background: #374151; }
+    /* First column (Institution / group label): the 4px asset/liability accent
+       eats into the normal cell padding, so give the leading cells a touch more
+       left padding — content then clears the accent by the same ~6px other
+       columns clear their divider. */
+    #holdings-table th:first-child,
+    #holdings-table td:first-child { padding-left: 0.625rem; }
+    /* Total (footer) rows: match the column-header cells' dividers — drawn as a
+       box-shadow (not a border-collapse border, which is faint/vanishes on the
+       sticky footer) so the footer grid lines up with the header's. */
+    #holdings-table .total-row td:not(:last-child) {
+        border-right-width: 0;
+        box-shadow: inset -1px 0 0 #e5e7eb;   /* gray-200, same as the header */
+    }
+    .dark #holdings-table .total-row td:not(:last-child) {
+        box-shadow: inset -1px 0 0 #4b5563;   /* gray-600 */
+    }
     /* Sticky group section headers: each group's heading band + column header
        stick to the top while its rows scroll, then the next group's header
        replaces them. Sticky is confined to the <tbody>, which is why each group
@@ -48,14 +66,50 @@
         position: sticky;
         top: 0;
         z-index: 7;
+        /* Borders are drawn as box-shadow, not border-collapse borders: a
+           collapsed border belongs to the table's paint layer and scrolls away
+           when the row is sticky, so the heading/header borders would vanish on
+           scroll (QA #5). A box-shadow is painted with the sticky cell and stays
+           put. Heading band: blue-200 underline. */
+        box-shadow: inset 0 -1px 0 #bfdbfe;
+    }
+    .dark #holdings-table .holdings-group-heading > td { box-shadow: inset 0 -1px 0 #1e3a8a; }  /* blue-900 */
+    /* The band's blue-500 left accent, also a box-shadow (see above): a
+       collapsed border-left shifted out of place when the sticky band scrolled.
+       Combined with the underline on the first cell. */
+    #holdings-table .holdings-group-heading > td:first-child {
+        box-shadow: inset 4px 0 0 #3b82f6, inset 0 -1px 0 #bfdbfe;
+    }
+    .dark #holdings-table .holdings-group-heading > td:first-child {
+        box-shadow: inset 4px 0 0 #3b82f6, inset 0 -1px 0 #1e3a8a;
     }
     #holdings-table .holdings-group-header > th {
         position: sticky;
         top: var(--sheet-heading-h, 1.75rem);
         z-index: 7;
         background: #f3f4f6;   /* gray-100 */
+        /* Underline (gray-300, 2px) drawn as box-shadow — see above. */
+        box-shadow: inset 0 -2px 0 #d1d5db;
     }
-    .dark #holdings-table .holdings-group-header > th { background: #374151; }  /* gray-700 */
+    .dark #holdings-table .holdings-group-header > th {
+        background: #374151;   /* gray-700 */
+        box-shadow: inset 0 -2px 0 #4b5563;   /* gray-600 */
+    }
+    /* Inter-column dividers (gray-200, 1px) are border-collapse borders too, so
+       they scroll away when the header sticks — redraw them as a box-shadow on
+       every column except the last (matches the header's `last:border-r-0`),
+       combined with the underline above. */
+    #holdings-table .holdings-group-header > th:not(:last-child) {
+        box-shadow: inset -1px 0 0 #e5e7eb, inset 0 -2px 0 #d1d5db;
+    }
+    .dark #holdings-table .holdings-group-header > th:not(:last-child) {
+        box-shadow: inset -1px 0 0 #4b5563, inset 0 -2px 0 #4b5563;
+    }
+    /* Two-line master footer: Liquid (total-upper) pins one row above Net worth,
+       which pins to the bottom edge; both are sticky via the base .total-row. */
+    #holdings-table .total-row.total-upper {
+        bottom: 1.75rem;
+    }
 </style>
 
 <form id="holdings-filter-form" method="get" action="{{ url_for('holdings.holdings_view', filename=filename) }}" class="shrink-0">
@@ -69,12 +123,12 @@
     {% endcall %}
 </form>
 
-<div class="table-scroll-container rounded-b-lg border-l border-b border-r border-gray-300 dark:border-gray-600 shadow-sm" data-sheet-scroll data-sticky-actions>
-{# One table, two domain groups. Headers are per-group rows inside the tbody
+<div class="table-scroll-container rounded-b-lg border-l border-b border-r border-gray-300 dark:border-gray-600 shadow-sm" data-sheet-scroll{% if edit_mode %} data-sticky-actions{% endif %}>
+{# One table, four type-based groups. Headers are per-group rows inside the tbody
    (the trailing column slots differ per group), so there is no global thead.
-   The actions column is always present (inert in view mode) so toggling edit
-   never changes the column count — the columns keep their widths, and w-full
-   still lets the table fill the pane. #}
+   The sticky right-hand actions column (drag + delete) renders only in edit mode
+   — in view mode it is dropped so it doesn't eat horizontal space (esp. on
+   mobile); w-full lets the remaining columns fill the pane in either mode. #}
 <table id="holdings-table" class="editable-table w-full text-sm border-collapse bg-white dark:bg-gray-800">
     {% include "partials/holdings_tbody.html" %}
 </table>

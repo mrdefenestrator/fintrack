@@ -55,9 +55,12 @@
     }
 
     function updateIndicators(headerRow, col, dir) {
-        headerRow.querySelectorAll(".sortable-th").forEach(function (th, i) {
+        // Key off each header's data-col, not its position — blank structural
+        // slots (non-sortable) and colspan'd columns make position != column.
+        headerRow.querySelectorAll(".sortable-th").forEach(function (th) {
+            var thCol = parseInt(th.getAttribute("data-col"), 10);
             var ind = th.querySelector(".sort-indicator");
-            if (ind) ind.textContent = i === col && dir !== "none" ? (dir === "asc" ? " ↑" : " ↓") : "";
+            if (ind) ind.textContent = thCol === col && dir !== "none" ? (dir === "asc" ? " ↑" : " ↓") : "";
         });
     }
 

@@ -2,7 +2,7 @@
 
 Walks the unified flow from the Phase 3 design spec: pick a snapshot, create
 an account from the import page, upload + confirm an OFX, see the transaction
-in the ledger — then see the same account in the net-worth accounts grid.
+in the ledger — then see the same account in the Holdings grid.
 """
 
 import pytest
@@ -65,13 +65,13 @@ def test_import_confirm_transaction_and_networth_account(page, unified_server):
     page.goto(f"{unified_server}/s/ledger/transactions?year=2026&month=4")
     assert page.locator("text=WHOLE FOODS MARKET").first.is_visible()
 
-    # Net-worth side: the same account appears in the accounts grid
-    page.goto(f"{unified_server}/s/ledger/accounts")
+    # Net-worth side: the same account appears in the Holdings grid (Cash group)
+    page.goto(f"{unified_server}/s/ledger/holdings")
     assert page.locator("td", has_text="Flow Checking").first.is_visible()
 
-    # Legacy status URL redirects to the accounts view (page was removed)
+    # Legacy status URL redirects to Holdings (Accounts page was retired)
     page.goto(f"{unified_server}/s/ledger/status")
-    page.wait_for_url("**/accounts**")
+    page.wait_for_url("**/holdings**")
     assert page.locator("td", has_text="Flow Checking").first.is_visible()
 
 
@@ -102,10 +102,12 @@ _OFX_WITH_LEDGERBAL = """\
 </OFX>"""
 
 
-def test_statement_balance_feeds_history_and_sparkline(page, unified_server):
-    """Confirming a statement with a LEDGERBAL updates the account balance,
-    as-of date, and sparkline on the net-worth accounts grid; a manual edit
-    then adds another history point."""
+def test_statement_balance_feeds_holdings(page, unified_server):
+    """Confirming a statement with a LEDGERBAL updates the account's balance and
+    as-of date shown in the Holdings Cash group; a manual edit then changes it.
+
+    (The balance-history data layer is covered by unit tests; the per-row
+    sparkline was an Accounts-page feature, retired with that page.)"""
     import re
 
     html = _form_post(
@@ -128,25 +130,24 @@ def test_statement_balance_feeds_history_and_sparkline(page, unified_server):
     assert m
     _form_post(f"{unified_server}/s/ledger/import/{m.group(1)}/confirm")
 
-    page.goto(f"{unified_server}/s/ledger/accounts")
-    row = page.locator(f"#account-row-{account_id}")
+    page.goto(f"{unified_server}/s/ledger/holdings")
+    row = page.locator(f"#holding-row-account-{account_id}")
     assert "1,234.56" in row.inner_text()
-    assert row.locator("[data-history-cell]").inner_text().strip() != "—"
-    assert "2026-06-30" in row.locator("[data-history-cell]").inner_text()
+    assert "2026-06-30" in row.inner_text()  # LEDGERBAL as-of date
 
-    # Manual balance edit adds a second point: sparkline becomes visible
-    page.goto(f"{unified_server}/s/ledger/accounts?edit=1")
-    row = page.locator(f"#account-row-{account_id}")
-    row.locator("td").nth(3).click()
-    inp = page.locator("#accounts-tbody input[name='value']")
+    # Manual balance edit (Amount cell) updates the value
+    page.goto(f"{unified_server}/s/ledger/holdings?edit=1")
+    row = page.locator(f"#holding-row-account-{account_id}")
+    row.locator("td").nth(3).click()  # Amount is the 4th cell
+    inp = page.locator("#holdings-table input[name='value']")
     inp.wait_for(state="visible")
     inp.click()
     inp.fill("1300.00")
     with page.expect_response(
-        lambda r: "/accounts/update/" in r.url and r.request.method == "POST",
+        lambda r: "/holdings/update/account/" in r.url and r.request.method == "POST",
         timeout=5000,
     ):
-        page.locator("#accounts-tbody tr.total-row td").first.click()
-    page.wait_for_selector(f"#account-row-{account_id} [data-sparkline]")
-    row = page.locator(f"#account-row-{account_id}")
+        page.locator("#holdings-table tr.total-row td").first.click()
+    page.wait_for_selector(f"#holding-row-account-{account_id}")
+    row = page.locator(f"#holding-row-account-{account_id}")
     assert "1,300.00" in row.inner_text()

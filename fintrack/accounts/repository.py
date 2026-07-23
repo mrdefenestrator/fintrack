@@ -77,7 +77,8 @@ def _derive_cc_balance(row: dict[str, Any]) -> None:
     """Set the canonical signed balance for a credit card from available/limit.
 
     balance = available - credit_limit (negative = amount owed), matching the
-    signed ledger balance a statement import reports.
+    signed ledger balance a statement import reports. Used when `available` is
+    the field being edited (the Accounts sheet's model).
     """
     if row.get("account_type") != "credit_card":
         return
@@ -85,6 +86,22 @@ def _derive_cc_balance(row: dict[str, Any]) -> None:
     credit_limit = row.get("credit_limit")
     if available is not None and credit_limit is not None:
         row["balance"] = available - credit_limit
+
+
+def _derive_cc_available(row: dict[str, Any]) -> None:
+    """Recompute a credit card's available credit = credit_limit + balance.
+
+    balance is the canonical input (kept current by statement imports and edits),
+    so editing the limit or the balance recomputes the remaining credit rather
+    than overwriting what is owed (QA #10). Rows keep the invariant
+    available == credit_limit + balance either way.
+    """
+    if row.get("account_type") != "credit_card":
+        return
+    balance = row.get("balance")
+    credit_limit = row.get("credit_limit")
+    if balance is not None and credit_limit is not None:
+        row["available"] = credit_limit + balance
 
 
 def add_account(conn: Connection, snapshot_id: int, account: dict[str, Any]) -> int:
@@ -128,8 +145,13 @@ def update_account(
         col = _field_to_col(k)
         if col:
             merged[col] = to_date(v) if col == "as_of_date" else v
-    if {"available", "limit"} & updates.keys():
+    # Keep the credit-card invariant available == credit_limit + balance. An
+    # `available` edit is the input (Accounts sheet) -> derive balance; a limit
+    # or balance edit keeps balance the input (QA #10) -> recompute available.
+    if "available" in updates.keys():
         _derive_cc_balance(merged)
+    elif {"limit", "balance"} & updates.keys():
+        _derive_cc_available(merged)
     conn.execute(
         update(accounts)
         .where(accounts.c.id == account_id, accounts.c.snapshot_id == snapshot_id)

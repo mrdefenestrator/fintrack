@@ -7,7 +7,7 @@ pytestmark = pytest.mark.e2e
 
 def test_file_picker_hover_reveals_buttons(page, flask_server):
     """Hovering the active file row reveals rename and duplicate buttons."""
-    page.goto(f"{flask_server}/s/test_finances/accounts")
+    page.goto(f"{flask_server}/s/test_finances/holdings")
     page.locator("[data-file-picker]").click()
     page.locator("[data-file-picker-dropdown]").wait_for(state="visible")
 
@@ -22,7 +22,7 @@ def test_file_picker_hover_reveals_buttons(page, flask_server):
 
 def test_file_picker_shows_active_file(page, flask_server):
     """File picker button is visible and active file is marked in the dropdown."""
-    page.goto(f"{flask_server}/s/test_finances/accounts")
+    page.goto(f"{flask_server}/s/test_finances/holdings")
     assert page.locator("[data-file-picker]").is_visible()
     page.locator("[data-file-picker]").click()
     page.locator("[data-file-picker-dropdown]").wait_for(state="visible")
@@ -31,7 +31,7 @@ def test_file_picker_shows_active_file(page, flask_server):
 
 def test_file_picker_lists_files(page, flask_server):
     """Opening the file picker shows available files."""
-    page.goto(f"{flask_server}/s/test_finances/accounts")
+    page.goto(f"{flask_server}/s/test_finances/holdings")
     page.locator("[data-file-picker]").click()
     dropdown = page.locator("[data-file-picker-dropdown]")
     dropdown.wait_for(state="visible")
@@ -41,7 +41,7 @@ def test_file_picker_lists_files(page, flask_server):
 
 def test_file_picker_create_new_file(page, flask_server):
     """Creating a new file via the picker navigates back to a valid page."""
-    page.goto(f"{flask_server}/s/test_finances/accounts")
+    page.goto(f"{flask_server}/s/test_finances/holdings")
     page.locator("[data-file-picker]").click()
     page.locator("[data-file-picker-dropdown]").wait_for(state="visible")
 
@@ -62,7 +62,7 @@ def test_file_picker_create_new_file(page, flask_server):
 
 def test_file_picker_duplicate_file(page, flask_server):
     """Duplicating a file via the picker navigates back to a valid page."""
-    page.goto(f"{flask_server}/s/test_finances/accounts")
+    page.goto(f"{flask_server}/s/test_finances/holdings")
     page.locator("[data-file-picker]").click()
     page.locator("[data-file-picker-dropdown]").wait_for(state="visible")
 
@@ -85,7 +85,7 @@ def test_file_picker_duplicate_file(page, flask_server):
 def test_file_picker_rename_file(page, flask_server):
     """Renaming a file via the picker navigates back to a valid page."""
     # First create a file to rename
-    page.goto(f"{flask_server}/s/test_finances/accounts")
+    page.goto(f"{flask_server}/s/test_finances/holdings")
     page.locator("[data-file-picker]").click()
     page.locator("[data-file-picker-dropdown]").wait_for(state="visible")
     page.get_by_text("New file").click()
@@ -114,7 +114,7 @@ def test_file_picker_rename_file(page, flask_server):
 def test_file_picker_select_file(page, flask_server):
     """Selecting a different file reloads the page with that file's data."""
     # First create a second file so we have something to switch to
-    page.goto(f"{flask_server}/s/test_finances/accounts")
+    page.goto(f"{flask_server}/s/test_finances/holdings")
     page.locator("[data-file-picker]").click()
     page.locator("[data-file-picker-dropdown]").wait_for(state="visible")
     page.get_by_text("New file").click()
@@ -139,7 +139,7 @@ def test_file_picker_select_file(page, flask_server):
 def test_file_picker_hover_reveals_delete_button(page, flask_server):
     """Hovering a non-active file row reveals its delete button."""
     # Create a second file so test_finances becomes non-active after switching
-    page.goto(f"{flask_server}/s/test_finances/accounts")
+    page.goto(f"{flask_server}/s/test_finances/holdings")
     page.locator("[data-file-picker]").click()
     page.locator("[data-file-picker-dropdown]").wait_for(state="visible")
     page.get_by_text("New file").click()
@@ -163,7 +163,7 @@ def test_file_picker_hover_reveals_delete_button(page, flask_server):
 def test_file_picker_delete_non_active(page, flask_server):
     """Deleting a non-active file stays on a valid page."""
     # First create a file to delete
-    page.goto(f"{flask_server}/s/test_finances/accounts")
+    page.goto(f"{flask_server}/s/test_finances/holdings")
     page.locator("[data-file-picker]").click()
     page.locator("[data-file-picker-dropdown]").wait_for(state="visible")
     page.get_by_text("New file").click()

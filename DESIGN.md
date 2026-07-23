@@ -225,18 +225,25 @@ Single Flask app (`web/app.py`), port 5003 (`FINTRACK_PORT`), database from
 `/s/<snapshot>/<section>`, with
 `?edit=1` toggling spreadsheet-style edit mode on the net-worth pages.
 
-Navigation is two-tier and task-oriented: a primary row with two group tabs —
-`Finances` (Holdings · Budget · Projections) and `Spending`
-(Transactions · Trends · Merchants) — and a secondary row showing the active
-group's sub-tabs. Holdings is the landing page; each group tab remembers its
-last-visited sub-tab for the session (sessionStorage, `web/static/js/nav.js`).
-Holdings subsumes the old standalone Accounts and Assets sheets, which were
-retired — it is one dense, spreadsheet-style view over the same tables.
-Information density is a deliberate feature of these sheets, not a problem to
-design around. Net worth shows under the Holdings sub-tab (the "fintrack" title
-carries no figure). Holdings' structure and the invariants that keep the sticky
-chrome correct are documented under [Holdings sheet](#holdings-sheet) below.
-Import is an icon button in the header rather than a tab, and the edit-mode
+Navigation is a **single-row top bar plus a collapsible side navigation**. The
+top bar carries only a nav toggle (`☰`), the current page name, and the always-
+visible utility controls — the lock/edit toggle, Import, the theme cycle, and
+the snapshot picker. Primary navigation lives in a grouped outline
+(`Finances`: Holdings · Budget · Projections; `Spending`: Trends ·
+Transactions · Merchants — group headings are labels, only the destinations are
+links). On wide screens (≥`lg`, 1024px) that outline is a docked left sidebar;
+the `☰` collapses it to reclaim horizontal width for the dense sheets. Below the
+breakpoint it collapses to a hamburger that opens the same outline as an overlay
+drawer, so a narrow header never clips. It is one responsive component (Alpine
+state on `<body>`), not two nav systems — which is why it reads consistently
+across desktop, mobile portrait, and mobile landscape (where the single top bar
+is the big vertical reclaim). Holdings is the landing page. Holdings subsumes the
+old standalone Accounts and Assets sheets, which were retired — it is one dense,
+spreadsheet-style view over the same tables; information density is a deliberate
+feature of these sheets, not a problem to design around. Net worth shows in the
+Holdings sheet's footer (the header carries no figures). Holdings' structure and
+the invariants that keep the sticky chrome correct are documented under
+[Holdings sheet](#holdings-sheet) below. Import is a header icon; the edit-mode
 lock is functional only on the pages that honor it (Holdings, Budget — muted
 elsewhere). The old `/s/<snapshot>/status` dashboard was removed; its URL
 redirects to Holdings.

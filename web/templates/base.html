@@ -424,63 +424,39 @@
     </style>
 </head>
 
-<body class="h-full flex flex-col overflow-hidden bg-gray-50 dark:bg-gray-900 dark:text-gray-100">
-    <header id="main-header" class="bg-blue-800 text-white shadow sticky top-0 z-50">
-        {# Two-tier navigation: routes still set active_tab per page; the
-           active group (Finances / Spending) is derived from it here so
-           routes never need to know about groups. Pages outside both groups
-           (import) render with neither group active. The lock/edit toggle
-           is only functional on the pages that honor edit mode. #}
+<body x-data="{ navOpen: window.matchMedia('(min-width: 1024px)').matches, init() { this._narrow = window.matchMedia('(max-width: 1023px)').matches; window.addEventListener('resize', () => { const n = window.matchMedia('(max-width: 1023px)').matches; if (n !== this._narrow) { this._narrow = n; this.navOpen = !n; } }); } }" class="h-full flex flex-col overflow-hidden bg-gray-50 dark:bg-gray-900 dark:text-gray-100">
+    <header id="main-header" class="bg-blue-800 text-white shadow z-50 shrink-0">
+        {# Single-row top bar. Primary navigation lives in the collapsible sidebar
+           below (grouped outline) — docked on wide screens, a hamburger drawer
+           when narrow. This bar carries only the nav toggle, the current page
+           name, and the always-visible utilities (lock/edit, import, theme,
+           snapshot picker). #}
         {% set _cur_tab = active_tab if active_tab is defined else none %}
-        {% set _active_group = 'finances' if _cur_tab in ('budget', 'holdings', 'projections')
-            else ('spending' if _cur_tab in ('transactions', 'trends', 'merchants') else none) %}
         {% set _edit_honoring = _cur_tab in ('holdings', 'budget') %}
-        <!-- Row 1: title + controls -->
-        <div class="flex items-center px-4">
+        {% set _page_names = {'holdings':'Holdings','budget':'Budget','projections':'Projections','trends':'Trends','transactions':'Transactions','merchants':'Merchants','import':'Import'} %}
+        {% set _page_name = _page_names.get(_cur_tab, '') %}
+        <div class="flex items-center h-12 px-2 gap-1">
             {% if filename %}
-            <a href="{{ url_for('holdings.holdings_view', filename=filename, edit=1 if edit_mode else none) }}"
-                class="font-semibold text-lg text-white hover:text-blue-100 py-2 pr-6 shrink-0 whitespace-nowrap">
-                fintrack
-            </a>
+            <button type="button" @click="navOpen = !navOpen" data-nav-toggle title="Menu"
+                aria-label="Toggle navigation" :aria-expanded="navOpen ? 'true' : 'false'"
+                class="p-2 rounded hover:bg-blue-700 shrink-0 text-white">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+                </svg>
+            </button>
+            <span class="font-semibold text-base text-white whitespace-nowrap px-1">{{ _page_name }}</span>
             {% else %}
-            <a href="{{ url_for('status.status_view') }}"
-                class="font-semibold text-lg text-white hover:text-blue-100 py-2 pr-6 shrink-0 whitespace-nowrap">
-                fintrack
-            </a>
+            <span class="font-semibold text-lg text-white px-2">fintrack</span>
             {% endif %}
 
-            {# Group tabs (Finances / Spending) live inline in the header row,
-               between the title and the right-hand controls. They carry no
-               totals line (net worth shows under the Holdings sub-tab), so they
-               render as single-line pills. Sub-tabs (Accounts, Budget,
-               … / Transactions, Trends, …) remain in their own full-width row
-               below. data-nav / data-nav-group / data-nav-active-group are
-               required by web/static/js/nav.js (group-tab memory); keep them. #}
-            {% if filename %}
-            {# Group tabs render as underline tabs (QA item 7) so they read like
-               the sub-tabs below, rather than as ambiguous pills. #}
-            {% set _grp_active = 'border-white text-white' %}
-            {% set _grp_idle = 'border-transparent text-blue-100 hover:text-white hover:border-blue-400' %}
-            {% set _grp_cls = 'px-3 flex items-center text-sm font-medium border-b-2 transition-colors' %}
-            <nav class="flex items-stretch gap-2 ml-3 shrink-0 self-stretch" data-nav data-nav-file="{{ filename }}"
-                {% if _active_group %}data-nav-active-group="{{ _active_group }}"{% endif %}>
-                <a href="{{ url_for('holdings.holdings_view', filename=filename, edit=1 if edit_mode else none) }}"
-                    data-nav-group="finances"
-                    class="{{ _grp_cls }} {% if _active_group == 'finances' %}{{ _grp_active }}{% else %}{{ _grp_idle }}{% endif %}">Finances</a>
-                <a href="/s/{{ filename }}/trends" data-nav-group="spending"
-                    class="{{ _grp_cls }} {% if _active_group == 'spending' %}{{ _grp_active }}{% else %}{{ _grp_idle }}{% endif %}">Spending</a>
-            </nav>
-            {% endif %}
-
-            {# Shared header pill: icon + label with a `sm:`-collapsing label,
-               reused by the Import link and the lock/edit toggle so they stay
-               visually consistent and shrink to icon-only on narrow screens. #}
+            {# Shared header pill: icon + label with a `md:`-collapsing label, reused
+               by Import and the lock/edit toggle so they stay consistent and shrink
+               to icon-only on narrow screens. #}
             {% set _hdr_pill = 'flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors' %}
-            <div class="flex items-center ml-auto gap-2 shrink-0">
-            <!-- Lock/Unlock edit mode: functional only on pages that honor
-                 edit mode (accounts, budget, assets); elsewhere a same-size
-                 muted, non-interactive lock keeps the controls from
-                 shifting. -->
+            <div class="flex items-center ml-auto gap-1 shrink-0">
+                <!-- Lock/Unlock edit mode: functional only on pages that honor edit
+                     mode (Holdings, Budget); elsewhere a same-size muted, non-
+                     interactive lock keeps the controls from shifting. -->
             {% if filename %}
             {% if _edit_honoring %}
             <form method="POST" action="{{ url_for('edit_mode.toggle') }}" class="flex items-center py-2" data-edit-toggle>
@@ -677,94 +653,43 @@
                     </template>
                 </div>
             </div>
-            </div><!-- end right controls -->
-        </div><!-- end row 1 -->
-
-        <!-- Sub-tab row (full width)
-
-             The active group's sub-tabs (Accounts/Budget/Assets/Projections
-             or Transactions/Trends/Merchants). The group tabs themselves
-             (Finances / Spending) live inline in the header row above. Every
-             sub-tab renders exactly two lines: a label and a totals line,
-             regardless of whether that route computes a quick total, so the
-             row is a constant height on every page. Routes that don't call
-             get_common_context (e.g. transactions, trends) leave n2/n3/n6
-             as None; rather than omitting the totals line entirely (which
-             used to make the row shorter and visibly jump when switching
-             tabs), the line is always rendered and the `invisible` utility
-             class (visibility:hidden, still occupies layout space) hides it
-             when there's nothing to show. The same applies to the whole row:
-             on pages where neither group is active (import), the row still
-             renders with an invisible placeholder tab so the header keeps its
-             height. Do not reintroduce a conditional that wraps the entire
-             totals span (or the sub-tab row) in an if-block keyed on n2/n3/n6
-             or the active group — that recreates the jitter bug (QA item 16).
-
-             web/static/js/nav.js records the current group + sub-tab in
-             sessionStorage (keyed on the data-nav-* attributes on the header
-             group nav) and rewrites the group-tab hrefs so each group tab
-             returns to its last-visited sub-tab; without JS the tabs fall
-             back to the server-rendered defaults (Finances→Accounts,
-             Spending→Transactions). -->
-        {% if filename %}
-        {% set _tab_active = 'border-white text-white' %}
-        {% set _tab_idle = 'border-transparent text-blue-100 hover:text-white hover:border-blue-400' %}
-        {% set _tab_total_cls = 'text-xs font-normal tabular-nums' %}
-        {% set _tab_cls = 'flex-1 py-2 flex flex-col items-center text-sm font-medium border-b-2 transition-colors' %}
-        {# Net worth (liquid − CC + non-liquid assets) shown under the Holdings
-           tab, matching the Holdings page's Net worth footer. #}
-        {% set _networth = (n2 + n6) if (n2 is not none and n6 is not none) else none %}
-        {% if _active_group == 'finances' %}
-        <nav class="flex border-t border-blue-700 bg-blue-900/25" data-nav-sub>
-            <a href="{{ url_for('holdings.holdings_view', filename=filename, edit=1 if edit_mode else none) }}"
-                class="{{ _tab_cls }} {% if _cur_tab == 'holdings' %}{{ _tab_active }}{% else %}{{ _tab_idle }}{% endif %}">
-                <span>Holdings</span>
-                <span class="{{ _tab_total_cls }} {% if _networth is none %}invisible{% elif _networth | display_is_negative %}text-red-300{% else %}opacity-75{% endif %}" {% if _networth is none %}aria-hidden="true"{% endif %}>{{ (_networth | fmt_money_header) if _networth is not none else ' ' }}</span>
-            </a>
-            <a href="{{ url_for('budget.budget_view', filename=filename, edit=1 if edit_mode else none) }}"
-                class="{{ _tab_cls }} {% if _cur_tab == 'budget' %}{{ _tab_active }}{% else %}{{ _tab_idle }}{% endif %}">
-                <span>Budget</span>
-                <span class="{{ _tab_total_cls }} {% if n3 is none %}invisible{% elif n3 | display_is_negative %}text-red-300{% else %}opacity-75{% endif %}" {% if n3 is none %}aria-hidden="true"{% endif %}>{{ (n3 | fmt_money_header) if n3 is not none else ' ' }}</span>
-            </a>
-            <a href="{{ url_for('projections.projections_view', filename=filename, edit=1 if edit_mode else none) }}"
-                class="{{ _tab_cls }} {% if _cur_tab == 'projections' %}{{ _tab_active }}{% else %}{{ _tab_idle }}{% endif %}">
-                <span>Projections</span>
-                <span class="{{ _tab_total_cls }} invisible" aria-hidden="true">&nbsp;</span>
-            </a>
-        </nav>
-        {% elif _active_group == 'spending' %}
-        <nav class="flex border-t border-blue-700 bg-blue-900/25" data-nav-sub>
-            <a href="/s/{{ filename }}/trends"
-                class="{{ _tab_cls }} {% if _cur_tab == 'trends' %}{{ _tab_active }}{% else %}{{ _tab_idle }}{% endif %}">
-                <span>Trends</span>
-                <span class="{{ _tab_total_cls }} invisible" aria-hidden="true">&nbsp;</span>
-            </a>
-            <a href="/s/{{ filename }}/transactions"
-                class="{{ _tab_cls }} {% if _cur_tab == 'transactions' %}{{ _tab_active }}{% else %}{{ _tab_idle }}{% endif %}">
-                <span>Transactions</span>
-                <span class="{{ _tab_total_cls }} invisible" aria-hidden="true">&nbsp;</span>
-            </a>
-            <a href="/s/{{ filename }}/merchants"
-                class="{{ _tab_cls }} {% if _cur_tab == 'merchants' %}{{ _tab_active }}{% else %}{{ _tab_idle }}{% endif %}">
-                <span>Merchants</span>
-                <span class="{{ _tab_total_cls }} invisible" aria-hidden="true">&nbsp;</span>
-            </a>
-        </nav>
-        {% else %}
-        <!-- No active group (e.g. import): height-reserved empty sub-row -->
-        <nav class="flex border-t border-blue-700 bg-blue-900/25" data-nav-sub aria-hidden="true">
-            <span class="{{ _tab_cls }} border-transparent invisible">
-                <span>&nbsp;</span>
-                <span class="{{ _tab_total_cls }}">&nbsp;</span>
-            </span>
-        </nav>
-        {% endif %}
-        {% endif %}
+            </div><!-- end utility cluster -->
+        </div><!-- end top bar -->
     </header>
 
-    <main class="flex-1 min-h-0 flex flex-col px-2 py-2">
-        {% block content %}{% endblock %}
-    </main>
+    <div class="flex flex-1 min-h-0">
+        {% if filename %}
+        <!-- Scrim behind the mobile drawer -->
+        <div x-show="navOpen" x-transition.opacity @click="navOpen = false"
+            class="fixed inset-0 top-12 bg-black/40 z-30 lg:hidden"></div>
+
+        {# Primary navigation: docked sidebar on wide screens (>=lg), overlay
+           drawer when narrow. Grouped outline — headings are labels, only the
+           destination pages are links. #}
+        {% set _side = 'block px-6 py-1.5 mr-2 rounded-r-full transition-colors' %}
+        {% set _side_idle = 'text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700' %}
+        {% set _side_active = 'bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-200 font-medium' %}
+        {% set _side_head = 'px-4 pt-3 pb-1 text-[11px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500' %}
+        <nav aria-label="Sections" data-nav-sidebar
+            class="w-60 shrink-0 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 overflow-y-auto z-40 fixed top-12 bottom-0 left-0 -translate-x-full transition-transform lg:static lg:top-0 lg:translate-x-0"
+            :class="navOpen ? 'translate-x-0' : '-translate-x-full lg:hidden'">
+            <div class="py-2 text-sm">
+                <div class="{{ _side_head }}">Finances</div>
+                <a href="{{ url_for('holdings.holdings_view', filename=filename, edit=1 if edit_mode else none) }}" class="{{ _side }} {% if _cur_tab == 'holdings' %}{{ _side_active }}{% else %}{{ _side_idle }}{% endif %}"{% if _cur_tab == 'holdings' %} aria-current="page"{% endif %}>Holdings</a>
+                <a href="{{ url_for('budget.budget_view', filename=filename, edit=1 if edit_mode else none) }}" class="{{ _side }} {% if _cur_tab == 'budget' %}{{ _side_active }}{% else %}{{ _side_idle }}{% endif %}"{% if _cur_tab == 'budget' %} aria-current="page"{% endif %}>Budget</a>
+                <a href="{{ url_for('projections.projections_view', filename=filename, edit=1 if edit_mode else none) }}" class="{{ _side }} {% if _cur_tab == 'projections' %}{{ _side_active }}{% else %}{{ _side_idle }}{% endif %}"{% if _cur_tab == 'projections' %} aria-current="page"{% endif %}>Projections</a>
+                <div class="{{ _side_head }}">Spending</div>
+                <a href="/s/{{ filename }}/trends" class="{{ _side }} {% if _cur_tab == 'trends' %}{{ _side_active }}{% else %}{{ _side_idle }}{% endif %}"{% if _cur_tab == 'trends' %} aria-current="page"{% endif %}>Trends</a>
+                <a href="/s/{{ filename }}/transactions" class="{{ _side }} {% if _cur_tab == 'transactions' %}{{ _side_active }}{% else %}{{ _side_idle }}{% endif %}"{% if _cur_tab == 'transactions' %} aria-current="page"{% endif %}>Transactions</a>
+                <a href="/s/{{ filename }}/merchants" class="{{ _side }} {% if _cur_tab == 'merchants' %}{{ _side_active }}{% else %}{{ _side_idle }}{% endif %}"{% if _cur_tab == 'merchants' %} aria-current="page"{% endif %}>Merchants</a>
+            </div>
+        </nav>
+        {% endif %}
+
+        <main class="flex-1 min-w-0 min-h-0 flex flex-col px-2 py-2">
+            {% block content %}{% endblock %}
+        </main>
+    </div>
 
     <script src="{{ url_for('static', filename='js/vendor/Sortable.min.js') }}"></script>
     <script src="{{ url_for('static', filename='js/sortable.js') }}"></script>
@@ -773,7 +698,6 @@
     <script src="{{ url_for('static', filename='js/row-reorder.js') }}"></script>
     <script src="{{ url_for('static', filename='js/ledger.js') }}"></script>
     <script src="{{ url_for('static', filename='js/sheet-scroll.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/nav.js') }}"></script>
     <script src="{{ url_for('static', filename='js/shortcuts.js') }}"></script>
 </body>
 

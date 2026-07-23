@@ -454,6 +454,15 @@
             left: 0;
             right: var(--sheet-right-h, 0px);
             height: 1.75rem;
+            /* Above the sticky group heading/header rows (z-7), same as the side
+               shadows: on the grouped Holdings sheet a blue group-heading row
+               that is mid-scroll (sticky, so z-7) would otherwise paint over the
+               top/bottom shadow instead of under it, so the shadow appeared to
+               stop at those rows. The geometry (--sheet-header-h / --sheet-footer-h
+               insets) already keeps these shadows off the *pinned* header/footer
+               chrome, so a higher z only covers mid-scroll content — which is the
+               intent. */
+            z-index: 8;
         }
 
         /* The side (left/right) shadows signal horizontally-hidden columns, so

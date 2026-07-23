@@ -81,6 +81,13 @@ def index():
     prev_year = year if month > 1 else year - 1
     next_month = month + 1 if month < 12 else 1
     next_year = year if month < 12 else year + 1
+    # "Latest" = the current calendar month; mirror the Trends pager (Latest
+    # button + disabled next arrow once you're at/after it) so both time pagers
+    # behave identically.
+    is_latest = (year, month) >= (today.year, today.month)
+    # Human-readable month label ("Jul 2026"), matching the Trends window label
+    # (%b %Y) so the two pagers read the same.
+    month_label = f"{date(year, month, 1):%b %Y}"
 
     template = (
         "partials/transactions_content.html"
@@ -99,6 +106,8 @@ def index():
         prev_month=prev_month,
         next_year=next_year,
         next_month=next_month,
+        is_latest=is_latest,
+        month_label=month_label,
         selected_categories=selected_categories,
         selected_accounts=selected_accounts,
         q=amount or search or "",

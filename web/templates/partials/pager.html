@@ -12,6 +12,34 @@
    shown (Trends) — disabled at the latest window rather than removed, so the
    controls don't shift when you page away from latest (QA item 20). is_latest
    disables the next arrow too. #}
+{# Shared segmented control: a row of joined pills where exactly one is active,
+   used for the mutually-exclusive time-range selectors on Transactions
+   (This month / All time) and Trends (Quarterly / Year to Date / Trailing 12 Mo)
+   so both pages share one look and one implementation (issue #1).
+
+   options: list of {url, label, active}. The first pill has no left border;
+   each subsequent pill draws a divider, so they read as one contiguous form.
+
+   - target/use_htmx: htmx partial-swap pages pass use_htmx=true (default) and a
+     hx-target; pages that navigate full-page (e.g. Projections) pass
+     use_htmx=false for plain <a> links.
+   - size: 'md' (default) for the standalone top control clusters (Trends /
+     Transactions); 'sm' for a compact control that sits inline in a filter bar
+     (Projections Months). #}
+{%- macro segmented(options, target='#content', use_htmx=true, size='md') -%}
+{% set _pad = 'px-3 h-8' if size == 'md' else 'px-2.5 py-1' %}
+{% set _seg = '%s flex items-center text-sm transition-colors whitespace-nowrap' | format(_pad) %}
+{% set _seg_on = 'bg-blue-500 text-white' %}
+{% set _seg_off = 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600' %}
+<div class="inline-flex {{ 'h-8' if size == 'md' else '' }} rounded-md border border-gray-300 dark:border-gray-600 overflow-hidden">
+    {% for o in options %}
+    <a href="{{ o.url }}" {% if use_htmx %}hx-get="{{ o.url }}" hx-target="{{ target }}" hx-push-url="true"{% endif %}
+       class="{{ _seg }} {{ '' if loop.first else 'border-l border-gray-300 dark:border-gray-600' }} {{ _seg_on if o.active else _seg_off }}">{{ o.label }}</a>
+    {% endfor %}
+</div>
+{%- endmacro -%}
+
+
 {%- macro pager(prev_url, next_url, label, is_latest=false, latest_url=none, target='#content', label_width='w-28') -%}
 {% set _btn = 'h-8 w-8 flex items-center justify-center rounded-md border border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer' %}
 {% set _btn_off = 'h-8 w-8 flex items-center justify-center rounded-md border border-gray-200 dark:border-gray-700 text-gray-300 dark:text-gray-600 cursor-not-allowed' %}

@@ -72,9 +72,10 @@ def test_transactions_combined_filter_by_text(page, confirmed_server):
 
 
 def test_transactions_month_label_displayed(page, flask_server):
-    """Current month/year label is shown (MM/YYYY format)."""
+    """Current month/year label is shown (human-readable "Mon YYYY", matching
+    the Trends window label)."""
     page.goto(f"{flask_server}/s/ledger/transactions?year=2026&month=4")
-    assert page.locator("text=/\\d{2}\\/\\d{4}/").first.is_visible()
+    assert page.locator("text=Apr 2026").first.is_visible()
 
 
 def test_transactions_prev_arrow_navigates(page, flask_server):

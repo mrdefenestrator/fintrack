@@ -28,15 +28,17 @@
 {% endif %}
 {% for group in groups %}
 <tbody class="holdings-group" data-group="{{ group.key }}"{% if edit_mode and group.reorderable %} data-reorder-url="{{ url_for('holdings.reorder', filename=filename, group=group.key) }}"{% endif %}>
-    {# Opaque backgrounds: the band rows are sticky, so translucency would let
-       scrolled data show through them. Underline + left accent are drawn as
-       box-shadows in holdings.html (border-collapse borders scroll away / shift
-       when the band is sticky — QA #5). #}
-    {% set _band = 'bg-blue-50 dark:bg-blue-950' %}
+    {# Per-group color coding lives in holdings.html (issue #4): this tbody's
+       data-group keys the band tint, the accent top/bottom borders, the left
+       rail and the label color. Backgrounds are opaque (the band rows are sticky;
+       translucency would let scrolled data show through) and the borders are
+       box-shadows (border-collapse borders scroll away / shift when the band is
+       sticky — QA #5). The total stays neutral so it never fights the band tint;
+       negatives still go red. #}
     <tr class="holdings-group-heading">
-        <td colspan="3" class="{{ _band }} px-2 py-1.5 text-xs font-semibold uppercase tracking-wide text-blue-800 dark:text-blue-200">{{ group.label }}</td>
-        <td class="{{ _band }} px-1.5 py-1.5 text-right tabular-nums text-sm font-semibold text-blue-900 dark:text-blue-100 {% if group.total | display_is_negative %}!text-red-600 dark:!text-red-400{% endif %}">{{ group.total }}</td>
-        <td colspan="{{ span - 4 }}" class="{{ _band }}"></td>
+        <td colspan="3" class="px-2 py-1.5 text-xs font-semibold uppercase tracking-wide">{{ group.label }}</td>
+        <td class="px-1.5 py-1.5 text-right tabular-nums text-sm font-semibold text-gray-900 dark:text-gray-100 {% if group.total | display_is_negative %}!text-red-600 dark:!text-red-400{% endif %}">{{ group.total }}</td>
+        <td colspan="{{ span - 4 }}"></td>
     </tr>
     <tr class="holdings-group-header bg-gray-100 dark:bg-gray-700">
         {% for h in group.headers %}

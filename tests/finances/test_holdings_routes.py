@@ -93,8 +93,9 @@ def test_holdings_view_has_no_tier_or_kind_surface(client):
 
 
 def test_holdings_view_row_accents_by_asset_liability(client):
-    """Rows carry a data-accent so the first cell gets the green/red left accent
-    (painted on the cell, not the row, for WebKit border-collapse reliability)."""
+    """Rows carry a data-accent recording asset/liability polarity. (The left
+    accent rail is now colored per group, not by this attribute — issue #4 — but
+    the attribute is kept for semantics.)"""
     resp = client.get("/s/finances/holdings")
     rows = _rows_region(resp.get_data(as_text=True))
     assert 'data-accent="asset"' in rows  # the checking account

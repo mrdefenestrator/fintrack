@@ -1,14 +1,13 @@
 {% import "partials/pager.html" as nav %}
 <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
-    <div class="flex items-center gap-2">
-        {% for p, label in [("quarterly", "Quarterly"), ("ytd", "Year to Date"), ("trailing12", "Trailing 12 Mo")] %}
-        <a href="/s/{{ filename }}/trends?period={{ p }}{{ end_qs }}"
-           hx-get="/s/{{ filename }}/trends?period={{ p }}{{ end_qs }}" hx-target="#content" hx-push-url="true"
-           class="px-3 py-1.5 text-sm rounded {{ 'bg-blue-500 text-white' if period == p else 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600' }}">
-            {{ label }}
-        </a>
-        {% endfor %}
-    </div>
+    {% set _period_opts = [] %}
+    {% for p, label in [("quarterly", "Quarterly"), ("ytd", "Year to Date"), ("trailing12", "Trailing 12 Mo")] %}
+    {% set _ = _period_opts.append({
+        'url': "/s/%s/trends?period=%s%s" | format(filename, p, end_qs),
+        'label': label,
+        'active': period == p}) %}
+    {% endfor %}
+    {{ nav.segmented(_period_opts) }}
     {{ nav.pager(
         prev_url="/s/%s/trends?period=%s&end=%s" | format(filename, period, prev_end),
         next_url="/s/%s/trends?period=%s&end=%s" | format(filename, period, next_end),

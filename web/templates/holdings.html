@@ -6,17 +6,37 @@
 {% import "partials/sheet_filter_bar.html" as fb %}
 
 <style>
-    /* Asset (green) / liability (red) left accent. Drawn as an inset box-shadow
-       on the first *cell*, not a border: a border-collapse border is painted in
-       the table's own layer, which WebKit renders over/beside the sticky header,
-       heading, and total rows — so the accent of a data row scrolling behind
-       them leaked out in the gaps. A box-shadow paints with the cell in the
-       data row's (z-auto) layer, so the z-7 sticky chrome reliably covers it. */
-    #holdings-table tr[data-accent="asset"] > td:first-child {
-        box-shadow: inset 4px 0 0 #34d399;   /* emerald-400 */
+    /* Per-group color coding (issue #4). Each type group gets one accent color,
+       declared as custom properties on its <tbody data-group>; every rule below
+       reads var(--accent)/--band/--label, so the whole palette lives here. It is
+       temperature-coded — cool = you own it (Cash emerald, Assets blue), warm =
+       you owe it (Credit Cards rose, Loans amber) — so the old asset/liability
+       read survives while each group also gains its own identity. (Data rows keep
+       their data-accent attribute for semantics; it no longer drives color.) */
+    #holdings-table .holdings-group[data-group="cash"]   { --accent: #34d399; --band: #ecfdf5; --band-dark: #022c22; --label: #065f46; --label-dark: #6ee7b7; }
+    #holdings-table .holdings-group[data-group="credit"] { --accent: #fb7185; --band: #fff1f2; --band-dark: #4c0519; --label: #9f1239; --label-dark: #fda4af; }
+    #holdings-table .holdings-group[data-group="loan"]   { --accent: #fbbf24; --band: #fffbeb; --band-dark: #451a03; --label: #92400e; --label-dark: #fcd34d; }
+    #holdings-table .holdings-group[data-group="asset"]  { --accent: #3b82f6; --band: #eff6ff; --band-dark: #172554; --label: #1e40af; --label-dark: #bfdbfe; }
+
+    /* Continuous left accent rail down the whole group (heading, column header,
+       data rows, add-row) so each group reads as one block. Drawn as an inset
+       box-shadow, not a border-collapse border: a collapsed border is painted in
+       the table's own layer, which WebKit renders over/beside the sticky heading/
+       header/total rows — so a rail on a data row scrolling behind them leaked out
+       in the gaps. A box-shadow paints with the cell (z-auto), so the z-7 sticky
+       chrome reliably covers it. The heading/header first-cell rules below repeat
+       the rail (a more specific box-shadow fully replaces this one). */
+    #holdings-table .holdings-group > tr > :first-child {
+        box-shadow: inset 4px 0 0 var(--accent);
     }
-    #holdings-table tr[data-accent="liability"] > td:first-child {
-        box-shadow: inset 4px 0 0 #fb7185;   /* rose-400 */
+    /* Lift the data-row accent rail above the top scroll shadow (z-4) so the rail
+       stays crisp as rows scroll up under the pinned header, while the shadow
+       still falls over the rest of the data cells. Kept below the sticky group
+       chrome (z-7) and the actions column (z-6) so the accent still clips
+       correctly behind them (the box-shadow-not-border reason above). */
+    #holdings-table .holdings-group > tr[data-accent] > td:first-child {
+        position: relative;
+        z-index: 5;
     }
     /* Actions column sticks to the right edge; data scrolls behind it. A uniform
        background (the actions column is chrome, not data) keeps scrolled cells
@@ -58,23 +78,23 @@
         position: sticky;
         top: 0;
         z-index: 7;
-        /* Borders are drawn as box-shadow, not border-collapse borders: a
-           collapsed border belongs to the table's paint layer and scrolls away
-           when the row is sticky, so the heading/header borders would vanish on
-           scroll (QA #5). A box-shadow is painted with the sticky cell and stays
-           put. Heading band: blue-200 underline. */
-        box-shadow: inset 0 -1px 0 #bfdbfe;
+        /* Tinted band + a continuous accent border on BOTH the top and bottom
+           edge of the title row (issue #4). Applied to every cell so the two
+           lines run the full row width. Drawn as box-shadows, not border-collapse
+           borders: a collapsed border belongs to the table's paint layer and
+           scrolls away / shifts when the row is sticky (QA #5); a box-shadow is
+           painted with the sticky cell and stays put. */
+        background: var(--band);
+        box-shadow: inset 0 1px 0 var(--accent), inset 0 -1px 0 var(--accent);
     }
-    .dark #holdings-table .holdings-group-heading > td { box-shadow: inset 0 -1px 0 #1e3a8a; }  /* blue-900 */
-    /* The band's blue-500 left accent, also a box-shadow (see above): a
-       collapsed border-left shifted out of place when the sticky band scrolled.
-       Combined with the underline on the first cell. */
+    .dark #holdings-table .holdings-group-heading > td { background: var(--band-dark); }
+    /* First cell also carries the left rail (composed with the top/bottom accent
+       borders) and the group-colored label text. */
     #holdings-table .holdings-group-heading > td:first-child {
-        box-shadow: inset 4px 0 0 #3b82f6, inset 0 -1px 0 #bfdbfe;
+        color: var(--label);
+        box-shadow: inset 4px 0 0 var(--accent), inset 0 1px 0 var(--accent), inset 0 -1px 0 var(--accent);
     }
-    .dark #holdings-table .holdings-group-heading > td:first-child {
-        box-shadow: inset 4px 0 0 #3b82f6, inset 0 -1px 0 #1e3a8a;
-    }
+    .dark #holdings-table .holdings-group-heading > td:first-child { color: var(--label-dark); }
     #holdings-table .holdings-group-header > th {
         position: sticky;
         top: var(--sheet-heading-h, 1.75rem);
@@ -96,6 +116,16 @@
     }
     .dark #holdings-table .holdings-group-header > th:not(:last-child) {
         box-shadow: inset -1px 0 0 #4b5563, inset 0 -2px 0 #4b5563;
+    }
+    /* The column-header row joins the accent rail too, keeping it continuous
+       through the group; compose it with the divider + underline above. (Ordered
+       after the :not(:last-child) rule — equal specificity — so it wins for the
+       first cell.) */
+    #holdings-table .holdings-group-header > th:first-child {
+        box-shadow: inset 4px 0 0 var(--accent), inset -1px 0 0 #e5e7eb, inset 0 -2px 0 #d1d5db;
+    }
+    .dark #holdings-table .holdings-group-header > th:first-child {
+        box-shadow: inset 4px 0 0 var(--accent), inset -1px 0 0 #4b5563, inset 0 -2px 0 #4b5563;
     }
     /* Two-line master footer (Liquid `total-upper` pinned above Net worth) is
        shared in base.html: `.table-scroll-container tr.total-row.total-upper`. */

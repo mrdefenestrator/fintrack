@@ -23,28 +23,28 @@
 
 <span id="month-state" data-year="{{ year }}" data-month="{{ month }}" hidden></span>
 
-{# Time navigation (This month / All time + month pager) — its own right-aligned
-   cluster next to the filter card, since it navigates rather than filters. #}
-<div class="shrink-0 mb-2 flex items-center justify-end gap-2">
-    {% set _seg = 'px-3 h-8 flex items-center text-sm transition-colors' %}
-    {% set _seg_on = 'bg-blue-500 text-white' %}
-    {% set _seg_off = 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600' %}
-    <div class="inline-flex h-8 rounded-md border border-gray-300 dark:border-gray-600 overflow-hidden">
-        <a href="{{ _url }}?year={{ year }}&month={{ month }}{{ filter_qs }}"
-           hx-get="{{ _url }}?year={{ year }}&month={{ month }}{{ filter_qs }}"
-           hx-target="#content" hx-push-url="true"
-           class="{{ _seg }} {{ _seg_off if all_months else _seg_on }}">This month</a>
-        <a href="{{ _url }}?all_months=true{{ filter_qs }}"
-           hx-get="{{ _url }}?all_months=true{{ filter_qs }}"
-           hx-target="#content" hx-push-url="true"
-           class="{{ _seg }} border-l border-gray-300 dark:border-gray-600 {{ _seg_on if all_months else _seg_off }}">All time</a>
-    </div>
+{# Time navigation (This month / All time + month pager) — a left-aligned cluster
+   above the filter card, matching the Trends layout (segmented control on the
+   left, window pager on the right) so both pages share one control language
+   (issue #1). #}
+<div class="shrink-0 mb-2 flex flex-wrap items-center justify-between gap-2">
+    {{ nav.segmented([
+        {'url': "%s?year=%s&month=%s%s" | format(_url, year, month, filter_qs),
+         'label': 'This month', 'active': not all_months},
+        {'url': "%s?all_months=true%s" | format(_url, filter_qs),
+         'label': 'All time', 'active': all_months}]) }}
+    {# Latest carries the current month explicitly (not a bare URL): the global
+       htmx:configRequest handler (ledger.js) injects the currently-viewed month
+       into any /transactions request missing year/month, which would otherwise
+       send Latest right back to the month you're on. #}
     {% if not all_months %}
     {{ nav.pager(
         prev_url="%s?year=%s&month=%s%s" | format(_url, prev_year, prev_month, filter_qs),
         next_url="%s?year=%s&month=%s%s" | format(_url, next_year, next_month, filter_qs),
-        label="%02d/%d" | format(month, year),
-        label_width='w-20') }}
+        label=month_label,
+        is_latest=is_latest,
+        latest_url="%s?year=%s&month=%s%s" | format(_url, latest_year, latest_month, filter_qs),
+        label_width='w-24') }}
     {% endif %}
 </div>
 

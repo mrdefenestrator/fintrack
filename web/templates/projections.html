@@ -3,6 +3,7 @@
 {% block content %}
 {% import "partials/sheet.html" as sheet %}
 {% import "partials/sheet_filter_bar.html" as fb %}
+{% import "partials/pager.html" as nav %}
 
 {# The accounts×months grid uses the shared sheet chrome: `.table-scroll-container`
    + `data-sheet-scroll` (sticky header, edge shadows, grid canvas, bottom-pinned
@@ -108,14 +109,16 @@
    no Reset). Matches the Holdings/Budget/Transactions filter card. #}
 {% call fb.filter_bar(active_count=0, reset_url='', label='Options',
     icon='M10.5 6h9.75M10.5 6a1.5 1.5 0 1 1-3 0m3 0a1.5 1.5 0 1 0-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-9.75 0h9.75') %}
-    <div class="flex items-center gap-1">
-        <span class="text-gray-500 dark:text-gray-400 mr-1">Months:</span>
+    <div class="flex items-center gap-2">
+        <span class="text-gray-500 dark:text-gray-400">Months:</span>
+        {% set _month_opts = [] %}
         {% for choice in month_choices %}
-        <a href="{{ url_for('projections.projections_view', filename=filename, months=choice, estimate=1 if estimate else none, edit=1 if edit_mode else none) }}"
-            class="px-2 py-0.5 rounded {% if months == choice %}bg-blue-600 text-white{% else %}bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700{% endif %}">
-            {{ choice }}
-        </a>
+        {% set _ = _month_opts.append({
+            'url': url_for('projections.projections_view', filename=filename, months=choice, estimate=1 if estimate else none, edit=1 if edit_mode else none),
+            'label': choice,
+            'active': months == choice}) %}
         {% endfor %}
+        {{ nav.segmented(_month_opts, use_htmx=false, size='sm') }}
     </div>
     {# View toggle styled as an emphasized button — colored (like the active
        Months button) when on, outlined when off (QA: estimate toggle). #}

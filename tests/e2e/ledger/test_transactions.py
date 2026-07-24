@@ -72,9 +72,10 @@ def test_transactions_combined_filter_by_text(page, confirmed_server):
 
 
 def test_transactions_month_label_displayed(page, flask_server):
-    """Current month/year label is shown (MM/YYYY format)."""
+    """Current month/year label is shown (human-readable "Mon YYYY", matching
+    the Trends window label)."""
     page.goto(f"{flask_server}/s/ledger/transactions?year=2026&month=4")
-    assert page.locator("text=/\\d{2}\\/\\d{4}/").first.is_visible()
+    assert page.locator("text=Apr 2026").first.is_visible()
 
 
 def test_transactions_prev_arrow_navigates(page, flask_server):
@@ -89,6 +90,22 @@ def test_transactions_next_arrow_navigates(page, flask_server):
     page.goto(f"{flask_server}/s/ledger/transactions?year=2026&month=4")
     page.click("a[title='Later']")
     page.wait_for_url("**/transactions**month=5**")
+
+
+def test_transactions_latest_button_jumps_to_current_month(page, flask_server):
+    """The Latest button navigates to the current calendar month.
+
+    Regression guard: the global htmx:configRequest handler injects the
+    currently-viewed month into any /transactions request missing year/month, so
+    a bare Latest URL used to bounce right back to the month you were on. Latest
+    must carry the current month explicitly so it actually lands there.
+    """
+    from datetime import date
+
+    page.goto(f"{flask_server}/s/ledger/transactions?year=2020&month=1")
+    page.click("a:has-text('Latest')")
+    today = date.today()
+    page.wait_for_url(f"**/transactions?year={today.year}&month={today.month}**")
 
 
 def test_transactions_table_has_expected_columns(page, flask_server):

@@ -29,6 +29,15 @@
     #holdings-table .holdings-group > tr > :first-child {
         box-shadow: inset 4px 0 0 var(--accent);
     }
+    /* Lift the data-row accent rail above the top scroll shadow (z-4) so the rail
+       stays crisp as rows scroll up under the pinned header, while the shadow
+       still falls over the rest of the data cells. Kept below the sticky group
+       chrome (z-7) and the actions column (z-6) so the accent still clips
+       correctly behind them (the box-shadow-not-border reason above). */
+    #holdings-table .holdings-group > tr[data-accent] > td:first-child {
+        position: relative;
+        z-index: 5;
+    }
     /* Actions column sticks to the right edge; data scrolls behind it. A uniform
        background (the actions column is chrome, not data) keeps scrolled cells
        from showing through. The scroll shadow that reads as "data behind here"
@@ -76,14 +85,14 @@
            scrolls away / shifts when the row is sticky (QA #5); a box-shadow is
            painted with the sticky cell and stays put. */
         background: var(--band);
-        box-shadow: inset 0 2px 0 var(--accent), inset 0 -2px 0 var(--accent);
+        box-shadow: inset 0 1px 0 var(--accent), inset 0 -1px 0 var(--accent);
     }
     .dark #holdings-table .holdings-group-heading > td { background: var(--band-dark); }
     /* First cell also carries the left rail (composed with the top/bottom accent
        borders) and the group-colored label text. */
     #holdings-table .holdings-group-heading > td:first-child {
         color: var(--label);
-        box-shadow: inset 4px 0 0 var(--accent), inset 0 2px 0 var(--accent), inset 0 -2px 0 var(--accent);
+        box-shadow: inset 4px 0 0 var(--accent), inset 0 1px 0 var(--accent), inset 0 -1px 0 var(--accent);
     }
     .dark #holdings-table .holdings-group-heading > td:first-child { color: var(--label-dark); }
     #holdings-table .holdings-group-header > th {

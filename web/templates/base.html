@@ -454,15 +454,14 @@
             left: 0;
             right: var(--sheet-right-h, 0px);
             height: 1.75rem;
-            /* Above the sticky group heading/header rows (z-7), same as the side
-               shadows: on the grouped Holdings sheet a blue group-heading row
-               that is mid-scroll (sticky, so z-7) would otherwise paint over the
-               top/bottom shadow instead of under it, so the shadow appeared to
-               stop at those rows. The geometry (--sheet-header-h / --sheet-footer-h
-               insets) already keeps these shadows off the *pinned* header/footer
-               chrome, so a higher z only covers mid-scroll content — which is the
-               intent. */
-            z-index: 8;
+            /* z-index differs per edge (set on the individual rules below): the
+               BOTTOM shadow sits above the sticky group heading/header rows (z-7)
+               so a group name row mid-scroll near the bottom is covered by it,
+               while the TOP shadow tucks *under* the group chrome and the
+               data-row accent rails so those scroll up crisply beneath the pinned
+               header. Both stay above plain data cells and (via the
+               --sheet-header-h / --sheet-footer-h insets) clear of the pinned
+               header/footer chrome. */
         }
 
         /* The side (left/right) shadows signal horizontally-hidden columns, so
@@ -485,11 +484,18 @@
 
         .sheet-scroll-shadow--top {
             top: var(--sheet-header-h, 0px);
+            /* Above plain data cells (z-auto) but below the group chrome (z-7) and
+               the data-row accent rails (lifted to z-5 on Holdings), so the shadow
+               falls only on scrolling data, not the group titles/headers/rails. */
+            z-index: 4;
             background: linear-gradient(to bottom, rgba(0, 0, 0, 0.16), rgba(0, 0, 0, 0));
         }
 
         .sheet-scroll-shadow--bottom {
             bottom: var(--sheet-footer-h, 0px);
+            /* Above the sticky group heading/header rows (z-7) so a group name row
+               mid-scroll near the bottom is covered rather than painting over it. */
+            z-index: 8;
             background: linear-gradient(to top, rgba(0, 0, 0, 0.16), rgba(0, 0, 0, 0));
         }
 

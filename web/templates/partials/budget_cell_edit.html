@@ -8,15 +8,14 @@
         onkeydown="if (event.keyCode === 13 || event.keyCode === 9 || event.keyCode === 27) event.preventDefault();">
         <input type="hidden" name="field" value="{{ field }}" />
         <input type="hidden" name="focus_direction" value="" />
-        {% if field == 'type' %}
+        {% if field == 'category' %}
         <select name="value" class="table-cell-select {% if right_align %}text-right{% endif %}" style="min-width:0"
             hx-post="{{ url_for('budget.update', filename=filename, index=index) }}"
             hx-trigger="focusout changed, change, keydown[keyCode==9], keydown[keyCode==9][shiftKey], keydown[keyCode==13], keydown[keyCode==13][shiftKey], keydown[keyCode==27]"
             hx-include="closest form" hx-swap="innerHTML" hx-target="#budget-tbody" autofocus>
             <option value="">—</option>
-            {% set type_list = budget_income_types if kind == 'income' else budget_expense_types %}
-            {% for t in type_list %}
-            <option value="{{ t }}" {% if value==t %}selected{% endif %}>{{ t | format_type }}</option>
+            {% for c in categories %}
+            <option value="{{ c }}" {% if value==c %}selected{% endif %}>{{ c }}</option>
             {% endfor %}
         </select>
         {% elif field == 'recurrence' %}

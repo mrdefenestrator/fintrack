@@ -169,8 +169,7 @@ class BudgetEntry(TypedDict, total=False):
     description: str  # Required - label
     amount: Decimal  # Required - amount
     recurrence: Recurrence  # Required - recurrence type
-    type: str  # Optional category (income or expense type)
-    category: str  # Optional ledger category this entry covers
+    category: str  # Category from the categories table
     date: str  # For one_time - ISO8601
     dayOfMonth: int  # For monthly/quarterly/semiannual (1-31)
     month: int  # For quarterly/semiannual/annual (1-12)

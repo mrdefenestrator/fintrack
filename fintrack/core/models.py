@@ -180,9 +180,6 @@ budget_entries = Table(
     Column("description", String, nullable=False),
     Column("amount", Numeric(12, 2), nullable=False),
     Column("recurrence", String, nullable=False),
-    Column("type", String, nullable=True),
-    # Ledger category this scheduled entry covers; lets projections avoid
-    # double-counting a budgeted expense against estimated category spend.
     Column("category", String, nullable=True),
     Column("date", Date, nullable=True),
     Column("day_of_month", Integer, nullable=True),

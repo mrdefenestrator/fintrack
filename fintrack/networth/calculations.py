@@ -46,17 +46,6 @@ _ACCOUNT_TYPE_TO_CALCULATION = {
 # shared with the web UI's selects/validation).
 ACCOUNT_TYPES_CLI = ACCOUNT_TYPE_VALUES
 BUDGET_KINDS_CLI = ["income", "expense"]
-BUDGET_INCOME_TYPES_CLI = ["salary", "refund", "bonus", "remittance"]
-BUDGET_EXPENSE_TYPES_CLI = [
-    "housing",
-    "insurance",
-    "service",
-    "utility",
-    "product",
-    "transport",
-    "food",
-]
-BUDGET_ALL_TYPES_CLI = BUDGET_INCOME_TYPES_CLI + BUDGET_EXPENSE_TYPES_CLI
 RECURRENCE_OPTIONS_CLI = [
     "one_time",
     "monthly",
@@ -70,9 +59,6 @@ ASSETS_KINDS_CLI = ["asset", "debt"]
 # Aliases for web and shared use (single source of truth)
 ACCOUNT_TYPES = ACCOUNT_TYPES_CLI
 BUDGET_KINDS = BUDGET_KINDS_CLI
-BUDGET_INCOME_TYPES = BUDGET_INCOME_TYPES_CLI
-BUDGET_EXPENSE_TYPES = BUDGET_EXPENSE_TYPES_CLI
-BUDGET_ALL_TYPES = BUDGET_ALL_TYPES_CLI
 RECURRENCE_OPTIONS = RECURRENCE_OPTIONS_CLI
 ASSETS_KINDS = ASSETS_KINDS_CLI
 

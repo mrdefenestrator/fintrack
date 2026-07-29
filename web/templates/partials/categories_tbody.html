@@ -26,7 +26,7 @@
     {% else %}
         <td class="{{ sheet.cell_class() }}">{{ c.name }}</td>
     {% endif %}
-    {% with delete_confirm_url=url_for('categories.delete_confirm', filename=filename, category_id=c.id) %}
+    {% with delete_confirm_url=url_for('categories.delete_confirm', filename=filename, category_id=c.id), reorderable=false %}
     {% include "partials/editable_table_delete_icon.html" %}
     {% endwith %}
 </tr>

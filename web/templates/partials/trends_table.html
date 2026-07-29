@@ -63,7 +63,7 @@
    `sortable-th`/`data-col` header hooks. The <tfoot> (Total + excluded rows) is
    outside <tbody>, so the sorter never touches it; each category row keeps its
    following `data-detail-row` expander glued to it through a sort. #}
-<table class="sortable w-full bg-white dark:bg-gray-800 rounded-lg shadow-sm text-sm">
+<table class="sortable w-full bg-white dark:bg-gray-800 rounded-lg shadow-sm text-sm" style="white-space:nowrap">
     {% set _sortable_th = 'sortable-th cursor-pointer select-none hover:text-gray-600 dark:hover:text-gray-300' %}
     <thead>
         <tr class="border-b dark:border-gray-700 text-left text-xs text-gray-400 dark:text-gray-500 uppercase tracking-wide">

@@ -190,6 +190,4 @@ def update(txn_id):
 
     if not txn:
         return "", 404
-    return render_template(
-        "partials/transaction_row.html", txn=txn, edit_mode=True
-    )
+    return render_template("partials/transaction_row.html", txn=txn, edit_mode=True)

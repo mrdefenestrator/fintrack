@@ -46,9 +46,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.add_column(
-        "asset_entries", sa.Column("next_due_date", sa.Date(), nullable=True)
-    )
+    op.add_column("asset_entries", sa.Column("next_due_date", sa.Date(), nullable=True))
     with op.batch_alter_table("asset_entries") as batch_op:
         batch_op.drop_column("statement_due_day_of_month")
         batch_op.drop_column("origination_date")

@@ -30,13 +30,24 @@
         );
     }
 
-    function apply(groupTbody, col, dir) {
+    function rowSortText(row, key) {
+        if (key && key.charAt(0) === "d") {
+            var detail = row.querySelector(
+                ".holding-detail-cell[data-detail-col='" + key.slice(1) + "']"
+            );
+            return detail && detail.textContent;
+        }
+        var col = parseInt((key || "").slice(1), 10);
+        return row.cells[col] && row.cells[col].textContent;
+    }
+
+    function apply(groupTbody, key, dir) {
         if (!groupTbody._origOrder) groupTbody._origOrder = dataRows(groupTbody);
         var rows = groupTbody._origOrder.slice();
         if (dir === "asc" || dir === "desc") {
             rows.sort(function (a, b) {
-                var va = parseSortValue(a.cells[col] && a.cells[col].textContent);
-                var vb = parseSortValue(b.cells[col] && b.cells[col].textContent);
+                var va = parseSortValue(rowSortText(a, key));
+                var vb = parseSortValue(rowSortText(b, key));
                 var cmp;
                 if (!isNaN(va.num) && !isNaN(vb.num)) cmp = va.num - vb.num;
                 else cmp = (va.str || "").localeCompare(vb.str || "", undefined, { numeric: true });
@@ -54,23 +65,21 @@
         document.dispatchEvent(new CustomEvent("holdings:sorted"));
     }
 
-    function updateIndicators(headerRow, col, dir) {
-        // Key off each header's data-col, not its position — blank structural
-        // slots (non-sortable) and colspan'd columns make position != column.
+    function updateIndicators(headerRow, key, dir) {
         headerRow.querySelectorAll(".sortable-th").forEach(function (th) {
-            var thCol = parseInt(th.getAttribute("data-col"), 10);
+            var thKey = th.getAttribute("data-sort-key");
             var ind = th.querySelector(".sort-indicator");
-            if (ind) ind.textContent = thCol === col && dir !== "none" ? (dir === "asc" ? " ↑" : " ↓") : "";
+            if (ind) ind.textContent = thKey === key && dir !== "none" ? (dir === "asc" ? " ↑" : " ↓") : "";
         });
     }
 
-    function writeUrl(group, col, dir) {
+    function writeUrl(group, key, dir) {
         var url = new URL(window.location);
         if (dir === "none") {
             url.searchParams.delete("sort_" + group + "_col");
             url.searchParams.delete("sort_" + group + "_dir");
         } else {
-            url.searchParams.set("sort_" + group + "_col", col);
+            url.searchParams.set("sort_" + group + "_col", key);
             url.searchParams.set("sort_" + group + "_dir", dir);
         }
         window.history.replaceState({}, "", url);
@@ -78,10 +87,10 @@
 
     function readUrl(group) {
         var params = new URL(window.location).searchParams;
-        var col = parseInt(params.get("sort_" + group + "_col"), 10);
+        var key = params.get("sort_" + group + "_col");
         var dir = params.get("sort_" + group + "_dir");
-        if (isNaN(col) || (dir !== "asc" && dir !== "desc")) return null;
-        return { col: col, dir: dir };
+        if (!/^[cd]\d+$/.test(key || "") || (dir !== "asc" && dir !== "desc")) return null;
+        return { key: key, dir: dir };
     }
 
     function init(groupTbody) {
@@ -92,28 +101,28 @@
         // Re-apply a persisted sort (fresh load, or after a tbody swap).
         var saved = readUrl(group);
         if (saved) {
-            groupTbody._sortCol = saved.col;
+            groupTbody._sortKey = saved.key;
             groupTbody._sortDir = saved.dir;
-            apply(groupTbody, saved.col, saved.dir);
-            updateIndicators(headerRow, saved.col, saved.dir);
+            apply(groupTbody, saved.key, saved.dir);
+            updateIndicators(headerRow, saved.key, saved.dir);
         }
 
         if (groupTbody._holdingsSort) return;
         groupTbody._holdingsSort = true;
         headerRow.querySelectorAll(".sortable-th").forEach(function (th) {
-            var col = parseInt(th.getAttribute("data-col"), 10);
-            if (isNaN(col)) return;
+            var key = th.getAttribute("data-sort-key");
+            if (!key) return;
             function doSort() {
                 var dir;
-                if (groupTbody._sortCol !== col) dir = "asc";
+                if (groupTbody._sortKey !== key) dir = "asc";
                 else if (groupTbody._sortDir === "asc") dir = "desc";
                 else if (groupTbody._sortDir === "desc") dir = "none";
                 else dir = "asc";
-                groupTbody._sortCol = col;
+                groupTbody._sortKey = key;
                 groupTbody._sortDir = dir;
-                apply(groupTbody, col, dir);
-                updateIndicators(headerRow, col, dir);
-                writeUrl(group, col, dir);
+                apply(groupTbody, key, dir);
+                updateIndicators(headerRow, key, dir);
+                writeUrl(group, key, dir);
             }
             th.addEventListener("click", doSort);
             th.addEventListener("keydown", function (e) {

@@ -129,14 +129,23 @@ def import_yaml(conn: Connection, path: Path, name: str | None = None) -> int:
             ("quantity", "quantity"),
             ("balance", "balance"),
             ("interestRate", "interest_rate"),
-            ("nextDueDate", "next_due_date"),
+            ("originalPrincipal", "original_principal"),
+            ("termMonths", "term_months"),
+            ("originationDate", "origination_date"),
+            ("statement_due_day_of_month", "statement_due_day_of_month"),
             ("asOfDate", "as_of_date"),
         ):
             val = entry.get(field)
             if val is not None:
                 row[col] = (
-                    to_date(val) if col in ("next_due_date", "as_of_date") else val
+                    to_date(val) if col in ("origination_date", "as_of_date") else val
                 )
+        # Backward compatibility for pre-origination YAML exports.
+        if (
+            row.get("statement_due_day_of_month") is None
+            and entry.get("nextDueDate") is not None
+        ):
+            row["statement_due_day_of_month"] = to_date(entry["nextDueDate"]).day
         db_id = conn.execute(insert(asset_entries).values(**row)).inserted_primary_key[
             0
         ]

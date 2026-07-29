@@ -1,13 +1,6 @@
-{# Holdings table body — ONE table, four type-based domain groups (Cash, Credit
-   Cards, Loans, Assets). Each group is a single <tbody> (heading + sticky header
-   + data rows + add-row) so its header can stick over its own data rows and get
-   replaced by the next group's header on scroll. Reorderable groups' data rows
-   carry data-reorder-index (drag-reorder scoped to the group via
-   data-reorder-url). The leading Institution/Type/Name/Amount and trailing
-   As Of slots align across groups; the middle slots are group-specific, and
-   blank structural slots (cell == "") pad the shorter groups. Cell edits swap
-   the whole table body (#holdings-table innerHTML). A two-line master footer
-   (Liquid + Net worth) closes the table. #}
+{# Holdings table body — ONE table with a shared eight-column spine. The middle
+   Details cell contains a group-specific CSS grid, so common columns stay
+   aligned without padding every group to the Loans column count. #}
 {% import "partials/sheet.html" as sheet %}
 {% from "macros/table.html" import cell_display, cell_edit_input, cell_edit_select, cell_non_editable %}
 {% set es = editing_source | default(none) %}
@@ -46,9 +39,18 @@
            header cell (holdings.html). Blank structural slots are non-sortable;
            `spans` lets one column cover several slots (Assets "Source"). #}
         {% set colspan = group.spans[loop.index0] %}
-        {% if h %}
+        {% if loop.index0 == detail_pos %}
+        <th class="holding-details-shell p-0">
+            <div class="holding-details-grid holding-details-header" style="--detail-count: {{ group.detail_headers | length }}">
+                {% for detail_header in group.detail_headers %}
+                <div class="holding-detail-header sortable-th px-1.5 py-0.5 font-medium text-gray-800 dark:text-gray-100 cursor-pointer select-none hover:bg-gray-200 dark:hover:bg-gray-600 {% if loop.index0 in group.detail_right_align %}text-right{% else %}text-left{% endif %}"
+                    data-sort-key="d{{ loop.index0 }}" role="button" tabindex="0">{{ detail_header }} <span class="sort-indicator"></span></div>
+                {% endfor %}
+            </div>
+        </th>
+        {% elif h %}
         <th class="sortable-th px-1.5 py-0.5 font-medium text-gray-800 dark:text-gray-100 cursor-pointer select-none hover:bg-gray-200 dark:hover:bg-gray-600 {% if loop.index0 in group.right_align %}text-right{% else %}text-left{% endif %}"
-            {% if colspan > 1 %}colspan="{{ colspan }}" {% endif %}data-col="{{ loop.index0 }}" role="button" tabindex="0" title="Sort by this column">{{ h }} <span class="sort-indicator"></span></th>
+            {% if colspan > 1 %}colspan="{{ colspan }}" {% endif %}data-sort-key="c{{ loop.index0 }}" role="button" tabindex="0" title="Sort by this column">{{ h }} <span class="sort-indicator"></span></th>
         {% else %}
         <th class="holdings-blank-slot px-1.5 py-0.5"{% if colspan > 1 %} colspan="{{ colspan }}"{% endif %}></th>
         {% endif %}
@@ -62,10 +64,39 @@
         {% set field = row.fields[i] %}
         {% set right = i in group.right_align %}
         {% set colspan = group.spans[i] %}
-        {% if cell == "" %}
-            {# blank structural slot: an empty cell, but with the normal right
-               divider so the gap reads as empty columns and As Of stays separated #}
-            <td class="{{ sheet.cell_class() }}"{% if colspan > 1 %} colspan="{{ colspan }}"{% endif %}></td>
+        {% if i == detail_pos %}
+            <td class="holding-details-shell p-0">
+                <div class="holding-details-grid" style="--detail-count: {{ row.detail_cells | length }}">
+                {% for detail_cell in row.detail_cells %}
+                    {% set di = loop.index0 %}
+                    {% set detail_field = row.detail_fields[di] %}
+                    {% set detail_right = di in group.detail_right_align %}
+                    <div class="holding-detail-cell {% if detail_right %}text-right tabular-nums{% endif %} {{ row.detail_classes[di] }}" data-detail-col="{{ di }}">
+                    {% if edit_mode and detail_field and es == row.source and er == row.ref and ef == detail_field %}
+                        {% set update_url = url_for('holdings.update', filename=filename, source=row.source, ref=row.ref) %}
+                        {% set display_url = url_for('holdings.cell_edit', filename=filename, source=row.source, ref=row.ref, field=detail_field, display=1) %}
+                        <form method="post" action="{{ update_url }}" class="inline"
+                            hx-get="{{ display_url }}" hx-trigger="focusout from:input delay:150ms"
+                            hx-swap="innerHTML" hx-target="#holdings-table"
+                            onkeydown="if(event.keyCode===13) event.preventDefault();">
+                            <input type="hidden" name="field" value="{{ detail_field }}" />
+                            <input type="text" name="value" value="{{ row.edit_raw[detail_field] }}" size="1"
+                                class="table-cell-input {% if detail_right %}text-right tabular-nums{% endif %}" style="min-width:0"
+                                hx-post="{{ update_url }}" hx-trigger="focusout changed, keydown[keyCode==13]"
+                                hx-include="closest form" hx-swap="innerHTML" hx-target="#holdings-table" autofocus />
+                        </form>
+                    {% elif edit_mode and detail_field %}
+                        {% set cell_edit_url = url_for('holdings.cell_edit', filename=filename, source=row.source, ref=row.ref, field=detail_field) %}
+                        {% set is_updated = us == row.source and ur == row.ref and uf == detail_field %}
+                        <button type="button" class="holding-detail-edit w-full h-full {% if detail_right %}text-right{% else %}text-left{% endif %} {% if is_updated %}cell-updated{% endif %}"
+                            hx-get="{{ cell_edit_url }}" hx-trigger="click" hx-swap="innerHTML" hx-target="#holdings-table">{{ detail_cell }}</button>
+                    {% else %}
+                        {{ detail_cell }}
+                    {% endif %}
+                    </div>
+                {% endfor %}
+                </div>
+            </td>
         {% elif edit_mode and field and es == row.source and er == row.ref and ef == field %}
             {% set update_url = url_for('holdings.update', filename=filename, source=row.source, ref=row.ref) %}
             {% set display_url = url_for('holdings.cell_edit', filename=filename, source=row.source, ref=row.ref, field=field, display=1) %}

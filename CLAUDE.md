@@ -87,6 +87,9 @@ degrades to a warning without it).
 - `accounts.balance` is the canonical signed balance (negative = owed on CCs);
   it is a denormalized cache of the latest balance_history point — always
   write through `record_balance()`, never update the column directly.
+- Loan origination/amortization fields belong only to `asset_entries` debt rows,
+  not account-type loans. Loan Due is a recurring day of month (1–31), matching
+  account Due; nonexistent days clamp to month-end.
 - Liquidity tier (liquid/semi-liquid/illiquid) is fixed by holding **type**
   with no per-holding override; the type→tier maps in `fintrack/core/types.py`
   are the single source of truth (add new types there, not ad-hoc). Tier
@@ -100,8 +103,9 @@ degrades to a warning without it).
   be prudent about what data is *relevant*, not about decluttering.
 - **Holdings direction.** Holdings unifies the Accounts and Assets sheets into
   one spreadsheet, split into four **type-based** groups — Cash · Credit Cards ·
-  Loans · Assets — each with its own tight column set (a group only shows the
-  columns that apply to it; blank slots pad to align As Of). Grouping is a
+  Loans · Assets — using a shared Institution·Type·Name·Amount·Details·Due·
+  Linked·As Of spine. Details contains a compact group-specific CSS grid, so
+  common fields align without blank padding columns. Grouping is a
   display concern over the same two tables (`accounts`; `asset_entries` by
   `kind`) — no data migration. The standalone Accounts and Assets **web pages**
   have been retired; Holdings is the finances landing page. See DESIGN.md

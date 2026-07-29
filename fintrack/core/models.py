@@ -219,7 +219,10 @@ asset_entries = Table(
     Column("balance", Numeric(14, 2), nullable=True),
     Column("asset_ref", Integer, ForeignKey("asset_entries.id"), nullable=True),
     Column("interest_rate", Numeric(8, 6), nullable=True),
-    Column("next_due_date", Date, nullable=True),
+    Column("original_principal", Numeric(14, 2), nullable=True),
+    Column("term_months", Integer, nullable=True),
+    Column("origination_date", Date, nullable=True),
+    Column("statement_due_day_of_month", Integer, nullable=True),
     Column("as_of_date", Date, nullable=True),
     Column("sort_order", Integer, nullable=False, default=0),
 )

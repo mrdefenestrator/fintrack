@@ -16,38 +16,38 @@ accounts:
 budget:
 - kind: income
   description: Salary
-  type: salary
+  category: Income
   amount: 4000.0
   recurrence: monthly
   dayOfMonth: 1
   autoAccountRef: 1
 - kind: income
   description: Freelance
-  type: bonus
+  category: Income
   amount: 500.0
   recurrence: monthly
   dayOfMonth: 15
 - kind: income
   description: Tax Refund
-  type: refund
+  category: Income
   amount: 800.0
   recurrence: one_time
 - kind: expense
   description: Rent
-  type: housing
+  category: Housing
   amount: 1500.0
   recurrence: monthly
   dayOfMonth: 1
   autoAccountRef: 1
 - kind: expense
   description: Groceries
-  type: food
+  category: Groceries
   amount: 600.0
   recurrence: monthly
   continuous: true
 - kind: expense
   description: Car Insurance
-  type: insurance
+  category: Insurance
   amount: 600.0
   recurrence: annual
   month: 3

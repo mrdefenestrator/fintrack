@@ -2,15 +2,15 @@
 {% block title %}Budget — fintrack{% endblock %}
 {% block content %}
 {% set _kinds_active = (include_kinds | length) if (include_kinds and include_kinds | length < budget_kinds | length) else 0 %}
-{% set _types_active = (include_types | length) if (include_types and include_types | length < budget_all_types | length) else 0 %}
+{% set _types_active = (include_categories | length) if (include_categories and include_categories | length < categories | length) else 0 %}
 {% set _rec_active = (include_recurrence | length) if (include_recurrence and include_recurrence | length < recurrence_options | length) else 0 %}
 {% set _active_count = _kinds_active + _types_active + _rec_active %}
 {% import "partials/filter_controls.html" as fc %}
 {% import "partials/sheet_filter_bar.html" as fb %}
 {% set kind_opts = [] %}
 {% for k in budget_kinds %}{% set _ = kind_opts.append({'value': k, 'display': k | capitalize, 'checked': k in include_kinds}) %}{% endfor %}
-{% set type_opts = [] %}
-{% for t in budget_all_types %}{% set _ = type_opts.append({'value': t, 'display': t | format_type, 'checked': t in include_types}) %}{% endfor %}
+{% set cat_opts = [] %}
+{% for c in categories %}{% set _ = cat_opts.append({'value': c, 'display': c, 'checked': c in include_categories}) %}{% endfor %}
 {% set rec_opts = [] %}
 {% for r in recurrence_options %}{% set _ = rec_opts.append({'value': r, 'display': r | format_recurrence, 'checked': r in include_recurrence}) %}{% endfor %}
 <form id="budget-filter-form" method="get" action="{{ url_for('budget.budget_view', filename=filename) }}" class="shrink-0">
@@ -19,12 +19,12 @@
         reset_url=url_for('budget.budget_view', filename=filename, edit=1 if edit_mode else none),
         use_htmx=false) %}
         {{ fc.multi_select('include_kind', 'Kind', kind_opts, form_id='budget-filter-form') }}
-        {{ fc.multi_select('include', 'Type', type_opts, form_id='budget-filter-form') }}
+        {{ fc.multi_select('include', 'Category', cat_opts, form_id='budget-filter-form') }}
         {{ fc.multi_select('include_recurrence', 'Recurrence', rec_opts, form_id='budget-filter-form') }}
     {% endcall %}
 </form>
 <div class="table-scroll-container rounded-b-lg border-l border-b border-r border-gray-300 dark:border-gray-600 shadow-sm" data-sheet-scroll>
-<table class="editable-table sortable w-full text-sm border-collapse bg-white dark:bg-gray-800"
+<table id="budget-table" class="editable-table sortable w-full text-sm border-collapse bg-white dark:bg-gray-800"
     data-cell-nav="budget-tbody"
     {% if _active_count %}data-reorder-locked{% endif %} {% if
     sort_col %}data-sort-col="{{ sort_col }}" {% endif %} {% if sort_dir %}data-sort-dir="{{ sort_dir }}" {% endif %}>

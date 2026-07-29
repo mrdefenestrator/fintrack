@@ -222,7 +222,7 @@ def _build_budget_table(
     account_display_by_id = account_display_by_id or {}
     headers = [
         "Kind",
-        "Type",
+        "Category",
         "Description",
         "Amount",
         "Recurrence",
@@ -254,7 +254,7 @@ def _build_budget_table(
         total_annual += sign * annual_amt
         row = [
             kind.capitalize(),
-            fmt_type_display(e.get("type") or "-"),
+            e.get("category") or "-",
             e.get("description", "-"),
             fmt_money(sign * e.get("amount", 0)),
             fmt_recurrence_display(e.get("recurrence") or "-"),

@@ -22,22 +22,22 @@ def filter_accounts_by_type(
 def apply_budget_filters(
     budget: List[Dict[str, Any]],
     include_kinds: List[str] | None = None,
-    include_types: List[str] | None = None,
-    exclude_types: List[str] | None = None,
+    include_categories: List[str] | None = None,
+    exclude_categories: List[str] | None = None,
     include_recurrence: List[str] | None = None,
     exclude_recurrence: List[str] | None = None,
 ) -> List[Dict[str, Any]]:
-    """Apply kind, type, and recurrence filters to unified budget list. Returns filtered list."""
+    """Apply kind, category, and recurrence filters to unified budget list."""
     result = list(budget)
     if include_kinds:
         kinds_set = set(k.lower() for k in include_kinds)
         result = [e for e in result if e.get("kind", "").lower() in kinds_set]
-    if include_types:
-        include_set = set(include_types)
-        result = [e for e in result if e.get("type") in include_set]
-    if exclude_types:
-        exclude_set = set(exclude_types)
-        result = [e for e in result if e.get("type") not in exclude_set]
+    if include_categories:
+        include_set = set(include_categories)
+        result = [e for e in result if e.get("category") in include_set]
+    if exclude_categories:
+        exclude_set = set(exclude_categories)
+        result = [e for e in result if e.get("category") not in exclude_set]
     if include_recurrence:
         rec_set = set(include_recurrence)
         result = [e for e in result if e.get("recurrence") in rec_set]

@@ -6,6 +6,7 @@ from fintrack.core import filters, tables
 from fintrack.networth import calculations
 from fintrack.core.loader import load_finances_from_db
 from fintrack.budget import repository as repo_budget
+from fintrack.ledger.repository.categories import get_category_names
 
 from .common import drop_separator_rows, get_common_context, validate_snapshot
 from .crud import (
@@ -19,9 +20,6 @@ from .crud import (
 budget_bp = Blueprint("budget", __name__, url_prefix="/s")
 
 BUDGET_KINDS = calculations.BUDGET_KINDS
-BUDGET_INCOME_TYPES = calculations.BUDGET_INCOME_TYPES
-BUDGET_EXPENSE_TYPES = calculations.BUDGET_EXPENSE_TYPES
-BUDGET_ALL_TYPES = calculations.BUDGET_ALL_TYPES
 RECURRENCE_OPTIONS = calculations.RECURRENCE_OPTIONS
 
 
@@ -55,6 +53,10 @@ def _render_tbody(
         (budget[i].get("kind", "income"), i, data_rows[i]) for i in range(len(budget))
     ]
 
+    engine = current_app.config["engine"]
+    with engine.connect() as conn:
+        categories = get_category_names(conn)
+
     return render_template(
         "partials/budget_tbody.html",
         filename=filename,
@@ -63,9 +65,7 @@ def _render_tbody(
         rows=rows,
         updated_index=updated_index,
         updated_field=updated_field,
-        budget_income_types=BUDGET_INCOME_TYPES,
-        budget_expense_types=BUDGET_EXPENSE_TYPES,
-        budget_all_types=BUDGET_ALL_TYPES,
+        categories=categories,
         recurrence_options=RECURRENCE_OPTIONS,
         account_display_by_id=ctx["account_display_by_id"],
         editing_index=editing_index,
@@ -89,7 +89,9 @@ def budget_view(filename: str):
     include_kinds = (
         request.args.getlist("include_kind") or request.args.getlist("kind") or []
     )
-    include_types = request.args.getlist("include") or request.args.getlist("i") or []
+    include_categories = (
+        request.args.getlist("include") or request.args.getlist("i") or []
+    )
     include_recurrence = (
         request.args.getlist("include_recurrence")
         or request.args.getlist("recurrence")
@@ -98,7 +100,7 @@ def budget_view(filename: str):
     budget = filters.apply_budget_filters(
         ctx["budget"],
         include_kinds=include_kinds or None,
-        include_types=include_types or None,
+        include_categories=include_categories or None,
         include_recurrence=include_recurrence or None,
     )
     include_kinds_set = set(k.lower() for k in include_kinds)
@@ -117,15 +119,16 @@ def budget_view(filename: str):
         (budget[i].get("kind", "income"), budget_global[i], data_rows[i])
         for i in range(len(budget))
     ]
+    engine = current_app.config["engine"]
+    with engine.connect() as conn:
+        categories = get_category_names(conn)
     ctx["include_kinds"] = [k for k in BUDGET_KINDS if k in include_kinds_set]
-    ctx["include_types"] = [t for t in BUDGET_ALL_TYPES if t in set(include_types)]
+    ctx["include_categories"] = [c for c in categories if c in set(include_categories)]
     ctx["include_recurrence"] = [
         r for r in RECURRENCE_OPTIONS if r in set(include_recurrence)
     ]
     ctx["budget_kinds"] = BUDGET_KINDS
-    ctx["budget_income_types"] = BUDGET_INCOME_TYPES
-    ctx["budget_expense_types"] = BUDGET_EXPENSE_TYPES
-    ctx["budget_all_types"] = BUDGET_ALL_TYPES
+    ctx["categories"] = categories
     ctx["recurrence_options"] = RECURRENCE_OPTIONS
     return render_template("budget.html", **ctx)
 

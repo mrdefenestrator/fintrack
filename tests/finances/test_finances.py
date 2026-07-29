@@ -262,30 +262,30 @@ def test_filter_accounts_by_type():
 
 
 def test_apply_budget_filters():
-    """Apply kind, type, and recurrence filters to unified budget list."""
+    """Apply kind, category, and recurrence filters to unified budget list."""
     budget = [
         {
             "kind": "income",
             "description": "Salary",
-            "type": "salary",
+            "category": "Income",
             "recurrence": "monthly",
         },
         {
             "kind": "income",
             "description": "Bonus",
-            "type": "bonus",
+            "category": "Income",
             "recurrence": "one_time",
         },
         {
             "kind": "expense",
             "description": "Rent",
-            "type": "housing",
+            "category": "Housing",
             "recurrence": "monthly",
         },
         {
             "kind": "expense",
             "description": "Food",
-            "type": "food",
+            "category": "Groceries",
             "recurrence": "monthly",
         },
     ]
@@ -303,15 +303,15 @@ def test_apply_budget_filters():
     assert len(result) == 2
     assert all(e["kind"] == "expense" for e in result)
 
-    # Include types: only matching
-    result = apply_budget_filters(budget, include_types=["salary", "housing"])
-    assert len(result) == 2
-    assert {e["type"] for e in result} == {"salary", "housing"}
+    # Include categories: only matching
+    result = apply_budget_filters(budget, include_categories=["Income", "Housing"])
+    assert len(result) == 3
+    assert {e["category"] for e in result} == {"Income", "Housing"}
 
-    # Exclude types
-    result = apply_budget_filters(budget, exclude_types=["bonus", "food"])
-    assert len(result) == 2
-    assert {e["type"] for e in result} == {"salary", "housing"}
+    # Exclude categories
+    result = apply_budget_filters(budget, exclude_categories=["Income", "Groceries"])
+    assert len(result) == 1
+    assert {e["category"] for e in result} == {"Housing"}
 
     # Include recurrence
     result = apply_budget_filters(budget, include_recurrence=["monthly"])

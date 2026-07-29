@@ -19,7 +19,6 @@ def _row_to_budget_entry(row) -> BudgetEntry:
         "recurrence": r["recurrence"],
     }
     optional_map = {
-        "type": "type",
         "category": "category",
         "date": "date",
         "day_of_month": "dayOfMonth",
@@ -162,7 +161,6 @@ _FIELD_TO_COL = {
     "description": "description",
     "amount": "amount",
     "recurrence": "recurrence",
-    "type": "type",
     "category": "category",
     "date": "date",
     "dayOfMonth": "day_of_month",
@@ -189,7 +187,6 @@ def _entry_dict_to_row(
         "sort_order": sort_order,
     }
     optional_map = {
-        "type": "type",
         "category": "category",
         "date": "date",
         "dayOfMonth": "day_of_month",

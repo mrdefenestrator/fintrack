@@ -96,7 +96,6 @@ def import_yaml(conn: Connection, path: Path, name: str | None = None) -> int:
             "sort_order": sort_order,
         }
         for field, col in (
-            ("type", "type"),
             ("category", "category"),
             ("date", "date"),
             ("dayOfMonth", "day_of_month"),

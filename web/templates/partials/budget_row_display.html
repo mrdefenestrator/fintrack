@@ -13,7 +13,7 @@
     {% else %}
         {% set when_field = 'when' %}
     {% endif %}
-    {% set fields = [None, 'type', 'description', 'amount', 'recurrence', when_field, None, None, None, 'autoAccountRef'] %}
+    {% set fields = [None, 'category', 'description', 'amount', 'recurrence', when_field, None, None, None, 'autoAccountRef'] %}
     {% for col_index in range(10) %}
     {% set field = fields[col_index] %}
     {% set cell_value = row_cells[col_index] if col_index < row_cells | length else '' %}
@@ -22,15 +22,14 @@
     {% set is_updated_cell = (updated_index is defined and updated_index==index and updated_field is defined and updated_field==field) %}
     {% set is_editing_cell = (editing_index is defined and editing_index==index and editing_field is defined and editing_field==field) %}
     {% if is_editing_cell and field %}
-        {% if field == 'type' %}
+        {% if field == 'category' %}
             {% call(caller) cell_edit_select(field, editing_value, right_align,
                 url_for('budget.update', filename=filename, index=index),
                 url_for('budget.cell_edit', filename=filename, index=index, field=field, display=1),
                 'budget-tbody', none, none) %}
                 <option value="">—</option>
-                {% set type_list = budget_income_types if kind == 'income' else budget_expense_types %}
-                {% for t in type_list %}
-                <option value="{{ t }}" {% if editing_value==t %}selected{% endif %}>{{ t | format_type }}</option>
+                {% for c in categories %}
+                <option value="{{ c }}" {% if editing_value==c %}selected{% endif %}>{{ c }}</option>
                 {% endfor %}
             {% endcall %}
         {% elif field == 'recurrence' %}

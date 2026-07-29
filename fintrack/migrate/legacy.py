@@ -59,6 +59,20 @@ _FINANCES_TABLES = (
     "fin_asset_entries",
 )
 
+_LEGACY_TYPE_TO_CATEGORY = {
+    "housing": "Housing",
+    "transport": "Transport",
+    "insurance": "Insurance",
+    "utility": "Utilities",
+    "food": "Groceries",
+    "product": "Shopping",
+    "service": "Subscriptions",
+    "salary": "Income",
+    "bonus": "Income",
+    "refund": "Income",
+    "remittance": "Income",
+}
+
 
 def _reflect(engine: Engine, names: tuple[str, ...]) -> dict[str, Table]:
     md = MetaData()
@@ -621,7 +635,7 @@ def apply_migration(
                     description=b["description"],
                     amount=b["amount"],
                     recurrence=b["recurrence"],
-                    type=b.get("type"),
+                    category=_LEGACY_TYPE_TO_CATEGORY.get(b.get("type")),
                     date=_lenient_date(
                         b.get("date"), f"budget '{b['description']}'", warnings
                     ),

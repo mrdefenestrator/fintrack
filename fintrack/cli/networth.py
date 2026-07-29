@@ -34,8 +34,6 @@ from fintrack.networth import repository as repo_assets
 from fintrack.networth.calculations import (
     _ACCOUNT_TYPE_TO_CALCULATION,
     ACCOUNT_TYPES,
-    BUDGET_EXPENSE_TYPES,
-    BUDGET_INCOME_TYPES,
     BUDGET_KINDS,
     RECURRENCE_OPTIONS,
     account_funding_needed,
@@ -331,8 +329,8 @@ def accounts_delete(cli, account_id, dry_run):
 
 @click.command()
 @click.option("--kind", "include_kinds", multiple=True, type=click.Choice(BUDGET_KINDS))
-@click.option("-i", "--include-type", "include_types", multiple=True)
-@click.option("-x", "--exclude-type", "exclude_types", multiple=True)
+@click.option("-i", "--include-category", "include_categories", multiple=True)
+@click.option("-x", "--exclude-category", "exclude_categories", multiple=True)
 @click.option("--include-recurrence", "include_recurrence", multiple=True)
 @click.option("--exclude-recurrence", "exclude_recurrence", multiple=True)
 @sort_options
@@ -340,8 +338,8 @@ def accounts_delete(cli, account_id, dry_run):
 def budget(
     cli,
     include_kinds,
-    include_types,
-    exclude_types,
+    include_categories,
+    exclude_categories,
     include_recurrence,
     exclude_recurrence,
     sort_key,
@@ -354,8 +352,8 @@ def budget(
     entries = apply_budget_filters(
         data.get("budget") or [],
         include_kinds=list(include_kinds) or None,
-        include_types=list(include_types) or None,
-        exclude_types=list(exclude_types) or None,
+        include_categories=list(include_categories) or None,
+        exclude_categories=list(exclude_categories) or None,
         include_recurrence=list(include_recurrence) or None,
         exclude_recurrence=list(exclude_recurrence) or None,
     )
@@ -376,8 +374,6 @@ def budget(
 
 
 def _budget_entry_options(kind: str, adding: bool):
-    types = BUDGET_INCOME_TYPES if kind == "income" else BUDGET_EXPENSE_TYPES
-
     def wrap(f):
         for decorator in reversed(
             [
@@ -389,7 +385,6 @@ def _budget_entry_options(kind: str, adding: bool):
                     required=adding,
                     default=None,
                 ),
-                click.option("--type", "type_", type=click.Choice(types), default=None),
                 click.option("--category", default=None),
                 click.option("--date", "date_", default=None),
                 click.option("--dayOfMonth", "day_of_month", type=int, default=None),
@@ -412,7 +407,6 @@ def _budget_fields(kwargs) -> dict:
         "description": "description",
         "amount": "amount",
         "recurrence": "recurrence",
-        "type_": "type",
         "category": "category",
         "date_": "date",
         "day_of_month": "dayOfMonth",

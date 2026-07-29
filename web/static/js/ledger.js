@@ -161,6 +161,6 @@ document.addEventListener('htmx:configRequest', function (e) {
     if (!e.detail.path.endsWith('/transactions')) return;
     const state = document.getElementById('month-state');
     if (!state) return;
-    if (!e.detail.parameters.year) e.detail.parameters.year = state.dataset.year;
-    if (!e.detail.parameters.month) e.detail.parameters.month = state.dataset.month;
+    if (!e.detail.parameters.get('year')) e.detail.parameters.set('year', state.dataset.year);
+    if (!e.detail.parameters.get('month')) e.detail.parameters.set('month', state.dataset.month);
 });

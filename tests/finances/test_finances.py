@@ -451,3 +451,52 @@ def test_status_command_exits_zero(tmp_path):
     )
     assert result.exit_code == 0, result.output
     assert "Accounts" in result.output
+
+
+def test_debts_cli_adds_and_displays_origination_data(tmp_path):
+    from click.testing import CliRunner
+    from sqlalchemy import create_engine
+
+    from fintrack.cli import cli
+    from fintrack.core.db import init_db
+    from fintrack.snapshots.repository import create_snapshot
+
+    db_path = tmp_path / "loan.db"
+    engine = create_engine(f"sqlite:///{db_path}", future=True)
+    init_db(engine)
+    with engine.connect() as conn:
+        create_snapshot(conn, "home")
+
+    base = ["--db", str(db_path), "--snapshot", "home"]
+    result = CliRunner().invoke(
+        cli,
+        base
+        + [
+            "debts",
+            "add",
+            "--name",
+            "Mortgage",
+            "--balance",
+            "240000",
+            "--interestRate",
+            "0.06",
+            "--original-principal",
+            "300000",
+            "--term-months",
+            "360",
+            "--origination-date",
+            "2020-01-10",
+            "--statement_due_day_of_month",
+            "31",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+
+    result = CliRunner().invoke(cli, base + ["debts"])
+    assert result.exit_code == 0, result.output
+    assert "Mortgage" in result.output
+    assert "$300,000.00" in result.output
+    assert "360 mo" in result.output
+    assert "31st" in result.output
+    assert "$1,798.65" in result.output
+    assert "20.0%" in result.output

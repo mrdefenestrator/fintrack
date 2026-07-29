@@ -1,5 +1,7 @@
 """Tests for the SQLite repository layer (accounts, budget, assets, snapshots)."""
 
+from decimal import Decimal
+
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.exc import IntegrityError
@@ -572,3 +574,47 @@ def test_asset_entry_unit_defaults_usd_and_round_trips():
         # Home is the first entry (sort_order); change its unit.
         update_asset_entry(c, snap_id, 0, {"unit": "ETH"})
         assert get_asset_entries(c, snap_id)[0]["unit"] == "ETH"
+
+
+def test_loan_origination_fields_round_trip():
+    engine = create_engine("sqlite:///:memory:", future=True)
+    init_db(engine)
+    with engine.connect() as c:
+        snap_id = create_snapshot(c, "s")
+        add_asset_entry(
+            c,
+            snap_id,
+            {
+                "kind": "debt",
+                "type": "loan",
+                "name": "Mortgage",
+                "balance": 280000,
+                "interestRate": Decimal("0.0625"),
+                "originalPrincipal": Decimal("300000"),
+                "termMonths": 360,
+                "originationDate": "2025-06-12",
+                "statement_due_day_of_month": 1,
+            },
+        )
+        loan = get_asset_entries(c, snap_id)[0]
+        assert loan["originalPrincipal"] == Decimal("300000.00")
+        assert loan["termMonths"] == 360
+        assert loan["originationDate"] == "2025-06-12"
+        assert loan["statement_due_day_of_month"] == 1
+
+        update_asset_entry(
+            c,
+            snap_id,
+            0,
+            {
+                "originalPrincipal": Decimal("310000"),
+                "termMonths": 180,
+                "originationDate": "2025-07-01",
+                "statement_due_day_of_month": 15,
+            },
+        )
+        loan = get_asset_entries(c, snap_id)[0]
+        assert loan["originalPrincipal"] == Decimal("310000.00")
+        assert loan["termMonths"] == 180
+        assert loan["originationDate"] == "2025-07-01"
+        assert loan["statement_due_day_of_month"] == 15

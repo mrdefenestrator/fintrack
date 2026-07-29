@@ -1,5 +1,6 @@
 """Table builders for status and subcommands (CLI and web)."""
 
+from datetime import date
 from decimal import Decimal
 from typing import Any, Dict, List
 
@@ -10,6 +11,11 @@ from fintrack.networth.calculations import (
     _entry_subtotal,
     _semiannual_other_month,
     _subtotal_remainder_of_month,
+)
+from fintrack.networth.amortization import (
+    payoff_progress,
+    projected_payoff_date,
+    scheduled_payment,
 )
 from fintrack.core.formatting import (
     fmt_day_ordinal,
@@ -319,6 +325,12 @@ def _build_net_worth_table(
         "Subtotal",
         "Reference",
         "Interest rate",
+        "Original",
+        "Term",
+        "Due",
+        "P&I",
+        "Paid",
+        "Payoff",
     ]
     if show_index:
         headers = ["Index"] + headers
@@ -350,6 +362,12 @@ def _build_net_worth_table(
                 fmt_money(subtotal),
                 entry.get("source") or "-",
                 "-",
+                "-",
+                "-",
+                "-",
+                "-",
+                "-",
+                "-",
             ]
         else:  # debt
             total_subtotal -= subtotal
@@ -358,6 +376,33 @@ def _build_net_worth_table(
             if ref is not None:
                 linked = asset_by_id.get(ref)
                 ref_display = linked.get("name", "-") if linked else str(ref)
+            is_loan = entry.get("type") == "loan"
+            payment = (
+                scheduled_payment(
+                    entry.get("originalPrincipal"),
+                    entry.get("interestRate"),
+                    entry.get("termMonths"),
+                )
+                if is_loan
+                else None
+            )
+            progress = (
+                payoff_progress(entry.get("originalPrincipal"), entry.get("balance"))
+                if is_loan
+                else None
+            )
+            due_day = entry.get("statement_due_day_of_month")
+            payoff = (
+                projected_payoff_date(
+                    entry.get("balance"),
+                    entry.get("interestRate"),
+                    payment,
+                    date.today(),
+                    due_day,
+                )
+                if payment is not None
+                else None
+            )
             row = [
                 "Debt",
                 entry.get("institution") or "-",
@@ -367,11 +412,36 @@ def _build_net_worth_table(
                 fmt_money(-subtotal),
                 ref_display,
                 _fmt_interest_rate(entry.get("interestRate")),
+                fmt_money(entry["originalPrincipal"])
+                if is_loan and entry.get("originalPrincipal") is not None
+                else "-",
+                f"{entry['termMonths']} mo"
+                if is_loan and entry.get("termMonths")
+                else "-",
+                fmt_day_ordinal(due_day) if due_day else "-",
+                fmt_money(payment) if payment is not None else "-",
+                f"{progress * 100:.1f}%" if progress is not None else "-",
+                payoff.isoformat() if payoff is not None else "-",
             ]
         if show_index:
             row = [str(idx)] + row
         rows.append(row)
-    total_row = ["Total", "-", "-", "-", "-", fmt_money(total_subtotal), "-", "-"]
+    total_row = [
+        "Total",
+        "-",
+        "-",
+        "-",
+        "-",
+        fmt_money(total_subtotal),
+        "-",
+        "-",
+        "-",
+        "-",
+        "-",
+        "-",
+        "-",
+        "-",
+    ]
     if show_index:
         total_row = [""] + total_row
     _append_table_separator_and_total(rows, headers, total_row)

@@ -49,12 +49,12 @@ mise run serve    # http://localhost:5003
 The root URL is the snapshot picker; every page lives under
 `/s/<snapshot>/<section>`:
 
-`Status · Accounts · Transactions · Trends · Budget · Assets · Projections · Import · Merchants`
+`Holdings · Status · Transactions · Trends · Budget · Projections · Import · Merchants · Categories`
 
-Status is the landing dashboard (key numbers + funding analysis). The accounts
-page is a spreadsheet-style editor (`?edit=1`) with a balance-history sparkline
-and staleness coloring per account. Import accepts drag-and-drop statement
-files, stages them, and confirms/rejects per file.
+Holdings is the finances landing page and combines cash accounts, credit cards,
+loans, and assets in a dense spreadsheet-style editor (`?edit=1`). Status is
+the key-numbers and funding-analysis dashboard. Import accepts drag-and-drop
+statement files, stages them, and confirms/rejects per file.
 
 ## CLI
 

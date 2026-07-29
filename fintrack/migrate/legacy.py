@@ -637,6 +637,9 @@ def apply_migration(
         # --- asset entries -----------------------------------------------------
         asset_map: dict[int, int] = {}
         for a in fin["assets"]:
+            legacy_due_date = _lenient_date(
+                a.get("next_due_date"), f"asset '{a['name']}'", warnings
+            )
             asset_map[a["id"]] = conn.execute(
                 insert(models.asset_entries).values(
                     snapshot_id=snap_map[a["snapshot_id"]],
@@ -648,8 +651,8 @@ def apply_migration(
                     quantity=a.get("quantity"),
                     balance=a.get("balance"),
                     interest_rate=a.get("interest_rate"),
-                    next_due_date=_lenient_date(
-                        a.get("next_due_date"), f"asset '{a['name']}'", warnings
+                    statement_due_day_of_month=(
+                        legacy_due_date.day if legacy_due_date else None
                     ),
                     as_of_date=_lenient_date(
                         a.get("as_of_date"), f"asset '{a['name']}'", warnings

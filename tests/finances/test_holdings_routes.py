@@ -73,6 +73,11 @@ def test_holdings_view_returns_200_with_columns(client):
         "Amount",
         "Equity",
         "LTV",
+        "Original",
+        "Term",
+        "Originated",
+        "P&amp;I",
+        "Paid",
     ):
         assert header in body
     # Both holdings render.
@@ -126,6 +131,11 @@ def test_holdings_grouped_layout(client):
     # Group-specific columns appear, proving per-group headers.
     assert "Unit Price" in body  # Assets
     assert "Equity" in body  # Loans
+    # One physical Details column contains compact per-group grids; the old
+    # structural blank padding columns are gone.
+    assert body.count("holding-details-header") == 4
+    assert 'data-group="cash"' in body
+    assert 'data-sort-key="d0"' in body
 
 
 def test_holdings_view_reuses_shared_filter_bar(client):
@@ -392,6 +402,68 @@ def test_holdings_update_debt_interest(client, db_engine):
     with db_engine.connect() as conn:
         entry = get_asset_entries(conn, 1)[0]
     assert float(entry["interestRate"]) == 0.055
+
+
+def test_holdings_loan_origination_fields_and_derived_values(client, db_engine):
+    from fintrack.networth.repository import get_asset_entries
+
+    with db_engine.connect() as conn:
+        add_asset_entry(
+            conn,
+            1,
+            {
+                "kind": "debt",
+                "type": "loan",
+                "name": "Mortgage",
+                "balance": 240000,
+                "interestRate": 0.06,
+                "originalPrincipal": 300000,
+                "termMonths": 360,
+                "originationDate": "2020-01-10",
+                "statement_due_day_of_month": 31,
+            },
+        )
+
+    body = client.get("/s/finances/holdings?edit=1").get_data(as_text=True)
+    assert "$300,000.00" in body
+    assert "360 mo" in body
+    assert "2020-01-10" in body
+    assert "$1,798.65" in body
+    assert "20.0%" in body
+    assert "31st" in body
+
+    for field, value in (
+        ("originalPrincipal", "310000"),
+        ("termMonths", "180"),
+        ("originationDate", "2021-02-03"),
+        ("statement_due_day_of_month", "15"),
+    ):
+        resp = client.post(
+            "/s/finances/holdings/update/asset/0",
+            data={"field": field, "value": value},
+        )
+        assert resp.status_code == 200
+
+    with db_engine.connect() as conn:
+        loan = get_asset_entries(conn, 1)[0]
+    assert loan["originalPrincipal"] == 310000
+    assert loan["termMonths"] == 180
+    assert loan["originationDate"] == "2021-02-03"
+    assert loan["statement_due_day_of_month"] == 15
+
+
+def test_holdings_rejects_invalid_loan_due_day(client, db_engine):
+    with db_engine.connect() as conn:
+        add_asset_entry(
+            conn,
+            1,
+            {"kind": "debt", "type": "loan", "name": "Loan", "balance": 1000},
+        )
+    resp = client.post(
+        "/s/finances/holdings/update/asset/0",
+        data={"field": "statement_due_day_of_month", "value": "32"},
+    )
+    assert resp.status_code == 422
 
 
 def test_holdings_update_cc_payment_account_ref(client, db_engine):

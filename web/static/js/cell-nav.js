@@ -28,8 +28,25 @@
         );
     }
 
-    function isEditable(td) {
-        return td && td.matches && td.matches('td[hx-get*="/holdings/cell/"]');
+    function isEditable(el) {
+        return el && el.matches && el.matches(
+            'td[hx-get*="/holdings/cell/"], .holding-detail-edit[hx-get*="/holdings/cell/"]'
+        );
+    }
+
+    function editableCells(row) {
+        return Array.prototype.slice.call(
+            row.querySelectorAll(
+                ':scope > td[hx-get*="/holdings/cell/"], :scope > td .holding-detail-edit[hx-get*="/holdings/cell/"]'
+            )
+        );
+    }
+
+    function cellKey(el, row) {
+        var detail = el && el.closest(".holding-detail-cell");
+        if (detail) return "d" + detail.getAttribute("data-detail-col");
+        var td = el && el.closest("td");
+        return td ? "c" + Array.prototype.indexOf.call(row.children, td) : null;
     }
 
     function dataRows() {
@@ -39,25 +56,21 @@
     }
 
     function firstEditable(row, fromEnd) {
-        var cells = row.children;
-        if (fromEnd) {
-            for (var i = cells.length - 1; i >= 0; i--) if (isEditable(cells[i])) return cells[i];
-        } else {
-            for (var j = 0; j < cells.length; j++) if (isEditable(cells[j])) return cells[j];
-        }
-        return null;
+        var cells = editableCells(row);
+        return cells.length ? cells[fromEnd ? cells.length - 1 : 0] : null;
     }
 
-    function findNext(rowId, col, dir) {
+    function findNext(rowId, key, dir) {
         var row = document.getElementById(rowId);
         if (!row) return null;
 
         if (dir === "right" || dir === "left") {
             var step = dir === "right" ? 1 : -1;
-            var cells = row.children;
-            for (var i = col + step; i >= 0 && i < cells.length; i += step) {
-                if (isEditable(cells[i])) return cells[i];
-            }
+            var cells = editableCells(row);
+            var current = cells.findIndex(function (cell) {
+                return cellKey(cell, row) === key;
+            });
+            if (current >= 0 && cells[current + step]) return cells[current + step];
             // Wrap onto the adjacent data row.
             var rows = dataRows();
             var next = rows[rows.indexOf(row) + step];
@@ -69,8 +82,11 @@
         var pos = all.indexOf(row);
         var stp = dir === "down" ? 1 : -1;
         for (var r = pos + stp; r >= 0 && r < all.length; r += stp) {
-            var c = all[r].children[col];
-            if (isEditable(c)) return c;
+            var candidates = editableCells(all[r]);
+            var match = candidates.find(function (cell) {
+                return cellKey(cell, all[r]) === key;
+            });
+            if (match) return match;
         }
         return null;
     }
@@ -129,7 +145,7 @@
             e.stopImmediatePropagation();
             pending = {
                 rowId: tr.id,
-                col: Array.prototype.indexOf.call(tr.children, td),
+                key: cellKey(field, tr),
                 dir: dir,
             };
             htmx.ajax("POST", url, {
@@ -145,7 +161,7 @@
         var nav = pending;
         pending = null;
         if (!nav) return;
-        var next = findNext(nav.rowId, nav.col, nav.dir);
+        var next = findNext(nav.rowId, nav.key, nav.dir);
         if (!next) return;
         var url = next.getAttribute("hx-get");
         // Defer past the current swap's settle, then open the next cell for edit

@@ -197,7 +197,10 @@ class AssetEntry(TypedDict, total=False):
     balance: Decimal  # Amount owed per unit
     assetRef: int  # Optional link to asset entry id
     interestRate: Decimal  # Optional annual rate as decimal
-    nextDueDate: str  # Optional ISO8601 date
+    originalPrincipal: Decimal  # Optional original financed principal
+    termMonths: int  # Optional original amortization term in months
+    originationDate: str  # Optional ISO8601 origination date
+    statement_due_day_of_month: int  # Optional recurring payment due day (1-31)
     asOfDate: str  # Optional ISO8601 date
 
 

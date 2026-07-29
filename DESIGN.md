@@ -98,7 +98,8 @@ Single `MetaData` in `fintrack/core/models.py`.
   category spend.
 - **asset_entries** — assets and debts: `kind`, a liquidity-tier `type` (see
   below), `value`/`quantity`/`balance`, `asset_ref` (e.g. a loan against an
-  asset, which surfaces as equity/LTV), `interest_rate`, `next_due_date`.
+  asset, which surfaces as equity/LTV), `interest_rate`, loan origination
+  fields, and `statement_due_day_of_month`.
 - **balance_history** — the time series behind `accounts.balance`; see below.
 
 Money columns are `Numeric(12,2)` (asset values `14,2`); date columns are real
@@ -264,18 +265,19 @@ and Assets are the `kind=debt` / `kind=asset` slices of `asset_entries`. The
 split is a display grouping only — no data migration, and the debt↔asset
 equity/LTV pairing (`calculations.equity_pairs`) is unchanged.
 
-- **Columns are per-group and tight.** Each group carries its own header row and
-  fills only its own columns; the leading Institution·Type·Name·Amount and the
-  trailing Due·Linked·As Of slots sit in the same slot index in every group so
-  they align down the table, and blank structural slots (rendered as empty cells
-  with the normal gridline) pad the shorter groups — table width = the widest
-  group, not the union. Cash: Reserve·Funding. Credit Cards:
+- **Columns use a common spine plus group details.** The physical table columns
+  are Institution·Type·Name·Amount·Details·Due·Linked·As Of, so every shared
+  field stays aligned with a consistent width. Details is one table cell
+  containing a compact, group-specific CSS grid; shorter groups are no longer
+  padded to the Loans column count. Cash: Reserve·Funding. Credit Cards:
   Limit·Available·Rewards·Statement·Due·Linked. Loans:
-  Interest·Equity·LTV·Due·Linked. Assets: Unit Price·Qty·Source·Linked. Equity
-  and LTV show on the **loan** row (the debt side of a secured pair). A column
-  may carry a `span` so one cell covers several slots — the Assets "Source" cell
-  spans three so its long valuation text borrows neighbouring slots instead of
-  forcing the Rewards / Statement / LTV columns wide in the other groups.
+  Interest·Equity·LTV·Original·Term·Originated·P&I·Paid·Due·Linked. Assets:
+  Unit Price·Qty·Source·Linked. Equity and LTV show on the **loan** row (the
+  debt side of a secured pair). Original, Term, and Originated capture loan
+  origination inputs; P&I and Paid are derived amortization values. Due is a
+  recurring day of month, clamped to month-end when needed. A column
+  Each detail grid has an explicit column template so its headers and values
+  stay aligned independently of the other groups.
 - **Row accent by group, not sign.** The left asset/liability accent is green for
   Cash + Assets and red for Credit Cards + Loans — a credit card reads as a
   liability even at a zero balance — rather than keyed off the current amount's

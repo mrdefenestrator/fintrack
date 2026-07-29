@@ -46,6 +46,7 @@ from fintrack.core.types import (
     HOLDING_TYPE_VALUES,
 )
 from fintrack.networth import calculations
+from fintrack.networth.amortization import payoff_progress, scheduled_payment
 from fintrack.networth.repository import (
     add_asset_entry,
     delete_asset_entry,
@@ -83,18 +84,14 @@ _TYPE_LABELS: dict[str, str] = HOLDING_TYPE_LABELS
 _BALANCE_LABELS: dict[str, str] = {"asset": "Assets", "liability": "Liabilities"}
 
 # ---------------------------------------------------------------------------
-# Column layouts — one per group. Each tuple is (key, header, right_align, span).
+# Column layouts. Each tuple is (key, header, right_align, span).
 #
-# The leading Institution·Type·Name·Amount and the trailing Due·Linked·As Of
-# columns occupy the same *slot* (physical column) in every group so they line up
-# down the table; blank slots (_E) pad the shorter groups. `span` lets one cell
-# cover several slots — the Assets "Source" cell spans two so its long valuation
-# text (e.g. "KBB Private Party Very Good") borrows the neighbouring slot's width
-# instead of forcing the Rewards / Statement / LTV columns wide in other groups.
-# Every group's spans sum to the same slot count so the grid — and the sticky
-# right-hand actions column — line up.
+# The table itself has one eight-column common spine:
+# Institution · Type · Name · Amount · Details · Due · Linked · As Of.
+# "Details" is one physical table cell containing a group-specific CSS grid.
+# This keeps every genuinely shared column aligned without padding short groups
+# out to the Loans group's column count.
 # ---------------------------------------------------------------------------
-_E: tuple[str, str, bool, int] = ("", "", False, 1)  # structural blank slot
 _LEADING: list[tuple[str, str, bool, int]] = [
     ("institution", "Institution", False, 1),
     ("type", "Type", False, 1),
@@ -104,56 +101,46 @@ _LEADING: list[tuple[str, str, bool, int]] = [
 _DUE = ("due", "Due", False, 1)
 _LINKED = ("linked", "Linked", False, 1)
 _ASOF = ("as_of", "As Of", False, 1)
-
-# Slots (after the leading 4): each group's own columns first, then aligned
-# Due (slot 8) · Linked (slot 9) · As Of (slot 10); blank slots pad to keep them
-# aligned across groups.
-_CASH_COLS = _LEADING + [
+_DETAILS = ("details", "Details", False, 1)
+_SPINE_COLS = _LEADING + [_DETAILS, _DUE, _LINKED, _ASOF]
+_CASH_DETAILS = [
     ("reserve", "Reserve", True, 1),
     ("funding", "Funding", True, 1),
-    _E,
-    _E,
-    _E,
-    _E,
-    _ASOF,
 ]
-_CREDIT_COLS = _LEADING + [
+_CREDIT_DETAILS = [
     ("limit", "Limit", True, 1),
     ("available", "Available", True, 1),
     ("rewards", "Rewards", True, 1),
     ("statement", "Statement", True, 1),
-    _DUE,
-    _LINKED,
-    _ASOF,
 ]
-_LOAN_COLS = _LEADING + [
+_LOAN_DETAILS = [
     ("interest", "Interest", True, 1),
     ("equity", "Equity", True, 1),
     ("ltv", "LTV", True, 1),
-    _E,
-    _DUE,
-    _LINKED,
-    _ASOF,
+    ("original", "Original", True, 1),
+    ("term", "Term", True, 1),
+    ("originated", "Originated", False, 1),
+    ("payment", "P&I", True, 1),
+    ("progress", "Paid", True, 1),
 ]
-_ASSET_COLS = _LEADING + [
+_ASSET_DETAILS = [
     ("unit_price", "Unit Price", True, 1),
     ("qty", "Qty", True, 1),
-    ("source", "Source", False, 3),  # spans three slots (see note above)
-    _LINKED,
-    _ASOF,
+    ("source", "Source", False, 1),
 ]
-_NCOLS = sum(span for _, _, _, span in _CASH_COLS)  # slot count (same per group)
+_NCOLS = len(_SPINE_COLS)
 _AMOUNT_POS = 3  # Amount is the 4th (leading) slot in every group
+_DETAIL_POS = 4
 
 # Group definitions: key -> (label, source, singular noun for the add button,
-# column layout). Order here is the top-to-bottom render order.
+# detail layout). Order here is the top-to-bottom render order.
 _GROUPS: list[tuple[str, str, str, str, list]] = [
-    ("cash", "Cash", "account", "account", _CASH_COLS),
-    ("credit", "Credit Cards", "account", "credit card", _CREDIT_COLS),
-    ("loan", "Loans", "asset", "loan", _LOAN_COLS),
-    ("asset", "Assets", "asset", "asset", _ASSET_COLS),
+    ("cash", "Cash", "account", "account", _CASH_DETAILS),
+    ("credit", "Credit Cards", "account", "credit card", _CREDIT_DETAILS),
+    ("loan", "Loans", "asset", "loan", _LOAN_DETAILS),
+    ("asset", "Assets", "asset", "asset", _ASSET_DETAILS),
 ]
-_GROUP_COLS = {key: cols for key, _, _, _, cols in _GROUPS}
+_GROUP_DETAILS = {key: cols for key, _, _, _, cols in _GROUPS}
 
 
 def _account_group_key(a: dict) -> str:
@@ -267,8 +254,12 @@ def _asset_col_fields(e: dict) -> dict:
     }
     if is_debt:
         m["interest"] = "interestRate"
-        m["due"] = "nextDueDate"
+        m["due"] = "statement_due_day_of_month"
         m["linked"] = "assetRef"  # the asset this debt is secured by
+        if e.get("type") == "loan":
+            m["original"] = "originalPrincipal"
+            m["term"] = "termMonths"
+            m["originated"] = "originationDate"
         if single_unit:
             m["amount"] = "balance"
     else:
@@ -368,26 +359,26 @@ def _make_row(
     today,
     source,
     ref,
-    cols,
+    detail_cols,
     col_fields,
     edit_raw,
     liability,
 ):
     """Assemble a row record: display cells, per-cell classes, edit metadata.
 
-    `cols` is the group's column layout; cells/fields are positioned by its keys
-    so groups share their aligned slots. Structural blank slots (key "") render
-    as truly empty cells (not a muted dash). The left accent encodes the asset/
+    The physical cells follow `_SPINE_COLS`; the middle Details cell contains
+    the group's own `detail_cols`. The left accent encodes the asset/
     liability split by the holding's *group* — Credit Cards and Loans are
     liabilities (red) even at a zero balance; Cash and Assets are green — rather
     than by the sign of the current amount.
     """
-    keys = _col_keys(cols)
+    keys = _col_keys(_SPINE_COLS)
+    detail_keys = _col_keys(detail_cols)
     is_liability = liability
-    # Blank structural slots ("") are empty; real columns fall back to a dash.
-    cells = ["" if k == "" else values.get(k, _BLANK) for k in keys]
+    cells = ["" if k == "details" else values.get(k, _BLANK) for k in keys]
     cell_classes = [
-        "" if (k == "" or cells[i] != _BLANK) else _MUTED for i, k in enumerate(keys)
+        "" if (k == "details" or cells[i] != _BLANK) else _MUTED
+        for i, k in enumerate(keys)
     ]
     if "as_of" in keys:
         staleness = _staleness_class(values.get("as_of_iso"), today)
@@ -404,6 +395,11 @@ def _make_row(
         "cell_classes": cell_classes,
         # Blank slots carry no field (never editable).
         "fields": [None if k == "" else col_fields.get(k) for k in keys],
+        "detail_cells": [values.get(k, _BLANK) for k in detail_keys],
+        "detail_fields": [col_fields.get(k) for k in detail_keys],
+        "detail_classes": [
+            "" if values.get(k, _BLANK) != _BLANK else _MUTED for k in detail_keys
+        ],
         "edit_raw": edit_raw,
         "accent_side": "liability" if is_liability else "asset",
     }
@@ -452,7 +448,7 @@ def _account_row(a: dict, funding_by_id: dict, account_display: dict, today: dat
         today,
         "account",
         a.get("id"),
-        _GROUP_COLS[group_key],
+        _GROUP_DETAILS[group_key],
         _account_col_fields(a),
         edit_raw,
         liability=group_key in ("credit", "loan"),
@@ -464,6 +460,20 @@ def _asset_row(e: dict, pair: dict | None, linked: str, index: int, today: date)
     price = e.get("balance") if is_debt else e.get("value")
     amount = calculations.asset_contribution(e)
     group_key = _asset_group_key(e)
+    has_amortization = is_debt and e.get("type") == "loan"
+    payment = (
+        scheduled_payment(
+            e.get("originalPrincipal"), e.get("interestRate"), e.get("termMonths")
+        )
+        if has_amortization
+        else None
+    )
+    progress = (
+        payoff_progress(e.get("originalPrincipal"), e.get("balance"))
+        if has_amortization
+        else None
+    )
+    due_day = e.get("statement_due_day_of_month")
     values = {
         "institution": e.get("institution") or _BLANK,
         "type": _type_label(e.get("type")) or _BLANK,
@@ -471,11 +481,24 @@ def _asset_row(e: dict, pair: dict | None, linked: str, index: int, today: date)
         "unit_price": _unit_price(e.get("unit") or "USD", price),
         "qty": _fmt_qty(e.get("quantity")),
         "amount": fmt_money(amount),
-        "due": e.get("nextDueDate") if is_debt and e.get("nextDueDate") else _BLANK,
+        "due": fmt_day_ordinal(due_day) if is_debt and due_day else _BLANK,
         # Linked: for a loan, the asset it is secured by; for an asset, the
         # loan(s) secured against it.
         "linked": linked,
         "interest": _fmt_pct(e.get("interestRate")),
+        "original": (
+            _money(e.get("originalPrincipal")) if has_amortization else _BLANK
+        ),
+        "term": (
+            f"{e['termMonths']} mo"
+            if has_amortization and e.get("termMonths")
+            else _BLANK
+        ),
+        "originated": (
+            e.get("originationDate") or _BLANK if has_amortization else _BLANK
+        ),
+        "payment": _money(payment),
+        "progress": _fmt_ltv(progress),
         "source": _BLANK if is_debt else (e.get("source") or _BLANK),
         "as_of": e.get("asOfDate") or _BLANK,
         "as_of_iso": e.get("asOfDate"),
@@ -492,7 +515,10 @@ def _asset_row(e: dict, pair: dict | None, linked: str, index: int, today: date)
         "value": _raw(e.get("value")),
         "balance": _raw(e.get("balance")),
         "interestRate": _raw(e.get("interestRate")),
-        "nextDueDate": e.get("nextDueDate") or "",
+        "originalPrincipal": _raw(e.get("originalPrincipal")),
+        "termMonths": _raw(e.get("termMonths")),
+        "originationDate": e.get("originationDate") or "",
+        "statement_due_day_of_month": _raw(e.get("statement_due_day_of_month")),
         "assetRef": _raw(e.get("assetRef")),
         "source": e.get("source") or "",
     }
@@ -504,7 +530,7 @@ def _asset_row(e: dict, pair: dict | None, linked: str, index: int, today: date)
         today,
         "asset",
         index,
-        _GROUP_COLS[group_key],
+        _GROUP_DETAILS[group_key],
         _asset_col_fields(e),
         edit_raw,
         liability=group_key == "loan",
@@ -580,7 +606,7 @@ def _groups_ctx(rows_by_group: dict[str, list[dict]], accounts, assets):
     tables at once.
     """
     groups = []
-    for key, label, source, add_noun, cols in _GROUPS:
+    for key, label, source, add_noun, detail_cols in _GROUPS:
         grp_rows = rows_by_group.get(key, [])
         total = sum((r["amount"] for r in grp_rows), Decimal("0"))
         sources = {r["source"] for r in grp_rows}
@@ -591,9 +617,12 @@ def _groups_ctx(rows_by_group: dict[str, list[dict]], accounts, assets):
                 "label": label,
                 "source": source,
                 "add_noun": add_noun,
-                "headers": _col_headers(cols),
-                "right_align": _col_right_align(cols),
-                "spans": _col_spans(cols),
+                "headers": _col_headers(_SPINE_COLS),
+                "right_align": _col_right_align(_SPINE_COLS),
+                "spans": _col_spans(_SPINE_COLS),
+                "detail_headers": _col_headers(detail_cols),
+                "detail_keys": _col_keys(detail_cols),
+                "detail_right_align": _col_right_align(detail_cols),
                 "rows": grp_rows,
                 "total": fmt_money(total),
                 "reorderable": reorderable,
@@ -640,6 +669,7 @@ def _tbody_ctx(rows_by_group, ctx: dict, filters_active=False, **editing) -> dic
         "filters_active": filters_active,
         "ncols": _NCOLS,
         "amount_pos": _AMOUNT_POS,
+        "detail_pos": _DETAIL_POS,
         "account_type_options": ACCOUNT_TYPE_OPTIONS,
         "asset_type_options": ASSET_TYPE_OPTIONS,
         "account_ref_options": account_ref_options,
@@ -778,10 +808,20 @@ def _coerce(source: str, field: str, value_raw: str) -> tuple:
         return value_raw, None
     if field == "unit":
         return (value_raw.upper() or "USD"), None
-    if field in ("institution", "source", "nextDueDate"):
+    if field in ("institution", "source", "originationDate"):
         return (value_raw or None), None
     cmap = ACCOUNTS_COERCION if source == "account" else ASSETS_COERCION
-    return coerce_value(field, value_raw, cmap)
+    value, error = coerce_value(field, value_raw, cmap)
+    if error:
+        return value, error
+    if field == "statement_due_day_of_month" and value is not None:
+        if not 1 <= value <= 31:
+            return None, "Due day must be between 1 and 31"
+    if field == "termMonths" and value is not None and value <= 0:
+        return None, "Term must be greater than zero"
+    if field == "originalPrincipal" and value is not None and value <= 0:
+        return None, "Original principal must be greater than zero"
+    return value, None
 
 
 @holdings_bp.route("/<filename>/holdings/update/<source>/<int:ref>", methods=["POST"])
@@ -875,7 +915,7 @@ def reorder(filename: str, group: str):
     fixed, then persisted as a full table permutation.
     """
     snapshot_id = validate_snapshot(filename)
-    if group not in _GROUP_COLS:
+    if group not in _GROUP_DETAILS:
         abort(404)
     source = "account" if group in ("cash", "credit") else "asset"
     try:
@@ -918,7 +958,7 @@ def reorder(filename: str, group: str):
 def add(filename: str, group: str):
     """Add a blank holding to a group; the user then edits it inline."""
     snapshot_id = validate_snapshot(filename)
-    if group not in _GROUP_COLS:
+    if group not in _GROUP_DETAILS:
         abort(404)
     engine = current_app.config["engine"]
     today = _client_today()

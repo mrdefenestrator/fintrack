@@ -290,7 +290,7 @@ def test_apply_full_migration(
             for a in conn.execute(select(models.asset_entries)).mappings().all()
         }
         assert assets["Mortgage"]["asset_ref"] == assets["House"]["id"]
-        assert assets["Mortgage"]["next_due_date"] is None  # 'not-a-date' warned
+        assert assets["Mortgage"]["statement_due_day_of_month"] is None
 
         # balance_history: 1 statement row + 3 migration rows
         history = conn.execute(select(models.balance_history)).mappings().all()

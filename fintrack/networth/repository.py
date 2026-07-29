@@ -10,7 +10,7 @@ from fintrack.core.models import asset_entries
 from fintrack.core.ordering import reorder_by_positions
 from fintrack.core.types import AssetEntry
 
-_DATE_COLS = ("next_due_date", "as_of_date")
+_DATE_COLS = ("origination_date", "as_of_date")
 
 
 def _row_to_asset_entry(row) -> AssetEntry:
@@ -32,7 +32,10 @@ def _row_to_asset_entry(row) -> AssetEntry:
         "balance": "balance",
         "asset_ref": "assetRef",
         "interest_rate": "interestRate",
-        "next_due_date": "nextDueDate",
+        "original_principal": "originalPrincipal",
+        "term_months": "termMonths",
+        "origination_date": "originationDate",
+        "statement_due_day_of_month": "statement_due_day_of_month",
         "as_of_date": "asOfDate",
     }
     for col, field in optional_map.items():
@@ -197,7 +200,10 @@ _FIELD_TO_COL = {
     "balance": "balance",
     "assetRef": "asset_ref",
     "interestRate": "interest_rate",
-    "nextDueDate": "next_due_date",
+    "originalPrincipal": "original_principal",
+    "termMonths": "term_months",
+    "originationDate": "origination_date",
+    "statement_due_day_of_month": "statement_due_day_of_month",
     "asOfDate": "as_of_date",
 }
 
@@ -225,7 +231,10 @@ def _entry_dict_to_row(
         "balance": "balance",
         "assetRef": "asset_ref",
         "interestRate": "interest_rate",
-        "nextDueDate": "next_due_date",
+        "originalPrincipal": "original_principal",
+        "termMonths": "term_months",
+        "originationDate": "origination_date",
+        "statement_due_day_of_month": "statement_due_day_of_month",
         "asOfDate": "as_of_date",
     }
     for field, col in optional_map.items():

@@ -57,7 +57,22 @@ _BUDGET_COLALIGN = (
     "left",
     "left",
 )
-_ASSETS_COLALIGN = ("left", "left", "left", "right", "right", "right", "left", "right")
+_ASSETS_COLALIGN = (
+    "left",
+    "left",
+    "left",
+    "right",
+    "right",
+    "right",
+    "left",
+    "right",
+    "right",
+    "right",
+    "right",
+    "right",
+    "right",
+    "left",
+)
 
 # Asset-entry types selectable for the `asset` kind (everything but `loan`,
 # which is the liability type used by debts). Drives --type choices.
@@ -670,7 +685,14 @@ def debts(ctx, sort_key, sort_dir, show_id):
 @click.option("--quantity", type=float, default=None)
 @click.option("--assetRef", "asset_ref", type=int, default=None)
 @click.option("--interestRate", "interest_rate", type=float, default=None)
-@click.option("--nextDueDate", "next_due_date", default=None)
+@click.option("--original-principal", type=float, default=None)
+@click.option("--term-months", type=click.IntRange(min=1), default=None)
+@click.option(
+    "--statement_due_day_of_month",
+    type=click.IntRange(min=1, max=31),
+    default=None,
+)
+@click.option("--origination-date", default=None)
 @click.option("--asOfDate", "as_of", default=None)
 @click.option("--institution", default=None)
 @pass_cli
@@ -681,7 +703,10 @@ def debts_add(
     quantity,
     asset_ref,
     interest_rate,
-    next_due_date,
+    original_principal,
+    term_months,
+    statement_due_day_of_month,
+    origination_date,
     as_of,
     institution,
 ):
@@ -690,7 +715,10 @@ def debts_add(
         ("quantity", quantity),
         ("assetRef", asset_ref),
         ("interestRate", interest_rate),
-        ("nextDueDate", next_due_date),
+        ("originalPrincipal", original_principal),
+        ("termMonths", term_months),
+        ("statement_due_day_of_month", statement_due_day_of_month),
+        ("originationDate", origination_date),
         ("asOfDate", as_of),
         ("institution", institution),
     ):
@@ -712,7 +740,14 @@ def debts_add(
 @click.option("--quantity", type=float, default=None)
 @click.option("--assetRef", "asset_ref", type=int, default=None)
 @click.option("--interestRate", "interest_rate", type=float, default=None)
-@click.option("--nextDueDate", "next_due_date", default=None)
+@click.option("--original-principal", type=float, default=None)
+@click.option("--term-months", type=click.IntRange(min=1), default=None)
+@click.option(
+    "--statement_due_day_of_month",
+    type=click.IntRange(min=1, max=31),
+    default=None,
+)
+@click.option("--origination-date", default=None)
 @click.option("--asOfDate", "as_of", default=None)
 @click.option("--institution", default=None)
 @pass_cli
@@ -723,7 +758,10 @@ def debts_edit(cli, index, **kwargs):
         "quantity": "quantity",
         "asset_ref": "assetRef",
         "interest_rate": "interestRate",
-        "next_due_date": "nextDueDate",
+        "original_principal": "originalPrincipal",
+        "term_months": "termMonths",
+        "statement_due_day_of_month": "statement_due_day_of_month",
+        "origination_date": "originationDate",
         "as_of": "asOfDate",
         "institution": "institution",
     }

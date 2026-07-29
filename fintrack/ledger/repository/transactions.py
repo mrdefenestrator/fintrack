@@ -73,6 +73,11 @@ def get_transactions(
             transactions.c.date >= start,
             transactions.c.date <= end,
         )
+    elif year:
+        subq = subq.where(
+            transactions.c.date >= date(year, 1, 1),
+            transactions.c.date <= date(year, 12, 31),
+        )
 
     if acct_filter:
         subq = subq.where(transactions.c.account_id.in_(acct_filter))

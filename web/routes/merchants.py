@@ -41,6 +41,8 @@ def index():
     # Default (case-insensitive by name) order; column sorting is done
     # client-side in the web UI (web/static/js/sortable.js).
     merchants = sorted(merchants, key=lambda m: (m["merchant_name"] or "").lower())
+    merchant_count = len(merchants)
+    total_txn_count = sum(m["txn_count"] for m in merchants)
 
     template = (
         "partials/merchants_content.html"
@@ -55,6 +57,8 @@ def index():
         search=search,
         selected_category=filter_category,
         selected_source=filter_source,
+        merchant_count=merchant_count,
+        total_txn_count=total_txn_count,
     )
 
 

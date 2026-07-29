@@ -9,5 +9,12 @@
         {% for m in merchants %}
         {% include "partials/merchant_row.html" %}
         {% endfor %}
+        {% if merchant_count %}
+        <tr class="total-row bg-gray-100 dark:bg-gray-700 border-t-2 border-gray-300 dark:border-gray-600 font-medium">
+            <td class="{{ sheet.cell_class('', 'whitespace-nowrap') }}" colspan="3">{{ merchant_count }} merchant{{ 's' if merchant_count != 1 else '' }}</td>
+            <td class="{{ sheet.cell_class('text-right tabular-nums') }}">{{ total_txn_count }}</td>
+            <td class="{{ sheet.cell_class() }}"></td>
+        </tr>
+        {% endif %}
     </tbody>
 </table>

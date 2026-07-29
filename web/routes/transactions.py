@@ -56,14 +56,16 @@ def index():
         else:
             search, amount = q, None
     status = request.args.get("status")
-    all_months = request.args.get("all_months") == "true"
+    all_months_val = request.args.get("all_months", "")
+    all_months = all_months_val == "true"
+    this_year = all_months_val == "year"
 
     engine = current_app.config["engine"]
     with engine.connect() as conn:
         txns = get_transactions(
             conn,
             year=None if all_months else year,
-            month=None if all_months else month,
+            month=None if (all_months or this_year) else month,
             categories=selected_categories or None,
             account_ids=selected_accounts or None,
             search=search,
@@ -85,6 +87,7 @@ def index():
     # button + disabled next arrow once you're at/after it) so both time pagers
     # behave identically.
     is_latest = (year, month) >= (today.year, today.month)
+    is_latest_year = year >= today.year
     # Human-readable month label ("Jul 2026"), matching the Trends window label
     # (%b %Y) so the two pagers read the same.
     month_label = f"{date(year, month, 1):%b %Y}"
@@ -107,6 +110,7 @@ def index():
         next_year=next_year,
         next_month=next_month,
         is_latest=is_latest,
+        is_latest_year=is_latest_year,
         latest_year=today.year,
         latest_month=today.month,
         month_label=month_label,
@@ -115,6 +119,7 @@ def index():
         q=amount or search or "",
         selected_status=status,
         all_months=all_months,
+        this_year=this_year,
         txn_count=txn_count,
         txn_total=txn_total,
     )

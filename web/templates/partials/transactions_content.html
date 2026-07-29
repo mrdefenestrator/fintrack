@@ -39,7 +39,15 @@
        htmx:configRequest handler (ledger.js) injects the currently-viewed month
        into any /transactions request missing year/month, which would otherwise
        send Latest right back to the month you're on. #}
-    {% if not all_months and not this_year %}
+    {% if this_year %}
+    {{ nav.pager(
+        prev_url="%s?year=%s&month=%s&all_months=year%s" | format(_url, year - 1, month, filter_qs),
+        next_url="%s?year=%s&month=%s&all_months=year%s" | format(_url, year + 1, month, filter_qs),
+        label=year,
+        is_latest=is_latest_year,
+        latest_url="%s?year=%s&month=%s&all_months=year%s" | format(_url, latest_year, month, filter_qs),
+        label_width='w-16') }}
+    {% elif not all_months %}
     {{ nav.pager(
         prev_url="%s?year=%s&month=%s%s" | format(_url, prev_year, prev_month, filter_qs),
         next_url="%s?year=%s&month=%s%s" | format(_url, next_year, next_month, filter_qs),

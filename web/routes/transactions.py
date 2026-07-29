@@ -87,6 +87,7 @@ def index():
     # button + disabled next arrow once you're at/after it) so both time pagers
     # behave identically.
     is_latest = (year, month) >= (today.year, today.month)
+    is_latest_year = year >= today.year
     # Human-readable month label ("Jul 2026"), matching the Trends window label
     # (%b %Y) so the two pagers read the same.
     month_label = f"{date(year, month, 1):%b %Y}"
@@ -109,6 +110,7 @@ def index():
         next_year=next_year,
         next_month=next_month,
         is_latest=is_latest,
+        is_latest_year=is_latest_year,
         latest_year=today.year,
         latest_month=today.month,
         month_label=month_label,

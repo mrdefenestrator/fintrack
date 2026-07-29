@@ -30,9 +30,9 @@
 <div class="shrink-0 mb-2 flex flex-wrap items-center justify-between gap-2">
     {{ nav.segmented([
         {'url': "%s?year=%s&month=%s%s" | format(_url, year, month, filter_qs),
-         'label': 'This month', 'active': not all_months and not this_year},
+         'label': 'Month', 'active': not all_months and not this_year},
         {'url': "%s?year=%s&month=%s&all_months=year%s" | format(_url, year, month, filter_qs),
-         'label': 'This year', 'active': this_year},
+         'label': 'Year', 'active': this_year},
         {'url': "%s?all_months=true%s" | format(_url, filter_qs),
          'label': 'All time', 'active': all_months}]) }}
     {# Latest carries the current month explicitly (not a bare URL): the global

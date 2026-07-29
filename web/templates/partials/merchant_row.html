@@ -8,13 +8,15 @@
            hx-get="/s/{{ filename }}/transactions?search={{ m.merchant_name | urlencode }}"
            hx-target="#content" hx-push-url="true">{{ m.merchant_name }}</a>
     </td>
-    {% if editing_field is defined and editing_field == 'category' %}
+    {% if edit_mode and editing_field is defined and editing_field == 'category' %}
         {{ select_edit('category', m.category, categories,
             "/s/" ~ filename ~ "/merchants/" ~ m.id ~ "/category",
             row_id,
             display_url="/s/" ~ filename ~ "/merchants/" ~ m.id ~ "/row") }}
-    {% else %}
+    {% elif edit_mode %}
         {{ cell_display(m.category, "/s/" ~ filename ~ "/merchants/" ~ m.id ~ "/cell?field=category", row_id) }}
+    {% else %}
+        <td class="{{ sheet.cell_class() }}">{{ m.category }}</td>
     {% endif %}
     <td class="{{ sheet.cell_class('', 'text-gray-500 dark:text-gray-400') }}">{{ source_labels.get(m.source, m.source) }}</td>
     <td class="{{ sheet.cell_class('text-right tabular-nums') }}">{{ m.txn_count }}</td>

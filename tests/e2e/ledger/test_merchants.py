@@ -142,10 +142,10 @@ def test_merchants_appear_after_transaction_correction(page, confirmed_server):
 
 def test_merchants_category_cell_opens_inline_select(page, confirmed_server):
     """Clicking a merchant's Category cell swaps it to an inline <select>."""
-    page.goto(f"{confirmed_server}/s/ledger/merchants")
+    page.goto(f"{confirmed_server}/s/ledger/merchants?edit=1")
     if page.locator("table tbody tr:not(.sheet-grid-filler)").count() == 0:
         _seed_merchant_via_transaction(page, confirmed_server)
-        page.goto(f"{confirmed_server}/s/ledger/merchants")
+        page.goto(f"{confirmed_server}/s/ledger/merchants?edit=1")
 
     first_row = page.locator("table tbody tr:not(.sheet-grid-filler)").first
     _open_inline_editor(page, first_row.locator("td").nth(1))  # Category column
@@ -156,10 +156,10 @@ def test_merchants_category_cell_opens_inline_select(page, confirmed_server):
 
 def test_merchants_category_inline_edit_saves(page, confirmed_server):
     """Selecting a new category in the inline editor persists it."""
-    page.goto(f"{confirmed_server}/s/ledger/merchants")
+    page.goto(f"{confirmed_server}/s/ledger/merchants?edit=1")
     if page.locator("table tbody tr:not(.sheet-grid-filler)").count() == 0:
         _seed_merchant_via_transaction(page, confirmed_server)
-        page.goto(f"{confirmed_server}/s/ledger/merchants")
+        page.goto(f"{confirmed_server}/s/ledger/merchants?edit=1")
 
     first_row = page.locator("table tbody tr:not(.sheet-grid-filler)").first
     _open_inline_editor(page, first_row.locator("td").nth(1))  # Category column
@@ -208,14 +208,23 @@ def test_merchants_search_filters_results(page, confirmed_server):
 
 
 def _add_category(page, base_url, name):
-    """Add a category via the Categories page add row; returns once it lands."""
-    page.goto(f"{base_url}/s/ledger/categories")
-    add_input = page.locator("#categories-tbody input[name='name']")
-    add_input.fill(name)
+    """Add a category via the Categories page stub-then-edit pattern."""
+    page.goto(f"{base_url}/s/ledger/categories?edit=1")
     with page.expect_response(
         lambda r: "/categories/add" in r.url and r.request.method == "POST"
     ):
-        add_input.press("Enter")
+        page.locator("button", has_text="+ Add category").click()
+    page.wait_for_load_state("networkidle")
+    # The stub is created as "New category" (or "New category N"); rename it.
+    stub_cell = page.locator("#categories-tbody td", has_text="New category").first
+    _open_inline_editor(page, stub_cell)
+    rename_input = page.locator("#categories-tbody input[name='value']")
+    rename_input.wait_for()
+    rename_input.fill(name)
+    with page.expect_response(
+        lambda r: "/rename" in r.url and r.request.method == "POST"
+    ):
+        rename_input.press("Enter")
     page.wait_for_load_state("networkidle")
 
 
@@ -229,10 +238,10 @@ def test_categories_moved_off_merchants_page(page, confirmed_server):
 
 def test_categories_page_renders_sheet(page, confirmed_server):
     """The Categories page renders the shared sheet: a Category column header
-    and an add row."""
-    page.goto(f"{confirmed_server}/s/ledger/categories")
+    and (in edit mode) an add button."""
+    page.goto(f"{confirmed_server}/s/ledger/categories?edit=1")
     assert page.locator("#categories-table thead th", has_text="Category").is_visible()
-    assert page.locator("#categories-tbody input[name='name']").is_visible()
+    assert page.locator("button", has_text="+ Add category").is_visible()
 
 
 def test_categories_add_new_category(page, confirmed_server):
@@ -248,17 +257,21 @@ def test_categories_add_new_category(page, confirmed_server):
     assert any("TempCat" in t for t in labels)
 
 
-def test_categories_add_duplicate_shows_inline_error(page, confirmed_server):
-    """Adding a name that already exists shows an inline error row instead of
-    creating a duplicate."""
+def test_categories_rename_to_duplicate_shows_inline_error(page, confirmed_server):
+    """Renaming a category to an existing name shows an inline error row."""
     _add_category(page, confirmed_server, "DupCat")
+    _add_category(page, confirmed_server, "DupCat2")
 
-    add_input = page.locator("#categories-tbody input[name='name']")
-    add_input.fill("DupCat")
+    cell = page.locator("#categories-tbody td", has_text="DupCat2").first
+    _open_inline_editor(page, cell)
+
+    rename_input = page.locator("#categories-tbody input[name='value']")
+    rename_input.wait_for()
+    rename_input.fill("DupCat")
     with page.expect_response(
-        lambda r: "/categories/add" in r.url and r.request.method == "POST"
+        lambda r: "/rename" in r.url and r.request.method == "POST"
     ) as resp_info:
-        add_input.press("Enter")
+        rename_input.press("Enter")
     assert resp_info.value.status == 422
     assert "already exists" in page.locator("#categories-tbody").inner_text()
 
@@ -268,8 +281,7 @@ def test_categories_rename(page, confirmed_server):
     _add_category(page, confirmed_server, "RenameMeCat")
 
     cell = page.locator("#categories-tbody td", has_text="RenameMeCat").first
-    with page.expect_response(lambda r: "/edit" in r.url):
-        cell.click()
+    _open_inline_editor(page, cell)
 
     rename_input = page.locator("#categories-tbody input[name='value']")
     rename_input.wait_for()
@@ -290,14 +302,14 @@ def test_categories_blocked_delete_shows_breakdown(page, confirmed_server):
     _add_category(page, confirmed_server, "ProtectedCat")
     _seed_merchant_via_transaction(page, confirmed_server, category="ProtectedCat")
 
-    page.goto(f"{confirmed_server}/s/ledger/categories")
+    page.goto(f"{confirmed_server}/s/ledger/categories?edit=1")
     row = page.locator("#categories-tbody tr", has_text="ProtectedCat")
     with page.expect_response(lambda r: "/delete-confirm" in r.url):
-        row.get_by_title("Delete category").click()
+        row.get_by_title("Delete").click()
     with page.expect_response(
         lambda r: r.url.endswith("/delete") and r.request.method == "POST"
     ) as resp_info:
-        page.locator("#categories-tbody").get_by_title("Confirm delete").click()
+        row.get_by_title("Confirm delete").click()
     assert resp_info.value.status == 422
 
     tbody_text = page.locator("#categories-tbody").inner_text()

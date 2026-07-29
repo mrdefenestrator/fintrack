@@ -9,7 +9,8 @@
     {'value': 'manual', 'display': 'Manual'}] %}
 {% set _active = (1 if selected_category else 0) + (1 if selected_source else 0) + (1 if search else 0) %}
 
-{% call fb.filter_bar(active_count=_active, reset_url=_url) %}
+{% call fb.filter_bar(active_count=_active, reset_url=_url ~ ('?edit=1' if edit_mode else '')) %}
+    {% if edit_mode %}<input type="hidden" name="edit" value="1">{% endif %}
     {{ fc.single_select('category', 'Category', category_opts, selected_category or '', _url, any_label='Any category') }}
     {{ fc.single_select('source', 'Source', source_opts, selected_source or '', _url, any_label='Any source') }}
     <input type="search" id="merchant-search" name="search" value="{{ search }}" placeholder="Search merchants..."

@@ -107,66 +107,32 @@ def test_budget_update_cell(page, flask_server):
     assert page.locator("#budget-tbody").get_by_text("Monthly Salary").is_visible()
 
 
-def test_budget_add_income(page, flask_server):
-    """Adding a new income entry via the add row."""
-    page.goto(f"{flask_server}/s/test_finances/budget")
-    enable_edit_mode(page)
-
-    add_row = page.locator("#budget-add-row")
-    # Kind defaults to income
-    add_row.locator("input[name='description']").fill("Side Gig")
-    add_row.locator("input[name='amount']").fill("200")
-
-    add_row.locator("button[type='submit']").click()
-    page.wait_for_timeout(500)
-
-    # Should see the new entry after page refresh (HX-Refresh)
-    page.goto(f"{flask_server}/s/test_finances/budget")
-    assert page.locator("#budget-tbody").get_by_text("Side Gig").is_visible()
-
-
 def test_budget_add_expense(page, flask_server):
-    """Adding a new expense entry via the add row."""
+    """Adding a new expense entry via the stub-then-edit add button."""
     page.goto(f"{flask_server}/s/test_finances/budget")
     enable_edit_mode(page)
 
-    add_row = page.locator("#budget-add-row")
-    add_row.locator("select[name='kind']").select_option("expense")
-    page.wait_for_timeout(200)
+    with page.expect_response(
+        lambda r: "/budget/add" in r.url and r.request.method == "POST"
+    ):
+        page.locator("button", has_text="+ Add expense").click()
+    page.wait_for_load_state("networkidle")
 
-    add_row.locator("input[name='description']").fill("Internet")
-    add_row.locator("input[name='amount']").fill("80")
-
-    add_row.locator("button[type='submit']").click()
-    page.wait_for_timeout(500)
-
-    page.goto(f"{flask_server}/s/test_finances/budget")
-    assert page.locator("#budget-tbody").get_by_text("Internet").is_visible()
+    assert page.locator("#budget-tbody").get_by_text("New entry").is_visible()
 
 
-def test_budget_kind_selector_filters_types(page, flask_server):
-    """Switching kind in add row filters the type dropdown options."""
+def test_budget_add_income(page, flask_server):
+    """Adding a new income entry via the stub-then-edit add button."""
     page.goto(f"{flask_server}/s/test_finances/budget")
     enable_edit_mode(page)
 
-    add_row = page.locator("#budget-add-row")
-    type_select = add_row.locator("select[name='type']")
+    with page.expect_response(
+        lambda r: "/budget/add" in r.url and r.request.method == "POST"
+    ):
+        page.locator("button", has_text="+ Add income").click()
+    page.wait_for_load_state("networkidle")
 
-    # When kind=income, income types should be visible
-    add_row.locator("select[name='kind']").select_option("income")
-    page.wait_for_timeout(200)
-
-    # salary option should be visible
-    salary_opt = type_select.locator("option[value='salary']")
-    assert salary_opt.count() > 0
-
-    # Switch to expense
-    add_row.locator("select[name='kind']").select_option("expense")
-    page.wait_for_timeout(200)
-
-    # housing option should be visible
-    housing_opt = type_select.locator("option[value='housing']")
-    assert housing_opt.count() > 0
+    assert page.locator("#budget-tbody").get_by_text("New entry").is_visible()
 
 
 def test_budget_delete(page, flask_server):

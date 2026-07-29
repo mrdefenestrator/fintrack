@@ -6,7 +6,7 @@
    snapshot-scoped), so there's no filter bar; the card carries all four borders
    itself instead of borrowing its top edge from a filter bar. #}
 <div class="table-scroll-container rounded-lg border border-gray-300 dark:border-gray-600 shadow-sm" data-sheet-scroll>
-<table id="categories-table" class="editable-table sortable w-full text-sm border-collapse bg-white dark:bg-gray-800">
+<table id="categories-table" class="editable-table sortable w-full text-sm border-collapse bg-white dark:bg-gray-800" data-cell-nav="categories-tbody">
     {% with headers=['Category'], right_align_cols=[] %}{% include "partials/editable_table_thead.html" %}{% endwith %}
     <tbody id="categories-tbody">
         {% include "partials/categories_tbody.html" %}

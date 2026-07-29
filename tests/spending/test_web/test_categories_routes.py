@@ -60,39 +60,40 @@ def test_merchants_page_no_longer_embeds_categories(client, db_engine):
     assert "categories-panel-body" not in body
 
 
-def test_add_category_success(client, db_engine):
-    resp = client.post("/s/ledger/categories/add", data={"name": "Pets"})
+def test_add_category_creates_stub(client, db_engine):
+    resp = client.post("/s/ledger/categories/add")
     assert resp.status_code == 200
-    assert "Pets" in resp.get_data(as_text=True)
+    assert resp.headers.get("HX-Refresh") == "true"
     with db_engine.connect() as conn:
         assert conn.execute(
-            select(categories.c.id).where(categories.c.name == "Pets")
+            select(categories.c.id).where(categories.c.name == "New category")
         ).fetchone()
 
 
-def test_add_category_duplicate_returns_422_with_message(client, db_engine):
-    _add(db_engine, "Pets")
-    resp = client.post("/s/ledger/categories/add", data={"name": "Pets"})
-    assert resp.status_code == 422
-    assert "HX-Refresh" not in resp.headers
-    assert "already exists" in resp.get_data(as_text=True)
+def test_add_category_generates_unique_name(client, db_engine):
+    _add(db_engine, "New category")
+    resp = client.post("/s/ledger/categories/add")
+    assert resp.status_code == 200
+    with db_engine.connect() as conn:
+        assert conn.execute(
+            select(categories.c.id).where(categories.c.name == "New category 2")
+        ).fetchone()
 
 
-def test_add_category_case_insensitive_duplicate_returns_422(client, db_engine):
-    _add(db_engine, "Pets")
-    resp = client.post("/s/ledger/categories/add", data={"name": "PETS"})
-    assert resp.status_code == 422
-    assert "already exists" in resp.get_data(as_text=True)
-
-
-def test_add_category_empty_name_returns_422(client):
-    resp = client.post("/s/ledger/categories/add", data={"name": "   "})
-    assert resp.status_code == 422
+def test_add_category_generates_sequential_names(client, db_engine):
+    _add(db_engine, "New category")
+    _add(db_engine, "New category 2")
+    resp = client.post("/s/ledger/categories/add")
+    assert resp.status_code == 200
+    with db_engine.connect() as conn:
+        assert conn.execute(
+            select(categories.c.id).where(categories.c.name == "New category 3")
+        ).fetchone()
 
 
 def test_edit_returns_inline_editor(client, db_engine):
     cat_id = _add(db_engine, "Groceries")
-    resp = client.get(f"/s/ledger/categories/{cat_id}/edit")
+    resp = client.get(f"/s/ledger/categories/{cat_id}/edit?edit=1")
     assert resp.status_code == 200
     body = resp.get_data(as_text=True)
     assert 'name="value"' in body
@@ -169,20 +170,25 @@ def test_delete_confirm_shows_yes_no(client, db_engine):
     cat_id = _add(db_engine, "Groceries")
     resp = client.get(f"/s/ledger/categories/{cat_id}/delete-confirm")
     assert resp.status_code == 200
-    assert "Confirm delete" in resp.get_data(as_text=True)
+    body = resp.get_data(as_text=True)
+    assert "Confirm delete" in body
+    assert "Cancel delete" in body
 
 
 def test_delete_btn_cancels_confirm(client, db_engine):
     cat_id = _add(db_engine, "Groceries")
     resp = client.get(f"/s/ledger/categories/{cat_id}/delete-btn")
     assert resp.status_code == 200
-    assert "Confirm delete" not in resp.get_data(as_text=True)
+    body = resp.get_data(as_text=True)
+    assert "Confirm delete" not in body
+    assert "Delete" in body
 
 
 def test_delete_unused_category_succeeds(client, db_engine):
     cat_id = _add(db_engine, "Groceries")
     resp = client.post(f"/s/ledger/categories/{cat_id}/delete")
     assert resp.status_code == 200
+    assert resp.headers.get("HX-Refresh") == "true"
     with db_engine.connect() as conn:
         assert not conn.execute(
             select(categories.c.id).where(categories.c.name == "Groceries")

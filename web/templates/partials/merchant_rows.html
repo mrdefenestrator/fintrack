@@ -3,7 +3,7 @@
    `sortable` class + `sortable-th` headers; there is no server-side sort.
    Inline Category editing is preserved — see partials/merchant_row.html. #}
 {% import "partials/sheet.html" as sheet %}
-<table class="sortable w-full text-sm border-collapse bg-white dark:bg-gray-800">
+<table id="merchants-table" class="sortable w-full text-sm border-collapse bg-white dark:bg-gray-800" data-cell-nav="merchants-table" data-cell-nav-swap="outerHTML">
     {{ sheet.thead(["Merchant", "Category", "Source", "Transactions", "Last Seen"], right_align_cols=[3]) }}
     <tbody>
         {% for m in merchants %}

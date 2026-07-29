@@ -12,6 +12,22 @@
    that month labels shouldn't wrap. #}
 <style>
     [data-projection-table] thead th { white-space: nowrap; }
+    [data-projection-table] .projection-group[data-group="cash"]   { --accent: #34d399; --band: #ecfdf5; --band-dark: #022c22; --label: #065f46; --label-dark: #6ee7b7; }
+    [data-projection-table] .projection-group[data-group="credit"] { --accent: #fb7185; --band: #fff1f2; --band-dark: #4c0519; --label: #9f1239; --label-dark: #fda4af; }
+    [data-projection-table] .projection-group[data-group="loan"]   { --accent: #fbbf24; --band: #fffbeb; --band-dark: #451a03; --label: #92400e; --label-dark: #fcd34d; }
+    [data-projection-table] .projection-group-heading > td {
+        background: var(--band);
+        box-shadow: inset 0 1px 0 var(--accent), inset 0 -1px 0 var(--accent);
+    }
+    .dark [data-projection-table] .projection-group-heading > td { background: var(--band-dark); }
+    [data-projection-table] .projection-group-heading > td:first-child {
+        color: var(--label);
+        box-shadow: inset 4px 0 0 var(--accent), inset 0 1px 0 var(--accent), inset 0 -1px 0 var(--accent);
+    }
+    .dark [data-projection-table] .projection-group-heading > td:first-child { color: var(--label-dark); }
+    [data-projection-table] .projection-group > tr:not(.projection-group-heading) > :first-child {
+        box-shadow: inset 4px 0 0 var(--accent);
+    }
 </style>
 
 {# Non-scrolling top band: warnings, chart, and the (opt-in) estimate breakdown.
@@ -23,7 +39,7 @@
 {% if result.warnings %}
 <div class="mb-4 max-w-2xl rounded border border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-900/20 px-3 py-2 text-sm text-red-700 dark:text-red-300">
     {% for w in result.warnings %}
-    <div data-projection-warning>⚠ {{ w.account.name }} falls to {{ w.balance | fmt_money }} in {{ w.month_label }}
+    <div data-projection-warning>⚠ {{ w.account.institution ~ ' ' ~ w.account.name if w.account.institution else w.account.name }} falls to {{ w.balance | fmt_money }} in {{ w.month_label }}
         (minimum {{ w.minimum | fmt_money }})</div>
     {% endfor %}
 </div>
@@ -104,12 +120,11 @@
 
 </div><!-- end top band -->
 
-{# Horizon + estimate controls, fused to the top of the grid via the shared
-   filter-bar card (view controls, not filters — hence the custom label/icon and
-   no Reset). Matches the Holdings/Budget/Transactions filter card. #}
-{% call fb.filter_bar(active_count=0, reset_url='', label='Options',
+{% call fb.filter_bar(active_count=0,
+    reset_url=url_for('projections.projections_view', filename=filename, edit=1 if edit_mode else none),
+    use_htmx=false, label='Options',
     icon='M10.5 6h9.75M10.5 6a1.5 1.5 0 1 1-3 0m3 0a1.5 1.5 0 1 0-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-9.75 0h9.75') %}
-    <div class="flex items-center gap-2">
+    <div class="flex items-center gap-2" data-proj-nav>
         <span class="text-gray-500 dark:text-gray-400">Months:</span>
         {% set _month_opts = [] %}
         {% for choice in month_choices %}
@@ -120,11 +135,9 @@
         {% endfor %}
         {{ nav.segmented(_month_opts, use_htmx=false, size='sm') }}
     </div>
-    {# View toggle styled as an emphasized button — colored (like the active
-       Months button) when on, outlined when off (QA: estimate toggle). #}
     <a href="{{ url_for('projections.projections_view', filename=filename, months=months, estimate=none if estimate else 1, edit=1 if edit_mode else none) }}"
         data-estimate-toggle role="button" aria-pressed="{{ 'true' if estimate else 'false' }}"
-        class="px-2 py-0.5 rounded {% if estimate %}bg-blue-600 text-white{% else %}bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700{% endif %}">
+        class="px-2.5 py-1 rounded text-sm transition-colors border border-gray-300 dark:border-gray-600 {% if estimate %}bg-blue-500 text-white border-blue-500{% else %}bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600{% endif %}">
         Estimate unscheduled spend
     </a>
 {% endcall %}
@@ -135,13 +148,23 @@
 {# Client-side column sort (web/static/js/sortable.js) via `sortable` + the
    sheet.thead hooks; the (unassigned)/Liquid/Net-worth rows live in <tfoot> so
    the sorter (tbody-only) leaves them pinned in place. #}
-<table data-projection-table class="sortable sheet-freeze-col w-full text-sm border-collapse bg-white dark:bg-gray-800">
+<table data-projection-table class="sortable sheet-freeze-col w-full text-sm border-collapse bg-white dark:bg-gray-800" style="white-space:nowrap">
     {{ sheet.thead(["Account"] + (result.months | map(attribute='label') | list),
                    right_align_cols=range(1, (result.months | length) + 1) | list) }}
-    <tbody>
-        {% for row in result.rows %}
-        <tr class="{{ sheet.row_class() }}">
-            <td class="{{ sheet.cell_class('', 'whitespace-nowrap') }}">{{ row.account.name }}</td>
+    {% for group in groups %}
+    <tbody class="projection-group" data-group="{{ group.key }}" x-data="{ open: {{ 'true' if group.key in open_groups else 'false' }} }" :data-open="open">
+        <tr class="projection-group-heading cursor-pointer select-none" @click="open = !open">
+            <td class="px-2 py-1.5 text-xs font-semibold uppercase tracking-wide whitespace-nowrap">
+                <span class="inline-block transition-transform duration-150 text-[0.6rem] mr-0.5" :class="open && 'rotate-90'">&#9656;</span>
+                {{ group.label }}
+            </td>
+            {% for s in group.subtotals %}
+            <td class="px-1.5 py-1.5 text-right tabular-nums whitespace-nowrap text-sm font-semibold text-gray-900 dark:text-gray-100 {% if s | display_is_negative %}!text-red-600 dark:!text-red-400{% endif %}">{{ s }}</td>
+            {% endfor %}
+        </tr>
+        {% for row in group.rows %}
+        <tr class="{{ sheet.row_class() }}" x-show="open" x-transition.opacity>
+            <td class="{{ sheet.cell_class() }}">{{ row.account.institution ~ ' ' ~ row.account.name if row.account.institution else row.account.name }}</td>
             {% for bal in row.balances %}
             <td class="{{ sheet.cell_class('text-right tabular-nums whitespace-nowrap',
                 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 font-medium' if row.below[loop.index0]
@@ -150,6 +173,7 @@
         </tr>
         {% endfor %}
     </tbody>
+    {% endfor %}
     <tfoot>
         {% if result.has_unassigned %}
         <tr class="italic text-gray-600 dark:text-gray-300 border-b border-gray-200 dark:border-gray-700">
@@ -174,4 +198,30 @@
     </tfoot>
 </table>
 </div>
+<script>
+(function() {
+    var table = document.querySelector('[data-projection-table]');
+    if (!table) return;
+    function openKeys() {
+        return Array.from(table.querySelectorAll('.projection-group[data-open="true"]'))
+            .map(function(g) { return g.dataset.group; });
+    }
+    function withOpen(href) {
+        var u = new URL(href, location.origin);
+        u.searchParams.delete('open');
+        openKeys().forEach(function(k) { u.searchParams.append('open', k); });
+        return u.toString();
+    }
+    table.addEventListener('click', function(e) {
+        if (e.target.closest('.projection-group-heading'))
+            requestAnimationFrame(function() { history.replaceState(null, '', withOpen(location.href)); });
+    });
+    document.addEventListener('click', function(e) {
+        var link = e.target.closest('[data-proj-nav] a, [data-estimate-toggle]');
+        if (!link) return;
+        e.preventDefault();
+        location.href = withOpen(link.href);
+    });
+})();
+</script>
 {% endblock %}

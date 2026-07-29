@@ -16,10 +16,11 @@
 
 {# filter_qs carries the column filters (multi account_id / category, status, q)
    for the time-nav links; month/all-months state is passed explicitly. #}
-{% set filter_qs %}{% for aid in selected_accounts %}&account_id={{ aid }}{% endfor %}{% for c in selected_categories %}&category={{ c | urlencode }}{% endfor %}{% if selected_status %}&status={{ selected_status }}{% endif %}{% if q %}&q={{ q | urlencode }}{% endif %}{% endset %}
+{% set filter_qs %}{% for aid in selected_accounts %}&account_id={{ aid }}{% endfor %}{% for c in selected_categories %}&category={{ c | urlencode }}{% endfor %}{% if selected_status %}&status={{ selected_status }}{% endif %}{% if q %}&q={{ q | urlencode }}{% endif %}{% if edit_mode %}&edit=1{% endif %}{% endset %}
 
 {% set _active = (selected_accounts | length) + (selected_categories | length) + (1 if selected_status else 0) + (1 if q else 0) %}
-{% set _reset = "%s?year=%s&month=%s%s" | format(_url, year, month, '&all_months=true' if all_months else ('&all_months=year' if this_year else '')) %}
+{% set _edit_qs = '&edit=1' if edit_mode else '' %}
+{% set _reset = "%s?year=%s&month=%s%s%s" | format(_url, year, month, '&all_months=true' if all_months else ('&all_months=year' if this_year else ''), _edit_qs) %}
 
 <span id="month-state" data-year="{{ year }}" data-month="{{ month }}" hidden></span>
 
@@ -60,6 +61,7 @@
 
 {# Integrated filter card (QA item 13), fused to the top of the table. #}
 {% call fb.filter_bar(active_count=_active, reset_url=_reset) %}
+    {% if edit_mode %}<input type="hidden" name="edit" value="1">{% endif %}
     {{ fc.multi_select('account_id', 'Account', account_opts, _url) }}
     {{ fc.multi_select('category', 'Category', category_opts, _url) }}
     {{ fc.single_select('status', 'Status', status_opts, selected_status or '', _url) }}

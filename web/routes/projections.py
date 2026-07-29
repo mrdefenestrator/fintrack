@@ -5,9 +5,11 @@ query params (?months=N&estimate=1) so states are linkable.
 """
 
 import math
+from decimal import Decimal
 
 from flask import Blueprint, current_app, render_template, request
 
+from fintrack.core.formatting import fmt_money
 from fintrack.projections import engine
 from web.routes.common import get_common_context, validate_snapshot
 
@@ -23,6 +25,46 @@ CHART_PAD_T = 12
 CHART_PAD_B = 26
 
 MONTH_CHOICES = (6, 12, 24, 36)
+
+_PROJECTION_GROUPS = [
+    ("cash", "Cash"),
+    ("credit", "Credit Cards"),
+    ("loan", "Loans"),
+]
+
+
+def _row_group_key(row: dict) -> str:
+    if row.get("_source") == "debt":
+        return "loan"
+    t = row["account"].get("type")
+    if t == "credit_card":
+        return "credit"
+    if t == "loan":
+        return "loan"
+    return "cash"
+
+
+def _group_rows(result) -> list[dict]:
+    grouped: dict[str, list] = {key: [] for key, _ in _PROJECTION_GROUPS}
+    for row in result["rows"]:
+        key = _row_group_key(row)
+        if key in grouped:
+            grouped[key].append(row)
+
+    groups = []
+    for key, label in _PROJECTION_GROUPS:
+        rows = grouped[key]
+        if not rows:
+            continue
+        n = len(result["months"])
+        subtotals = [
+            fmt_money(sum((r["balances"][mi] for r in rows), Decimal("0")))
+            for mi in range(n)
+        ]
+        groups.append(
+            {"key": key, "label": label, "rows": rows, "subtotals": subtotals}
+        )
+    return groups
 
 
 def _fmt_compact(v: float) -> str:
@@ -135,6 +177,7 @@ def projections_view(filename):
     months = request.args.get("months", engine.DEFAULT_MONTHS, type=int)
     months = engine.clamp_months(months)
     estimate = request.args.get("estimate") == "1"
+    open_groups = set(request.args.getlist("open"))
 
     context = get_common_context(snapshot_id, filename, edit_mode)
     eng = current_app.config["engine"]
@@ -147,9 +190,11 @@ def projections_view(filename):
         "projections.html",
         active_tab="projections",
         result=result,
+        groups=_group_rows(result),
         chart=_chart(result),
         months=months,
         month_choices=MONTH_CHOICES,
         estimate=estimate,
+        open_groups=open_groups,
         **context,
     )

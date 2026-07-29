@@ -20,6 +20,7 @@ _MERCHANT_EDITABLE_FIELDS = {"category"}
 
 @bp.route("/merchants")
 def index():
+    edit_mode = request.args.get("edit") == "1"
     search = request.args.get("search", "")
     filter_category = request.args.get("category", "")
     filter_source = request.args.get("source", "")
@@ -52,6 +53,7 @@ def index():
     return render_template(
         template,
         active_tab="merchants",
+        edit_mode=edit_mode,
         merchants=merchants,
         categories=categories,
         search=search,
@@ -73,12 +75,17 @@ def cell_edit(merchant_id):
     if not merchant:
         return "", 404
     if field not in _MERCHANT_EDITABLE_FIELDS:
-        return render_template("partials/merchant_row.html", m=merchant)
+        return render_template(
+            "partials/merchant_row.html",
+            m=merchant,
+            edit_mode=True,
+        )
     return render_template(
         "partials/merchant_row.html",
         m=merchant,
         categories=categories,
         editing_field=field,
+        edit_mode=True,
     )
 
 
@@ -90,13 +97,15 @@ def row(merchant_id):
         merchant = get_merchant_with_stats_by_id(conn, merchant_id)
     if not merchant:
         return "", 404
-    return render_template("partials/merchant_row.html", m=merchant)
+    return render_template(
+        "partials/merchant_row.html",
+        m=merchant,
+        edit_mode=True,
+    )
 
 
 @bp.route("/merchants/<int:merchant_id>/category", methods=["POST"])
 def update_category(merchant_id):
-    # `value` is the spreadsheet cell input name; fall back to the legacy
-    # `category` field name for compatibility.
     category = request.form.get("value", request.form.get("category", "")).strip()
 
     engine = current_app.config["engine"]
@@ -109,4 +118,8 @@ def update_category(merchant_id):
                 conn, merchant["merchant_name"], category, source="manual"
             )
             merchant = get_merchant_with_stats_by_id(conn, merchant_id)
-    return render_template("partials/merchant_row.html", m=merchant)
+    return render_template(
+        "partials/merchant_row.html",
+        m=merchant,
+        edit_mode=True,
+    )

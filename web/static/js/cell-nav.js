@@ -1,17 +1,22 @@
 /**
- * Spreadsheet keyboard navigation for the Holdings edit grid.
+ * Spreadsheet keyboard navigation for editable sheet grids.
  *
  *   Tab / Shift+Tab   -> next / previous editable cell (right / left, wrapping
  *                        onto the adjacent row)
  *   Enter / Shift+Enter -> down / up the same column
+ *   Escape             -> cancel the current edit
  *
- * Each move first saves the cell being edited (a POST that re-renders the whole
- * table body into #holdings-table), then, on the resulting swap, clicks the next
- * editable cell — which re-enters edit mode there (the cell-edit input autofocuses).
+ * Each move first saves the cell being edited, then, on the resulting swap,
+ * opens the next editable cell (the cell-edit input autofocuses).
  *
- * We drive the save ourselves (htmx.ajax) and stopImmediatePropagation so the
- * cell's own hx-trigger doesn't also fire (no double save). Editable display
- * cells are the ones carrying an hx-get to the holdings cell-edit route.
+ * Tables opt in by adding `data-cell-nav` on the container element (the
+ * <table> or a wrapper).  The attribute's value names the htmx swap target id
+ * (e.g. "holdings-table" or "budget-tbody") for tables that swap their whole
+ * tbody.  For per-row tables (merchants), set data-cell-nav-swap="outerHTML"
+ * and saves will use the field's own hx-target.
+ *
+ * Editable display cells: any td with hx-get containing "/cell" or "/edit".
+ * Holdings detail cells (.holding-detail-edit) are also supported.
  */
 (function () {
     "use strict";
@@ -28,16 +33,23 @@
         );
     }
 
-    function isEditable(el) {
-        return el && el.matches && el.matches(
-            'td[hx-get*="/holdings/cell/"], .holding-detail-edit[hx-get*="/holdings/cell/"]'
-        );
+    function findContainer(el) {
+        return el && el.closest("[data-cell-nav]");
+    }
+
+    function swapTarget(container) {
+        var id = container.getAttribute("data-cell-nav");
+        return id ? "#" + id : null;
+    }
+
+    function swapMode(container) {
+        return container.getAttribute("data-cell-nav-swap") || "innerHTML";
     }
 
     function editableCells(row) {
         return Array.prototype.slice.call(
             row.querySelectorAll(
-                ':scope > td[hx-get*="/holdings/cell/"], :scope > td .holding-detail-edit[hx-get*="/holdings/cell/"]'
+                ':scope > td[hx-get*="/cell"], :scope > td[hx-get*="/edit"], :scope > td .holding-detail-edit[hx-get*="/cell"]'
             )
         );
     }
@@ -49,10 +61,20 @@
         return td ? "c" + Array.prototype.indexOf.call(row.children, td) : null;
     }
 
-    function dataRows() {
-        return Array.prototype.slice.call(
-            document.querySelectorAll("#holdings-table tr[data-reorder-index]")
+    function dataRows(container) {
+        var rows = Array.prototype.slice.call(
+            container.querySelectorAll("tr[data-reorder-index]")
         );
+        if (!rows.length) {
+            rows = Array.prototype.slice.call(
+                container.querySelectorAll("tbody > tr[id]")
+            ).filter(function (tr) {
+                return !tr.classList.contains("total-row") &&
+                    !tr.hasAttribute("data-add-row") &&
+                    tr.id.indexOf("error") === -1;
+            });
+        }
+        return rows;
     }
 
     function firstEditable(row, fromEnd) {
@@ -60,7 +82,7 @@
         return cells.length ? cells[fromEnd ? cells.length - 1 : 0] : null;
     }
 
-    function findNext(rowId, key, dir) {
+    function findNext(container, rowId, key, dir) {
         var row = document.getElementById(rowId);
         if (!row) return null;
 
@@ -71,14 +93,12 @@
                 return cellKey(cell, row) === key;
             });
             if (current >= 0 && cells[current + step]) return cells[current + step];
-            // Wrap onto the adjacent data row.
-            var rows = dataRows();
+            var rows = dataRows(container);
             var next = rows[rows.indexOf(row) + step];
             return next ? firstEditable(next, dir === "left") : null;
         }
 
-        // up / down: same column, scanning adjacent data rows.
-        var all = dataRows();
+        var all = dataRows(container);
         var pos = all.indexOf(row);
         var stp = dir === "down" ? 1 : -1;
         for (var r = pos + stp; r >= 0 && r < all.length; r += stp) {
@@ -95,16 +115,12 @@
         "keydown",
         function (e) {
             if (!isEditField(e.target)) return;
-            // This grid navigation is holdings-only: it drives htmx swaps against
-            // #holdings-table and would otherwise hijack Enter/Escape (and suppress
-            // the native save) on every other sheet that reuses .table-cell-input
-            // (transactions, merchants, accounts, budget, assets).
-            if (!e.target.closest("#holdings-table")) return;
+            var container = findContainer(e.target);
+            if (!container) return;
 
-            // Escape: abandon the edit and restore the original value. Reset the
-            // field to its original (defaultValue / defaultSelected) first so the
-            // cell's own `focusout changed` trigger sees no change and won't save,
-            // then re-render the cell in display mode via the form's hx-get.
+            var mode = swapMode(container);
+            var target = swapTarget(container);
+
             if (e.key === "Escape") {
                 e.preventDefault();
                 e.stopImmediatePropagation();
@@ -119,9 +135,16 @@
                 var cancelForm = el.closest("form");
                 var displayUrl = cancelForm && cancelForm.getAttribute("hx-get");
                 if (displayUrl) {
+                    var cancelTarget = target;
+                    var cancelSwap = mode;
+                    if (mode === "outerHTML") {
+                        var tr = el.closest("tr");
+                        cancelTarget = tr ? "#" + tr.id : target;
+                        cancelSwap = "outerHTML";
+                    }
                     htmx.ajax("GET", displayUrl, {
-                        target: "#holdings-table",
-                        swap: "innerHTML",
+                        target: cancelTarget,
+                        swap: cancelSwap,
                     });
                 }
                 return;
@@ -140,17 +163,23 @@
             var fieldName = form && form.querySelector('[name="field"]');
             if (!td || !tr || !tr.id || !url || !fieldName) return;
 
-            // Save this cell ourselves; suppress the cell's own hx-trigger.
             e.preventDefault();
             e.stopImmediatePropagation();
             pending = {
+                containerId: container.id || container.getAttribute("data-cell-nav"),
                 rowId: tr.id,
                 key: cellKey(field, tr),
                 dir: dir,
+                mode: mode,
             };
+
+            var saveTarget = target;
+            if (mode === "outerHTML") {
+                saveTarget = "#" + tr.id;
+            }
             htmx.ajax("POST", url, {
-                target: "#holdings-table",
-                swap: "innerHTML",
+                target: saveTarget,
+                swap: mode,
                 values: { field: fieldName.value, value: field.value },
             });
         },
@@ -161,13 +190,21 @@
         var nav = pending;
         pending = null;
         if (!nav) return;
-        var next = findNext(nav.rowId, nav.key, nav.dir);
+        var container =
+            document.getElementById(nav.containerId) ||
+            document.querySelector('[data-cell-nav="' + nav.containerId + '"]');
+        if (!container) return;
+        var next = findNext(container, nav.rowId, nav.key, nav.dir);
         if (!next) return;
         var url = next.getAttribute("hx-get");
-        // Defer past the current swap's settle, then open the next cell for edit
-        // (its cell-edit input autofocuses).
+        var nextTarget = swapTarget(container);
+        var nextSwap = nav.mode;
+        if (nav.mode === "outerHTML") {
+            var nextTr = next.closest("tr");
+            nextTarget = nextTr ? "#" + nextTr.id : nextTarget;
+        }
         setTimeout(function () {
-            htmx.ajax("GET", url, { target: "#holdings-table", swap: "innerHTML" });
+            htmx.ajax("GET", url, { target: nextTarget, swap: nextSwap });
         }, 0);
     });
 })();

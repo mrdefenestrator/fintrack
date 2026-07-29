@@ -15,7 +15,7 @@ trailing add row. Every add / rename / delete re-renders the tbody
 htmx:beforeSwap hook swaps non-empty 422 bodies in).
 """
 
-from flask import Blueprint, current_app, render_template, request
+from flask import Blueprint, current_app, g, render_template, request, url_for
 
 from web.routes.common import snapshot_scoped
 
@@ -29,8 +29,17 @@ from fintrack.ledger.repository.categories import (
 bp = snapshot_scoped(Blueprint("categories", __name__, url_prefix="/s/<filename>"))
 
 
-def _tbody(error=None, editing_id=None, confirm_id=None, status=200):
-    """Render the categories tbody rows (the swap target of every mutation)."""
+def _is_edit_mode():
+    return request.args.get("edit") == "1"
+
+
+def _tbody(error=None, editing_id=None, edit_mode=True, status=200):
+    """Render the categories tbody rows (the swap target of every mutation).
+
+    edit_mode defaults to True because htmx partials (edit, rename, row) are
+    only reachable while editing — they don't carry the parent page's ?edit=1
+    query param.
+    """
     engine = current_app.config["engine"]
     with engine.connect() as conn:
         cats = list_categories(conn)
@@ -39,7 +48,7 @@ def _tbody(error=None, editing_id=None, confirm_id=None, status=200):
         cats=cats,
         error=error,
         editing_id=editing_id,
-        confirm_id=confirm_id,
+        edit_mode=edit_mode,
     )
     return html if status == 200 else (html, status)
 
@@ -47,22 +56,33 @@ def _tbody(error=None, editing_id=None, confirm_id=None, status=200):
 @bp.route("/categories")
 def index():
     """The Categories page (full chrome)."""
+    edit_mode = _is_edit_mode()
     engine = current_app.config["engine"]
     with engine.connect() as conn:
         cats = list_categories(conn)
-    return render_template("categories.html", active_tab="categories", cats=cats)
+    return render_template(
+        "categories.html",
+        active_tab="categories",
+        cats=cats,
+        edit_mode=edit_mode,
+    )
 
 
 @bp.route("/categories/add", methods=["POST"])
 def add():
-    name = request.form.get("name", "").strip()
     engine = current_app.config["engine"]
     with engine.connect() as conn:
-        try:
-            add_category(conn, name=name)
-        except ValueError as e:
-            return _tbody(error=str(e), status=422)
-    return _tbody()
+        existing = {c["name"].lower() for c in list_categories(conn)}
+        name = "New category"
+        if name.lower() in existing:
+            n = 2
+            while f"{name} {n}".lower() in existing:
+                n += 1
+            name = f"{name} {n}"
+        add_category(conn, name=name)
+    resp = current_app.make_response("")
+    resp.headers["HX-Refresh"] = "true"
+    return resp
 
 
 @bp.route("/categories/<int:category_id>/edit")
@@ -98,14 +118,25 @@ def rename(category_id):
 
 @bp.route("/categories/<int:category_id>/delete-btn")
 def delete_btn(category_id):
-    """Cancel the delete confirmation, back to the plain delete icon."""
-    return _tbody()
+    """Cancel the delete confirmation — restore the plain delete icon cell."""
+    return render_template(
+        "partials/editable_table_delete_icon.html",
+        delete_confirm_url=url_for(
+            "categories.delete_confirm",
+            category_id=category_id,
+        ),
+        edit_mode=True,
+    )
 
 
 @bp.route("/categories/<int:category_id>/delete-confirm")
 def delete_confirm(category_id):
     """Show the inline Yes/No delete confirmation for one row."""
-    return _tbody(confirm_id=category_id)
+    return render_template(
+        "partials/categories_delete_confirm.html",
+        filename=g.filename,
+        category_id=category_id,
+    )
 
 
 @bp.route("/categories/<int:category_id>/delete", methods=["POST"])
@@ -121,4 +152,6 @@ def delete(category_id):
             delete_category(conn, name=current["name"])
         except ValueError as e:
             return _tbody(error=str(e), status=422)
-    return _tbody()
+    resp = current_app.make_response("")
+    resp.headers["HX-Refresh"] = "true"
+    return resp

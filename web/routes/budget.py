@@ -202,34 +202,15 @@ def reorder(filename: str):
 @budget_bp.route("/<filename>/budget/add", methods=["POST"])
 def add(filename: str):
     snapshot_id = validate_snapshot(filename)
-    kind = request.form.get("kind", "income").strip()
+    kind = request.form.get("kind", "expense").strip()
     if kind not in ("income", "expense"):
-        abort(400)
-    description = request.form.get("description", "").strip() or "New"
-    amount_raw = request.form.get("amount", "0").strip()
-    recurrence = request.form.get("recurrence", "monthly").strip() or "monthly"
+        kind = "expense"
     entry = {
         "kind": kind,
-        "description": description,
+        "description": "New entry",
         "amount": 0.0,
-        "recurrence": recurrence,
+        "recurrence": "monthly",
     }
-    try:
-        entry["amount"] = float(amount_raw) if amount_raw else 0.0
-    except ValueError:
-        entry["amount"] = 0.0
-    for key in ("type", "date", "dayOfMonth", "month", "dayOfYear", "autoAccountRef"):
-        val = request.form.get(key, "").strip()
-        if key in ("dayOfMonth", "month", "dayOfYear", "autoAccountRef"):
-            if val:
-                try:
-                    entry[key] = int(val)
-                except ValueError:
-                    pass
-        elif key == "type" and val:
-            entry[key] = val
-        elif key == "date" and val:
-            entry[key] = val
     engine = current_app.config["engine"]
     try:
         with engine.connect() as conn:

@@ -19,7 +19,7 @@
 {% set filter_qs %}{% for aid in selected_accounts %}&account_id={{ aid }}{% endfor %}{% for c in selected_categories %}&category={{ c | urlencode }}{% endfor %}{% if selected_status %}&status={{ selected_status }}{% endif %}{% if q %}&q={{ q | urlencode }}{% endif %}{% endset %}
 
 {% set _active = (selected_accounts | length) + (selected_categories | length) + (1 if selected_status else 0) + (1 if q else 0) %}
-{% set _reset = "%s?year=%s&month=%s%s" | format(_url, year, month, '&all_months=true' if all_months else '') %}
+{% set _reset = "%s?year=%s&month=%s%s" | format(_url, year, month, '&all_months=true' if all_months else ('&all_months=year' if this_year else '')) %}
 
 <span id="month-state" data-year="{{ year }}" data-month="{{ month }}" hidden></span>
 
@@ -30,14 +30,16 @@
 <div class="shrink-0 mb-2 flex flex-wrap items-center justify-between gap-2">
     {{ nav.segmented([
         {'url': "%s?year=%s&month=%s%s" | format(_url, year, month, filter_qs),
-         'label': 'This month', 'active': not all_months},
+         'label': 'This month', 'active': not all_months and not this_year},
+        {'url': "%s?year=%s&month=%s&all_months=year%s" | format(_url, year, month, filter_qs),
+         'label': 'This year', 'active': this_year},
         {'url': "%s?all_months=true%s" | format(_url, filter_qs),
          'label': 'All time', 'active': all_months}]) }}
     {# Latest carries the current month explicitly (not a bare URL): the global
        htmx:configRequest handler (ledger.js) injects the currently-viewed month
        into any /transactions request missing year/month, which would otherwise
        send Latest right back to the month you're on. #}
-    {% if not all_months %}
+    {% if not all_months and not this_year %}
     {{ nav.pager(
         prev_url="%s?year=%s&month=%s%s" | format(_url, prev_year, prev_month, filter_qs),
         next_url="%s?year=%s&month=%s%s" | format(_url, next_year, next_month, filter_qs),
@@ -59,7 +61,7 @@
            class="w-64 bg-white dark:bg-gray-700 px-2 py-1 rounded border border-gray-200 dark:border-gray-600 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500">
     <input type="hidden" name="year" value="{{ year }}">
     <input type="hidden" name="month" value="{{ month }}">
-    <input type="hidden" name="all_months" value="{{ 'true' if all_months else '' }}">
+    <input type="hidden" name="all_months" value="{{ 'true' if all_months else ('year' if this_year else '') }}">
 {% endcall %}
 
 <div class="table-scroll-container rounded-b-lg border-l border-b border-r border-gray-300 dark:border-gray-600 shadow-sm" data-sheet-scroll>

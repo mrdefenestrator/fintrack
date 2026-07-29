@@ -56,14 +56,16 @@ def index():
         else:
             search, amount = q, None
     status = request.args.get("status")
-    all_months = request.args.get("all_months") == "true"
+    all_months_val = request.args.get("all_months", "")
+    all_months = all_months_val == "true"
+    this_year = all_months_val == "year"
 
     engine = current_app.config["engine"]
     with engine.connect() as conn:
         txns = get_transactions(
             conn,
             year=None if all_months else year,
-            month=None if all_months else month,
+            month=None if (all_months or this_year) else month,
             categories=selected_categories or None,
             account_ids=selected_accounts or None,
             search=search,
@@ -115,6 +117,7 @@ def index():
         q=amount or search or "",
         selected_status=status,
         all_months=all_months,
+        this_year=this_year,
         txn_count=txn_count,
         txn_total=txn_total,
     )

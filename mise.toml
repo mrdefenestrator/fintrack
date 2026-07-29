@@ -41,6 +41,10 @@ description = "Run e2e browser tests with Playwright (run playwright-install fir
 run = "uv run playwright install chromium"
 description = "Install Playwright browser binaries"
 
+[tasks.migrate]
+run = "uv run alembic upgrade head"
+description = "Run database migrations to latest"
+
 [tasks.serve]
 run = "uv run python -m web.app"
 description = "Start the fintrack web server (port 5003)"

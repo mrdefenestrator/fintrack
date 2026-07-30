@@ -127,6 +127,8 @@ _ASSET_DETAILS = [
     ("unit_price", "Unit Price", True, 1),
     ("qty", "Qty", True, 1),
     ("source", "Source", False, 1),
+    ("est_return", "Est. Return", True, 1),
+    ("contribution", "Mo. Contrib.", True, 1),
 ]
 _NCOLS = len(_SPINE_COLS)
 _AMOUNT_POS = 3  # Amount is the 4th (leading) slot in every group
@@ -266,6 +268,8 @@ def _asset_col_fields(e: dict) -> dict:
         m["unit_price"] = "unit"
         m["qty"] = "quantity"
         m["source"] = "source"
+        m["est_return"] = "annualReturnRate"
+        m["contribution"] = "monthlyContribution"
         if single_unit and (e.get("unit") or "USD") == "USD":
             m["amount"] = "value"
     return m
@@ -500,6 +504,8 @@ def _asset_row(e: dict, pair: dict | None, linked: str, index: int, today: date)
         "payment": _money(payment),
         "progress": _fmt_ltv(progress),
         "source": _BLANK if is_debt else (e.get("source") or _BLANK),
+        "est_return": _fmt_pct(e.get("annualReturnRate")) if not is_debt else _BLANK,
+        "contribution": _money(e.get("monthlyContribution")) if not is_debt else _BLANK,
         "as_of": e.get("asOfDate") or _BLANK,
         "as_of_iso": e.get("asOfDate"),
     }
@@ -521,6 +527,8 @@ def _asset_row(e: dict, pair: dict | None, linked: str, index: int, today: date)
         "statement_due_day_of_month": _raw(e.get("statement_due_day_of_month")),
         "assetRef": _raw(e.get("assetRef")),
         "source": e.get("source") or "",
+        "annualReturnRate": _raw(e.get("annualReturnRate")),
+        "monthlyContribution": _raw(e.get("monthlyContribution")),
     }
     return group_key, _make_row(
         values,

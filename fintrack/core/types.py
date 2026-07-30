@@ -190,6 +190,8 @@ class AssetEntry(TypedDict, total=False):
     # Asset-only fields
     value: Decimal  # Estimated value per unit
     source: str  # Optional valuation source
+    annualReturnRate: Decimal  # Annual growth (positive) or depreciation (negative)
+    monthlyContribution: Decimal  # Recurring monthly contribution
     # Shared (asset + debt) fields
     quantity: Decimal  # Optional; default 1. Assets: value × quantity. Debts: balance × quantity
     # Debt-only fields

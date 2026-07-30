@@ -264,13 +264,28 @@ ASSETS_FIELD_TO_COL_DEBT = [
 ASSETS_RIGHT_ALIGN_COLS = (3, 4, 5, 7)
 
 # Fields that are right-aligned in assets
-ASSETS_RIGHT_ALIGN_FIELDS = {"value", "quantity", "balance", "interestRate"}
+ASSETS_RIGHT_ALIGN_FIELDS = {
+    "value",
+    "quantity",
+    "balance",
+    "interestRate",
+    "annualReturnRate",
+    "monthlyContribution",
+}
 
 
 def assets_field_editable(kind: str, field: str) -> bool:
     """Return True if the field is editable for this asset/debt kind."""
     if kind == "asset":
-        editable_fields = {"institution", "name", "value", "quantity", "source"}
+        editable_fields = {
+            "institution",
+            "name",
+            "value",
+            "quantity",
+            "source",
+            "annualReturnRate",
+            "monthlyContribution",
+        }
     else:  # debt
         editable_fields = {
             "institution",

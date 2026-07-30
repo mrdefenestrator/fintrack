@@ -28,12 +28,15 @@ _PROJECTION_GROUPS = [
     ("cash", "Cash"),
     ("credit", "Credit Cards"),
     ("loan", "Loans"),
+    ("asset", "Assets"),
 ]
 
 
 def _row_group_key(row: dict) -> str:
     if row.get("_source") == "debt":
         return "loan"
+    if row.get("_source") == "asset":
+        return "asset"
     t = row["account"].get("type")
     if t == "credit_card":
         return "credit"

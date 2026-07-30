@@ -16,8 +16,7 @@ balance_history point). For each projected month, in order:
    in the current month, applied to the unassigned bucket.
 
 Totals reuse the key-number calculations: liquid = liquid_total + unassigned;
-net worth = liquid_minus_cc + net non-liquid assets + unassigned (assets are
-held constant — no return modeling).
+net worth = liquid_minus_cc + projected asset total - debt total + unassigned.
 """
 
 import calendar
@@ -86,6 +85,15 @@ def _autopay_transfers(
         balances[payer_id] -= owed
 
 
+def _asset_monthly_params(asset: Dict[str, Any]) -> tuple[Decimal, Decimal]:
+    """Return (monthly_rate, monthly_contribution) for a non-debt asset."""
+    annual_rate = asset.get("annualReturnRate")
+    contribution = asset.get("monthlyContribution")
+    monthly_rate = money(annual_rate) / Decimal(12) if annual_rate else _ZERO
+    monthly_contrib = money(contribution) if contribution else _ZERO
+    return monthly_rate, monthly_contrib
+
+
 def _debt_monthly_payment(debt: Dict[str, Any]) -> tuple[Decimal, Decimal]:
     """Return (monthly_rate, payment) for a debt with amortization data.
 
@@ -124,7 +132,12 @@ def project(
 
     debts = [e for e in assets if e.get("kind") == "debt"]
     non_debt_assets = [e for e in assets if e.get("kind") != "debt"]
-    static_asset_total = sum((asset_contribution(e) for e in non_debt_assets), _ZERO)
+
+    asset_values: Dict[int, Decimal] = {}
+    asset_params: Dict[int, tuple[Decimal, Decimal]] = {}
+    for idx, a in enumerate(non_debt_assets):
+        asset_values[idx] = asset_contribution(a)
+        asset_params[idx] = _asset_monthly_params(a)
 
     estimate = None
     estimate_monthly = _ZERO
@@ -152,6 +165,9 @@ def project(
     ]
     per_account: Dict[int, List[Decimal]] = {a["id"]: [] for a in accounts}
     per_debt: Dict[int, List[Decimal]] = {idx: [] for idx in range(len(debts))}
+    per_asset: Dict[int, List[Decimal]] = {
+        idx: [] for idx in range(len(non_debt_assets))
+    }
     unassigned_series: List[Decimal] = []
     liquid_series: List[Decimal] = []
     net_worth_series: List[Decimal] = []
@@ -194,14 +210,23 @@ def project(
                     )
             per_debt[idx].append(debt_balances[idx])
 
+        for idx in range(len(non_debt_assets)):
+            monthly_rate, monthly_contrib = asset_params[idx]
+            if monthly_rate != _ZERO or monthly_contrib != _ZERO:
+                asset_values[idx] = (
+                    asset_values[idx] * (Decimal(1) + monthly_rate) + monthly_contrib
+                )
+            per_asset[idx].append(asset_values[idx])
+
         for acc in accounts:
             per_account[acc["id"]].append(balances[acc["id"]])
         unassigned_series.append(unassigned)
         projected = [{**a, "balance": balances[a["id"]]} for a in accounts]
         debt_total = sum(debt_balances.values(), _ZERO)
+        asset_total = sum(asset_values.values(), _ZERO)
         liquid_series.append(liquid_total(projected) + unassigned)
         net_worth_series.append(
-            liquid_minus_cc(projected) + static_asset_total - debt_total + unassigned
+            liquid_minus_cc(projected) + asset_total - debt_total + unassigned
         )
 
     rows = []
@@ -231,6 +256,16 @@ def project(
                 "balances": series,
                 "below": [False] * len(series),
                 "_source": "debt",
+            }
+        )
+
+    for idx, a in enumerate(non_debt_assets):
+        rows.append(
+            {
+                "account": a,
+                "balances": per_asset[idx],
+                "below": [False] * len(per_asset[idx]),
+                "_source": "asset",
             }
         )
 

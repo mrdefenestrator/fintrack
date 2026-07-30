@@ -39,6 +39,8 @@ ASSETS_COERCION = {
     "quantity": DECIMAL_COERCE,
     "balance": DECIMAL_COERCE,
     "interestRate": DECIMAL_COERCE,
+    "annualReturnRate": DECIMAL_COERCE,
+    "monthlyContribution": DECIMAL_COERCE,
     "originalPrincipal": DECIMAL_COERCE,
     "termMonths": INT_COERCE,
     "statement_due_day_of_month": INT_COERCE,

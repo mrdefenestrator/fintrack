@@ -314,7 +314,10 @@ def _fmt_pct(rate) -> str:
     if rate is None:
         return _BLANK
     pct = (Decimal(str(rate)) * 100).normalize()
-    return f"{format(pct, 'f')}%"
+    s = format(pct, "f")
+    if pct < 0:
+        return f"({s.lstrip('-')}%)"
+    return f"{s}%"
 
 
 def _money(x) -> str:

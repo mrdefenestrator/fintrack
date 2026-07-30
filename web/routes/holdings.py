@@ -285,6 +285,11 @@ _BLANK = "-"
 _MUTED = "text-gray-300 dark:text-gray-600"
 
 
+def _is_display_negative(value: str) -> bool:
+    s = str(value).strip()
+    return s.startswith("(") or (s.startswith("-") and len(s) > 1)
+
+
 def _type_label(value: str | None) -> str:
     if not value:
         return ""
@@ -306,7 +311,10 @@ def _fmt_ltv(ltv: Decimal | None) -> str:
 
 
 def _fmt_pct(rate) -> str:
-    return f"{rate * 100:.2f}%" if rate is not None else _BLANK
+    if rate is None:
+        return _BLANK
+    pct = (Decimal(str(rate)) * 100).normalize()
+    return f"{format(pct, 'f')}%"
 
 
 def _money(x) -> str:
@@ -402,7 +410,12 @@ def _make_row(
         "detail_cells": [values.get(k, _BLANK) for k in detail_keys],
         "detail_fields": [col_fields.get(k) for k in detail_keys],
         "detail_classes": [
-            "" if values.get(k, _BLANK) != _BLANK else _MUTED for k in detail_keys
+            _MUTED
+            if values.get(k, _BLANK) == _BLANK
+            else "text-red-600 dark:text-red-400"
+            if _is_display_negative(values.get(k, _BLANK))
+            else ""
+            for k in detail_keys
         ],
         "edit_raw": edit_raw,
         "accent_side": "liability" if is_liability else "asset",

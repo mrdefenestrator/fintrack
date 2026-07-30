@@ -111,7 +111,7 @@ def test_merchants_empty_after_import_before_categorization(page, confirmed_serv
 def _seed_merchant_via_transaction(page, base_url, category="Groceries"):
     """Populate the merchant cache by categorizing a transaction with the
     inline Category editor's apply-to-merchant option checked."""
-    page.goto(f"{base_url}/s/ledger/transactions?year=2026&month=4")
+    page.goto(f"{base_url}/s/ledger/transactions?year=2026&month=4&edit=1")
     page.wait_for_selector("table tbody tr:not(.sheet-grid-filler)")
 
     # Open the Category cell (5th column) on the first row, waiting until htmx

@@ -71,7 +71,7 @@
                     {% set di = loop.index0 %}
                     {% set detail_field = row.detail_fields[di] %}
                     {% set detail_right = di in group.detail_right_align %}
-                    <div class="holding-detail-cell {% if detail_right %}text-right tabular-nums{% endif %} {{ row.detail_classes[di] }}" data-detail-col="{{ di }}">
+                    <div class="holding-detail-cell {% if detail_right %}text-right tabular-nums{% endif %} {{ row.detail_classes[di] }}{% if edit_mode and not detail_field %} text-gray-400 dark:text-gray-500{% endif %}" data-detail-col="{{ di }}">
                     {% if edit_mode and detail_field and es == row.source and er == row.ref and ef == detail_field %}
                         {% set update_url = url_for('holdings.update', filename=filename, source=row.source, ref=row.ref) %}
                         {% set display_url = url_for('holdings.cell_edit', filename=filename, source=row.source, ref=row.ref, field=detail_field, display=1) %}

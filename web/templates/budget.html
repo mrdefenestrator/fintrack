@@ -24,7 +24,7 @@
     {% endcall %}
 </form>
 <div class="table-scroll-container rounded-b-lg border-l border-b border-r border-gray-300 dark:border-gray-600 shadow-sm" data-sheet-scroll>
-<table id="budget-table" class="editable-table sortable w-full text-sm border-collapse bg-white dark:bg-gray-800"
+<table id="budget-table" class="editable-table sortable w-full text-sm border-collapse bg-white dark:bg-gray-800" style="white-space:nowrap"
     data-cell-nav="budget-tbody"
     {% if _active_count %}data-reorder-locked{% endif %} {% if
     sort_col %}data-sort-col="{{ sort_col }}" {% endif %} {% if sort_dir %}data-sort-dir="{{ sort_dir }}" {% endif %}>

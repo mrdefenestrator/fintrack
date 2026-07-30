@@ -29,8 +29,8 @@
 {% endmacro %}
 
 {# --- Non-editable cell (greyed out) --- #}
-{% macro cell_non_editable(cell_value, right_align, is_negative, colspan=1) %}
-{% set _muted = ('text-red-400 dark:text-red-500' if is_negative else 'text-gray-400 dark:text-gray-500') ~ ' bg-gray-100 dark:bg-gray-700' %}
+{% macro cell_non_editable(cell_value, right_align, is_negative, colspan=1, is_positive=false) %}
+{% set _muted = 'text-red-400 dark:text-red-500' if is_negative else ('text-green-400 dark:text-green-500' if is_positive else 'text-gray-400 dark:text-gray-500') %}
 <td class="{{ sheet.cell_class('text-right tabular-nums' if right_align else '', _muted) }}"{% if colspan > 1 %} colspan="{{ colspan }}"{% endif %}>
     {{ cell_value }}</td>
 {% endmacro %}

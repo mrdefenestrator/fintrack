@@ -28,9 +28,6 @@
         style="background-color: {{ 'rgba(239,68,68,' if val < 0 else 'rgba(34,197,94,' }}{{ '%.2f'|format(alpha) }})">
         <a class="{{ 'text-white font-medium' if heat > 0.65 else 'text-gray-700 dark:text-gray-100' }} hover:underline block"
            href="{{ url_for('transactions.index', year=ym[0], month=ym[1], category=row.category) }}"
-           hx-get="{{ url_for('transactions.index', year=ym[0], month=ym[1], category=row.category) }}"
-           hx-target="#content"
-           hx-push-url="true"
            title="View {{ row.category }} transactions for {{ month_labels[i] }}"
            onclick="event.stopPropagation()">
             ${{ val|abs|money(0) }}
@@ -66,7 +63,7 @@
    `sortable-th`/`data-col` header hooks. The <tfoot> (Total + excluded rows) is
    outside <tbody>, so the sorter never touches it; each category row keeps its
    following `data-detail-row` expander glued to it through a sort. #}
-<table class="sortable w-full bg-white dark:bg-gray-800 rounded-lg shadow-sm text-sm">
+<table class="sortable w-full bg-white dark:bg-gray-800 rounded-lg shadow-sm text-sm" style="white-space:nowrap">
     {% set _sortable_th = 'sortable-th cursor-pointer select-none hover:text-gray-600 dark:hover:text-gray-300' %}
     <thead>
         <tr class="border-b dark:border-gray-700 text-left text-xs text-gray-400 dark:text-gray-500 uppercase tracking-wide">

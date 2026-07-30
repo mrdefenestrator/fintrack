@@ -35,10 +35,11 @@ from fintrack.budget.recurrence import (
     subtotal_remainder_of_month,
 )
 from fintrack.budget.repository import get_budget_entries
+from fintrack.networth.amortization import scheduled_payment
 from fintrack.networth.calculations import (
+    asset_contribution,
     liquid_minus_cc,
     liquid_total,
-    net_nonliquid_total,
 )
 from fintrack.networth.repository import get_asset_entries
 from fintrack.projections.estimators import (
@@ -85,6 +86,24 @@ def _autopay_transfers(
         balances[payer_id] -= owed
 
 
+def _debt_monthly_payment(debt: Dict[str, Any]) -> tuple[Decimal, Decimal]:
+    """Return (monthly_rate, payment) for a debt with amortization data.
+
+    Falls back to (0, 0) when the debt lacks full amortization fields,
+    in which case the balance is held constant in the projection.
+    """
+    principal = debt.get("originalPrincipal")
+    rate = debt.get("interestRate")
+    term = debt.get("termMonths")
+    if principal is None or rate is None or term is None:
+        return _ZERO, _ZERO
+    payment = scheduled_payment(principal, rate, term)
+    if payment is None:
+        return _ZERO, _ZERO
+    monthly_rate = money(rate) / Decimal(12)
+    return monthly_rate, payment
+
+
 def project(
     conn: Connection,
     snapshot_id: int,
@@ -102,7 +121,10 @@ def project(
     accounts = get_accounts(conn, snapshot_id)
     budget = get_budget_entries(conn, snapshot_id)
     assets = get_asset_entries(conn, snapshot_id)
-    net_assets = net_nonliquid_total(assets)
+
+    debts = [e for e in assets if e.get("kind") == "debt"]
+    non_debt_assets = [e for e in assets if e.get("kind") != "debt"]
+    static_asset_total = sum((asset_contribution(e) for e in non_debt_assets), _ZERO)
 
     estimate = None
     estimate_monthly = _ZERO
@@ -116,11 +138,20 @@ def project(
     balances: Dict[int, Decimal] = {a["id"]: money(a.get("balance")) for a in accounts}
     unassigned = _ZERO
 
+    debt_balances: Dict[int, Decimal] = {}
+    debt_amort: Dict[int, tuple[Decimal, Decimal]] = {}
+    debt_due_days: Dict[int, int | None] = {}
+    for idx, d in enumerate(debts):
+        debt_balances[idx] = money(d.get("balance"))
+        debt_amort[idx] = _debt_monthly_payment(d)
+        debt_due_days[idx] = d.get("statement_due_day_of_month")
+
     grid = month_sequence(today.year, today.month, months)
     month_infos = [
         {"year": y, "month": m, "label": _month_label(y, m)} for y, m in grid
     ]
     per_account: Dict[int, List[Decimal]] = {a["id"]: [] for a in accounts}
+    per_debt: Dict[int, List[Decimal]] = {idx: [] for idx in range(len(debts))}
     unassigned_series: List[Decimal] = []
     liquid_series: List[Decimal] = []
     net_worth_series: List[Decimal] = []
@@ -150,12 +181,28 @@ def project(
             else:
                 unassigned += estimate_monthly
 
+        for idx in range(len(debts)):
+            monthly_rate, payment = debt_amort[idx]
+            if payment != _ZERO:
+                due_day = debt_due_days[idx]
+                if i == 0 and due_day is not None and today.day >= due_day:
+                    pass
+                else:
+                    bal = debt_balances[idx]
+                    debt_balances[idx] = max(
+                        _ZERO, bal * (Decimal(1) + monthly_rate) - payment
+                    )
+            per_debt[idx].append(debt_balances[idx])
+
         for acc in accounts:
             per_account[acc["id"]].append(balances[acc["id"]])
         unassigned_series.append(unassigned)
         projected = [{**a, "balance": balances[a["id"]]} for a in accounts]
+        debt_total = sum(debt_balances.values(), _ZERO)
         liquid_series.append(liquid_total(projected) + unassigned)
-        net_worth_series.append(liquid_minus_cc(projected) + net_assets + unassigned)
+        net_worth_series.append(
+            liquid_minus_cc(projected) + static_asset_total - debt_total + unassigned
+        )
 
     rows = []
     warnings = []
@@ -175,6 +222,17 @@ def project(
                         "minimum": money(minimum),
                     }
                 )
+
+    for idx, d in enumerate(debts):
+        series = [-bal for bal in per_debt[idx]]
+        rows.append(
+            {
+                "account": d,
+                "balances": series,
+                "below": [False] * len(series),
+                "_source": "debt",
+            }
+        )
 
     return {
         "start": today,

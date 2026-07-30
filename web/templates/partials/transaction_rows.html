@@ -4,9 +4,9 @@
    Inline cell editing (Merchant/Category/Notes) is preserved — see
    partials/transaction_row.html and partials/ledger_cells.html. #}
 {% import "partials/sheet.html" as sheet %}
-<table class="sortable w-full text-sm border-collapse bg-white dark:bg-gray-800">
+<table class="sortable w-full text-sm border-collapse bg-white dark:bg-gray-800" data-cell-nav="txn-tbody" style="white-space:nowrap">
     {{ sheet.thead(["Date", "Merchant", "Description", "Account", "Category", "Amount", "Notes"], right_align_cols=[5]) }}
-    <tbody>
+    <tbody id="txn-tbody">
         {% for txn in transactions %}
         {% include "partials/transaction_row.html" %}
         {% endfor %}

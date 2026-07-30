@@ -89,12 +89,12 @@ def test_status_url_redirects_to_holdings(page, flask_server):
 def test_lock_scoped_to_edit_pages(page, flask_server):
     """The lock toggle is functional on holdings/budget and muted
     (non-interactive) on pages that don't honor edit mode."""
-    for path in ("holdings", "budget"):
+    for path in ("holdings", "budget", "merchants", "categories", "transactions"):
         page.goto(f"{flask_server}/s/test_finances/{path}")
         assert page.locator("button[title^='Enter edit mode']").is_visible(), path
         assert page.locator("[data-lock-muted]").count() == 0, path
 
-    for path in ("transactions", "projections", "import"):
+    for path in ("projections", "import"):
         page.goto(f"{flask_server}/s/test_finances/{path}")
         assert page.locator("[data-lock-muted]").is_visible(), path
         assert page.locator("button[title^='Enter edit mode']").count() == 0, path

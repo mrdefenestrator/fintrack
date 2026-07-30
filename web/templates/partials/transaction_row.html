@@ -1,26 +1,41 @@
 {% from "partials/ledger_cells.html" import cell_display, text_edit, select_edit %}
+{% from "macros/table.html" import cell_non_editable %}
 {% import "partials/sheet.html" as sheet %}
 {% set row_id = "txn-row-" ~ txn.id %}
 {% set base = "/s/" ~ filename ~ "/transactions/" ~ txn.id %}
 <tr id="{{ row_id }}" class="{{ sheet.row_class() }}">
     {# Date — raw imported data, immutable #}
+    {% if edit_mode %}
+    {{ cell_non_editable(txn.date, false, false) }}
+    {% else %}
     <td class="{{ sheet.cell_class('', 'whitespace-nowrap') }}">{{ txn.date }}</td>
+    {% endif %}
 
     {# Merchant — corrections overlay (merchant_name) #}
-    {% if editing_field is defined and editing_field == 'merchant_name' %}
+    {% if edit_mode and editing_field is defined and editing_field == 'merchant_name' %}
         {{ text_edit('merchant_name', txn.merchant, base ~ "/update", base ~ "/row", row_id) }}
-    {% else %}
+    {% elif edit_mode %}
         {{ cell_display(txn.merchant, base ~ "/cell?field=merchant_name", row_id) }}
+    {% else %}
+        <td class="{{ sheet.cell_class() }}">{{ txn.merchant }}</td>
     {% endif %}
 
     {# Description — raw imported data, immutable #}
-    <td class="{{ sheet.cell_class('', 'text-gray-500 dark:text-gray-400') }}">{{ txn.raw_description }}</td>
+    {% if edit_mode %}
+    {{ cell_non_editable(txn.raw_description, false, false) }}
+    {% else %}
+    <td class="{{ sheet.cell_class() }}">{{ txn.raw_description }}</td>
+    {% endif %}
 
     {# Account — immutable #}
-    <td class="{{ sheet.cell_class('', 'text-gray-500 dark:text-gray-400') }}">{{ txn.account_name or '—' }}</td>
+    {% if edit_mode %}
+    {{ cell_non_editable(txn.account_name or '—', false, false) }}
+    {% else %}
+    <td class="{{ sheet.cell_class() }}">{{ txn.account_name or '—' }}</td>
+    {% endif %}
 
     {# Category — corrections overlay, with optional apply-to-merchant #}
-    {% if editing_field is defined and editing_field == 'category' %}
+    {% if edit_mode and editing_field is defined and editing_field == 'category' %}
         {% call select_edit('category', txn.category, categories, base ~ "/update", row_id) %}
             <label class="ml-2 inline-flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 cursor-pointer align-middle"
                    title="Also set this category on every transaction from this merchant">
@@ -28,19 +43,27 @@
                 <span class="hidden sm:inline">merchant</span>
             </label>
         {% endcall %}
-    {% else %}
+    {% elif edit_mode %}
         {{ cell_display(txn.category, base ~ "/cell?field=category", row_id) }}
+    {% else %}
+        <td class="{{ sheet.cell_class() }}">{{ txn.category }}</td>
     {% endif %}
 
     {# Amount — raw imported data, immutable #}
+    {% if edit_mode %}
+    {{ cell_non_editable(('-$' if txn.amount < 0 else '+$') ~ (txn.amount|abs|money), true, txn.amount < 0, is_positive=txn.amount > 0) }}
+    {% else %}
     <td class="{{ sheet.cell_class('text-right tabular-nums', 'whitespace-nowrap ' ~ ('text-red-600 dark:text-red-400' if txn.amount < 0 else 'text-green-600 dark:text-green-400')) }}">
         {{ '-$' if txn.amount < 0 else '+$' }}{{ txn.amount|abs|money }}
     </td>
+    {% endif %}
 
     {# Notes — corrections overlay #}
-    {% if editing_field is defined and editing_field == 'notes' %}
+    {% if edit_mode and editing_field is defined and editing_field == 'notes' %}
         {{ text_edit('notes', txn.notes or '', base ~ "/update", base ~ "/row", row_id) }}
-    {% else %}
+    {% elif edit_mode %}
         {{ cell_display(txn.notes or '—', base ~ "/cell?field=notes", row_id) }}
+    {% else %}
+        <td class="{{ sheet.cell_class() }}">{{ txn.notes or '—' }}</td>
     {% endif %}
 </tr>

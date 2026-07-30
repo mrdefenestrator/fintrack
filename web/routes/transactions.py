@@ -30,6 +30,7 @@ def _load_txn(conn, txn_id):
 
 @bp.route("/transactions")
 def index():
+    edit_mode = request.args.get("edit") == "1"
     today = date.today()
     year = request.args.get("year", today.year, type=int)
     month = request.args.get("month", today.month, type=int)
@@ -122,6 +123,7 @@ def index():
         this_year=this_year,
         txn_count=txn_count,
         txn_total=txn_total,
+        edit_mode=edit_mode,
     )
 
 
@@ -135,7 +137,7 @@ def cell_edit(txn_id):
         txn = _load_txn(conn, txn_id)
     if not txn:
         return "", 404
-    kwargs = {"txn": txn, "categories": categories}
+    kwargs = {"txn": txn, "categories": categories, "edit_mode": True}
     if field in _TXN_EDITABLE_FIELDS:
         kwargs["editing_field"] = field
     return render_template("partials/transaction_row.html", **kwargs)
@@ -149,7 +151,7 @@ def row(txn_id):
         txn = _load_txn(conn, txn_id)
     if not txn:
         return "", 404
-    return render_template("partials/transaction_row.html", txn=txn)
+    return render_template("partials/transaction_row.html", txn=txn, edit_mode=True)
 
 
 @bp.route("/transactions/<int:txn_id>/update", methods=["POST"])
@@ -188,4 +190,4 @@ def update(txn_id):
 
     if not txn:
         return "", 404
-    return render_template("partials/transaction_row.html", txn=txn)
+    return render_template("partials/transaction_row.html", txn=txn, edit_mode=True)

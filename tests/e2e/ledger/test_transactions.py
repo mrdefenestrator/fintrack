@@ -216,7 +216,7 @@ def test_transactions_merchant_names_visible(page, confirmed_server):
 def test_transactions_category_cell_opens_inline_select(page, confirmed_server):
     """Clicking the Category cell (col 4) swaps it to a <select> with the
     apply-to-merchant option."""
-    page.goto(f"{confirmed_server}/s/ledger/transactions?year=2026&month=4")
+    page.goto(f"{confirmed_server}/s/ledger/transactions?year=2026&month=4&edit=1")
     cat_cell = page.locator("table tbody tr").first.locator("td").nth(4)
     with page.expect_response(lambda r: "/cell" in r.url and "category" in r.url):
         cat_cell.click()
@@ -227,7 +227,7 @@ def test_transactions_category_cell_opens_inline_select(page, confirmed_server):
 
 def test_transactions_merchant_cell_opens_text_input(page, confirmed_server):
     """Clicking the Merchant cell (col 1) swaps it to a text input."""
-    page.goto(f"{confirmed_server}/s/ledger/transactions?year=2026&month=4")
+    page.goto(f"{confirmed_server}/s/ledger/transactions?year=2026&month=4&edit=1")
     merchant_cell = page.locator("table tbody tr").first.locator("td").nth(1)
     with page.expect_response(lambda r: "/cell" in r.url and "merchant_name" in r.url):
         merchant_cell.click()
@@ -237,7 +237,7 @@ def test_transactions_merchant_cell_opens_text_input(page, confirmed_server):
 
 def test_transactions_notes_cell_opens_text_input(page, confirmed_server):
     """Clicking the Notes cell (col 6) swaps it to a text input."""
-    page.goto(f"{confirmed_server}/s/ledger/transactions?year=2026&month=4")
+    page.goto(f"{confirmed_server}/s/ledger/transactions?year=2026&month=4&edit=1")
     notes_cell = page.locator("table tbody tr").first.locator("td").nth(6)
     with page.expect_response(lambda r: "/cell" in r.url and "notes" in r.url):
         notes_cell.click()
@@ -247,7 +247,7 @@ def test_transactions_notes_cell_opens_text_input(page, confirmed_server):
 
 def test_transactions_amount_cell_not_editable(page, confirmed_server):
     """The Amount cell (col 5) is raw data and does not open an editor."""
-    page.goto(f"{confirmed_server}/s/ledger/transactions?year=2026&month=4")
+    page.goto(f"{confirmed_server}/s/ledger/transactions?year=2026&month=4&edit=1")
     amount_cell = page.locator("table tbody tr").first.locator("td").nth(5)
     amount_cell.click()
     # No inline input appears anywhere in the table.
@@ -343,7 +343,7 @@ def test_transactions_amount_filter_invalid_input_ignored(page, confirmed_server
 
 def test_transactions_notes_inline_edit_saves(page, confirmed_server):
     """Typing a note and blurring persists it to the corrections overlay."""
-    page.goto(f"{confirmed_server}/s/ledger/transactions?year=2026&month=4")
+    page.goto(f"{confirmed_server}/s/ledger/transactions?year=2026&month=4&edit=1")
     notes_cell = page.locator("table tbody tr").first.locator("td").nth(6)
     with page.expect_response(lambda r: "/cell" in r.url and "notes" in r.url):
         notes_cell.click()

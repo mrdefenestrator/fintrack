@@ -36,6 +36,8 @@ def forecast_view():
         active_tab="forecast",
         by_category=sorted_categories,
         monthly_total=monthly_total,
-        budget_category_count=len({e.get("category") for e in budget if e.get("category")}),
+        budget_category_count=len(
+            {e.get("category") for e in budget if e.get("category")}
+        ),
         **context,
     )

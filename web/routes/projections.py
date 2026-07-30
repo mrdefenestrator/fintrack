@@ -125,10 +125,7 @@ def _chart(result) -> dict | None:
     def area_path(series):
         baseline_y = CHART_PAD_T + plot_h
         pts = " ".join(f"L{x(i):.1f},{y(v):.1f}" for i, v in enumerate(series))
-        return (
-            f"M{x(0):.1f},{baseline_y} {pts} "
-            f"L{x(n-1):.1f},{baseline_y} Z"
-        )
+        return f"M{x(0):.1f},{baseline_y} {pts} L{x(n - 1):.1f},{baseline_y} Z"
 
     def dots(series):
         return [

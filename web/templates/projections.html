@@ -26,6 +26,8 @@
         box-shadow: inset 4px 0 0 var(--accent), inset 0 1px 0 var(--accent), inset 0 -1px 0 var(--accent);
     }
     .dark [data-projection-table] .projection-group-heading > td:first-child { color: var(--label-dark); }
+    [data-projection-table] .projection-group-heading > td { color: var(--label); }
+    .dark [data-projection-table] .projection-group-heading > td { color: var(--label-dark); }
     [data-projection-table] .projection-group > tr:not(.projection-group-heading) > :first-child {
         box-shadow: inset 4px 0 0 var(--accent);
     }
@@ -143,7 +145,7 @@
                 {{ group.label }}
             </td>
             {% for s in group.subtotals %}
-            <td class="px-1.5 py-1.5 text-right tabular-nums whitespace-nowrap text-sm font-medium {% if s | display_is_negative %}!text-red-600 dark:!text-red-400{% else %}text-gray-500 dark:text-gray-400{% endif %}">{{ s }}</td>
+            <td class="px-1.5 py-1.5 text-right tabular-nums whitespace-nowrap text-sm {% if s | display_is_negative %}!text-red-600 dark:!text-red-400{% endif %}">{{ s }}</td>
             {% endfor %}
         </tr>
         {% for row in group.rows %}

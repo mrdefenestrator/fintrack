@@ -184,6 +184,9 @@ def test_net_worth_includes_static_assets(conn, snapshot_id):
     result = project(conn, snapshot_id, months=2, today=TODAY)
     assert result["liquid"] == [Decimal(1000), Decimal(1000)]
     assert result["net_worth"] == [Decimal(10000), Decimal(10000)]
+    asset_rows = [r for r in result["rows"] if r.get("_source") == "asset"]
+    assert len(asset_rows) == 1
+    assert asset_rows[0]["balances"] == [Decimal(9000), Decimal(9000)]
 
 
 def test_month_zero_prorates_remainder_of_month(conn, snapshot_id):
@@ -204,6 +207,94 @@ def test_month_zero_prorates_remainder_of_month(conn, snapshot_id):
     )
     result = project(conn, snapshot_id, months=3, today=TODAY)
     assert _series(result, checking) == [Decimal(1000), Decimal(900), Decimal(800)]
+
+
+def test_asset_growth_compounds_monthly(conn, snapshot_id):
+    _add(conn, snapshot_id, balance=0)
+    add_asset_entry(
+        conn,
+        snapshot_id,
+        {
+            "kind": "asset",
+            "name": "401k",
+            "value": 10000,
+            "annualReturnRate": Decimal("0.12"),
+        },
+    )
+    result = project(conn, snapshot_id, months=3, today=TODAY)
+    asset_rows = [r for r in result["rows"] if r.get("_source") == "asset"]
+    assert len(asset_rows) == 1
+    b = asset_rows[0]["balances"]
+    r = Decimal("1.01")  # 0.12 / 12
+    assert b[0] == Decimal("10000") * r
+    assert b[1] == Decimal("10000") * r * r
+    assert b[2] == Decimal("10000") * r * r * r
+    assert result["net_worth"][2] == b[2]
+
+
+def test_asset_contribution_with_growth(conn, snapshot_id):
+    _add(conn, snapshot_id, balance=0)
+    add_asset_entry(
+        conn,
+        snapshot_id,
+        {
+            "kind": "asset",
+            "name": "Retirement",
+            "value": 10000,
+            "annualReturnRate": Decimal("0.12"),
+            "monthlyContribution": Decimal("500"),
+        },
+    )
+    result = project(conn, snapshot_id, months=2, today=TODAY)
+    asset_rows = [r for r in result["rows"] if r.get("_source") == "asset"]
+    b = asset_rows[0]["balances"]
+    expected_0 = Decimal("10000") * Decimal("1.01") + Decimal("500")
+    expected_1 = expected_0 * Decimal("1.01") + Decimal("500")
+    assert b[0] == expected_0
+    assert b[1] == expected_1
+
+
+def test_asset_depreciation(conn, snapshot_id):
+    _add(conn, snapshot_id, balance=0)
+    add_asset_entry(
+        conn,
+        snapshot_id,
+        {
+            "kind": "asset",
+            "name": "Car",
+            "value": 30000,
+            "annualReturnRate": Decimal("-0.15"),
+        },
+    )
+    result = project(conn, snapshot_id, months=2, today=TODAY)
+    asset_rows = [r for r in result["rows"] if r.get("_source") == "asset"]
+    b = asset_rows[0]["balances"]
+    monthly_rate = Decimal("-0.15") / Decimal("12")
+    expected_0 = Decimal("30000") * (Decimal("1") + monthly_rate)
+    expected_1 = expected_0 * (Decimal("1") + monthly_rate)
+    assert b[0] == expected_0
+    assert b[1] == expected_1
+
+
+def test_asset_contribution_only(conn, snapshot_id):
+    _add(conn, snapshot_id, balance=0)
+    add_asset_entry(
+        conn,
+        snapshot_id,
+        {
+            "kind": "asset",
+            "name": "Savings Bond",
+            "value": 5000,
+            "monthlyContribution": Decimal("100"),
+        },
+    )
+    result = project(conn, snapshot_id, months=3, today=TODAY)
+    asset_rows = [r for r in result["rows"] if r.get("_source") == "asset"]
+    assert asset_rows[0]["balances"] == [
+        Decimal(5100),
+        Decimal(5200),
+        Decimal(5300),
+    ]
 
 
 def test_months_clamped(conn, snapshot_id):

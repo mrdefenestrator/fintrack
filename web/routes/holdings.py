@@ -127,6 +127,8 @@ _ASSET_DETAILS = [
     ("unit_price", "Unit Price", True, 1),
     ("qty", "Qty", True, 1),
     ("source", "Source", False, 1),
+    ("est_return", "Est. Return", True, 1),
+    ("contribution", "Mo. Contrib.", True, 1),
 ]
 _NCOLS = len(_SPINE_COLS)
 _AMOUNT_POS = 3  # Amount is the 4th (leading) slot in every group
@@ -266,6 +268,8 @@ def _asset_col_fields(e: dict) -> dict:
         m["unit_price"] = "unit"
         m["qty"] = "quantity"
         m["source"] = "source"
+        m["est_return"] = "annualReturnRate"
+        m["contribution"] = "monthlyContribution"
         if single_unit and (e.get("unit") or "USD") == "USD":
             m["amount"] = "value"
     return m
@@ -279,6 +283,11 @@ _STALE_RED_DAYS = 95
 # muted color that de-emphasizes it so populated cells stand out.
 _BLANK = "-"
 _MUTED = "text-gray-300 dark:text-gray-600"
+
+
+def _is_display_negative(value: str) -> bool:
+    s = str(value).strip()
+    return s.startswith("(") or (s.startswith("-") and len(s) > 1)
 
 
 def _type_label(value: str | None) -> str:
@@ -302,7 +311,13 @@ def _fmt_ltv(ltv: Decimal | None) -> str:
 
 
 def _fmt_pct(rate) -> str:
-    return f"{rate * 100:.2f}%" if rate is not None else _BLANK
+    if rate is None:
+        return _BLANK
+    pct = (Decimal(str(rate)) * 100).normalize()
+    s = format(pct, "f")
+    if pct < 0:
+        return f"({s.lstrip('-')}%)"
+    return f"{s}%"
 
 
 def _money(x) -> str:
@@ -398,7 +413,12 @@ def _make_row(
         "detail_cells": [values.get(k, _BLANK) for k in detail_keys],
         "detail_fields": [col_fields.get(k) for k in detail_keys],
         "detail_classes": [
-            "" if values.get(k, _BLANK) != _BLANK else _MUTED for k in detail_keys
+            _MUTED
+            if values.get(k, _BLANK) == _BLANK
+            else "text-red-600 dark:text-red-400"
+            if _is_display_negative(values.get(k, _BLANK))
+            else ""
+            for k in detail_keys
         ],
         "edit_raw": edit_raw,
         "accent_side": "liability" if is_liability else "asset",
@@ -500,6 +520,8 @@ def _asset_row(e: dict, pair: dict | None, linked: str, index: int, today: date)
         "payment": _money(payment),
         "progress": _fmt_ltv(progress),
         "source": _BLANK if is_debt else (e.get("source") or _BLANK),
+        "est_return": _fmt_pct(e.get("annualReturnRate")) if not is_debt else _BLANK,
+        "contribution": _money(e.get("monthlyContribution")) if not is_debt else _BLANK,
         "as_of": e.get("asOfDate") or _BLANK,
         "as_of_iso": e.get("asOfDate"),
     }
@@ -521,6 +543,8 @@ def _asset_row(e: dict, pair: dict | None, linked: str, index: int, today: date)
         "statement_due_day_of_month": _raw(e.get("statement_due_day_of_month")),
         "assetRef": _raw(e.get("assetRef")),
         "source": e.get("source") or "",
+        "annualReturnRate": _raw(e.get("annualReturnRate")),
+        "monthlyContribution": _raw(e.get("monthlyContribution")),
     }
     return group_key, _make_row(
         values,

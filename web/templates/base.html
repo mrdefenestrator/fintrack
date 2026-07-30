@@ -831,6 +831,7 @@
                 <div class="{{ _side_head }}">Finances</div>
                 <a href="{{ url_for('holdings.holdings_view', filename=filename, edit=1 if edit_mode else none) }}" class="{{ _side }} {% if _cur_tab == 'holdings' %}{{ _side_active }}{% else %}{{ _side_idle }}{% endif %}"{% if _cur_tab == 'holdings' %} aria-current="page"{% endif %}>Holdings</a>
                 <a href="{{ url_for('budget.budget_view', filename=filename, edit=1 if edit_mode else none) }}" class="{{ _side }} {% if _cur_tab == 'budget' %}{{ _side_active }}{% else %}{{ _side_idle }}{% endif %}"{% if _cur_tab == 'budget' %} aria-current="page"{% endif %}>Budget</a>
+                <a href="{{ url_for('forecast.forecast_view', filename=filename) }}" class="{{ _side }} {% if _cur_tab == 'forecast' %}{{ _side_active }}{% else %}{{ _side_idle }}{% endif %}"{% if _cur_tab == 'forecast' %} aria-current="page"{% endif %}>Forecast</a>
                 <a href="{{ url_for('projections.projections_view', filename=filename, edit=1 if edit_mode else none) }}" class="{{ _side }} {% if _cur_tab == 'projections' %}{{ _side_active }}{% else %}{{ _side_idle }}{% endif %}"{% if _cur_tab == 'projections' %} aria-current="page"{% endif %}>Projections</a>
                 <div class="{{ _side_head }}">Spending</div>
                 <a href="/s/{{ filename }}/trends" class="{{ _side }} {% if _cur_tab == 'trends' %}{{ _side_active }}{% else %}{{ _side_idle }}{% endif %}"{% if _cur_tab == 'trends' %} aria-current="page"{% endif %}>Trends</a>

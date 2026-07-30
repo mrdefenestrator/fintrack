@@ -3,39 +3,33 @@
 {% block content %}
 {% import "partials/sheet.html" as sheet %}
 
-<div class="max-w-2xl">
-    <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
-        Trailing 3-month average spending per category, excluding
-        {{ budget_category_count }} categor{{ 'y' if budget_category_count == 1 else 'ies' }}
-        already covered by budget entries.
-        The Projections page can fold this total into the balance forecast.
-    </p>
-
-    {% if by_category %}
-    <div class="table-scroll-container rounded-lg border border-gray-300 dark:border-gray-600 shadow-sm">
-    <table class="w-full text-sm border-collapse bg-white dark:bg-gray-800" style="white-space:nowrap">
-        {{ sheet.thead(["Category", "Avg/month"], right_align_cols=[1]) }}
-        <tbody>
-            {% for category, avg in by_category %}
-            <tr class="{{ sheet.row_class() }}">
-                <td class="{{ sheet.cell_class() }}">{{ category }}</td>
-                <td class="{{ sheet.cell_class('text-right tabular-nums', 'text-red-600 dark:text-red-400') }}">{{ avg | fmt_money }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-        <tfoot>
-            <tr class="total-row bg-gray-100 dark:bg-gray-700 border-t-2 border-gray-300 dark:border-gray-600 font-medium">
-                <td class="{{ sheet.cell_class() }}">Total</td>
-                <td class="{{ sheet.cell_class('text-right tabular-nums', 'text-red-600 dark:text-red-400') }}">{{ monthly_total | fmt_money }}</td>
-            </tr>
-        </tfoot>
-    </table>
-    </div>
-    {% else %}
-    <p class="text-sm text-gray-500 dark:text-gray-400 italic">
-        No unbudgeted spending found — every spending category is covered by a budget entry,
-        or there are no transactions in the trailing 3 months.
-    </p>
-    {% endif %}
+<div class="table-scroll-container rounded-lg border border-gray-300 dark:border-gray-600 shadow-sm">
+{% if rows %}
+<table class="w-full text-sm border-collapse bg-white dark:bg-gray-800" style="white-space:nowrap">
+    {{ sheet.thead(["Category", "Actual/mo", "Budget/mo", "Delta"], right_align_cols=[1, 2, 3]) }}
+    <tbody>
+        {% for row in rows %}
+        <tr class="{{ sheet.row_class() }}">
+            <td class="{{ sheet.cell_class() }}">{{ row.category }}</td>
+            <td class="{{ sheet.cell_class('text-right tabular-nums', sheet.neg(row.actual | display_is_negative)) }}">{{ row.actual | fmt_money }}</td>
+            <td class="{{ sheet.cell_class('text-right tabular-nums', sheet.neg(row.budgeted | display_is_negative) if row.budgeted else 'text-gray-300 dark:text-gray-600') }}">{% if row.budgeted %}{{ row.budgeted | fmt_money }}{% else %}-{% endif %}</td>
+            <td class="{{ sheet.cell_class('text-right tabular-nums', sheet.neg(row.delta | display_is_negative) if row.budgeted else 'text-gray-300 dark:text-gray-600') }}">{% if row.budgeted %}{{ row.delta | fmt_money }}{% else %}-{% endif %}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+    <tfoot>
+        <tr class="total-row bg-gray-100 dark:bg-gray-700 border-t-2 border-gray-300 dark:border-gray-600 font-medium">
+            <td class="{{ sheet.cell_class() }}">Total</td>
+            <td class="{{ sheet.cell_class('text-right tabular-nums', sheet.neg(actual_total | display_is_negative)) }}">{{ actual_total | fmt_money }}</td>
+            <td class="{{ sheet.cell_class('text-right tabular-nums', sheet.neg(budgeted_total | display_is_negative)) }}">{{ budgeted_total | fmt_money }}</td>
+            <td class="{{ sheet.cell_class('text-right tabular-nums', sheet.neg(delta_total | display_is_negative)) }}">{{ delta_total | fmt_money }}</td>
+        </tr>
+    </tfoot>
+</table>
+{% else %}
+<p class="text-sm text-gray-500 dark:text-gray-400 italic px-3 py-4">
+    No spending data found — no transactions in the trailing 3 months.
+</p>
+{% endif %}
 </div>
 {% endblock %}

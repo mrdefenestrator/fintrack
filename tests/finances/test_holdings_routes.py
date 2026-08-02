@@ -131,11 +131,9 @@ def test_holdings_grouped_layout(client):
     # Group-specific columns appear, proving per-group headers.
     assert "Unit Price" in body  # Assets
     assert "Equity" in body  # Loans
-    # One physical Details column contains compact per-group grids; the old
-    # structural blank padding columns are gone.
-    assert body.count("holding-details-header") == 4
+    # Each group has its own column headers as real <th> cells.
     assert 'data-group="cash"' in body
-    assert 'data-sort-key="d0"' in body
+    assert 'data-sort-key="c4"' in body
 
 
 def test_holdings_view_reuses_shared_filter_bar(client):

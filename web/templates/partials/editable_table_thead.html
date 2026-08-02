@@ -2,4 +2,4 @@
    Thin wrapper over the shared sheet.thead macro with the trailing actions
    column enabled. headers = list of column names; right_align_cols = 0-based
    indices to right-align. #}
-{% import "partials/sheet.html" as sheet %}{{ sheet.thead(headers, right_align_cols | default([]), actions_col=true) }}
+{% import "partials/sheet.html" as sheet %}{{ sheet.thead(headers, right_align_cols | default([]), actions_col=true, tooltips=tooltips | default([])) }}

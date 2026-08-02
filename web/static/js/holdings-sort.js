@@ -31,12 +31,6 @@
     }
 
     function rowSortText(row, key) {
-        if (key && key.charAt(0) === "d") {
-            var detail = row.querySelector(
-                ".holding-detail-cell[data-detail-col='" + key.slice(1) + "']"
-            );
-            return detail && detail.textContent;
-        }
         var col = parseInt((key || "").slice(1), 10);
         return row.cells[col] && row.cells[col].textContent;
     }
@@ -89,7 +83,7 @@
         var params = new URL(window.location).searchParams;
         var key = params.get("sort_" + group + "_col");
         var dir = params.get("sort_" + group + "_dir");
-        if (!/^[cd]\d+$/.test(key || "") || (dir !== "asc" && dir !== "desc")) return null;
+        if (!/^c\d+$/.test(key || "") || (dir !== "asc" && dir !== "desc")) return null;
         return { key: key, dir: dir };
     }
 

@@ -28,7 +28,20 @@
     data-cell-nav="budget-tbody"
     {% if _active_count %}data-reorder-locked{% endif %} {% if
     sort_col %}data-sort-col="{{ sort_col }}" {% endif %} {% if sort_dir %}data-sort-dir="{{ sort_dir }}" {% endif %}>
-{% with headers=headers, right_align_cols=[3, 5, 6, 7, 8] %}{% include "partials/editable_table_thead.html" %}{% endwith %}
+    <colgroup>
+        <col style="width: 5.5rem">
+        <col style="width: 10rem">
+        <col>
+        <col style="width: 7rem">
+        <col style="width: 8rem">
+        <col style="width: 7rem">
+        <col style="width: 7rem">
+        <col style="width: 6.5rem">
+        <col style="width: 6.5rem">
+        <col style="width: 10rem">
+    </colgroup>
+{% with headers=headers, right_align_cols=[3, 5, 6, 7, 8],
+    tooltips=["Income or expense", "Budget category", "Description of this budget entry", "Per-occurrence amount", "How often this entry recurs", "Day of month or specific date", "Prorated amount remaining this month", "Expected total for this month", "Annualized total", "Account for auto-matching transactions"] %}{% include "partials/editable_table_thead.html" %}{% endwith %}
     <tbody id="budget-tbody"{% if edit_mode %} data-reorder-url="{{ url_for('budget.reorder', filename=filename) }}"{% endif %}>
         {% include "partials/budget_tbody.html" %}
     </tbody>

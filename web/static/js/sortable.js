@@ -102,8 +102,8 @@
             var cellA = a.cells[colIndex];
             var cellB = b.cells[colIndex];
             if (!cellA || !cellB) return 0;
-            var va = parseSortValue(cellA.textContent);
-            var vb = parseSortValue(cellB.textContent);
+            var va = parseSortValue(cellA.getAttribute('data-sort-value') || cellA.textContent);
+            var vb = parseSortValue(cellB.getAttribute('data-sort-value') || cellB.textContent);
             var cmp;
             if (!isNaN(va.num) && !isNaN(vb.num)) {
                 cmp = va.num - vb.num;

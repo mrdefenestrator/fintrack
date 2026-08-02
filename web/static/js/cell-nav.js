@@ -49,14 +49,12 @@
     function editableCells(row) {
         return Array.prototype.slice.call(
             row.querySelectorAll(
-                ':scope > td[hx-get*="/cell"], :scope > td[hx-get*="/edit"], :scope > td .holding-detail-edit[hx-get*="/cell"]'
+                ':scope > td[hx-get*="/cell"], :scope > td[hx-get*="/edit"]'
             )
         );
     }
 
     function cellKey(el, row) {
-        var detail = el && el.closest(".holding-detail-cell");
-        if (detail) return "d" + detail.getAttribute("data-detail-col");
         var td = el && el.closest("td");
         return td ? "c" + Array.prototype.indexOf.call(row.children, td) : null;
     }
@@ -160,8 +158,7 @@
             var tr = field.closest("tr");
             var url = field.getAttribute("hx-post");
             var form = field.closest("form");
-            var fieldName = form && form.querySelector('[name="field"]');
-            if (!td || !tr || !tr.id || !url || !fieldName) return;
+            if (!td || !tr || !tr.id || !url || !form) return;
 
             e.preventDefault();
             e.stopImmediatePropagation();
@@ -173,6 +170,18 @@
                 mode: mode,
             };
 
+            var vals = {};
+            for (var fi = 0; fi < form.elements.length; fi++) {
+                var inp = form.elements[fi];
+                if (inp.name && inp.type !== "submit" && inp.type !== "button") {
+                    if (inp.type === "checkbox" || inp.type === "radio") {
+                        if (inp.checked) vals[inp.name] = inp.value || "on";
+                    } else {
+                        vals[inp.name] = inp.value;
+                    }
+                }
+            }
+
             var saveTarget = target;
             if (mode === "outerHTML") {
                 saveTarget = "#" + tr.id;
@@ -180,7 +189,7 @@
             htmx.ajax("POST", url, {
                 target: saveTarget,
                 swap: mode,
-                values: { field: fieldName.value, value: field.value },
+                values: vals,
             });
         },
         true

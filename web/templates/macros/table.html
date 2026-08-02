@@ -22,9 +22,9 @@
 
 {# --- Display cell (editable, clickable to open edit). `colspan` lets a cell
       span several table slots (the Holdings "Source" column spans two). --- #}
-{% macro cell_display(cell_value, right_align, is_negative, cell_edit_url, tbody_id, is_updated, colspan=1) %}
+{% macro cell_display(cell_value, right_align, is_negative, cell_edit_url, tbody_id, is_updated, colspan=1, sort_value=none) %}
 <td class="{{ sheet.display_cell_class('text-right tabular-nums' if right_align else '', sheet.neg(is_negative)) }}"
-    {% if colspan > 1 %}colspan="{{ colspan }}" {% endif %}hx-get="{{ cell_edit_url }}" hx-trigger="click" hx-swap="innerHTML" hx-target="#{{ tbody_id }}" role="button" tabindex="0">
+    {% if sort_value is not none %}data-sort-value="{{ sort_value }}" {% endif %}{% if colspan > 1 %}colspan="{{ colspan }}" {% endif %}hx-get="{{ cell_edit_url }}" hx-trigger="click" hx-swap="innerHTML" hx-target="#{{ tbody_id }}" role="button" tabindex="0">
     {{ cell_value }}</td>
 {% endmacro %}
 

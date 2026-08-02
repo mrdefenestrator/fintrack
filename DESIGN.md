@@ -325,19 +325,18 @@ slices of `accounts`; Loans combines account-type loans with `kind=debt`
 grouping only—there is no data migration—and debt↔asset equity/LTV pairing
 (`calculations.equity_pairs`) is unchanged.
 
-- **Columns use a common spine plus group details.** The physical table columns
-  are Institution·Type·Name·Amount·Details·Due·Linked·As Of, so every shared
-  field stays aligned with a consistent width. Details is one table cell
-  containing a compact, group-specific CSS grid; shorter groups are no longer
-  padded to the Loans column count. Cash: Reserve·Funding. Credit Cards:
-  Limit·Available·Rewards·Statement·Due·Linked. Loans:
-  Interest·Equity·LTV·Original·Term·Originated·P&I·Paid·Due·Linked. Assets:
+- **Ragged right edge with shared leading columns.** The first four columns —
+  Institution·Type·Name·Amount — are shared across all groups and stay aligned
+  via `<col>` widths. Each group appends its own trailing columns as real `<td>`
+  cells; shorter groups pad with a filler `<td colspan>` to the widest group's
+  column count so the HTML table grid stays consistent.
+  Cash: Reserve·Funding·As Of. Credit Cards:
+  Limit·Available·Rewards·Statement·Due·Linked·As Of. Loans:
+  Interest·Equity·LTV·Original·Term·Originated·P&I·Paid·Due·Linked·As Of. Assets:
   Unit Price·Qty·Source·Est. Return·Mo. Contrib. Equity and LTV show on the
-  **loan** row (the debt side of a secured pair). Original, Term, and Originated capture loan
-  origination inputs; P&I and Paid are derived amortization values. Due is a
-  recurring day of month, clamped to month-end when needed. Each detail grid
-  has an explicit column template so its headers and values
-  stay aligned independently of the other groups.
+  **loan** row (the debt side of a secured pair). Original, Term, and Originated
+  capture loan origination inputs; P&I and Paid are derived amortization values.
+  Due is a recurring day of month, clamped to month-end when needed.
 - **Row accent by group, not sign.** Cash, Credit Cards, Loans, and Assets have
   distinct green, rose, amber, and blue accents. A credit card therefore reads
   as a liability even at a zero balance rather than changing with the current
@@ -427,5 +426,5 @@ and testable) and only ever reads the legacy databases:
 ## Out of scope
 
 - Bank API sync (Plaid etc.) — imports remain file-based.
-- Investment return / debt interest modeling in projections.
+- Market-driven investment returns; variable-rate debt modeling.
 - Multi-currency; multi-user auth.

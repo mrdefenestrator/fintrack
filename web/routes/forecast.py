@@ -24,16 +24,23 @@ _ZERO = Decimal("0")
 
 def _budgeted_monthly_by_category(
     budget: list[dict],
-) -> dict[str, Decimal]:
-    """Sum of annualized-then-divided-by-12 expense amounts, keyed by category."""
+) -> tuple[dict[str, Decimal], dict[str, str]]:
+    """Sum of annualized-then-divided-by-12 amounts, keyed by category.
+
+    Returns (totals, kinds) where totals are unsigned monthly sums and kinds
+    maps each category to its budget kind ('income' or 'expense').
+    """
     totals: dict[str, Decimal] = {}
+    kinds: dict[str, str] = {}
     for entry in budget:
         cat = entry.get("category")
-        if not cat or entry.get("kind") != "expense":
+        kind = entry.get("kind")
+        if not cat or kind not in ("income", "expense"):
             continue
         monthly = amount_annual(entry) / Decimal(12)
         totals[cat] = totals.get(cat, _ZERO) + monthly
-    return totals
+        kinds[cat] = kind
+    return totals, kinds
 
 
 @bp.route("/forecast")
@@ -53,29 +60,29 @@ def forecast_view():
             snapshot_id=g.snapshot_id,
         )
 
-    budgeted = _budgeted_monthly_by_category(budget)
+    budgeted, budget_kinds = _budgeted_monthly_by_category(budget)
 
     all_categories = sorted(
-        set(all_averages.keys()) | set(budgeted.keys()) - EXCLUDED_CATEGORIES
+        (set(all_averages.keys()) | set(budgeted.keys())) - EXCLUDED_CATEGORIES
     )
 
     rows = []
     actual_total = _ZERO
     budgeted_total = _ZERO
     for cat in all_categories:
-        if cat in EXCLUDED_CATEGORIES:
-            continue
         actual = all_averages.get(cat, _ZERO)
         bgt = budgeted.get(cat, _ZERO)
-        bgt_display = -bgt if bgt else _ZERO
-        delta = actual - bgt_display
+        kind = budget_kinds.get(cat)
+        bgt_display = -bgt if kind == "expense" else bgt if kind == "income" else _ZERO
+        is_budgeted = cat in budgeted
+        delta = actual - bgt_display if is_budgeted else _ZERO
         rows.append(
             {
                 "category": cat,
                 "actual": actual,
                 "budgeted": bgt_display,
                 "delta": delta,
-                "is_budgeted": cat in budgeted,
+                "is_budgeted": is_budgeted,
             }
         )
         actual_total += actual

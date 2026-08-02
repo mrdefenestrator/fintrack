@@ -587,7 +587,7 @@
            snapshot picker). #}
         {% set _cur_tab = active_tab if active_tab is defined else none %}
         {% set _edit_honoring = _cur_tab in ('holdings', 'budget', 'merchants', 'categories', 'transactions') %}
-        {% set _page_names = {'holdings':'Holdings','budget':'Budget','projections':'Projections','trends':'Trends','transactions':'Transactions','merchants':'Merchants','categories':'Categories','import':'Import'} %}
+        {% set _page_names = {'holdings':'Holdings','budget':'Budget','forecast':'Forecast','projections':'Projections','trends':'Trends','transactions':'Transactions','merchants':'Merchants','categories':'Categories','import':'Import'} %}
         {% set _page_name = _page_names.get(_cur_tab, '') %}
         <div class="flex items-center h-12 px-2 gap-1">
             {% if filename %}

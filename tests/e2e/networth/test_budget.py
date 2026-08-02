@@ -327,16 +327,16 @@ def test_budget_when_continuous_toggle_off(page, flask_server):
     cont_cb.wait_for(state="visible")
     assert cont_cb.is_checked()
 
-    # Day input should be disabled
+    # Day input should be readonly when continuous
     day_input = editing_cell.locator("input[name='dayOfMonth']")
-    assert day_input.is_disabled()
+    assert day_input.get_attribute("readonly") is not None
 
     # Uncheck continuous
     cont_cb.click()
     page.wait_for_timeout(200)
 
-    # Day input should now be enabled
-    assert not day_input.is_disabled()
+    # Day input should now be editable
+    assert day_input.get_attribute("readonly") is None
 
     # Enter day 5
     day_input.fill("5")

@@ -147,7 +147,8 @@
    the sorter (tbody-only) leaves them pinned in place. #}
 <table data-projection-table class="sortable sheet-freeze-col w-full text-sm border-collapse bg-white dark:bg-gray-800" style="white-space:nowrap">
     {{ sheet.thead(["Account"] + (result.months | map(attribute='label') | list),
-                   right_align_cols=range(1, (result.months | length) + 1) | list) }}
+                   right_align_cols=range(1, (result.months | length) + 1) | list,
+                   tooltips=["Account or holding name"]) }}
     {% for group in groups %}
     <tbody class="projection-group" data-group="{{ group.key }}" x-data="{ open: {{ 'true' if group.key in open_groups else 'false' }} }" :data-open="open">
         <tr class="projection-group-heading cursor-pointer select-none" @click="open = !open">

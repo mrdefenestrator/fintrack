@@ -86,11 +86,9 @@ _BALANCE_LABELS: dict[str, str] = {"asset": "Assets", "liability": "Liabilities"
 # ---------------------------------------------------------------------------
 # Column layouts. Each tuple is (key, header, right_align, span).
 #
-# The table itself has one eight-column common spine:
-# Institution · Type · Name · Amount · Details · Due · Linked · As Of.
-# "Details" is one physical table cell containing a group-specific CSS grid.
-# This keeps every genuinely shared column aligned without padding short groups
-# out to the Loans group's column count.
+# The first four columns (Institution · Type · Name · Amount) are shared across
+# all groups. Each group appends its own trailing columns as real <td> cells,
+# giving a ragged right edge with native table auto-sizing.
 # ---------------------------------------------------------------------------
 _LEADING: list[tuple[str, str, bool, int]] = [
     ("institution", "Institution", False, 1),
@@ -98,22 +96,21 @@ _LEADING: list[tuple[str, str, bool, int]] = [
     ("name", "Name", False, 1),
     ("amount", "Amount", True, 1),
 ]
-_DUE = ("due", "Due", False, 1)
-_LINKED = ("linked", "Linked", False, 1)
-_ASOF = ("as_of", "As Of", False, 1)
-_DETAILS = ("details", "Details", False, 1)
-_SPINE_COLS = _LEADING + [_DETAILS, _DUE, _LINKED, _ASOF]
-_CASH_DETAILS = [
+_CASH_COLS = _LEADING + [
     ("reserve", "Reserve", True, 1),
     ("funding", "Funding", True, 1),
+    ("as_of", "As Of", False, 1),
 ]
-_CREDIT_DETAILS = [
+_CREDIT_COLS = _LEADING + [
     ("limit", "Limit", True, 1),
     ("available", "Available", True, 1),
     ("rewards", "Rewards", True, 1),
     ("statement", "Statement", True, 1),
+    ("due", "Due", False, 1),
+    ("linked", "Linked", False, 1),
+    ("as_of", "As Of", False, 1),
 ]
-_LOAN_DETAILS = [
+_LOAN_COLS = _LEADING + [
     ("interest", "Interest", True, 1),
     ("equity", "Equity", True, 1),
     ("ltv", "LTV", True, 1),
@@ -122,27 +119,58 @@ _LOAN_DETAILS = [
     ("originated", "Originated", False, 1),
     ("payment", "P&I", True, 1),
     ("progress", "Paid", True, 1),
+    ("due", "Due", False, 1),
+    ("linked", "Linked", False, 1),
+    ("as_of", "As Of", False, 1),
 ]
-_ASSET_DETAILS = [
+_ASSET_COLS = _LEADING + [
     ("unit_price", "Unit Price", True, 1),
     ("qty", "Qty", True, 1),
     ("source", "Source", False, 1),
     ("est_return", "Est. Return", True, 1),
     ("contribution", "Mo. Contrib.", True, 1),
 ]
-_NCOLS = len(_SPINE_COLS)
-_AMOUNT_POS = 3  # Amount is the 4th (leading) slot in every group
-_DETAIL_POS = 4
+_AMOUNT_POS = 3
+
+_COL_TOOLTIPS: dict[str, str] = {
+    "institution": "Financial institution or brokerage",
+    "type": "Account or holding type",
+    "name": "Account or holding name",
+    "amount": "Current balance or market value",
+    "reserve": "Target cash reserve",
+    "funding": "Monthly amount needed to reach reserve",
+    "as_of": "Date of last balance update",
+    "limit": "Credit limit",
+    "available": "Available credit (limit minus owed)",
+    "rewards": "Rewards balance",
+    "statement": "Last statement balance",
+    "due": "Payment due date (day of month)",
+    "linked": "Linked payment account or secured asset",
+    "interest": "Annual interest rate",
+    "equity": "Current equity (asset value minus owed)",
+    "ltv": "Loan-to-value ratio",
+    "original": "Original loan principal",
+    "term": "Loan term in months",
+    "originated": "Loan origination date",
+    "payment": "Monthly principal and interest payment",
+    "progress": "Percentage of principal paid off",
+    "unit_price": "Price per unit or share",
+    "qty": "Number of units or shares held",
+    "source": "Price data source",
+    "est_return": "Estimated annual return rate",
+    "contribution": "Monthly contribution amount",
+}
 
 # Group definitions: key -> (label, source, singular noun for the add button,
-# detail layout). Order here is the top-to-bottom render order.
+# full column layout). Order here is the top-to-bottom render order.
 _GROUPS: list[tuple[str, str, str, str, list]] = [
-    ("cash", "Cash", "account", "account", _CASH_DETAILS),
-    ("credit", "Credit Cards", "account", "credit card", _CREDIT_DETAILS),
-    ("loan", "Loans", "asset", "loan", _LOAN_DETAILS),
-    ("asset", "Assets", "asset", "asset", _ASSET_DETAILS),
+    ("cash", "Cash", "account", "account", _CASH_COLS),
+    ("credit", "Credit Cards", "account", "credit card", _CREDIT_COLS),
+    ("loan", "Loans", "asset", "loan", _LOAN_COLS),
+    ("asset", "Assets", "asset", "asset", _ASSET_COLS),
 ]
-_GROUP_DETAILS = {key: cols for key, _, _, _, cols in _GROUPS}
+_GROUP_COLS = {key: cols for key, _, _, _, cols in _GROUPS}
+_MAX_COLS = max(len(cols) for cols in _GROUP_COLS.values())
 
 
 def _account_group_key(a: dict) -> str:
@@ -180,6 +208,10 @@ def _col_right_align(cols):
 
 def _col_spans(cols):
     return [span for _, _, _, span in cols]
+
+
+def _col_tooltips(cols):
+    return [_COL_TOOLTIPS.get(k, h) for k, h, _, _ in cols]
 
 
 # Editable columns per account group, mapping the display column key to the
@@ -374,54 +406,44 @@ def _make_row(
     today,
     source,
     ref,
-    detail_cols,
+    cols,
     col_fields,
     edit_raw,
     liability,
 ):
     """Assemble a row record: display cells, per-cell classes, edit metadata.
 
-    The physical cells follow `_SPINE_COLS`; the middle Details cell contains
-    the group's own `detail_cols`. The left accent encodes the asset/
-    liability split by the holding's *group* — Credit Cards and Loans are
-    liabilities (red) even at a zero balance; Cash and Assets are green — rather
-    than by the sign of the current amount.
+    Every column in the group's `cols` list becomes a real <td>. The left accent
+    encodes the asset/liability split by the holding's *group* — Credit Cards
+    and Loans are liabilities (red) even at a zero balance; Cash and Assets are
+    green — rather than by the sign of the current amount.
     """
-    keys = _col_keys(_SPINE_COLS)
-    detail_keys = _col_keys(detail_cols)
-    is_liability = liability
-    cells = ["" if k == "details" else values.get(k, _BLANK) for k in keys]
-    cell_classes = [
-        "" if (k == "details" or cells[i] != _BLANK) else _MUTED
-        for i, k in enumerate(keys)
-    ]
-    if "as_of" in keys:
-        staleness = _staleness_class(values.get("as_of_iso"), today)
-        if staleness:
-            cell_classes[keys.index("as_of")] = staleness
+    keys = _col_keys(cols)
+    cells = [values.get(k, _BLANK) for k in keys]
+    staleness = _staleness_class(values.get("as_of_iso"), today)
+    cell_classes = []
+    for i, k in enumerate(keys):
+        v = cells[i]
+        if k == "as_of" and staleness:
+            cell_classes.append(staleness)
+        elif v == _BLANK:
+            cell_classes.append(_MUTED)
+        elif _is_display_negative(v):
+            cell_classes.append("text-red-600 dark:text-red-400")
+        else:
+            cell_classes.append("")
     return {
         "source": source,
         "ref": ref,
         "institution": institution,
         "type_value": type_value,
-        "balance_side": "liability" if is_liability else "asset",
+        "balance_side": "liability" if liability else "asset",
         "amount": amount,
         "cells": cells,
         "cell_classes": cell_classes,
-        # Blank slots carry no field (never editable).
-        "fields": [None if k == "" else col_fields.get(k) for k in keys],
-        "detail_cells": [values.get(k, _BLANK) for k in detail_keys],
-        "detail_fields": [col_fields.get(k) for k in detail_keys],
-        "detail_classes": [
-            _MUTED
-            if values.get(k, _BLANK) == _BLANK
-            else "text-red-600 dark:text-red-400"
-            if _is_display_negative(values.get(k, _BLANK))
-            else ""
-            for k in detail_keys
-        ],
+        "fields": [col_fields.get(k) for k in keys],
         "edit_raw": edit_raw,
-        "accent_side": "liability" if is_liability else "asset",
+        "accent_side": "liability" if liability else "asset",
     }
 
 
@@ -468,7 +490,7 @@ def _account_row(a: dict, funding_by_id: dict, account_display: dict, today: dat
         today,
         "account",
         a.get("id"),
-        _GROUP_DETAILS[group_key],
+        _GROUP_COLS[group_key],
         _account_col_fields(a),
         edit_raw,
         liability=group_key in ("credit", "loan"),
@@ -554,7 +576,7 @@ def _asset_row(e: dict, pair: dict | None, linked: str, index: int, today: date)
         today,
         "asset",
         index,
-        _GROUP_DETAILS[group_key],
+        _GROUP_COLS[group_key],
         _asset_col_fields(e),
         edit_raw,
         liability=group_key == "loan",
@@ -630,7 +652,7 @@ def _groups_ctx(rows_by_group: dict[str, list[dict]], accounts, assets):
     tables at once.
     """
     groups = []
-    for key, label, source, add_noun, detail_cols in _GROUPS:
+    for key, label, source, add_noun, cols in _GROUPS:
         grp_rows = rows_by_group.get(key, [])
         total = sum((r["amount"] for r in grp_rows), Decimal("0"))
         sources = {r["source"] for r in grp_rows}
@@ -641,12 +663,11 @@ def _groups_ctx(rows_by_group: dict[str, list[dict]], accounts, assets):
                 "label": label,
                 "source": source,
                 "add_noun": add_noun,
-                "headers": _col_headers(_SPINE_COLS),
-                "right_align": _col_right_align(_SPINE_COLS),
-                "spans": _col_spans(_SPINE_COLS),
-                "detail_headers": _col_headers(detail_cols),
-                "detail_keys": _col_keys(detail_cols),
-                "detail_right_align": _col_right_align(detail_cols),
+                "headers": _col_headers(cols),
+                "tooltips": _col_tooltips(cols),
+                "right_align": _col_right_align(cols),
+                "spans": _col_spans(cols),
+                "ncols": len(cols),
                 "rows": grp_rows,
                 "total": fmt_money(total),
                 "reorderable": reorderable,
@@ -659,7 +680,7 @@ def _groups_ctx(rows_by_group: dict[str, list[dict]], accounts, assets):
         ("Liquid", totals["liquid"]),
         ("Net worth", totals["net_worth"]),
     ):
-        cells = [""] * _NCOLS
+        cells = [""] * _MAX_COLS
         cells[2] = label
         cells[_AMOUNT_POS] = fmt_money(value)
         master.append(cells)
@@ -691,9 +712,8 @@ def _tbody_ctx(rows_by_group, ctx: dict, filters_active=False, **editing) -> dic
         "groups": groups,
         "master_total": master_total,
         "filters_active": filters_active,
-        "ncols": _NCOLS,
+        "max_cols": _MAX_COLS,
         "amount_pos": _AMOUNT_POS,
-        "detail_pos": _DETAIL_POS,
         "account_type_options": ACCOUNT_TYPE_OPTIONS,
         "asset_type_options": ASSET_TYPE_OPTIONS,
         "account_ref_options": account_ref_options,
@@ -939,7 +959,7 @@ def reorder(filename: str, group: str):
     fixed, then persisted as a full table permutation.
     """
     snapshot_id = validate_snapshot(filename)
-    if group not in _GROUP_DETAILS:
+    if group not in _GROUP_COLS:
         abort(404)
     source = "account" if group in ("cash", "credit") else "asset"
     try:
@@ -982,7 +1002,7 @@ def reorder(filename: str, group: str):
 def add(filename: str, group: str):
     """Add a blank holding to a group; the user then edits it inline."""
     snapshot_id = validate_snapshot(filename)
-    if group not in _GROUP_DETAILS:
+    if group not in _GROUP_COLS:
         abort(404)
     engine = current_app.config["engine"]
     today = _client_today()

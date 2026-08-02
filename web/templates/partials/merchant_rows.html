@@ -4,7 +4,8 @@
    Inline Category editing is preserved — see partials/merchant_row.html. #}
 {% import "partials/sheet.html" as sheet %}
 <table id="merchants-table" class="sortable w-full text-sm border-collapse bg-white dark:bg-gray-800" data-cell-nav="merchants-table" data-cell-nav-swap="outerHTML" style="white-space:nowrap">
-    {{ sheet.thead(["Merchant", "Category", "Source", "Transactions", "Last Seen"], right_align_cols=[3]) }}
+    {{ sheet.thead(["Merchant", "Category", "Source", "Transactions", "Last Seen"], right_align_cols=[3],
+        tooltips=["Normalized merchant name", "Assigned spending category", "How the category was assigned (auto, manual, correction)", "Total number of transactions", "Date of most recent transaction"]) }}
     <tbody>
         {% for m in merchants %}
         {% include "partials/merchant_row.html" %}

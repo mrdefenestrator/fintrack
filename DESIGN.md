@@ -8,36 +8,81 @@ implemented; the original merge plan is preserved at
 
 ## Architecture
 
-- **SQLite** storage, **SQLAlchemy Core** (not ORM) for all queries,
-  **Alembic** for migrations (single chain, fresh baseline — legacy data
-  arrives via `migrate-legacy`, never via upgrade of an old DB).
-- **Repository pattern**: all database access goes through repository modules;
-  routes and CLI commands never build SQL.
-- **Corrections overlay**: imported statement data is immutable; user fixes
+fintrack is one Python application with two delivery surfaces over the same
+domain and database:
+
+```
+Flask routes / Click commands
+             │
+             ├── workflow orchestration (routes, commands, importer)
+             ├── pure domain logic (recurrence, calculations, projections)
+             └── repositories ── SQLAlchemy Core ── SQLite
+                       │
+                       └── Alembic schema history
+```
+
+- **Delivery:** Flask routes translate HTTP/HTMX requests into repository and
+  domain calls; Click commands do the same for the terminal. Jinja presenters
+  and CLI table builders format results for their respective surfaces.
+- **Workflow orchestration:** there is currently no separate application-service
+  package. Multi-step use cases live in route/command functions or focused
+  orchestrators such as `ledger/importer/run_import()`.
+- **Domain logic:** recurrence, net-worth calculations, amortization,
+  projections, normalization, and deduplication are kept independent of Flask
+  and Click where possible.
+- **Persistence:** repository modules own SQLAlchemy Core queries and mutations;
+  routes and CLI commands do not construct SQL. Repositories expose legacy-shaped
+  dictionaries (`type`, `asOfDate`, `assetRef`, etc.) while mapping to snake-case
+  database columns at the repository boundary.
+- **External adapters:** statement parsers read OFX/QFX/CSV files, and the
+  classifier is the only integration with the Claude API.
+- **Schema:** `fintrack/core/models.py` is the metadata definition used by the
+  application and Alembic autogeneration. Alembic is the upgrade history used by
+  deployments; `init_db()` also calls `MetaData.create_all()` at application/CLI
+  startup so a new database can be bootstrapped. Legacy databases enter through
+  `migrate-legacy`, never by upgrading a predecessor schema.
+
+Two cross-cutting persistence patterns are central to the application:
+
+- **Corrections overlay:** imported statement data is immutable; user fixes
   (category, merchant name, notes) live in `transaction_corrections` and are
   applied at read time.
-- **Staging area**: imports are `staging` until reviewed, then `confirmed` or
+- **Staging area:** imports are `staging` until reviewed, then `confirmed` or
   `rejected`; only confirmed transactions appear in reports.
-- **Flask + HTMX** web UI, **Click** CLI, both thin layers over the same
-  repositories.
+
+### Transaction ownership
+
+Write repositories and persistence helpers currently own their transaction
+boundary: they issue their mutation(s) and call `Connection.commit()` before
+returning. Callers normally open a connection with `engine.connect()` and rely
+on the called writer to commit; read-only operations do not commit.
+
+Consequently, one repository call is the practical unit of atomicity. A workflow
+that invokes several committing writers—such as creating an import and then
+inserting its transactions, or creating an account and then recording its
+opening balance—crosses more than one transaction. Callers must not assume those
+steps roll back as a unit. Preserve this convention when maintaining current
+code; any move to workflow-level atomicity must be an intentional, coordinated
+change that removes inner commits and makes a higher-level service own
+`begin`/`commit`/`rollback`.
 
 ### Package layout
 
 ```
 fintrack.py                # Click CLI entrypoint
 fintrack/
-  core/         db.py (engine + FK pragma), models.py (single MetaData),
-                config.py (config paths), types.py, formatting.py, filters.py
+  core/         engine/FK pragma, schema metadata, shared types, coercion,
+                loading, ordering, filtering, formatting, CLI table builders
   ledger/       importer/ (OFX/QFX + CSV parsers, normalization, dedup),
                 classifier.py (Claude API), repository/ (imports, transactions,
                 merchants, corrections, categories, aggregations)
-  accounts/     repository.py (unified accounts), balance_history.py, matching.py
+  accounts/     repository.py (unified accounts), balance_history.py
   budget/       repository.py, recurrence.py (occurrence + proration engine)
   networth/     repository.py (assets/debts), calculations.py (key numbers, funding)
   projections/  engine.py, estimators.py
   snapshots/    repository.py
-  migrate/      legacy.py (one-time legacy import), mapping.py
-  cli/          one module per command group
+  migrate/      legacy.py and yaml_import.py (one-time import adapters)
+  cli/          Click command groups and shared CLI helpers
 web/            Flask app: app.py, routes/, templates/, static/
 migrations/     Alembic (single chain)
 configs/        categories.yaml, normalization.yaml, institutions/
@@ -58,10 +103,12 @@ Single `MetaData` in `fintrack/core/models.py`.
   (`imports`, `transactions`, `balance_history`). Imports and transactions
   deliberately carry **no** `snapshot_id` — it is derived through
   `account_id`, avoiding a denormalized consistency invariant.
-- `merchant_cache`, `categories`, and `transaction_corrections` are
-  deliberately **global**: classification knowledge and the category taxonomy
-  are shared across snapshots. A merchant classified in one household is
-  classified in all of them.
+- `merchant_cache` and `categories` are deliberately **global**: classification
+  knowledge and the category taxonomy are shared across snapshots. A merchant
+  classified in one household is classified in all of them.
+- `transaction_corrections` has no `snapshot_id`, but each correction belongs
+  to exactly one transaction and therefore inherits that transaction's account
+  and snapshot scope.
 - `snapshot_id` foreign keys cascade on delete; ownership references between
   rows (`payment_account_ref`, `auto_account_ref`, `asset_ref`) use NO ACTION,
   so deleting a referenced row directly is blocked while a snapshot-level
@@ -72,9 +119,9 @@ Single `MetaData` in `fintrack/core/models.py`.
 
 - **snapshots** — `name` (unique), `created_at`. A snapshot is an independent
   household; the whole app is scoped by it.
-- **accounts** — merged from both predecessors: identity (`name` unique per
-  `(snapshot, institution)`, `institution`, `account_type`; partial account
-  numbers live in the name itself, e.g. "Checking [1234]"), balance state
+- **accounts** — merged from both predecessors: identity (`name` constrained
+  unique per `(snapshot, institution)`, `institution`, `account_type`; partial
+  account numbers live in the name itself, e.g. "Checking [1234]"), balance state
   (`balance`, `available`,
   `credit_limit`, `rewards_balance`, `as_of_date`), autopay/funding config
   (`statement_balance`, `statement_due_day_of_month`, `payment_account_ref`
@@ -97,9 +144,10 @@ Single `MetaData` in `fintrack/core/models.py`.
   projections don't double-count a budgeted expense against estimated
   category spend.
 - **asset_entries** — assets and debts: `kind`, a liquidity-tier `type` (see
-  below), `value`/`quantity`/`balance`, `asset_ref` (e.g. a loan against an
-  asset, which surfaces as equity/LTV), `interest_rate`, loan origination
-  fields, and `statement_due_day_of_month`.
+  below), `unit`, `value`/`quantity`/`balance`, valuation source, estimated
+  return and monthly contribution, `asset_ref` (e.g. a loan against an asset,
+  which surfaces as equity/LTV), `interest_rate`, loan origination fields, and
+  `statement_due_day_of_month`.
 - **balance_history** — the time series behind `accounts.balance`; see below.
 
 Money columns are `Numeric(12,2)` (asset values `14,2`); date columns are real
@@ -118,13 +166,15 @@ and fall back to available−limit.
 
 Every holding — an `accounts` row or an `asset_entries` row — maps to one of
 three **liquidity tiers**, fixed by its type with no per-holding override
-(`fintrack/core/types.py`: `ACCOUNT_TYPE_TIER`, `ASSET_TYPE_TIER`; unknown
-types default to `illiquid`):
+(`fintrack/core/types.py`: `HOLDING_TYPE_TIER`; unknown/unset types default to
+`illiquid`). A non-USD unit caps a nominally liquid type at `semi_liquid`:
 
 - **liquid** — spendable now: checking, savings, wallets, gift cards, and
   credit cards (whose negative balance nets against cash).
-- **semi-liquid** — brokerage, crypto, HSA, and `other` accounts.
-- **illiquid** — retirement, real estate, vehicles, other assets, and loans.
+- **semi-liquid** — brokerage and HSA holdings, plus symbol-denominated wallets
+  such as cryptocurrency.
+- **illiquid** — retirement, real estate, vehicles, loans, and unclassified
+  holdings.
 
 `fintrack/networth/calculations.py` reduces each holding to a **signed
 contribution** (assets add, liabilities subtract; credit cards add rewards)
@@ -133,11 +183,12 @@ and sums them per tier. The tiers nest into cumulative totals
 liquid + semi-liquid and net worth = every holding. A secured debt linked to
 an asset via `asset_ref` also yields an **equity/LTV** pair (`equity_pairs`).
 
-These power the **Holdings** page (`/s/<snapshot>/holdings`), a read-only
-unified view of accounts + assets with the tier totals, equity, and filtering
-by tier / liabilities / institution. The older per-domain key numbers
-(`liquid_minus_cc`, `net_nonliquid_total`, used by the Accounts/Assets pages
-and projections) remain unchanged alongside the tier totals.
+These power the **Holdings** page (`/s/<snapshot>/holdings`), an editable
+unified sheet over accounts and asset/debt entries with tier totals, equity,
+and filtering by type, balance side, and institution. The older per-domain key
+numbers (`liquid_minus_cc`, `net_nonliquid_total`) remain available to CLI
+reports and calculations alongside the tier totals; the standalone Accounts
+and Assets web pages have been retired.
 
 ## Merchant classification & privacy
 
@@ -184,16 +235,15 @@ Every balance write is a row in `balance_history`:
   the same as-of date collapse to the latest write; a manual edit and a
   statement on the same day coexist.
 - **Re-sync**: `accounts.balance`/`available`/`as_of_date` are a denormalized
-  cache of the latest history point ordered by `(as_of DESC, created_at
-  DESC)`, updated in the same transaction as every write.
+  cache of the latest history point ordered by `(as_of DESC, id DESC)`. The
+  history upsert and cache update are committed together by `record_balance()`.
 - **Reconciliation** (informational, non-blocking): on statement confirm, the
   expected balance (previous point + sum of transactions in between) is
   compared to the statement's; a mismatch beyond a half-cent tolerance is
   stored in `note` and surfaced as a badge in the UI.
 
-The accounts page renders each account's recent history as an inline-SVG
-sparkline with as-of staleness coloring (green ≤ 35 days, amber ≤ 95, red
-beyond).
+Holdings surfaces balance dates and staleness; balance-history inspection is
+also available from the CLI.
 
 ## Projections
 
@@ -213,26 +263,35 @@ balance. Per month, in order:
 3. **Unscheduled spend** (opt-in `--estimate`) — trailing 3-month average
    ledger spend per category, minus categories claimed by budget entries and
    transfers, applied to the unassigned bucket (prorated in month 0).
+4. **Assets and debts** — non-debt assets apply their configured annual return
+   and monthly contribution; debts with complete origination data amortize by
+   their calculated payment on the configured due day.
 
-Totals reuse the net-worth key-number calculations; assets are held constant
-(no return modeling). Accounts dipping below `minimum_balance` are flagged.
+Totals reuse the net-worth key-number calculations. Accounts dipping below
+`minimum_balance` are flagged.
 Surfaced at `/s/<snapshot>/projections` (horizon and estimator as query
 params, inline-SVG chart) and `fintrack project --months N [--estimate]`.
+
+The adjacent `/s/<snapshot>/forecast` page compares scheduled monthly budget
+amounts with trailing ledger estimates by category; selected estimates can be
+included in the projection engine as unscheduled spend.
 
 ## Web UI
 
 Single Flask app (`web/app.py`), port 5003 (`FINTRACK_PORT`), database from
 `FINTRACK_DB`. URL scheme: `/` is the snapshot picker; everything else is
 `/s/<snapshot>/<section>`, with
-`?edit=1` toggling spreadsheet-style edit mode on the net-worth pages.
+`?edit=1` toggling spreadsheet-style edit mode on pages that support inline
+editing.
 
 Navigation is a **single-row top bar plus a collapsible side navigation**. The
 top bar carries only a nav toggle (`☰`), the current page name, and the always-
 visible utility controls — the lock/edit toggle, Import, the theme cycle, and
 the snapshot picker. Primary navigation lives in a grouped outline
-(`Finances`: Holdings · Budget · Projections; `Spending`: Trends ·
-Transactions · Merchants — group headings are labels, only the destinations are
-links). On wide screens (≥`lg`, 1024px) that outline is a docked left sidebar;
+(`Finances`: Holdings · Budget · Forecast · Projections; `Spending`: Trends ·
+Transactions · Merchants · Categories — group headings are labels, only the
+destinations are links). On wide screens (≥`lg`, 1024px) that outline is a
+docked left sidebar;
 the `☰` collapses it to reclaim horizontal width for the dense sheets. Below the
 breakpoint it collapses to a hamburger that opens the same outline as an overlay
 drawer, so a narrow header never clips. It is one responsive component (Alpine
@@ -245,25 +304,26 @@ feature of these sheets, not a problem to design around. Net worth shows in the
 Holdings sheet's footer (the header carries no figures). Holdings' structure and
 the invariants that keep the sticky chrome correct are documented under
 [Holdings sheet](#holdings-sheet) below. Import is a header icon; the edit-mode
-lock is functional only on the pages that honor it (Holdings, Budget — muted
-elsewhere). The old `/s/<snapshot>/status` dashboard was removed; its URL
-redirects to Holdings.
+lock is functional on Holdings, Budget, Transactions, Merchants, and Categories
+and muted elsewhere. The old `/s/<snapshot>/status` dashboard was removed; its
+URL redirects to Holdings.
 
-Two HTMX idioms coexist by design: ledger pages (transactions, trends,
-merchants, import) use `HX-Request` partial swaps and are snapshot-scoped via
-a `url_value_preprocessor` (`g.snapshot_id`); the net-worth pages (holdings,
-budget) use finances-style spreadsheet cell editing with explicit template
-names. One `base.html` carries Tailwind, HTMX, Alpine.js, and the light/dark
-theme toggle.
+Two route-scoping/HTMX idioms coexist. Transactions, trends, merchants,
+categories, import, and forecast use a snapshot-scoped blueprint preprocessor
+that places the validated filename and ID in `g`. Holdings, budget, and
+projections validate an explicit filename argument. Ledger pages commonly swap
+page-specific partials on `HX-Request`; editable sheets swap rows, cells, or
+table bodies. One `base.html` provides Tailwind, HTMX, Alpine.js, navigation,
+and theme behavior.
 
 ### Holdings sheet
 
 Holdings is one table split into four **type-based** groups, rendered top to
 bottom: **Cash · Credit Cards · Loans · Assets**. Cash and Credit Cards are type
-slices of the `accounts` table (credit cards split from spendable cash); Loans
-and Assets are the `kind=debt` / `kind=asset` slices of `asset_entries`. The
-split is a display grouping only — no data migration, and the debt↔asset
-equity/LTV pairing (`calculations.equity_pairs`) is unchanged.
+slices of `accounts`; Loans combines account-type loans with `kind=debt`
+`asset_entries`; Assets contains `kind=asset` entries. The split is a display
+grouping only—there is no data migration—and debt↔asset equity/LTV pairing
+(`calculations.equity_pairs`) is unchanged.
 
 - **Columns use a common spine plus group details.** The physical table columns
   are Institution·Type·Name·Amount·Details·Due·Linked·As Of, so every shared
@@ -272,16 +332,16 @@ equity/LTV pairing (`calculations.equity_pairs`) is unchanged.
   padded to the Loans column count. Cash: Reserve·Funding. Credit Cards:
   Limit·Available·Rewards·Statement·Due·Linked. Loans:
   Interest·Equity·LTV·Original·Term·Originated·P&I·Paid·Due·Linked. Assets:
-  Unit Price·Qty·Source·Linked. Equity and LTV show on the **loan** row (the
-  debt side of a secured pair). Original, Term, and Originated capture loan
+  Unit Price·Qty·Source·Est. Return·Mo. Contrib. Equity and LTV show on the
+  **loan** row (the debt side of a secured pair). Original, Term, and Originated capture loan
   origination inputs; P&I and Paid are derived amortization values. Due is a
-  recurring day of month, clamped to month-end when needed. A column
-  Each detail grid has an explicit column template so its headers and values
+  recurring day of month, clamped to month-end when needed. Each detail grid
+  has an explicit column template so its headers and values
   stay aligned independently of the other groups.
-- **Row accent by group, not sign.** The left asset/liability accent is green for
-  Cash + Assets and red for Credit Cards + Loans — a credit card reads as a
-  liability even at a zero balance — rather than keyed off the current amount's
-  sign.
+- **Row accent by group, not sign.** Cash, Credit Cards, Loans, and Assets have
+  distinct green, rose, amber, and blue accents. A credit card therefore reads
+  as a liability even at a zero balance rather than changing with the current
+  amount's sign.
 - **Totals.** Each group shows its own subtotal in its heading band; a master
   footer shows **Liquid** and **Net worth** (`calculations.tiered_totals`).
   Liquidity is a cross-cutting property, so it is reported independently of the
@@ -289,10 +349,9 @@ equity/LTV pairing (`calculations.equity_pairs`) is unchanged.
 - **Credit-card Available is computed and read-only** = `credit_limit + balance`.
   balance is the canonical input (kept current by statement imports); editing the
   limit or balance recomputes Available and preserves the balance
-  (`accounts.repository._derive_cc_available`), while an `available` edit on the
-  Accounts sheet still derives balance. Available ignores pending holds, so it
-  reads slightly high — the deliberate tradeoff for never drifting from the
-  imported balance.
+  (`accounts.repository._derive_cc_available`). Available ignores pending holds,
+  so it reads slightly high — the deliberate tradeoff for never drifting from
+  the imported balance.
 - **Reorder is scoped per group.** Because two groups can share one table, a
   group's local drag permutation is mapped onto that group's *global* slots in
   the table, leaving the other group's rows fixed; a group whose rows span two
@@ -306,7 +365,7 @@ scrolls out of view or paints over/beside the sticky cell (reproduced in both
 WebKit and Chromium). **So no border on a sticky row may be a border-collapse
 border**: draw it as a `box-shadow` on the cell instead (it paints with the
 sticky element and stays put). Header underline + inter-column dividers, the
-heading band's blue accent, and the row asset/liability accents are all
+group heading accents, and the row group accents are all
 box-shadows (`web/templates/holdings.html`, `base.html`). Only the total row
 stays pinned to the bottom; the add ("+ Add …") row flows inline as the last row
 of its group. `web/static/js/sheet-scroll.js` pins the total(s) to the bottom

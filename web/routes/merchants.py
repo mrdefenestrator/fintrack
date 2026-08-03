@@ -1,4 +1,4 @@
-from flask import Blueprint, current_app, render_template, request
+from flask import Blueprint, current_app, g, render_template, request
 
 from web.routes.common import snapshot_scoped
 
@@ -27,7 +27,7 @@ def index():
 
     engine = current_app.config["engine"]
     with engine.connect() as conn:
-        merchants = list_merchants_with_stats(conn)
+        merchants = list_merchants_with_stats(conn, snapshot_id=g.snapshot_id)
         categories = get_category_names(conn)
 
     if search:
@@ -70,7 +70,9 @@ def cell_edit(merchant_id):
     field = request.args.get("field", "category")
     engine = current_app.config["engine"]
     with engine.connect() as conn:
-        merchant = get_merchant_with_stats_by_id(conn, merchant_id)
+        merchant = get_merchant_with_stats_by_id(
+            conn, merchant_id, snapshot_id=g.snapshot_id
+        )
         categories = get_category_names(conn)
     if not merchant:
         return "", 404
@@ -94,7 +96,9 @@ def row(merchant_id):
     """Display (non-editing) merchant row — used to revert an open editor."""
     engine = current_app.config["engine"]
     with engine.connect() as conn:
-        merchant = get_merchant_with_stats_by_id(conn, merchant_id)
+        merchant = get_merchant_with_stats_by_id(
+            conn, merchant_id, snapshot_id=g.snapshot_id
+        )
     if not merchant:
         return "", 404
     return render_template(
@@ -110,14 +114,18 @@ def update_category(merchant_id):
 
     engine = current_app.config["engine"]
     with engine.connect() as conn:
-        merchant = get_merchant_with_stats_by_id(conn, merchant_id)
+        merchant = get_merchant_with_stats_by_id(
+            conn, merchant_id, snapshot_id=g.snapshot_id
+        )
         if not merchant:
             return "", 404
         if category:
             set_merchant_category(
                 conn, merchant["merchant_name"], category, source="manual"
             )
-            merchant = get_merchant_with_stats_by_id(conn, merchant_id)
+            merchant = get_merchant_with_stats_by_id(
+                conn, merchant_id, snapshot_id=g.snapshot_id
+            )
     return render_template(
         "partials/merchant_row.html",
         m=merchant,

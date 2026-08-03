@@ -215,7 +215,8 @@ def merchants():
 @pass_cli
 def merchants_list(cli, search):
     with cli.connect() as conn:
-        rows_data = list_merchants_with_stats(conn)
+        snapshot_id = cli.snapshot_id(conn)
+        rows_data = list_merchants_with_stats(conn, snapshot_id=snapshot_id)
     if search:
         rows_data = [
             m for m in rows_data if search.upper() in m["merchant_name"].upper()

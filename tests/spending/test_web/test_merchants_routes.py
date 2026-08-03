@@ -3,10 +3,13 @@
 which saves the merchant-wide category via the merchant cache.
 """
 
+from datetime import date
+
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, insert, select
 
 from fintrack.core.db import init_db
+from fintrack.core.models import accounts, imports, merchant_cache, transactions
 from fintrack.ledger.repository.merchants import (
     get_cached_category,
     set_merchant_category,
@@ -23,12 +26,38 @@ def db_engine():
 
 @pytest.fixture()
 def merchant_id(db_engine):
-    """Seed one merchant in the (global) cache and return its id."""
+    """Seed a merchant with a confirmed transaction in the snapshot."""
     with db_engine.connect() as conn:
-        create_snapshot(conn, "ledger")
+        snapshot_id = create_snapshot(conn, "ledger")
         set_merchant_category(conn, "WHOLE FOODS", "Groceries", source="api")
-        from fintrack.core.models import merchant_cache
-        from sqlalchemy import select
+
+        acc_id = conn.execute(
+            insert(accounts).values(
+                snapshot_id=snapshot_id,
+                name="Checking",
+                account_type="checking",
+            )
+        ).inserted_primary_key[0]
+        imp_id = conn.execute(
+            insert(imports).values(
+                account_id=acc_id,
+                filename="test.ofx",
+                file_hash="abc",
+                status="confirmed",
+            )
+        ).inserted_primary_key[0]
+        conn.execute(
+            insert(transactions).values(
+                import_id=imp_id,
+                account_id=acc_id,
+                date=date(2025, 1, 15),
+                amount=-42,
+                raw_description="WHOLE FOODS #123",
+                normalized_merchant="WHOLE FOODS",
+                fingerprint="fp1",
+            )
+        )
+        conn.commit()
 
         mid = conn.execute(
             select(merchant_cache.c.id).where(

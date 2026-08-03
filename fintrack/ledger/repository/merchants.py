@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from sqlalchemy import Connection, func, insert, select, update
 
 from fintrack.core.models import (
+    accounts,
     imports,
     merchant_cache,
     transaction_corrections,
@@ -73,22 +74,33 @@ def list_merchants(conn: Connection) -> list[dict]:
     return [dict(row._mapping) for row in rows]
 
 
-def _stats_query():
-    return (
-        select(
-            merchant_cache.c.id,
-            merchant_cache.c.merchant_name,
-            merchant_cache.c.category,
-            merchant_cache.c.source,
-            func.count(transactions.c.id).label("txn_count"),
-            func.max(transactions.c.date).label("last_seen"),
+def _stats_query(snapshot_id: int | None = None):
+    q = select(
+        merchant_cache.c.id,
+        merchant_cache.c.merchant_name,
+        merchant_cache.c.category,
+        merchant_cache.c.source,
+        func.count(transactions.c.id).label("txn_count"),
+        func.max(transactions.c.date).label("last_seen"),
+    ).select_from(merchant_cache)
+
+    if snapshot_id is not None:
+        q = (
+            q.join(
+                transactions,
+                transactions.c.normalized_merchant == merchant_cache.c.merchant_name,
+            )
+            .join(accounts, transactions.c.account_id == accounts.c.id)
+            .where(accounts.c.snapshot_id == snapshot_id)
         )
-        .select_from(merchant_cache)
-        .outerjoin(
+    else:
+        q = q.outerjoin(
             transactions,
             transactions.c.normalized_merchant == merchant_cache.c.merchant_name,
         )
-        .outerjoin(
+
+    return (
+        q.outerjoin(
             transaction_corrections,
             transactions.c.id == transaction_corrections.c.transaction_id,
         )
@@ -98,16 +110,24 @@ def _stats_query():
     )
 
 
-def get_merchant_with_stats_by_id(conn: Connection, merchant_id: int) -> dict | None:
+def get_merchant_with_stats_by_id(
+    conn: Connection, merchant_id: int, *, snapshot_id: int | None = None
+) -> dict | None:
     row = conn.execute(
-        _stats_query().where(merchant_cache.c.id == merchant_id)
+        _stats_query(snapshot_id).where(merchant_cache.c.id == merchant_id)
     ).fetchone()
     return dict(row._mapping) if row else None
 
 
-def list_merchants_with_stats(conn: Connection) -> list[dict]:
-    """List merchants with transaction count and last seen date."""
+def list_merchants_with_stats(
+    conn: Connection, *, snapshot_id: int | None = None
+) -> list[dict]:
+    """List merchants with transaction count and last seen date.
+
+    When *snapshot_id* is given, only merchants that have confirmed
+    transactions in accounts belonging to that snapshot are returned.
+    """
     rows = conn.execute(
-        _stats_query().order_by(merchant_cache.c.merchant_name)
+        _stats_query(snapshot_id).order_by(merchant_cache.c.merchant_name)
     ).fetchall()
     return [dict(row._mapping) for row in rows]

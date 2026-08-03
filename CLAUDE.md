@@ -75,8 +75,10 @@ degrades to a warning without it).
 ## Key Architecture Decisions
 
 - Snapshots scope all household data (accounts directly; imports/transactions/
-  balance_history via account). merchant_cache, categories, and corrections
-  are deliberately global.
+  balance_history via account). Categories and corrections are deliberately
+  global. merchant_cache rows are global, but the web UI and CLI filter the
+  merchants list by snapshot (only merchants with transactions in the
+  snapshot's accounts are shown).
 - **Privacy constraint: only normalized merchant names (plus the category
   list) are ever sent to the Claude API** — never amounts, dates, account
   numbers, or raw statement text. Do not widen the classifier prompt.

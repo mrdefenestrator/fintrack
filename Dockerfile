@@ -18,6 +18,7 @@ COPY fintrack/ ./fintrack/
 COPY web/ ./web/
 COPY configs/ ./configs/
 COPY migrations/ ./migrations/
+COPY scripts/ ./scripts/
 COPY fintrack.py ./
 COPY alembic.ini ./
 COPY docker-entrypoint.sh ./

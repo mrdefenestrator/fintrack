@@ -27,13 +27,16 @@ def _cold_start():
         return
     db_path = os.environ["FINTRACK_DB"]
     if not os.path.exists(db_path):
+        # LAMBDA_TASK_ROOT (/var/task) has the app code; ensure subprocesses
+        # can import fintrack/ and other project modules.
+        env = {**os.environ, "PYTHONPATH": os.environ.get("LAMBDA_TASK_ROOT", "/var/task")}
         subprocess.run(
             [sys.executable, "-m", "alembic", "upgrade", "head"],
-            check=True,
+            check=True, env=env,
         )
         subprocess.run(
             [sys.executable, "scripts/seed_example.py"],
-            check=True,
+            check=True, env=env,
         )
     _initialized = True
 

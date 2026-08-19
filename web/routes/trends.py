@@ -5,6 +5,7 @@ from collections import defaultdict
 
 from flask import Blueprint, current_app, g, render_template, request
 
+from fintrack.budget.repository import budgeted_monthly_by_category, get_budget_entries
 from fintrack.ledger.repository.aggregations import get_monthly_totals_range
 from web.routes.common import snapshot_scoped
 
@@ -128,6 +129,9 @@ def index():
         monthly_data = get_monthly_totals_range(
             conn, start_date=start, end_date=end, snapshot_id=g.snapshot_id
         )
+        budget = get_budget_entries(conn, g.snapshot_id)
+
+    budgeted, budget_kinds = budgeted_monthly_by_category(budget)
 
     by_category: dict = defaultdict(lambda: {"total": 0, "months": defaultdict(float)})
     all_months: set[tuple[int, int]] = set()
@@ -158,6 +162,15 @@ def index():
         else:
             pct_change = None
 
+        bgt = budgeted.get(cat)
+        kind = budget_kinds.get(cat)
+        if bgt is not None:
+            bgt_display = float(-bgt if kind == "expense" else bgt)
+            budget_delta = monthly_avg - bgt_display
+        else:
+            bgt_display = None
+            budget_delta = None
+
         trends.append(
             {
                 "category": cat,
@@ -166,6 +179,8 @@ def index():
                 "monthly_values": monthly_values,
                 "monthly_heat": heat,
                 "pct_change": pct_change,
+                "budget_monthly": bgt_display,
+                "budget_delta": budget_delta,
             }
         )
 
@@ -189,6 +204,14 @@ def index():
     else:
         footer_pct_change = None
 
+    budgeted_rows = [t for t in trends_main if t["budget_monthly"] is not None]
+    if budgeted_rows:
+        footer_budget: float | None = sum(t["budget_monthly"] for t in budgeted_rows)
+        footer_budget_delta: float | None = footer_avg - footer_budget
+    else:
+        footer_budget = None
+        footer_budget_delta = None
+
     template = (
         "partials/trends_table.html"
         if request.headers.get("HX-Request")
@@ -206,6 +229,8 @@ def index():
         monthly_footer_values=monthly_footer_values,
         num_months=num_months,
         footer_pct_change=footer_pct_change,
+        footer_budget=footer_budget,
+        footer_budget_delta=footer_budget_delta,
         prev_end=prev_end,
         next_end=next_end,
         anchor_end=anchor_end_param,

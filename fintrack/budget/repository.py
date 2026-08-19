@@ -1,13 +1,17 @@
 """Budget repository: CRUD + move for budget entries within a snapshot."""
 
+from decimal import Decimal
 from typing import Any
 
 from sqlalchemy import Connection, delete, func, insert, select, update
 
+from fintrack.budget.recurrence import amount_annual
 from fintrack.core.coerce import to_date
 from fintrack.core.models import budget_entries
 from fintrack.core.ordering import reorder_by_positions
 from fintrack.core.types import BudgetEntry
+
+_ZERO = Decimal("0")
 
 
 def _row_to_budget_entry(row) -> BudgetEntry:
@@ -49,6 +53,27 @@ def get_budget_entries(conn: Connection, snapshot_id: int) -> list[BudgetEntry]:
         .all()
     )
     return [_row_to_budget_entry(r) for r in rows]
+
+
+def budgeted_monthly_by_category(
+    budget: list[dict],
+) -> tuple[dict[str, Decimal], dict[str, str]]:
+    """Sum of annualized-then-divided-by-12 amounts, keyed by category.
+
+    Returns (totals, kinds) where totals are unsigned monthly sums and kinds
+    maps each category to its budget kind ('income' or 'expense').
+    """
+    totals: dict[str, Decimal] = {}
+    kinds: dict[str, str] = {}
+    for entry in budget:
+        cat = entry.get("category")
+        kind = entry.get("kind")
+        if not cat or kind not in ("income", "expense"):
+            continue
+        monthly = amount_annual(entry) / Decimal(12)
+        totals[cat] = totals.get(cat, _ZERO) + monthly
+        kinds[cat] = kind
+    return totals, kinds
 
 
 def _next_sort_order(conn: Connection, snapshot_id: int) -> int:

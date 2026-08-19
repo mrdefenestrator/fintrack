@@ -104,13 +104,18 @@ jobs:
               --auth-type NONE \
               --invoke-mode BUFFERED >/dev/null
 
-            echo "Adding public invoke permission..."
+            echo "Adding public invoke permissions..."
             aws lambda add-permission \
               --function-name "$FUNCTION_NAME" \
               --statement-id FunctionURLPublicAccess \
               --action lambda:InvokeFunctionUrl \
               --principal "*" \
               --function-url-auth-type NONE >/dev/null
+            aws lambda add-permission \
+              --function-name "$FUNCTION_NAME" \
+              --statement-id FunctionURLPublicInvoke \
+              --action lambda:InvokeFunction \
+              --principal "*" >/dev/null
           fi
 
           URL=$(aws lambda get-function-url-config \

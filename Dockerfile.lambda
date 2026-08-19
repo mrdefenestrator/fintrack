@@ -1,0 +1,24 @@
+FROM public.ecr.aws/lambda/python:3.12
+
+# Install uv for fast dependency resolution
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+# Install dependencies into the Lambda task root
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-dev && \
+    uv pip install mangum --python .venv/bin/python
+
+# Copy application code
+COPY fintrack/ ./fintrack/
+COPY web/ ./web/
+COPY configs/ ./configs/
+COPY migrations/ ./migrations/
+COPY scripts/ ./scripts/
+COPY fintrack.py ./
+COPY lambda_handler.py ./
+COPY alembic.ini ./
+
+# Alembic needs the venv Python on PATH for subprocess calls
+ENV PATH="/var/task/.venv/bin:${PATH}"
+
+CMD ["lambda_handler.handler"]

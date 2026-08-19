@@ -1,9 +1,9 @@
 # AWS Setup for PR Preview Environments
 
-One-time AWS provisioning for the App Runner PR preview workflow
+One-time AWS provisioning for the Lambda PR preview workflow
 (`.github/workflows/pr-preview.yml`). This creates the IAM roles, ECR
 repository, and cost controls needed to spin up throwaway preview instances
-per pull request.
+per pull request via Lambda Function URLs.
 
 ## Prerequisites
 
@@ -17,7 +17,7 @@ Replace these throughout the commands below:
 | Placeholder | Description |
 |-------------|-------------|
 | `<ACCOUNT_ID>` | Your AWS account ID |
-| `<REGION>` | [App Runner region](https://docs.aws.amazon.com/general/latest/gr/apprunner.html) (e.g. `us-east-2`) |
+| `<REGION>` | AWS region (e.g. `us-east-2`) |
 | `<YOUR_EMAIL>` | Email for budget alerts |
 
 ## 1. Create the GitHub OIDC identity provider
@@ -31,28 +31,29 @@ aws iam create-open-id-connect-provider \
   --client-id-list sts.amazonaws.com
 ```
 
-## 2. Create the App Runner → ECR access role
+## 2. Create the Lambda execution role
 
-App Runner assumes this role to pull container images from ECR:
+Lambda assumes this role to run the preview function. It needs basic
+execution permissions (CloudWatch Logs) and ECR image pull:
 
 ```bash
-aws iam create-role --role-name fintrack-apprunner-ecr-access \
+aws iam create-role --role-name fintrack-lambda-preview \
   --assume-role-policy-document '{
     "Version": "2012-10-17",
     "Statement": [{
       "Effect": "Allow",
-      "Principal": { "Service": "build.apprunner.amazonaws.com" },
+      "Principal": { "Service": "lambda.amazonaws.com" },
       "Action": "sts:AssumeRole"
     }]
   }'
-aws iam attach-role-policy --role-name fintrack-apprunner-ecr-access \
-  --policy-arn arn:aws:iam::aws:policy/service-role/AWSAppRunnerServicePolicyForECRAccess
+aws iam attach-role-policy --role-name fintrack-lambda-preview \
+  --policy-arn arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
 ```
 
 ## 3. Create the deploy role
 
 GitHub Actions assumes this role via OIDC. The trust policy `sub` condition
-uses wildcards (`mrdefenestrator*/fintrack*`) because GitHub's OIDC tokens now
+uses wildcards (`mrdefenestrator*/fintrack*`) because GitHub's OIDC tokens
 append numeric IDs to the owner and repo names (e.g.
 `repo:mrdefenestrator@12345/fintrack@67890:pull_request`):
 
@@ -72,10 +73,8 @@ aws iam create-role --role-name fintrack-pr-preview-deployer \
   }'
 ```
 
-Attach the permissions policy. ECR and App Runner resources are scoped to the
-preview repo name and `fintrack-pr-*` service prefix. `ListServices` and
-`GetAuthorizationToken` require `"Resource": "*"` — they don't support
-resource-level restrictions:
+Attach the permissions policy. ECR resources are scoped to the preview repo.
+Lambda resources are scoped to the `fintrack-pr-*` function name prefix:
 
 ```bash
 aws iam put-role-policy --role-name fintrack-pr-preview-deployer \
@@ -92,20 +91,18 @@ aws iam put-role-policy --role-name fintrack-pr-preview-deployer \
           "ecr:UploadLayerPart", "ecr:CompleteLayerUpload", "ecr:PutImage",
           "ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer",
           "ecr:ListImages", "ecr:BatchDeleteImage" ] },
-      { "Sid": "AppRunnerList", "Effect": "Allow",
-        "Action": "apprunner:ListServices", "Resource": "*" },
-      { "Sid": "AppRunner", "Effect": "Allow",
-        "Resource": "arn:aws:apprunner:<REGION>:<ACCOUNT_ID>:service/fintrack-pr-*",
+      { "Sid": "Lambda", "Effect": "Allow",
+        "Resource": "arn:aws:lambda:<REGION>:<ACCOUNT_ID>:function:fintrack-pr-*",
         "Action": [
-          "apprunner:CreateService", "apprunner:UpdateService",
-          "apprunner:DeleteService", "apprunner:DescribeService" ] },
-      { "Sid": "AppRunnerSLR", "Effect": "Allow",
-        "Action": "iam:CreateServiceLinkedRole", "Resource": "*",
-        "Condition": { "StringEquals": {
-          "iam:AWSServiceName": "apprunner.amazonaws.com" } } },
-      { "Sid": "PassAccessRole", "Effect": "Allow",
+          "lambda:CreateFunction", "lambda:UpdateFunctionCode",
+          "lambda:UpdateFunctionConfiguration",
+          "lambda:DeleteFunction", "lambda:GetFunction",
+          "lambda:GetFunctionUrlConfig", "lambda:CreateFunctionUrlConfig",
+          "lambda:DeleteFunctionUrlConfig",
+          "lambda:AddPermission", "lambda:RemovePermission" ] },
+      { "Sid": "PassLambdaRole", "Effect": "Allow",
         "Action": "iam:PassRole",
-        "Resource": "arn:aws:iam::<ACCOUNT_ID>:role/fintrack-apprunner-ecr-access" }
+        "Resource": "arn:aws:iam::<ACCOUNT_ID>:role/fintrack-lambda-preview" }
     ]
   }'
 ```
@@ -136,7 +133,7 @@ aws ecr put-lifecycle-policy --repository-name fintrack-preview \
 ## 5. Budget alarm (optional)
 
 Get emailed at 80% of a $5/month threshold — well above normal usage, catches
-forgotten previews:
+unexpected costs:
 
 ```bash
 aws budgets create-budget --account-id <ACCOUNT_ID> --region us-east-1 \
@@ -165,17 +162,15 @@ variables, not secrets — none are sensitive):
 |----------|----------|-------------------|
 | `AWS_REGION` | ✅ | `us-east-2` |
 | `AWS_DEPLOY_ROLE_ARN` | ✅ | `arn:aws:iam::<ACCOUNT_ID>:role/fintrack-pr-preview-deployer` |
-| `APPRUNNER_ACCESS_ROLE_ARN` | ✅ | `arn:aws:iam::<ACCOUNT_ID>:role/fintrack-apprunner-ecr-access` |
+| `LAMBDA_EXECUTION_ROLE_ARN` | ✅ | `arn:aws:iam::<ACCOUNT_ID>:role/fintrack-lambda-preview` |
 | `ECR_REPOSITORY` | — | defaults to `fintrack-preview` |
-| `APPRUNNER_CPU` | — | defaults to `1024` (1 vCPU) |
-| `APPRUNNER_MEMORY` | — | defaults to `2048` (2 GB) |
 
 Or via the CLI:
 
 ```bash
 gh variable set AWS_REGION --body "<REGION>"
 gh variable set AWS_DEPLOY_ROLE_ARN --body "arn:aws:iam::<ACCOUNT_ID>:role/fintrack-pr-preview-deployer"
-gh variable set APPRUNNER_ACCESS_ROLE_ARN --body "arn:aws:iam::<ACCOUNT_ID>:role/fintrack-apprunner-ecr-access"
+gh variable set LAMBDA_EXECUTION_ROLE_ARN --body "arn:aws:iam::<ACCOUNT_ID>:role/fintrack-lambda-preview"
 ```
 
 ## Teardown
@@ -183,11 +178,11 @@ gh variable set APPRUNNER_ACCESS_ROLE_ARN --body "arn:aws:iam::<ACCOUNT_ID>:role
 To remove everything:
 
 ```bash
-# Delete any running App Runner services first
-aws apprunner list-services --region <REGION> \
-  --query "ServiceSummaryList[?starts_with(ServiceName, 'fintrack-pr-')].ServiceArn" \
-  --output text | tr '\t' '\n' | while read arn; do
-    aws apprunner delete-service --service-arn "$arn" --region <REGION>
+# Delete any Lambda preview functions
+aws lambda list-functions --region <REGION> \
+  --query "Functions[?starts_with(FunctionName, 'fintrack-pr-')].FunctionName" \
+  --output text | tr '\t' '\n' | while read fn; do
+    aws lambda delete-function --function-name "$fn" --region <REGION>
   done
 
 # ECR repository (force-deletes all images)
@@ -199,9 +194,9 @@ aws iam delete-role-policy --role-name fintrack-pr-preview-deployer \
   --policy-name fintrack-pr-preview
 aws iam delete-role --role-name fintrack-pr-preview-deployer
 
-aws iam detach-role-policy --role-name fintrack-apprunner-ecr-access \
-  --policy-arn arn:aws:iam::aws:policy/service-role/AWSAppRunnerServicePolicyForECRAccess
-aws iam delete-role --role-name fintrack-apprunner-ecr-access
+aws iam detach-role-policy --role-name fintrack-lambda-preview \
+  --policy-arn arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+aws iam delete-role --role-name fintrack-lambda-preview
 
 # Budget (optional — only if created in step 5)
 aws budgets delete-budget --account-id <ACCOUNT_ID> --region us-east-1 \
@@ -214,5 +209,5 @@ aws iam delete-open-id-connect-provider \
 # GitHub variables
 gh variable delete AWS_REGION
 gh variable delete AWS_DEPLOY_ROLE_ARN
-gh variable delete APPRUNNER_ACCESS_ROLE_ARN
+gh variable delete LAMBDA_EXECUTION_ROLE_ARN
 ```

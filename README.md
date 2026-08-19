@@ -133,13 +133,13 @@ FINTRACK_DB=preview.db uv run python scripts/seed_example.py && mise run serve
 The seed is idempotent — it skips if the snapshot already exists — and only
 ever writes that one snapshot.
 
-## PR preview environments (AWS App Runner)
+## PR preview environments (AWS Lambda)
 
-`.github/workflows/pr-preview.yml` builds the image, deploys a **seeded,
-throwaway instance of the app to [AWS App Runner](https://aws.amazon.com/apprunner/)**
-on a public HTTPS URL for every pull request, comments the URL on the PR, and
-**deletes the instance when the PR is merged or closed**. Authentication uses
-GitHub OIDC, so there are **no AWS keys stored as GitHub secrets**.
+`.github/workflows/pr-preview.yml` builds a Lambda container image, deploys it
+as an **AWS Lambda function with a public Function URL** for every pull request,
+comments the URL on the PR, and **deletes the function when the PR is merged or
+closed**. Authentication uses GitHub OIDC, so there are **no AWS keys stored as
+GitHub secrets**.
 
 The workflow is **inert until configured**: both jobs are skipped while the
 `AWS_DEPLOY_ROLE_ARN` repository variable is unset. Follow the
@@ -147,18 +147,16 @@ The workflow is **inert until configured**: both jobs are skipped while the
 repository, and cost controls, then set the repository variables to activate
 previews.
 
-> **Heads-up:** App Runner service URLs are **public and unauthenticated** —
+> **Heads-up:** Lambda Function URLs are **public and unauthenticated** —
 > anyone with the link can view the preview. The preview only ever contains the
-> fake **Example Household** seed data (never a real database), the filesystem
-> is ephemeral, and the instance is deleted on PR close. Treat the URL as
+> fake **Example Household** seed data (never a real database), the database is
+> ephemeral (rebuilt on each cold start), and the function is deleted on PR
+> close. First load after idle may take a few seconds. Treat the URL as
 > shareable-but-guessable, not private.
 
 ### Cost
 
-You pay only while a preview exists (per-PR create → delete on close). App
-Runner bills a small provisioned-memory charge plus active compute; a 1 vCPU /
-2 GB preview alive for a day of review is on the order of pennies to ~$1, and
-ECR image storage is a few cents. Nothing is always-on — there is no load
-balancer or NAT gateway in this setup — so an idle repo with no open PRs costs
-essentially nothing. The ECR lifecycle policy auto-expires old images to keep
-storage near zero.
+Lambda previews scale to zero — you pay only for actual requests. A day of
+review with occasional page loads costs fractions of a cent; ECR image storage
+is a few cents. An idle repo with no open PRs costs nothing. The ECR lifecycle
+policy auto-expires old images to keep storage near zero.

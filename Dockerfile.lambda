@@ -4,11 +4,11 @@ FROM public.ecr.aws/lambda/python:3.12
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 # Install dependencies into the Lambda system Python (not a venv).
-# Lambda's runtime uses /var/lang/bin/python3.12; packages must land in
-# its site-packages for imports to work.
+# Export the lockfile to requirements.txt and pip-install into the system
+# site-packages. Lambda's runtime uses /var/lang/bin/python3.12.
 COPY pyproject.toml uv.lock ./
-RUN uv pip install --system --frozen --no-dev -r pyproject.toml && \
-    uv pip install --system mangum
+RUN uv export --frozen --no-dev --no-hashes -o requirements.txt && \
+    uv pip install --system -r requirements.txt mangum
 
 # Copy application code
 COPY fintrack/ ./fintrack/

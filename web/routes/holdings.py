@@ -356,11 +356,18 @@ def _money(x) -> str:
     return fmt_money(x) if x is not None else _BLANK
 
 
-def _unit_price(unit: str, price) -> str:
-    """Combined unit + per-unit price cell — only meaningful for symbol units."""
+def _unit_price(unit: str, price, *, live: bool = False) -> str:
+    """Combined unit + per-unit price cell — only meaningful for symbol units.
+
+    When *live* is True the price came from an external API (or its cache);
+    otherwise it is the manually-entered per-row value (fallback).
+    """
     if not unit or unit == "USD":
         return _BLANK
-    return f"{unit} {fmt_money(price)}" if price is not None else unit
+    if price is None:
+        return unit
+    tag = fmt_money(price)
+    return f"{unit} {tag}" if not live else f"{unit} {tag} ✓"
 
 
 def _cc_available(a: dict) -> str:
@@ -508,7 +515,8 @@ def _asset_row(
     is_debt = e.get("kind") == "debt"
     per_row_price = e.get("balance") if is_debt else e.get("value")
     unit = e.get("unit") or "USD"
-    price = rates.get(unit, per_row_price) if rates and unit != "USD" else per_row_price
+    has_live_rate = bool(rates and unit != "USD" and unit in rates)
+    price = rates[unit] if has_live_rate else per_row_price
     amount = calculations.asset_contribution(e, rates=rates)
     group_key = _asset_group_key(e)
     has_amortization = is_debt and e.get("type") == "loan"
@@ -529,7 +537,7 @@ def _asset_row(
         "institution": e.get("institution") or _BLANK,
         "type": _type_label(e.get("type")) or _BLANK,
         "name": e.get("name") or _BLANK,
-        "unit_price": _unit_price(e.get("unit") or "USD", price),
+        "unit_price": _unit_price(e.get("unit") or "USD", price, live=has_live_rate),
         "qty": _fmt_qty(e.get("quantity")),
         "amount": fmt_money(amount),
         "due": fmt_day_ordinal(due_day) if is_debt and due_day else _BLANK,

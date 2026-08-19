@@ -8,7 +8,7 @@
        area, leaving a blank band above the app — most visible in landscape
        (QA #1). The header is then padded past the notch via env() safe-area
        insets below. #}
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
     <meta name="theme-color" content="#1e40af">
     <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
     {# PWA / Add-to-Home-Screen. iOS ignores the SVG favicon for the home-screen
@@ -97,6 +97,15 @@
     <style>
         /* Hide Alpine-controlled elements until Alpine initializes (prevents flash) */
         [x-cloak] { display: none !important; }
+
+        /* Prevent double-tap-to-zoom on touch devices so taps fire immediately. */
+        html { touch-action: manipulation; }
+
+        /* Base main padding — overridden by the @supports block below when the
+           browser supports safe-area insets.  Declared as a plain element rule
+           (not a Tailwind utility class) so the safe-area @supports block can
+           win by cascade order without a specificity fight. */
+        main { padding: 0.5rem; }
 
         /* PWA standalone safe-area (QA #1). With viewport-fit=cover the web view
            fills the whole screen (removing iOS's blank letterbox band above the
@@ -417,9 +426,11 @@
             background: #374151;                  /* gray-700 */
         }
 
-        /* File picker row: reveal action buttons on hover */
+        /* File picker row: reveal action buttons on hover (hover-capable only) */
         .file-row-actions { opacity: 0; pointer-events: none; transition: opacity 0.1s ease; }
-        .file-row:hover .file-row-actions { opacity: 1; pointer-events: auto; }
+        @media (hover: hover) {
+            .file-row:hover .file-row-actions { opacity: 1; pointer-events: auto; }
+        }
 
         /* Sheet scroll shadows (opt-in via [data-sheet-scroll]).
            Mark a scrolling table container (the element with `overflow: auto`
@@ -582,7 +593,45 @@
         /* Projections chart: reveal the vertical guide line while hovering a
            month's hover band (the band also carries a native value tooltip). */
         .projection-hover-guide { opacity: 0; transition: opacity 0.1s ease; }
-        .projection-hover-band:hover .projection-hover-guide { opacity: 1; }
+        @media (hover: hover) {
+            .projection-hover-band:hover .projection-hover-guide { opacity: 1; }
+        }
+
+        /* ── Touch-device overrides ──────────────────────────────────────────
+           On pure-touch devices iOS shows :hover on first tap and fires click
+           on the second ("tap-to-hover, tap-to-click").  Suppress the hover
+           backgrounds that trigger this, and add :active feedback instead.
+           File-row delete actions are always visible since there is no hover
+           to reveal them. */
+        @media (hover: none) and (pointer: coarse) {
+            /* Always show file-row action buttons (no hover to reveal them) */
+            .file-row-actions { opacity: 1 !important; pointer-events: auto !important; }
+
+            /* Suppress hover backgrounds that cause double-tap */
+            [data-file-picker-dropdown] a:hover,
+            nav[data-nav-sidebar] a:hover {
+                background-color: transparent !important;
+            }
+            td[role="button"]:hover {
+                background-color: transparent !important;
+            }
+            table tbody tr:hover {
+                background-color: transparent !important;
+            }
+            th.sortable-th:hover {
+                background-color: inherit !important;
+            }
+
+            /* Touch feedback: brief active-state highlight */
+            [data-file-picker-dropdown] a:active,
+            nav[data-nav-sidebar] a:active {
+                background-color: rgba(0, 0, 0, 0.08) !important;
+            }
+            .dark [data-file-picker-dropdown] a:active,
+            .dark nav[data-nav-sidebar] a:active {
+                background-color: rgba(255, 255, 255, 0.1) !important;
+            }
+        }
     </style>
 </head>
 
@@ -849,7 +898,7 @@
         </nav>
         {% endif %}
 
-        <main class="flex-1 min-w-0 min-h-0 flex flex-col px-2 py-2">
+        <main class="flex-1 min-w-0 min-h-0 flex flex-col">
             {% block content %}{% endblock %}
         </main>
     </div>

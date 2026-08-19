@@ -70,7 +70,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Check if the function already exists
+          # Create or update the function
           if aws lambda get-function --function-name "$FUNCTION_NAME" >/dev/null 2>&1; then
             echo "Updating Lambda function ${FUNCTION_NAME}"
             aws lambda update-function-code \
@@ -94,13 +94,15 @@ jobs:
 
             echo "Waiting for function to be active..."
             aws lambda wait function-active --function-name "$FUNCTION_NAME"
+          fi
 
+          # Ensure Function URL exists (idempotent — skips if already configured)
+          if ! aws lambda get-function-url-config --function-name "$FUNCTION_NAME" >/dev/null 2>&1; then
             echo "Creating Function URL..."
             aws lambda create-function-url-config \
               --function-name "$FUNCTION_NAME" \
               --auth-type NONE \
-              --invoke-mode BUFFERED \
-              --query 'FunctionUrl' --output text >/dev/null
+              --invoke-mode BUFFERED >/dev/null
 
             echo "Adding public invoke permission..."
             aws lambda add-permission \

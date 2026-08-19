@@ -116,8 +116,8 @@ aws iam put-role-policy --role-name fintrack-pr-preview-deployer \
         "Resource": "arn:aws:lambda:<REGION>:<ACCOUNT_ID>:function:fintrack-pr-*",
         "Action": [
           "lambda:CreateFunction", "lambda:UpdateFunctionCode",
-          "lambda:UpdateFunctionConfiguration",
-          "lambda:DeleteFunction", "lambda:GetFunction",
+          "lambda:UpdateFunctionConfiguration", "lambda:GetFunctionConfiguration",
+          "lambda:DeleteFunction", "lambda:GetFunction", "lambda:GetPolicy",
           "lambda:GetFunctionUrlConfig", "lambda:CreateFunctionUrlConfig",
           "lambda:DeleteFunctionUrlConfig",
           "lambda:AddPermission", "lambda:RemovePermission" ] },

@@ -12,6 +12,7 @@ import sys
 # Point the DB at Lambda's writable /tmp
 os.environ.setdefault("FINTRACK_DB", "/tmp/fintrack.db")
 
+from asgiref.wsgi import WsgiToAsgi
 from mangum import Mangum
 
 from web.app import create_app
@@ -46,6 +47,7 @@ def handler(event, context):
     global _app
     _cold_start()
     if _app is None:
-        _app = create_app()
+        flask_app = create_app()
+        _app = WsgiToAsgi(flask_app)
     mangum_handler = Mangum(_app, lifespan="off")
     return mangum_handler(event, context)

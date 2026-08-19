@@ -51,9 +51,10 @@ aws iam attach-role-policy --role-name fintrack-apprunner-ecr-access \
 
 ## 3. Create the deploy role
 
-GitHub Actions assumes this role via OIDC. The trust policy is scoped to this
-repository (adjust the `sub` for a different owner/repo, or tighten it to
-`:pull_request` / a branch):
+GitHub Actions assumes this role via OIDC. The trust policy `sub` condition
+uses wildcards (`mrdefenestrator*/fintrack*`) because GitHub's OIDC tokens now
+append numeric IDs to the owner and repo names (e.g.
+`repo:mrdefenestrator@12345/fintrack@67890:pull_request`):
 
 ```bash
 aws iam create-role --role-name fintrack-pr-preview-deployer \
@@ -65,7 +66,7 @@ aws iam create-role --role-name fintrack-pr-preview-deployer \
       "Action": "sts:AssumeRoleWithWebIdentity",
       "Condition": {
         "StringEquals": { "token.actions.githubusercontent.com:aud": "sts.amazonaws.com" },
-        "StringLike": { "token.actions.githubusercontent.com:sub": "repo:mrdefenestrator/fintrack:*" }
+        "StringLike": { "token.actions.githubusercontent.com:sub": "repo:mrdefenestrator*/fintrack*:*" }
       }
     }]
   }'

@@ -105,9 +105,7 @@ aws iam put-role-policy --role-name fintrack-pr-preview-deployer \
           "iam:AWSServiceName": "apprunner.amazonaws.com" } } },
       { "Sid": "PassAccessRole", "Effect": "Allow",
         "Action": "iam:PassRole",
-        "Resource": "arn:aws:iam::<ACCOUNT_ID>:role/fintrack-apprunner-ecr-access",
-        "Condition": { "StringEquals": {
-          "iam:PassedToService": "apprunner.amazonaws.com" } } }
+        "Resource": "arn:aws:iam::<ACCOUNT_ID>:role/fintrack-apprunner-ecr-access" }
     ]
   }'
 ```

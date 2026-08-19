@@ -178,8 +178,9 @@ jobs:
       - name: Delete preview images from ECR (best effort)
         continue-on-error: true
         run: |
+          PR_TAG_PREFIX="pr-${{ github.event.number }}-"
           IDS=$(aws ecr list-images --repository-name "$ECR_REPOSITORY" \
-            --query "imageIds[?starts_with(imageTag, 'pr-${{ github.event.number }}-')]" \
+            --query "imageIds[?imageTag != null && starts_with(imageTag, '${PR_TAG_PREFIX}')]" \
             --output json)
           if [ "$IDS" != "[]" ] && [ -n "$IDS" ]; then
             aws ecr batch-delete-image --repository-name "$ECR_REPOSITORY" \

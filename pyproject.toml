@@ -19,7 +19,7 @@ dev = [
     "pytest>=8.0",
     "pytest-cov>=7.0",
     "ruff>=0.8",
-    "playwright>=1.40",
+    "playwright>=1.40,<1.57",
     "pytest-playwright>=0.4",
 ]
 

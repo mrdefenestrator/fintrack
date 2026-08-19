@@ -87,10 +87,16 @@ jobs:
               --package-type Image \
               --code "ImageUri=${IMAGE_URI}" \
               --role "$LAMBDA_ROLE_ARN" \
-              --memory-size 512 \
+              --memory-size 1024 \
               --timeout 30 \
               --environment "Variables={FINTRACK_DB=/tmp/fintrack.db}" \
               --query 'FunctionArn' --output text >/dev/null
+
+            # Force all requests to the same execution environment so the
+            # ephemeral SQLite DB in /tmp persists across requests.
+            aws lambda put-function-concurrency \
+              --function-name "$FUNCTION_NAME" \
+              --reserved-concurrent-executions 1 >/dev/null
 
             echo "Waiting for function to be active..."
             aws lambda wait function-active --function-name "$FUNCTION_NAME"

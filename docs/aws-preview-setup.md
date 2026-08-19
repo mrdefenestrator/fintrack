@@ -120,7 +120,8 @@ aws iam put-role-policy --role-name fintrack-pr-preview-deployer \
           "lambda:DeleteFunction", "lambda:GetFunction", "lambda:GetPolicy",
           "lambda:GetFunctionUrlConfig", "lambda:CreateFunctionUrlConfig",
           "lambda:DeleteFunctionUrlConfig",
-          "lambda:AddPermission", "lambda:RemovePermission" ] },
+          "lambda:AddPermission", "lambda:RemovePermission",
+          "lambda:PutFunctionConcurrency", "lambda:DeleteFunctionConcurrency" ] },
       { "Sid": "PassLambdaRole", "Effect": "Allow",
         "Action": "iam:PassRole",
         "Resource": "arn:aws:iam::<ACCOUNT_ID>:role/fintrack-lambda-preview" }

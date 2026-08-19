@@ -119,3 +119,44 @@ docker run -p 5003:5003 -v fintrack-data:/app/data fintrack
 The container runs `alembic upgrade head` on startup and stores the database
 at `/app/data/fintrack.db` (override with `FINTRACK_DB`). CI publishes the
 image on pushes to `main`.
+
+Set `FINTRACK_PREVIEW_SEED=1` to seed a throwaway **Example Household**
+snapshot (a few accounts, budget entries, a home + mortgage) on boot, so the
+app has something to show on first load:
+
+```bash
+docker run -p 5003:5003 -e FINTRACK_PREVIEW_SEED=1 fintrack
+# or locally, without Docker:
+FINTRACK_DB=preview.db uv run python scripts/seed_example.py && mise run serve
+```
+
+The seed is idempotent — it skips if the snapshot already exists — and only
+ever writes that one snapshot.
+
+## PR preview environments (AWS Lambda)
+
+`.github/workflows/pr-preview.yml` builds a Lambda container image, deploys it
+as an **AWS Lambda function with a public Function URL** for every pull request,
+comments the URL on the PR, and **deletes the function when the PR is merged or
+closed**. Authentication uses GitHub OIDC, so there are **no AWS keys stored as
+GitHub secrets**.
+
+The workflow is **inert until configured**: both jobs are skipped while the
+`AWS_DEPLOY_ROLE_ARN` repository variable is unset. Follow the
+[AWS setup guide](docs/aws-preview-setup.md) to provision the IAM roles, ECR
+repository, and cost controls, then set the repository variables to activate
+previews.
+
+> **Heads-up:** Lambda Function URLs are **public and unauthenticated** —
+> anyone with the link can view the preview. The preview only ever contains the
+> fake **Example Household** seed data (never a real database), the database is
+> ephemeral (rebuilt on each cold start), and the function is deleted on PR
+> close. First load after idle may take a few seconds. Treat the URL as
+> shareable-but-guessable, not private.
+
+### Cost
+
+Lambda previews scale to zero — you pay only for actual requests. A day of
+review with occasional page loads costs fractions of a cent; ECR image storage
+is a few cents. An idle repo with no open PRs costs nothing. The ECR lifecycle
+policy auto-expires old images to keep storage near zero.

@@ -1,0 +1,206 @@
+name: PR Preview (AWS Lambda)
+
+# Spins up a throwaway, seeded instance of the app for each pull request on a
+# public HTTPS URL (Lambda Function URL), then deletes it when the PR is merged
+# or closed. See docs/aws-preview-setup.md for the one-time AWS setup.
+#
+# Auth is via GitHub OIDC — there are NO long-lived AWS keys stored as secrets.
+# All configuration lives in repository variables (Settings -> Secrets and
+# variables -> Actions -> Variables); when AWS_DEPLOY_ROLE_ARN is unset the
+# jobs are skipped, so the workflow is inert until you configure it.
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, closed]
+
+# One preview per PR; never run two deploys for the same PR at once.
+concurrency:
+  group: pr-preview-${{ github.event.number }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write        # required for AWS OIDC
+  pull-requests: write   # required to post the preview URL comment
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION }}
+  ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY || 'fintrack-preview' }}
+  FUNCTION_NAME: fintrack-pr-${{ github.event.number }}
+
+jobs:
+  deploy:
+    # Build/deploy on open, reopen, and new commits — but not on close.
+    if: ${{ github.event.action != 'closed' && vars.AWS_DEPLOY_ROLE_ARN != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Log in to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Ensure ECR repository exists
+        run: |
+          aws ecr describe-repositories --repository-names "$ECR_REPOSITORY" >/dev/null 2>&1 \
+            || aws ecr create-repository --repository-name "$ECR_REPOSITORY" >/dev/null
+
+      - name: Build and push Lambda image
+        id: build
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+        run: |
+          IMAGE_URI="$REGISTRY/$ECR_REPOSITORY:pr-${{ github.event.number }}-${GITHUB_SHA::7}"
+          docker build -f Dockerfile.lambda -t "$IMAGE_URI" .
+          docker push "$IMAGE_URI"
+          echo "image_uri=$IMAGE_URI" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy Lambda function
+        id: deploy
+        env:
+          IMAGE_URI: ${{ steps.build.outputs.image_uri }}
+          LAMBDA_ROLE_ARN: ${{ vars.LAMBDA_EXECUTION_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+
+          # Create or update the function
+          if aws lambda get-function --function-name "$FUNCTION_NAME" >/dev/null 2>&1; then
+            echo "Updating Lambda function ${FUNCTION_NAME}"
+            aws lambda update-function-code \
+              --function-name "$FUNCTION_NAME" \
+              --image-uri "$IMAGE_URI" \
+              --query 'FunctionArn' --output text >/dev/null
+
+            echo "Waiting for update to complete..."
+            aws lambda wait function-updated --function-name "$FUNCTION_NAME"
+          else
+            echo "Creating Lambda function ${FUNCTION_NAME}"
+            aws lambda create-function \
+              --function-name "$FUNCTION_NAME" \
+              --package-type Image \
+              --code "ImageUri=${IMAGE_URI}" \
+              --role "$LAMBDA_ROLE_ARN" \
+              --memory-size 1024 \
+              --timeout 30 \
+              --environment "Variables={FINTRACK_DB=/tmp/fintrack.db}" \
+              --query 'FunctionArn' --output text >/dev/null
+
+            # Force all requests to the same execution environment so the
+            # ephemeral SQLite DB in /tmp persists across requests.
+            aws lambda put-function-concurrency \
+              --function-name "$FUNCTION_NAME" \
+              --reserved-concurrent-executions 1 >/dev/null
+
+            echo "Waiting for function to be active..."
+            aws lambda wait function-active --function-name "$FUNCTION_NAME"
+          fi
+
+          # Ensure Function URL exists (idempotent — skips if already configured)
+          if ! aws lambda get-function-url-config --function-name "$FUNCTION_NAME" >/dev/null 2>&1; then
+            echo "Creating Function URL..."
+            aws lambda create-function-url-config \
+              --function-name "$FUNCTION_NAME" \
+              --auth-type NONE \
+              --invoke-mode BUFFERED >/dev/null
+
+            echo "Adding public invoke permissions..."
+            aws lambda add-permission \
+              --function-name "$FUNCTION_NAME" \
+              --statement-id FunctionURLPublicAccess \
+              --action lambda:InvokeFunctionUrl \
+              --principal "*" \
+              --function-url-auth-type NONE >/dev/null
+            aws lambda add-permission \
+              --function-name "$FUNCTION_NAME" \
+              --statement-id FunctionURLPublicInvoke \
+              --action lambda:InvokeFunction \
+              --principal "*" >/dev/null
+          fi
+
+          URL=$(aws lambda get-function-url-config \
+            --function-name "$FUNCTION_NAME" \
+            --query 'FunctionUrl' --output text)
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+          echo "Preview URL: $URL"
+
+      - name: Comment preview URL on PR
+        uses: actions/github-script@v7
+        env:
+          PREVIEW_URL: ${{ steps.deploy.outputs.url }}
+        with:
+          script: |
+            const marker = '<!-- fintrack-preview -->';
+            const body = `${marker}\n### 🚀 Preview environment ready\n\n` +
+              `**${process.env.PREVIEW_URL}**\n\n` +
+              `Seeded with an example household (snapshot **Example Household**). ` +
+              `First load after idle may take a few seconds (cold start). ` +
+              `This instance is torn down automatically when the PR is merged or closed.\n\n` +
+              `---\n_Generated by [Claude Code](https://claude.ai/code)_`;
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const comments = await github.paginate(github.rest.issues.listComments,
+              { owner, repo, issue_number });
+            const existing = comments.find(c => c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            }
+
+  teardown:
+    # Delete the preview when the PR closes (merged or not).
+    if: ${{ github.event.action == 'closed' && vars.AWS_DEPLOY_ROLE_ARN != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Delete Lambda function
+        run: |
+          set -euo pipefail
+          if aws lambda get-function --function-name "$FUNCTION_NAME" >/dev/null 2>&1; then
+            echo "Deleting Lambda function ${FUNCTION_NAME}"
+            aws lambda delete-function --function-name "$FUNCTION_NAME"
+          else
+            echo "No Lambda function named ${FUNCTION_NAME}; nothing to delete."
+          fi
+
+      - name: Delete preview images from ECR (best effort)
+        continue-on-error: true
+        run: |
+          IDS=$(aws ecr list-images --repository-name "$ECR_REPOSITORY" \
+            --query "imageIds[?starts_with(imageTag, 'pr-${{ github.event.number }}-')]" \
+            --output json)
+          if [ "$IDS" != "[]" ] && [ -n "$IDS" ]; then
+            aws ecr batch-delete-image --repository-name "$ECR_REPOSITORY" \
+              --image-ids "$IDS" >/dev/null || true
+          fi
+
+      - name: Comment teardown on PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const marker = '<!-- fintrack-preview -->';
+            const body = `${marker}\n### 🧹 Preview environment torn down\n\n` +
+              `The Lambda preview for this PR has been deleted.\n\n` +
+              `---\n_Generated by [Claude Code](https://claude.ai/code)_`;
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const comments = await github.paginate(github.rest.issues.listComments,
+              { owner, repo, issue_number });
+            const existing = comments.find(c => c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            }

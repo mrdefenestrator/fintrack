@@ -31,4 +31,12 @@ PY
 
 .venv/bin/alembic upgrade head
 
+# Preview/demo environments seed a throwaway example household so the app has
+# something to show on first load. Idempotent and opt-in via env var, so normal
+# deployments are unaffected. Runs after migrations so the schema is present.
+if [ "${FINTRACK_PREVIEW_SEED:-0}" = "1" ]; then
+    echo "FINTRACK_PREVIEW_SEED=1; seeding example household"
+    .venv/bin/python scripts/seed_example.py
+fi
+
 exec .venv/bin/flask --app web/app.py run --host 0.0.0.0 --port 5003

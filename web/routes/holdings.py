@@ -497,10 +497,19 @@ def _account_row(a: dict, funding_by_id: dict, account_display: dict, today: dat
     )
 
 
-def _asset_row(e: dict, pair: dict | None, linked: str, index: int, today: date):
+def _asset_row(
+    e: dict,
+    pair: dict | None,
+    linked: str,
+    index: int,
+    today: date,
+    rates: dict | None = None,
+):
     is_debt = e.get("kind") == "debt"
-    price = e.get("balance") if is_debt else e.get("value")
-    amount = calculations.asset_contribution(e)
+    per_row_price = e.get("balance") if is_debt else e.get("value")
+    unit = e.get("unit") or "USD"
+    price = rates.get(unit, per_row_price) if rates and unit != "USD" else per_row_price
+    amount = calculations.asset_contribution(e, rates=rates)
     group_key = _asset_group_key(e)
     has_amortization = is_debt and e.get("type") == "loan"
     payment = (
@@ -588,6 +597,7 @@ def _all_rows(ctx: dict, today: date) -> dict[str, list[dict]]:
     accounts = ctx["accounts"]
     assets = ctx["assets"]
     budget = ctx["budget"]
+    rates = ctx.get("rates")
     account_display = ctx["account_display_by_id"]
 
     # Funding needed for cash (liquid) accounts only, matching the Accounts page.
@@ -601,7 +611,9 @@ def _all_rows(ctx: dict, today: date) -> dict[str, list[dict]]:
 
     # Equity/LTV for secured debts, keyed by the debt entry's identity so we can
     # fold it into that loan's row (per design: equity shows on the loan row).
-    equity_by_debt = {id(p["debt"]): p for p in calculations.equity_pairs(assets)}
+    equity_by_debt = {
+        id(p["debt"]): p for p in calculations.equity_pairs(assets, rates=rates)
+    }
 
     # Asset ↔ loan links (via asset_ref) for the "Linked" column, both ways.
     asset_name_by_id = {
@@ -627,7 +639,9 @@ def _all_rows(ctx: dict, today: date) -> dict[str, list[dict]]:
         key, row = _account_row(a, funding_by_id, account_display, today)
         rows[key].append(row)
     for idx, e in enumerate(assets):
-        key, row = _asset_row(e, equity_by_debt.get(id(e)), _linked(e), idx, today)
+        key, row = _asset_row(
+            e, equity_by_debt.get(id(e)), _linked(e), idx, today, rates=rates
+        )
         rows[key].append(row)
     return rows
 
@@ -642,7 +656,7 @@ def _apply_filters(rows, type_sel, balance_sel, inst_sel):
     return rows
 
 
-def _groups_ctx(rows_by_group: dict[str, list[dict]], accounts, assets):
+def _groups_ctx(rows_by_group: dict[str, list[dict]], accounts, assets, rates=None):
     """The four domain groups (headers, rows, group total, reorder wiring) + the
     master footer (Liquid + Net worth).
 
@@ -674,7 +688,7 @@ def _groups_ctx(rows_by_group: dict[str, list[dict]], accounts, assets):
             }
         )
 
-    totals = calculations.tiered_totals(accounts, assets)
+    totals = calculations.tiered_totals(accounts, assets, rates=rates)
     master = []
     for label, value in (
         ("Liquid", totals["liquid"]),
@@ -707,7 +721,9 @@ def _ref_options(ctx: dict) -> tuple[list, list]:
 def _tbody_ctx(rows_by_group, ctx: dict, filters_active=False, **editing) -> dict:
     """Shared context for the tbody partial (page render and edit swaps)."""
     account_ref_options, asset_ref_options = _ref_options(ctx)
-    groups, master_total = _groups_ctx(rows_by_group, ctx["accounts"], ctx["assets"])
+    groups, master_total = _groups_ctx(
+        rows_by_group, ctx["accounts"], ctx["assets"], rates=ctx.get("rates")
+    )
     return {
         "groups": groups,
         "master_total": master_total,

@@ -1,0 +1,255 @@
+"""External price lookups and local cache for non-USD asset units.
+
+Fetches current prices from free, no-key APIs:
+- CoinCap.io for crypto (BTC, ETH, …)
+- Yahoo Finance for stocks (AAPL, GOOGL, …)
+
+Prices are cached in the ``price_cache`` table and refreshed when stale
+(>24 h by default).  The public entry point is ``get_rates``, which
+returns a ``{unit: Decimal}`` mapping suitable for passing straight into
+the calculations engine.
+
+Privacy: only ticker symbols are ever sent to external APIs — no amounts,
+dates, account numbers, or personal data.
+"""
+
+import json
+import logging
+import urllib.request
+import urllib.error
+from datetime import datetime, timedelta, timezone
+from decimal import Decimal, InvalidOperation
+from typing import Any
+
+from sqlalchemy import select, text
+
+from fintrack.core.models import price_cache
+
+logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Configuration
+# ---------------------------------------------------------------------------
+
+STALENESS_THRESHOLD = timedelta(hours=24)
+FETCH_TIMEOUT = 5  # seconds
+
+# Known crypto symbols → CoinCap asset IDs.
+# CoinCap uses slug-style ids (e.g. "bitcoin"), not ticker symbols.
+CRYPTO_IDS: dict[str, str] = {
+    "BTC": "bitcoin",
+    "ETH": "ethereum",
+    "SOL": "solana",
+    "ADA": "cardano",
+    "DOT": "polkadot",
+    "AVAX": "avalanche-2",
+    "MATIC": "matic-network",
+    "LINK": "chainlink",
+    "XRP": "ripple",
+    "DOGE": "dogecoin",
+    "LTC": "litecoin",
+    "UNI": "uniswap",
+    "ATOM": "cosmos",
+    "BNB": "binancecoin",
+    "SHIB": "shiba-inu",
+    "NEAR": "near-protocol",
+    "ARB": "arbitrum",
+    "OP": "optimism",
+    "FIL": "filecoin",
+    "APT": "aptos",
+}
+
+# Reverse mapping: CoinCap id → symbol (for parsing responses).
+_ID_TO_SYMBOL: dict[str, str] = {v: k for k, v in CRYPTO_IDS.items()}
+
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
+
+
+def get_rates(conn, units: set[str]) -> dict[str, Decimal]:
+    """Return current USD prices for the requested *units*.
+
+    Checks the local ``price_cache`` first; stale entries (older than
+    ``STALENESS_THRESHOLD``) are refreshed from external APIs.  API
+    failures are logged and silently swallowed — cached values (even
+    stale ones) are returned, and units with no cached price at all are
+    simply omitted from the result.
+
+    The caller is responsible for falling back to the per-row ``value``
+    field when a unit is missing from the returned dict.
+    """
+    if not units:
+        return {}
+
+    cached = _read_cache(conn, units)
+    now = datetime.now(timezone.utc)
+
+    fresh: dict[str, Decimal] = {}
+    stale_units: set[str] = set()
+
+    for unit in units:
+        if unit in cached:
+            price, fetched_at = cached[unit]
+            fresh[unit] = price
+            if now - fetched_at > STALENESS_THRESHOLD:
+                stale_units.add(unit)
+        else:
+            stale_units.add(unit)
+
+    if stale_units:
+        fetched = _fetch_prices(stale_units)
+        if fetched:
+            _write_cache(conn, fetched)
+            fresh.update(fetched)
+
+    return fresh
+
+
+# ---------------------------------------------------------------------------
+# Cache I/O
+# ---------------------------------------------------------------------------
+
+
+def _read_cache(conn, units: set[str]) -> dict[str, tuple[Decimal, datetime]]:
+    """Read cached prices for the given *units*."""
+    rows = conn.execute(
+        select(
+            price_cache.c.unit, price_cache.c.price_usd, price_cache.c.fetched_at
+        ).where(price_cache.c.unit.in_(list(units)))
+    ).fetchall()
+    result: dict[str, tuple[Decimal, datetime]] = {}
+    for row in rows:
+        fetched_at = row.fetched_at
+        # Ensure fetched_at is timezone-aware for comparison.
+        if fetched_at.tzinfo is None:
+            fetched_at = fetched_at.replace(tzinfo=timezone.utc)
+        result[row.unit] = (Decimal(str(row.price_usd)), fetched_at)
+    return result
+
+
+def _write_cache(conn, prices: dict[str, Decimal]) -> None:
+    """Upsert cached prices (INSERT OR REPLACE for SQLite)."""
+    now = datetime.now(timezone.utc)
+    for unit, price in prices.items():
+        conn.execute(
+            text(
+                "INSERT INTO price_cache (unit, price_usd, fetched_at) "
+                "VALUES (:unit, :price, :ts) "
+                "ON CONFLICT(unit) DO UPDATE SET "
+                "price_usd = :price, fetched_at = :ts"
+            ),
+            {"unit": unit, "price": float(price), "ts": now},
+        )
+    conn.commit()
+
+
+# ---------------------------------------------------------------------------
+# External API fetchers
+# ---------------------------------------------------------------------------
+
+
+def _fetch_prices(units: set[str]) -> dict[str, Decimal]:
+    """Fetch prices for a set of units, dispatching to the right API."""
+    crypto = {u for u in units if u in CRYPTO_IDS}
+    stocks = units - crypto
+
+    result: dict[str, Decimal] = {}
+
+    if crypto:
+        try:
+            result.update(_fetch_crypto_prices(crypto))
+        except Exception:
+            logger.warning("Failed to fetch crypto prices from CoinCap", exc_info=True)
+
+    if stocks:
+        try:
+            result.update(_fetch_stock_prices(stocks))
+        except Exception:
+            logger.warning(
+                "Failed to fetch stock prices from Yahoo Finance", exc_info=True
+            )
+
+    return result
+
+
+def _fetch_crypto_prices(symbols: set[str]) -> dict[str, Decimal]:
+    """Batch-fetch crypto prices from CoinCap.io.
+
+    Uses ``GET /v2/assets?ids=bitcoin,ethereum,...`` which returns all
+    requested assets in a single call.
+    """
+    ids = [CRYPTO_IDS[s] for s in symbols if s in CRYPTO_IDS]
+    if not ids:
+        return {}
+
+    url = f"https://api.coincap.io/v2/assets?ids={','.join(ids)}"
+    data = _http_get_json(url)
+    if data is None:
+        return {}
+
+    assets: list[dict[str, Any]] = data.get("data", [])
+    result: dict[str, Decimal] = {}
+    for asset in assets:
+        asset_id = asset.get("id", "")
+        symbol = _ID_TO_SYMBOL.get(asset_id)
+        price_str = asset.get("priceUsd")
+        if symbol and price_str:
+            try:
+                result[symbol] = Decimal(price_str)
+            except InvalidOperation:
+                logger.warning("Bad price from CoinCap for %s: %r", symbol, price_str)
+    return result
+
+
+def _fetch_stock_prices(symbols: set[str]) -> dict[str, Decimal]:
+    """Fetch stock prices from Yahoo Finance, one ticker at a time.
+
+    Uses the ``/v8/finance/chart/{ticker}`` endpoint which returns
+    ``regularMarketPrice`` in the ``meta`` section.
+    """
+    result: dict[str, Decimal] = {}
+    for symbol in symbols:
+        try:
+            price = _fetch_yahoo_ticker(symbol)
+            if price is not None:
+                result[symbol] = price
+        except Exception:
+            logger.warning("Yahoo Finance lookup failed for %s", symbol, exc_info=True)
+    return result
+
+
+def _fetch_yahoo_ticker(symbol: str) -> Decimal | None:
+    """Fetch a single ticker's price from Yahoo Finance."""
+    url = (
+        f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
+        "?interval=1d&range=1d"
+    )
+    data = _http_get_json(url)
+    if data is None:
+        return None
+    try:
+        meta = data["chart"]["result"][0]["meta"]
+        price = meta.get("regularMarketPrice")
+        if price is not None:
+            return Decimal(str(price))
+    except (KeyError, IndexError, TypeError):
+        logger.warning("Unexpected Yahoo Finance response for %s", symbol)
+    return None
+
+
+# ---------------------------------------------------------------------------
+# HTTP helper
+# ---------------------------------------------------------------------------
+
+
+def _http_get_json(url: str) -> dict | None:
+    """GET *url* and parse the JSON body.  Returns ``None`` on any error."""
+    req = urllib.request.Request(url, headers={"User-Agent": "fintrack/0.1"})
+    try:
+        with urllib.request.urlopen(req, timeout=FETCH_TIMEOUT) as resp:
+            return json.loads(resp.read())
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError) as exc:
+        logger.warning("HTTP request failed: %s — %s", url, exc)
+        return None

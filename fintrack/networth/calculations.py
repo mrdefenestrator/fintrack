@@ -137,15 +137,32 @@ def projected_change_to_eom(
     return total
 
 
-def _entry_subtotal(entry: Dict[str, Any]) -> Decimal:
-    """Subtotal for an asset or debt entry: (value or balance) * quantity (defaults to 1)."""
+def _entry_subtotal(
+    entry: Dict[str, Any],
+    rates: Dict[str, Decimal] | None = None,
+) -> Decimal:
+    """Subtotal for an asset or debt entry.
+
+    When a cached price exists in *rates* for a non-USD unit, the amount
+    is ``quantity * rate`` (ignoring the per-row value/balance).  Otherwise
+    falls back to ``(value or balance) * quantity``.
+    """
+    qty = entry.get("quantity")
+    qty_dec = _money(qty) if qty is not None else Decimal(1)
+
+    unit = entry.get("unit") or "USD"
+    if unit != "USD" and rates and unit in rates:
+        return qty_dec * rates[unit]
+
     field = "value" if entry.get("kind") == "asset" else "balance"
     val = _money(entry.get(field))
-    qty = entry.get("quantity")
-    return val * (_money(qty) if qty is not None else Decimal(1))
+    return val * qty_dec
 
 
-def net_nonliquid_paired(assets: List[Dict[str, Any]]) -> Decimal:
+def net_nonliquid_paired(
+    assets: List[Dict[str, Any]],
+    rates: Dict[str, Decimal] | None = None,
+) -> Decimal:
     """(5) Sum of (asset subtotal - debt subtotal) for each debt with assetRef = asset id."""
     asset_by_id = {
         e["id"]: e
@@ -162,18 +179,21 @@ def net_nonliquid_paired(assets: List[Dict[str, Any]]) -> Decimal:
         asset = asset_by_id.get(ref)
         if not asset:
             continue
-        total += _entry_subtotal(asset) - _entry_subtotal(entry)
+        total += _entry_subtotal(asset, rates) - _entry_subtotal(entry, rates)
     return total
 
 
-def net_nonliquid_total(assets: List[Dict[str, Any]]) -> Decimal:
+def net_nonliquid_total(
+    assets: List[Dict[str, Any]],
+    rates: Dict[str, Decimal] | None = None,
+) -> Decimal:
     """(6) Sum of all asset subtotals minus sum of all debt subtotals."""
     total = _ZERO
     for entry in assets:
         if entry.get("kind") == "asset":
-            total += _entry_subtotal(entry)
+            total += _entry_subtotal(entry, rates)
         elif entry.get("kind") == "debt":
-            total -= _entry_subtotal(entry)
+            total -= _entry_subtotal(entry, rates)
     return total
 
 
@@ -223,28 +243,33 @@ def account_contribution(account: Dict[str, Any]) -> Decimal:
     return _money(account.get("balance"))
 
 
-def asset_contribution(entry: Dict[str, Any]) -> Decimal:
+def asset_contribution(
+    entry: Dict[str, Any],
+    rates: Dict[str, Decimal] | None = None,
+) -> Decimal:
     """Signed net-worth contribution of an asset/debt entry (assets +, debts -)."""
-    subtotal = _entry_subtotal(entry)
+    subtotal = _entry_subtotal(entry, rates)
     return subtotal if entry.get("kind") == "asset" else -subtotal
 
 
 def contributions_by_tier(
     accounts: List[Dict[str, Any]],
     assets: List[Dict[str, Any]],
+    rates: Dict[str, Decimal] | None = None,
 ) -> Dict[LiquidityTier, Decimal]:
     """Sum of signed contributions grouped by liquidity tier."""
     totals: Dict[LiquidityTier, Decimal] = {tier: _ZERO for tier in LIQUIDITY_TIERS}
     for account in accounts:
         totals[account_tier(account)] += account_contribution(account)
     for entry in assets:
-        totals[asset_tier(entry)] += asset_contribution(entry)
+        totals[asset_tier(entry)] += asset_contribution(entry, rates)
     return totals
 
 
 def tiered_totals(
     accounts: List[Dict[str, Any]],
     assets: List[Dict[str, Any]],
+    rates: Dict[str, Decimal] | None = None,
 ) -> Dict[str, Decimal]:
     """Cumulative liquidity totals: liquid ⊂ investable ⊂ net_worth.
 
@@ -252,7 +277,7 @@ def tiered_totals(
     - investable = liquid + semi-liquid holdings.
     - net_worth  = investable + illiquid holdings (all assets minus all loans).
     """
-    by_tier = contributions_by_tier(accounts, assets)
+    by_tier = contributions_by_tier(accounts, assets, rates)
     liquid = by_tier["liquid"]
     investable = liquid + by_tier["semi_liquid"]
     net_worth = investable + by_tier["illiquid"]
@@ -266,13 +291,17 @@ def tiered_totals(
 def net_worth_total(
     accounts: List[Dict[str, Any]],
     assets: List[Dict[str, Any]],
+    rates: Dict[str, Decimal] | None = None,
 ) -> Decimal:
     """Total net worth: signed sum across every account and asset/debt."""
-    by_tier = contributions_by_tier(accounts, assets)
+    by_tier = contributions_by_tier(accounts, assets, rates)
     return by_tier["liquid"] + by_tier["semi_liquid"] + by_tier["illiquid"]
 
 
-def equity_pairs(assets: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def equity_pairs(
+    assets: List[Dict[str, Any]],
+    rates: Dict[str, Decimal] | None = None,
+) -> List[Dict[str, Any]]:
     """Equity for each secured debt linked to an asset via assetRef.
 
     Returns one dict per linked debt: asset entry, debt entry, the asset and
@@ -294,8 +323,8 @@ def equity_pairs(assets: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         asset = asset_by_id.get(ref)
         if not asset:
             continue
-        asset_subtotal = _entry_subtotal(asset)
-        debt_subtotal = _entry_subtotal(entry)
+        asset_subtotal = _entry_subtotal(asset, rates)
+        debt_subtotal = _entry_subtotal(entry, rates)
         ltv = (debt_subtotal / asset_subtotal) if asset_subtotal else None
         pairs.append(
             {

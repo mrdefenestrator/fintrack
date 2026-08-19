@@ -91,10 +91,11 @@ def status(cli):
     accounts = data.get("accounts") or []
     budget = data.get("budget") or []
     assets = data.get("assets") or []
+    rates = data.get("rates")
     today = date.today()
     n2 = liquid_minus_cc(accounts)
     n3 = projected_change_to_eom(budget, today.year, today.month, today.day)
-    n6 = net_nonliquid_total(assets)
+    n6 = net_nonliquid_total(assets, rates=rates)
     rows = [
         ["Accounts", fmt_money(n2)],
         ["Budget (prorated)", fmt_money(n3)],

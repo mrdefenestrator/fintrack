@@ -15,6 +15,7 @@ def test_all_tables_created(engine):
         "budget_entries",
         "asset_entries",
         "balance_history",
+        "price_cache",
     }
     assert expected == table_names
 

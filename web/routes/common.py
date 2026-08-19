@@ -67,7 +67,9 @@ def quick_totals(data: dict, today: date | None = None) -> dict:
         "n3": calculations.projected_change_to_eom(
             data.get("budget") or [], today.year, today.month, today.day
         ),
-        "n6": calculations.net_nonliquid_total(data.get("assets") or []),
+        "n6": calculations.net_nonliquid_total(
+            data.get("assets") or [], rates=data.get("rates")
+        ),
     }
 
 
@@ -81,6 +83,7 @@ def get_common_context(snapshot_id: int, filename: str, edit_mode: bool):
     accs = data.get("accounts") or []
     budget = data.get("budget") or []
     assets = data.get("assets") or []
+    rates = data.get("rates") or {}
 
     today = date.today()
     year, month, day = today.year, today.month, today.day
@@ -99,6 +102,7 @@ def get_common_context(snapshot_id: int, filename: str, edit_mode: bool):
         "accounts": accs,
         "budget": budget,
         "assets": assets,
+        "rates": rates,
         "year": year,
         "month": month,
         "day": day,

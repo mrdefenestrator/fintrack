@@ -226,6 +226,14 @@ asset_entries = Table(
     Column("sort_order", Integer, nullable=False, default=0),
 )
 
+price_cache = Table(
+    "price_cache",
+    metadata,
+    Column("unit", String, primary_key=True),  # e.g. "BTC", "AAPL"
+    Column("price_usd", Numeric(14, 6), nullable=False),
+    Column("fetched_at", DateTime, nullable=False),
+)
+
 balance_history = Table(
     "balance_history",
     metadata,

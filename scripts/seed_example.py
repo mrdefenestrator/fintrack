@@ -166,6 +166,60 @@ def seed(conn) -> bool:
         },
     )
 
+    # --- Crypto & stock holdings (prices fetched from external APIs) ----------
+    add_asset_entry(
+        conn,
+        sid,
+        {
+            "kind": "asset",
+            "type": "brokerage",
+            "name": "Bitcoin",
+            "institution": "Coinbase",
+            "unit": "BTC",
+            "quantity": Decimal("0.45"),
+            "value": Decimal("60000.00"),
+        },
+    )
+    add_asset_entry(
+        conn,
+        sid,
+        {
+            "kind": "asset",
+            "type": "brokerage",
+            "name": "Ethereum",
+            "institution": "Coinbase",
+            "unit": "ETH",
+            "quantity": Decimal("3.2"),
+            "value": Decimal("3500.00"),
+        },
+    )
+    add_asset_entry(
+        conn,
+        sid,
+        {
+            "kind": "asset",
+            "type": "brokerage",
+            "name": "Apple Inc",
+            "institution": "Schwab",
+            "unit": "AAPL",
+            "quantity": Decimal("50"),
+            "value": Decimal("175.00"),
+        },
+    )
+    add_asset_entry(
+        conn,
+        sid,
+        {
+            "kind": "asset",
+            "type": "brokerage",
+            "name": "Vanguard S&P 500 ETF",
+            "institution": "Schwab",
+            "unit": "VOO",
+            "quantity": Decimal("25"),
+            "value": Decimal("480.00"),
+        },
+    )
+
     # --- Transactions (several months of realistic spending) ------------------
     # Spread transactions across the last 4 complete months so the Trends page
     # has data in every column and the Budget/mo + Delta columns are populated.

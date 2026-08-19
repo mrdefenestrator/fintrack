@@ -133,10 +133,23 @@ def project(
     debts = [e for e in assets if e.get("kind") == "debt"]
     non_debt_assets = [e for e in assets if e.get("kind") != "debt"]
 
+    # Fetch current rates for non-USD units so the initial asset valuation
+    # uses live prices.  The rate is treated as a fixed constant for future
+    # months (no forecasting); annualReturnRate still applies on top.
+    rates: Dict[str, Decimal] | None = None
+    units = {e["unit"] for e in assets if e.get("unit") and e["unit"] != "USD"}
+    if units:
+        try:
+            from fintrack.networth.prices import get_rates
+
+            rates = get_rates(conn, units)
+        except Exception:
+            pass  # fall back to per-row value
+
     asset_values: Dict[int, Decimal] = {}
     asset_params: Dict[int, tuple[Decimal, Decimal]] = {}
     for idx, a in enumerate(non_debt_assets):
-        asset_values[idx] = asset_contribution(a)
+        asset_values[idx] = asset_contribution(a, rates=rates)
         asset_params[idx] = _asset_monthly_params(a)
 
     estimate = None

@@ -356,11 +356,18 @@ def _money(x) -> str:
     return fmt_money(x) if x is not None else _BLANK
 
 
-def _unit_price(unit: str, price) -> str:
-    """Combined unit + per-unit price cell — only meaningful for symbol units."""
+def _unit_price(unit: str, price, *, live: bool = False) -> str:
+    """Combined unit + per-unit price cell — only meaningful for symbol units.
+
+    When *live* is True the price came from an external API (or its cache);
+    otherwise it is the manually-entered per-row value (fallback).
+    """
     if not unit or unit == "USD":
         return _BLANK
-    return f"{unit} {fmt_money(price)}" if price is not None else unit
+    if price is None:
+        return unit
+    tag = fmt_money(price)
+    return f"{unit} {tag}" if not live else f"{unit} {tag} ✓"
 
 
 def _cc_available(a: dict) -> str:
@@ -497,10 +504,20 @@ def _account_row(a: dict, funding_by_id: dict, account_display: dict, today: dat
     )
 
 
-def _asset_row(e: dict, pair: dict | None, linked: str, index: int, today: date):
+def _asset_row(
+    e: dict,
+    pair: dict | None,
+    linked: str,
+    index: int,
+    today: date,
+    rates: dict | None = None,
+):
     is_debt = e.get("kind") == "debt"
-    price = e.get("balance") if is_debt else e.get("value")
-    amount = calculations.asset_contribution(e)
+    per_row_price = e.get("balance") if is_debt else e.get("value")
+    unit = e.get("unit") or "USD"
+    has_live_rate = bool(rates and unit != "USD" and unit in rates)
+    price = rates[unit] if has_live_rate else per_row_price
+    amount = calculations.asset_contribution(e, rates=rates)
     group_key = _asset_group_key(e)
     has_amortization = is_debt and e.get("type") == "loan"
     payment = (
@@ -520,7 +537,7 @@ def _asset_row(e: dict, pair: dict | None, linked: str, index: int, today: date)
         "institution": e.get("institution") or _BLANK,
         "type": _type_label(e.get("type")) or _BLANK,
         "name": e.get("name") or _BLANK,
-        "unit_price": _unit_price(e.get("unit") or "USD", price),
+        "unit_price": _unit_price(e.get("unit") or "USD", price, live=has_live_rate),
         "qty": _fmt_qty(e.get("quantity")),
         "amount": fmt_money(amount),
         "due": fmt_day_ordinal(due_day) if is_debt and due_day else _BLANK,
@@ -588,6 +605,7 @@ def _all_rows(ctx: dict, today: date) -> dict[str, list[dict]]:
     accounts = ctx["accounts"]
     assets = ctx["assets"]
     budget = ctx["budget"]
+    rates = ctx.get("rates")
     account_display = ctx["account_display_by_id"]
 
     # Funding needed for cash (liquid) accounts only, matching the Accounts page.
@@ -601,7 +619,9 @@ def _all_rows(ctx: dict, today: date) -> dict[str, list[dict]]:
 
     # Equity/LTV for secured debts, keyed by the debt entry's identity so we can
     # fold it into that loan's row (per design: equity shows on the loan row).
-    equity_by_debt = {id(p["debt"]): p for p in calculations.equity_pairs(assets)}
+    equity_by_debt = {
+        id(p["debt"]): p for p in calculations.equity_pairs(assets, rates=rates)
+    }
 
     # Asset ↔ loan links (via asset_ref) for the "Linked" column, both ways.
     asset_name_by_id = {
@@ -627,7 +647,9 @@ def _all_rows(ctx: dict, today: date) -> dict[str, list[dict]]:
         key, row = _account_row(a, funding_by_id, account_display, today)
         rows[key].append(row)
     for idx, e in enumerate(assets):
-        key, row = _asset_row(e, equity_by_debt.get(id(e)), _linked(e), idx, today)
+        key, row = _asset_row(
+            e, equity_by_debt.get(id(e)), _linked(e), idx, today, rates=rates
+        )
         rows[key].append(row)
     return rows
 
@@ -642,7 +664,7 @@ def _apply_filters(rows, type_sel, balance_sel, inst_sel):
     return rows
 
 
-def _groups_ctx(rows_by_group: dict[str, list[dict]], accounts, assets):
+def _groups_ctx(rows_by_group: dict[str, list[dict]], accounts, assets, rates=None):
     """The four domain groups (headers, rows, group total, reorder wiring) + the
     master footer (Liquid + Net worth).
 
@@ -674,7 +696,7 @@ def _groups_ctx(rows_by_group: dict[str, list[dict]], accounts, assets):
             }
         )
 
-    totals = calculations.tiered_totals(accounts, assets)
+    totals = calculations.tiered_totals(accounts, assets, rates=rates)
     master = []
     for label, value in (
         ("Liquid", totals["liquid"]),
@@ -707,7 +729,9 @@ def _ref_options(ctx: dict) -> tuple[list, list]:
 def _tbody_ctx(rows_by_group, ctx: dict, filters_active=False, **editing) -> dict:
     """Shared context for the tbody partial (page render and edit swaps)."""
     account_ref_options, asset_ref_options = _ref_options(ctx)
-    groups, master_total = _groups_ctx(rows_by_group, ctx["accounts"], ctx["assets"])
+    groups, master_total = _groups_ctx(
+        rows_by_group, ctx["accounts"], ctx["assets"], rates=ctx.get("rates")
+    )
     return {
         "groups": groups,
         "master_total": master_total,

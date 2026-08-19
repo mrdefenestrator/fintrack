@@ -11,7 +11,6 @@ from .merchants import bp as merchants_bp
 from .categories import bp as categories_bp
 from .transactions import bp as transactions_bp
 from .trends import bp as trends_bp
-from .forecast import bp as forecast_bp
 
 
 def register_blueprints(app):
@@ -26,4 +25,3 @@ def register_blueprints(app):
     app.register_blueprint(categories_bp)
     app.register_blueprint(transactions_bp)
     app.register_blueprint(trends_bp)
-    app.register_blueprint(forecast_bp)

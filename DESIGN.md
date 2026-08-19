@@ -272,9 +272,10 @@ Totals reuse the net-worth key-number calculations. Accounts dipping below
 Surfaced at `/s/<snapshot>/projections` (horizon and estimator as query
 params, inline-SVG chart) and `fintrack project --months N [--estimate]`.
 
-The adjacent `/s/<snapshot>/forecast` page compares scheduled monthly budget
-amounts with trailing ledger estimates by category; selected estimates can be
-included in the projection engine as unscheduled spend.
+Budget-vs-actual comparison (monthly budgeted amount, delta) is integrated
+into the Trends page as Budget/mo and Delta columns alongside the existing
+per-category spending averages; selected estimates can be included in the
+projection engine as unscheduled spend.
 
 ## Web UI
 
@@ -288,7 +289,7 @@ Navigation is a **single-row top bar plus a collapsible side navigation**. The
 top bar carries only a nav toggle (`☰`), the current page name, and the always-
 visible utility controls — the lock/edit toggle, Import, the theme cycle, and
 the snapshot picker. Primary navigation lives in a grouped outline
-(`Finances`: Holdings · Budget · Forecast · Projections; `Spending`: Trends ·
+(`Finances`: Holdings · Budget · Projections; `Spending`: Trends ·
 Transactions · Merchants · Categories — group headings are labels, only the
 destinations are links). On wide screens (≥`lg`, 1024px) that outline is a
 docked left sidebar;
@@ -309,7 +310,7 @@ and muted elsewhere. The old `/s/<snapshot>/status` dashboard was removed; its
 URL redirects to Holdings.
 
 Two route-scoping/HTMX idioms coexist. Transactions, trends, merchants,
-categories, import, and forecast use a snapshot-scoped blueprint preprocessor
+categories, and import use a snapshot-scoped blueprint preprocessor
 that places the validated filename and ID in `g`. Holdings, budget, and
 projections validate an explicit filename argument. Ledger pages commonly swap
 page-specific partials on `HX-Request`; editable sheets swap rows, cells, or

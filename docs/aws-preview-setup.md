@@ -50,6 +50,27 @@ aws iam attach-role-policy --role-name fintrack-lambda-preview \
   --policy-arn arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
 ```
 
+Lambda pulls the container image using this role, so it also needs ECR read
+access:
+
+```bash
+aws iam put-role-policy --role-name fintrack-lambda-preview \
+  --policy-name ecr-pull --policy-document '{
+    "Version": "2012-10-17",
+    "Statement": [
+      { "Effect": "Allow",
+        "Action": [
+          "ecr:GetDownloadUrlForLayer",
+          "ecr:BatchGetImage",
+          "ecr:BatchCheckLayerAvailability" ],
+        "Resource": "arn:aws:ecr:<REGION>:<ACCOUNT_ID>:repository/fintrack-preview" },
+      { "Effect": "Allow",
+        "Action": "ecr:GetAuthorizationToken",
+        "Resource": "*" }
+    ]
+  }'
+```
+
 ## 3. Create the deploy role
 
 GitHub Actions assumes this role via OIDC. The trust policy `sub` condition
@@ -194,6 +215,8 @@ aws iam delete-role-policy --role-name fintrack-pr-preview-deployer \
   --policy-name fintrack-pr-preview
 aws iam delete-role --role-name fintrack-pr-preview-deployer
 
+aws iam delete-role-policy --role-name fintrack-lambda-preview \
+  --policy-name ecr-pull
 aws iam detach-role-policy --role-name fintrack-lambda-preview \
   --policy-arn arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
 aws iam delete-role --role-name fintrack-lambda-preview

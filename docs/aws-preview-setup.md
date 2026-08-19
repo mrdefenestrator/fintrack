@@ -151,6 +151,28 @@ aws ecr put-lifecycle-policy --repository-name fintrack-preview \
   }'
 ```
 
+Grant the Lambda service pull access via a repository policy (Lambda
+validates the image during `CreateFunction` using this, separate from the
+execution role's IAM permissions):
+
+```bash
+aws ecr set-repository-policy --repository-name fintrack-preview \
+  --region <REGION> --policy-text '{
+    "Version": "2012-10-17",
+    "Statement": [{
+      "Sid": "LambdaECRAccess",
+      "Effect": "Allow",
+      "Principal": { "Service": "lambda.amazonaws.com" },
+      "Action": [ "ecr:GetDownloadUrlForLayer", "ecr:BatchGetImage" ],
+      "Condition": {
+        "StringLike": {
+          "aws:sourceArn": "arn:aws:lambda:<REGION>:<ACCOUNT_ID>:function:fintrack-pr-*"
+        }
+      }
+    }]
+  }'
+```
+
 ## 5. Budget alarm (optional)
 
 Get emailed at 80% of a $5/month threshold — well above normal usage, catches

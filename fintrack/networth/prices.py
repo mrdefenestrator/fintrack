@@ -1,7 +1,7 @@
 """External price lookups and local cache for non-USD asset units.
 
 Fetches current prices from free, no-key APIs:
-- CoinCap.io for crypto (BTC, ETH, …)
+- CoinGecko (keyless public API) for crypto (BTC, ETH, …)
 - Yahoo Finance for stocks (AAPL, GOOGL, …)
 
 Prices are cached in the ``price_cache`` table and refreshed when stale
@@ -19,8 +19,6 @@ import urllib.request
 import urllib.error
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
-from typing import Any
-
 from sqlalchemy import select, text
 
 from fintrack.core.models import price_cache
@@ -34,8 +32,8 @@ logger = logging.getLogger(__name__)
 STALENESS_THRESHOLD = timedelta(hours=24)
 FETCH_TIMEOUT = 5  # seconds
 
-# Known crypto symbols → CoinCap asset IDs.
-# CoinCap uses slug-style ids (e.g. "bitcoin"), not ticker symbols.
+# Known crypto symbols → CoinGecko coin IDs.
+# CoinGecko uses slug-style ids (e.g. "bitcoin"), not ticker symbols.
 CRYPTO_IDS: dict[str, str] = {
     "BTC": "bitcoin",
     "ETH": "ethereum",
@@ -59,7 +57,7 @@ CRYPTO_IDS: dict[str, str] = {
     "APT": "aptos",
 }
 
-# Reverse mapping: CoinCap id → symbol (for parsing responses).
+# Reverse mapping: CoinGecko id → symbol (for parsing responses).
 _ID_TO_SYMBOL: dict[str, str] = {v: k for k, v in CRYPTO_IDS.items()}
 
 
@@ -161,7 +159,9 @@ def _fetch_prices(units: set[str]) -> dict[str, Decimal]:
         try:
             result.update(_fetch_crypto_prices(crypto))
         except Exception:
-            logger.warning("Failed to fetch crypto prices from CoinCap", exc_info=True)
+            logger.warning(
+                "Failed to fetch crypto prices from CoinGecko", exc_info=True
+            )
 
     if stocks:
         try:
@@ -175,31 +175,33 @@ def _fetch_prices(units: set[str]) -> dict[str, Decimal]:
 
 
 def _fetch_crypto_prices(symbols: set[str]) -> dict[str, Decimal]:
-    """Batch-fetch crypto prices from CoinCap.io.
+    """Batch-fetch crypto prices from CoinGecko's keyless public API.
 
-    Uses ``GET /v2/assets?ids=bitcoin,ethereum,...`` which returns all
-    requested assets in a single call.
+    Uses ``GET /api/v3/simple/price?ids=bitcoin,ethereum,...&vs_currencies=usd``
+    which returns all requested coins in a single call.
     """
     ids = [CRYPTO_IDS[s] for s in symbols if s in CRYPTO_IDS]
     if not ids:
         return {}
 
-    url = f"https://api.coincap.io/v2/assets?ids={','.join(ids)}"
+    url = (
+        "https://api.coingecko.com/api/v3/simple/price"
+        f"?ids={','.join(ids)}&vs_currencies=usd"
+    )
     data = _http_get_json(url)
     if data is None:
         return {}
 
-    assets: list[dict[str, Any]] = data.get("data", [])
+    # Response format: {"bitcoin": {"usd": 67000.12}, "ethereum": {"usd": 3500.45}}
     result: dict[str, Decimal] = {}
-    for asset in assets:
-        asset_id = asset.get("id", "")
-        symbol = _ID_TO_SYMBOL.get(asset_id)
-        price_str = asset.get("priceUsd")
-        if symbol and price_str:
+    for coin_id, prices in data.items():
+        symbol = _ID_TO_SYMBOL.get(coin_id)
+        price_val = prices.get("usd") if isinstance(prices, dict) else None
+        if symbol and price_val is not None:
             try:
-                result[symbol] = Decimal(price_str)
+                result[symbol] = Decimal(str(price_val))
             except InvalidOperation:
-                logger.warning("Bad price from CoinCap for %s: %r", symbol, price_str)
+                logger.warning("Bad price from CoinGecko for %s: %r", symbol, price_val)
     return result
 
 

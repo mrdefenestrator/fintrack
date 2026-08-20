@@ -102,15 +102,15 @@
            immediately.  Applied per-element (not on `html`) to avoid altering
            touch-gesture dispatch for nested scroll containers, which can break
            scroll-event-driven features like the sheet-scroll shadows on iOS.
-           Notably, `th.sortable-th` is NOT included: on iOS, touch-action on
-           children inside a sticky <thead> inside an overflow:auto container
-           can interfere with scroll-gesture dispatch (the browser treats the
-           header cell as its own touch-action region), suppressing the scroll
-           events that sheet-scroll.js needs.  The sortable headers already get
-           single-tap behavior because their click handlers fire immediately
-           via the elements listed here (the <th> itself is rarely the direct
-           tap target — the text/icon inside is). */
-        a, button, [role="button"], label,
+           <th> elements are excluded (`:not(th)` on the [role] selector): on
+           iOS, touch-action on children inside a sticky <thead> inside an
+           overflow:auto container can interfere with scroll-gesture dispatch
+           (the browser treats each header cell as its own touch-action region),
+           suppressing the scroll events that sheet-scroll.js needs. The
+           sheet.html <th> elements carry role="button", so a bare [role]
+           selector would re-include them.  They still get single-tap behavior
+           because their click handlers fire via the <span> / icon inside. */
+        a, button, [role="button"]:not(th), label,
         input, select, textarea { touch-action: manipulation; }
 
         /* Base main padding — overridden by the @supports block below when the

@@ -101,10 +101,17 @@
         /* Prevent double-tap-to-zoom on interactive elements so taps fire
            immediately.  Applied per-element (not on `html`) to avoid altering
            touch-gesture dispatch for nested scroll containers, which can break
-           scroll-event-driven features like the sheet-scroll shadows on iOS. */
+           scroll-event-driven features like the sheet-scroll shadows on iOS.
+           Notably, `th.sortable-th` is NOT included: on iOS, touch-action on
+           children inside a sticky <thead> inside an overflow:auto container
+           can interfere with scroll-gesture dispatch (the browser treats the
+           header cell as its own touch-action region), suppressing the scroll
+           events that sheet-scroll.js needs.  The sortable headers already get
+           single-tap behavior because their click handlers fire immediately
+           via the elements listed here (the <th> itself is rarely the direct
+           tap target — the text/icon inside is). */
         a, button, [role="button"], label,
-        input, select, textarea,
-        th.sortable-th { touch-action: manipulation; }
+        input, select, textarea { touch-action: manipulation; }
 
         /* Base main padding — overridden by the @supports block below when the
            browser supports safe-area insets.  Declared as a plain element rule
@@ -119,12 +126,14 @@
            header. In landscape the top inset is ~0 (the notch is on the side,
            handled by the left/right insets), so this only removes the band
            there; the top padding matters in portrait. */
-        /* Base positioning for the sidebar & scrim — declared as attribute
-           selectors (not Tailwind utilities) so the @supports override below
-           wins by cascade order without a specificity fight. The Tailwind
-           `top-12` class has been removed from the HTML for the same reason. */
-        [data-nav-sidebar],
-        [data-nav-scrim] { top: 3rem; }
+        /* Base positioning for the sidebar & scrim — element-qualified
+           attribute selectors (specificity 0,1,1) so they beat any single
+           Tailwind utility class (0,1,0) regardless of source order. The
+           Tailwind CDN injects its generated stylesheet after our inline
+           <style>, so bare [attr] selectors at (0,1,0) would lose to e.g.
+           .inset-0 at equal specificity. */
+        nav[data-nav-sidebar],
+        div[data-nav-scrim] { top: 3rem; }
 
         @supports (padding: env(safe-area-inset-top)) {
             #main-header {
@@ -132,11 +141,11 @@
                 padding-left: env(safe-area-inset-left);
                 padding-right: env(safe-area-inset-right);
             }
-            [data-nav-sidebar],
-            [data-nav-scrim] {
+            nav[data-nav-sidebar],
+            div[data-nav-scrim] {
                 top: calc(3rem + env(safe-area-inset-top));
             }
-            [data-nav-sidebar] {
+            nav[data-nav-sidebar] {
                 padding-left: env(safe-area-inset-left);
                 padding-bottom: env(safe-area-inset-bottom);
             }
@@ -895,7 +904,7 @@
         {% if filename %}
         <!-- Scrim behind the mobile drawer -->
         <div x-show="navOpen" x-transition.opacity @click="navOpen = false" data-nav-scrim
-            class="fixed inset-0 bg-black/40 z-30 lg:hidden"></div>
+            class="fixed left-0 right-0 bottom-0 bg-black/40 z-30 lg:hidden"></div>
 
         {# Primary navigation: docked sidebar on wide screens (>=lg), overlay
            drawer when narrow. Grouped outline — headings are labels, only the

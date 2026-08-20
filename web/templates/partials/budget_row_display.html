@@ -74,7 +74,7 @@
                                hx-post="{{ when_update_url }}"
                                hx-trigger="focusout changed, keydown[keyCode==13]"
                                hx-include="closest form" hx-swap="innerHTML" hx-target="#budget-tbody"
-                               autofocus />
+                               data-autofocus />
                         <label class="flex items-center gap-0.5 text-xs text-gray-500 dark:text-gray-400 cursor-pointer whitespace-nowrap select-none">
                             <input type="checkbox" name="continuous_cb" :checked="cont"
                                    @change="cont = $event.target.checked; if (cont) $nextTick(() => htmx.trigger($el.closest('form'), 'save'))" class="m-0" />
@@ -96,7 +96,7 @@
                                hx-post="{{ when_update_url }}"
                                hx-trigger="focusout changed, keydown[keyCode==13]"
                                hx-include="closest form" hx-swap="innerHTML" hx-target="#budget-tbody"
-                               autofocus />
+                               data-autofocus />
                     </form>
                 </td>
                 {% endif %}
@@ -120,7 +120,7 @@
                                hx-post="{{ when_update_url }}"
                                hx-trigger="focusout changed, keydown[keyCode==13]"
                                hx-include="closest form" hx-swap="innerHTML" hx-target="#budget-tbody"
-                               autofocus />
+                               data-autofocus />
                     </form>
                 </td>
             {% endif %}

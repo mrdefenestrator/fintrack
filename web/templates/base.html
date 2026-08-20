@@ -87,7 +87,7 @@
                 if (!saved) return;
                 const el = document.getElementById(saved.id);
                 if (el) {
-                    el.focus();
+                    el.focus({ preventScroll: true });
                     try { el.setSelectionRange(saved.start, saved.end); } catch (_) {}
                 }
                 saved = null;
@@ -95,6 +95,14 @@
         })();
     </script>
     <style>
+        /* PWA frame lock: prevent iOS from scrolling the html/body when the
+           virtual keyboard opens or a cell-edit input is focused.  The body
+           already has overflow-hidden via Tailwind; doubling on html and adding
+           overscroll-behavior: none on both seals the remaining gap where iOS
+           WebKit can bypass overflow:hidden during its scroll-to-focus. */
+        html { overflow: hidden; overscroll-behavior: none; }
+        body { overscroll-behavior: none; }
+
         /* Hide Alpine-controlled elements until Alpine initializes (prevents flash) */
         [x-cloak] { display: none !important; }
 
@@ -958,6 +966,57 @@
     <script src="{{ url_for('static', filename='js/ledger.js') }}"></script>
     <script src="{{ url_for('static', filename='js/sheet-scroll.js') }}"></script>
     <script src="{{ url_for('static', filename='js/shortcuts.js') }}"></script>
+
+    {# --- PWA scroll-safe autofocus (replaces native autofocus attribute) ---
+       HTMX's settle handler calls .focus() without preventScroll on native
+       [autofocus] elements, which lets iOS scroll the page frame to bring the
+       input into view.  Templates use data-autofocus instead; this handler
+       finds it after every swap and focuses with preventScroll: true. #}
+    <script>
+    (function () {
+        "use strict";
+        function focusMarked(root) {
+            var el = (root || document).querySelector("[data-autofocus]");
+            if (el && typeof el.focus === "function") {
+                el.focus({ preventScroll: true });
+            }
+        }
+        document.addEventListener("htmx:afterSettle", function (e) {
+            focusMarked(e.detail.elt);
+        });
+        if (document.readyState === "loading") {
+            document.addEventListener("DOMContentLoaded", function () { focusMarked(); });
+        } else {
+            focusMarked();
+        }
+    })();
+    </script>
+
+    {# --- PWA scroll-reset safety net ---
+       Belt-and-suspenders: if iOS still manages to shift the page frame after
+       a cell editor receives focus, snap it back on the next animation frame.
+       Only fires for inputs/selects inside .table-scroll-container. #}
+    <script>
+    (function () {
+        "use strict";
+        document.addEventListener("focus", function (e) {
+            var t = e.target;
+            if (!t || !t.closest || !t.closest(".table-scroll-container")) return;
+            if (t.tagName !== "INPUT" && t.tagName !== "SELECT" && t.tagName !== "TEXTAREA") return;
+            requestAnimationFrame(function () {
+                if (window.scrollX !== 0 || window.scrollY !== 0) {
+                    window.scrollTo(0, 0);
+                }
+                if (document.documentElement.scrollTop !== 0) {
+                    document.documentElement.scrollTop = 0;
+                }
+                if (document.body.scrollTop !== 0) {
+                    document.body.scrollTop = 0;
+                }
+            });
+        }, true);
+    })();
+    </script>
 </body>
 
 </html>

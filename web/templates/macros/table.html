@@ -54,7 +54,7 @@
             {% if inputmode %}inputmode="{{ inputmode }}"{% endif %}
             hx-post="{{ update_url }}"
             hx-trigger="focusout changed, keydown[keyCode==13]"
-            hx-include="closest form" hx-swap="innerHTML" hx-target="#{{ tbody_id }}" autofocus />
+            hx-include="closest form" hx-swap="innerHTML" hx-target="#{{ tbody_id }}" data-autofocus />
     </form>
 </td>
 {% endmacro %}
@@ -70,7 +70,7 @@
         <select name="value" class="table-cell-select {% if right_align %}text-right{% endif %}" style="min-width:0"
             hx-post="{{ update_url }}"
             hx-trigger="focusout changed, change"
-            hx-include="closest form" hx-swap="innerHTML" hx-target="#{{ tbody_id }}" autofocus>
+            hx-include="closest form" hx-swap="innerHTML" hx-target="#{{ tbody_id }}" data-autofocus>
             {{ caller() }}
         </select>
     </form>

@@ -12,7 +12,7 @@
         <select name="value" class="table-cell-select {% if right_align %}text-right{% endif %}" style="min-width:0"
             hx-post="{{ url_for('budget.update', filename=filename, index=index) }}"
             hx-trigger="focusout changed, change, keydown[keyCode==9], keydown[keyCode==9][shiftKey], keydown[keyCode==13], keydown[keyCode==13][shiftKey], keydown[keyCode==27]"
-            hx-include="closest form" hx-swap="innerHTML" hx-target="#budget-tbody" autofocus>
+            hx-include="closest form" hx-swap="innerHTML" hx-target="#budget-tbody" data-autofocus>
             <option value="">—</option>
             {% for c in categories %}
             <option value="{{ c }}" {% if value==c %}selected{% endif %}>{{ c }}</option>
@@ -22,7 +22,7 @@
         <select name="value" class="table-cell-select {% if right_align %}text-right{% endif %}" style="min-width:0"
             hx-post="{{ url_for('budget.update', filename=filename, index=index) }}"
             hx-trigger="focusout changed, change, keydown[keyCode==9], keydown[keyCode==9][shiftKey], keydown[keyCode==13], keydown[keyCode==13][shiftKey], keydown[keyCode==27]"
-            hx-include="closest form" hx-swap="innerHTML" hx-target="#budget-tbody" autofocus>
+            hx-include="closest form" hx-swap="innerHTML" hx-target="#budget-tbody" data-autofocus>
             {% for r in recurrence_options %}
             <option value="{{ r }}" {% if value==r %}selected{% endif %}>{{ r | format_recurrence }}</option>
             {% endfor %}
@@ -31,7 +31,7 @@
         <select name="value" class="table-cell-select {% if right_align %}text-right{% endif %}" style="min-width:0"
             hx-post="{{ url_for('budget.update', filename=filename, index=index) }}"
             hx-trigger="focusout changed, change, keydown[keyCode==9], keydown[keyCode==9][shiftKey], keydown[keyCode==13], keydown[keyCode==13][shiftKey], keydown[keyCode==27]"
-            hx-include="closest form" hx-swap="innerHTML" hx-target="#budget-tbody" autofocus>
+            hx-include="closest form" hx-swap="innerHTML" hx-target="#budget-tbody" data-autofocus>
             <option value="">—</option>
             {% for aid, name in account_display_by_id.items() %}
             <option value="{{ aid }}" {% if value==aid or value==aid | string %}selected{% endif %}>{{ name }}</option>
@@ -43,7 +43,7 @@
             style="min-width:0" {% if field=='dayOfMonth' or field=='month' or field=='dayOfYear' %}inputmode="numeric"
             {% endif %} hx-post="{{ url_for('budget.update', filename=filename, index=index) }}"
             hx-trigger="focusout changed, keydown[keyCode==9], keydown[keyCode==9][shiftKey], keydown[keyCode==13], keydown[keyCode==13][shiftKey], keydown[keyCode==27]"
-            hx-include="closest form" hx-swap="innerHTML" hx-target="#budget-tbody" autofocus />
+            hx-include="closest form" hx-swap="innerHTML" hx-target="#budget-tbody" data-autofocus />
         {% endif %}
         {% if error %}<span class="block text-xs text-red-600 dark:text-red-400 mt-0.5">{{ error }}</span>{% endif %}
     </form>

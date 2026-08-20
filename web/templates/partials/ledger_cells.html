@@ -37,7 +37,7 @@
                hx-post="{{ update_url }}"
                hx-trigger="focusout changed, keydown[keyCode==13]"
                hx-include="closest form" hx-target="#{{ row_id }}" hx-swap="outerHTML"
-               autofocus>
+               data-autofocus>
     </form>
 </td>
 {% endmacro %}
@@ -49,7 +49,7 @@
           hx-trigger="focusout from:select delay:150ms"
           hx-target="#{{ row_id }}" hx-swap="outerHTML"{% endif %}>
         <input type="hidden" name="field" value="{{ field }}">
-        <select name="value" class="table-cell-select {{ align_class }}" autofocus
+        <select name="value" class="table-cell-select {{ align_class }}" data-autofocus
                 hx-post="{{ update_url }}" hx-trigger="change" hx-include="closest form"
                 hx-target="#{{ row_id }}" hx-swap="outerHTML">
             {% for o in options %}

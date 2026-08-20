@@ -19,8 +19,6 @@ import urllib.request
 import urllib.error
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
-from typing import Any
-
 from sqlalchemy import select, text
 
 from fintrack.core.models import price_cache

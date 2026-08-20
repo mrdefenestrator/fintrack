@@ -161,7 +161,9 @@ def _fetch_prices(units: set[str]) -> dict[str, Decimal]:
         try:
             result.update(_fetch_crypto_prices(crypto))
         except Exception:
-            logger.warning("Failed to fetch crypto prices from CoinGecko", exc_info=True)
+            logger.warning(
+                "Failed to fetch crypto prices from CoinGecko", exc_info=True
+            )
 
     if stocks:
         try:
@@ -201,9 +203,7 @@ def _fetch_crypto_prices(symbols: set[str]) -> dict[str, Decimal]:
             try:
                 result[symbol] = Decimal(str(price_val))
             except InvalidOperation:
-                logger.warning(
-                    "Bad price from CoinGecko for %s: %r", symbol, price_val
-                )
+                logger.warning("Bad price from CoinGecko for %s: %r", symbol, price_val)
     return result
 
 

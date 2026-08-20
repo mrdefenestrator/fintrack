@@ -132,13 +132,11 @@ def test_get_rates_empty_units(conn):
 
 
 def _mock_http_get_json(url):
-    """Mock HTTP responses for CoinCap and Yahoo Finance."""
-    if "coincap.io" in url:
+    """Mock HTTP responses for CoinGecko and Yahoo Finance."""
+    if "coingecko.com" in url:
         return {
-            "data": [
-                {"id": "bitcoin", "priceUsd": "61234.56"},
-                {"id": "ethereum", "priceUsd": "3456.78"},
-            ]
+            "bitcoin": {"usd": 61234.56},
+            "ethereum": {"usd": 3456.78},
         }
     if "yahoo" in url:
         if "AAPL" in url:
@@ -147,7 +145,7 @@ def _mock_http_get_json(url):
 
 
 def test_fetch_crypto_prices():
-    """CoinCap response is parsed correctly."""
+    """CoinGecko response is parsed correctly."""
     from fintrack.networth.prices import _fetch_crypto_prices
 
     with patch(
@@ -175,5 +173,5 @@ def test_fetch_prices_api_failure_logged():
 
     with patch("fintrack.networth.prices._http_get_json", return_value=None):
         result = _fetch_prices({"BTC", "AAPL"})
-    # CoinCap returns None → empty crypto result; Yahoo returns None → empty stock
+    # CoinGecko returns None → empty crypto result; Yahoo returns None → empty stock
     assert result == {}

@@ -113,6 +113,21 @@
         a, button, [role="button"]:not(th), label,
         input, select, textarea { touch-action: manipulation; }
 
+        /* Reset touch-action inside scroll containers (QA scroll-shadows).
+           On iOS, touch-action: manipulation on ANY interactive element inside
+           an overflow:auto container can interfere with scroll-gesture dispatch,
+           suppressing the scroll events sheet-scroll.js needs.  Since
+           maximum-scale=1.0 already prevents auto-zoom-on-focus, it is safe to
+           restore the default touch-action here. The descendant selectors
+           (0,1,1 / 0,2,0) beat the element/attribute selectors above (0,1,0). */
+        .table-scroll-container a,
+        .table-scroll-container button,
+        .table-scroll-container [role="button"],
+        .table-scroll-container label,
+        .table-scroll-container input,
+        .table-scroll-container select,
+        .table-scroll-container textarea { touch-action: auto; }
+
         /* Base main padding — overridden by the @supports block below when the
            browser supports safe-area insets.  Declared as a plain element rule
            (not a Tailwind utility class) so the safe-area @supports block can

@@ -95,13 +95,14 @@
         })();
     </script>
     <style>
-        /* PWA frame lock: prevent iOS from scrolling the html/body when the
-           virtual keyboard opens or a cell-edit input is focused.  The body
-           already has overflow-hidden via Tailwind; doubling on html and adding
-           overscroll-behavior: none on both seals the remaining gap where iOS
-           WebKit can bypass overflow:hidden during its scroll-to-focus. */
-        html { overflow: hidden; overscroll-behavior: none; }
-        body { overscroll-behavior: none; }
+        /* PWA frame lock: prevent iOS scroll-chaining from inner containers
+           to the document level.  The body already has overflow-hidden via
+           Tailwind; overscroll-behavior: none on both root elements seals the
+           remaining gap where iOS WebKit can bounce/shift the page during
+           virtual-keyboard open or scroll-to-focus.  (overflow:hidden is NOT
+           added on html — it creates a clipping context that breaks
+           elementFromPoint hit-testing in Chromium.) */
+        html, body { overscroll-behavior: none; }
 
         /* Hide Alpine-controlled elements until Alpine initializes (prevents flash) */
         [x-cloak] { display: none !important; }

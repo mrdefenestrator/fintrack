@@ -1,6 +1,14 @@
 # Holdings schema split — supertype + four subtype tables
 
-**Status:** draft · drafted 2026-08-24
+**Status:** implemented · drafted 2026-08-24 · implemented 2026-08-25
+
+Implemented as described. Migration revision `a7b8c9d0e1f2` (also merges the
+dangling `price_cache` head). The one refinement from the draft: the migration
+runs with `PRAGMA foreign_keys=OFF` (not `defer_foreign_keys`), because
+Alembic's per-statement autocommits reset the deferred pragma and a `DROP
+TABLE` under live FK enforcement implicitly deletes-and-cascades rows before
+they are copied; integrity is still validated with `foreign_key_check` at the
+end.
 
 ## Goal
 

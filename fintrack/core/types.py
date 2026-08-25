@@ -95,10 +95,12 @@ HOLDING_TYPE_LABELS: dict[str, str] = dict(HOLDING_TYPE_OPTIONS)
 HOLDING_TYPE_VALUES: list[str] = [value for value, _ in HOLDING_TYPE_OPTIONS]
 
 # Curated per-context views onto the one vocabulary: which types the Accounts
-# vs Assets selectors offer. Both draw from HOLDING_TYPE_* (one taxonomy, one
-# tier map); the split is only about which choices make sense where. (loan and
-# digital_wallet appear in both: a loan account or a mortgage debt; a Venmo
-# wallet or a crypto wallet.)
+# (cash + credit-card bands) vs Assets selectors offer. Both draw from
+# HOLDING_TYPE_* (one taxonomy, one tier map); the split is only about which
+# choices make sense where. "loan" is in neither list: a loan is its own
+# Holdings band, created as a debt entry with a fixed loan type — you don't
+# retype a cash account or an asset into a loan. (digital_wallet appears in
+# both: a Venmo wallet or a crypto wallet.)
 _ACCOUNT_TYPE_KEYS = [
     "checking",
     "savings",
@@ -106,7 +108,6 @@ _ACCOUNT_TYPE_KEYS = [
     "digital_wallet",
     "gift_card",
     "credit_card",
-    "loan",
 ]
 _ASSET_TYPE_KEYS = [
     "brokerage",
@@ -115,7 +116,6 @@ _ASSET_TYPE_KEYS = [
     "real_estate",
     "vehicle",
     "digital_wallet",
-    "loan",
 ]
 ACCOUNT_TYPE_OPTIONS: list[tuple[str, str]] = [
     (v, HOLDING_TYPE_LABELS[v]) for v in _ACCOUNT_TYPE_KEYS

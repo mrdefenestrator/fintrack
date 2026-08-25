@@ -72,9 +72,10 @@ _ASSETS_COLALIGN = (
     "left",
 )
 
-# Asset-entry types selectable for the `asset` kind (everything but `loan`,
-# which is the liability type used by debts). Drives --type choices.
-_ASSET_ONLY_TYPES = [t for t in ASSET_TYPE_VALUES if t != "loan"]
+# Asset-entry types selectable for the `asset` kind. "loan" is deliberately
+# not an asset type (a loan is a debt entry with a fixed loan type), so the
+# asset-type vocabulary already excludes it. Drives --type choices.
+_ASSET_ONLY_TYPES = list(ASSET_TYPE_VALUES)
 
 
 def _load(cli, conn):

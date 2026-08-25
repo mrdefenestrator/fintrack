@@ -264,9 +264,12 @@ def _asset_col_fields(e: dict) -> dict:
     single_unit = qty is None or qty == 1
     m = {
         "institution": "institution",
-        "type": "type",
         "name": "name",
     }
+    # An asset's type is user-chosen; a loan's is fixed at "loan" (its band),
+    # so only assets get an editable Type cell.
+    if not is_debt:
+        m["type"] = "type"
     if is_debt:
         m["interest"] = "interestRate"
         m["due"] = "statement_due_day_of_month"

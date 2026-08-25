@@ -75,10 +75,10 @@ def _row_to_asset_entry(row: dict[str, Any]) -> AssetEntry:
     entry: AssetEntry = {
         "kind": "debt" if is_loan else "asset",
         "name": row["name"],
+        # The holding id, on every entry: an asset's is the target a debt's
+        # assetRef points at; both are the handle the repository mutates by.
+        "id": row["id"],
     }
-    # Asset-only: id for cross-reference (a debt's assetRef points at it).
-    if not is_loan:
-        entry["id"] = row["id"]
     if is_loan:
         optional_map = {
             "type": "type",
@@ -114,8 +114,6 @@ def _row_to_asset_entry(row: dict[str, Any]) -> AssetEntry:
             # coercion — see calculations._money. Date columns are exposed as
             # ISO strings in the dict API.
             entry[field] = val.isoformat() if col in _DATE_COLS else val
-    # Store DB id for index operations (not exposed in TypedDict)
-    entry["_db_id"] = row["id"]
     return entry
 
 
@@ -169,14 +167,13 @@ def add_asset_entry(
 def update_asset_entry(
     conn: Connection,
     snapshot_id: int,
-    index: int,
+    holding_id: int,
     updates: dict[str, Any],
     delete_keys: list[str] | None = None,
 ) -> None:
-    db_id = _index_to_db_id(conn, snapshot_id, index)
-    row = get_holding(conn, snapshot_id, db_id)
-    if row is None:
-        raise ValueError(f"Assets index {index} out of range")
+    row = get_holding(conn, snapshot_id, holding_id)
+    if row is None or row["group_key"] not in _ASSET_GROUPS:
+        raise ValueError(f"Asset/debt id {holding_id} not found")
     group = row["group_key"]
     if "kind" in updates:
         raise ValueError("An entry's kind cannot be changed")
@@ -207,29 +204,32 @@ def update_asset_entry(
 
     detail_values = {col: merged.get(col) for col in dmap.values()}
     # IntegrityError propagates, matching the pre-split dict API.
-    update_holding(conn, snapshot_id, db_id, group, group, spine_updates, detail_values)
+    update_holding(
+        conn, snapshot_id, holding_id, group, group, spine_updates, detail_values
+    )
     conn.commit()
 
 
-def delete_asset_entry(conn: Connection, snapshot_id: int, index: int) -> None:
-    db_id = _index_to_db_id(conn, snapshot_id, index)
+def delete_asset_entry(conn: Connection, snapshot_id: int, holding_id: int) -> None:
     try:
-        delete_holding(conn, snapshot_id, db_id, _ASSET_GROUPS)
+        deleted = delete_holding(conn, snapshot_id, holding_id, _ASSET_GROUPS)
     except IntegrityError as e:
         # NO ACTION foreign key: this asset is still referenced by a debt
         # (assetRef) or the holding by a budget entry.
         conn.rollback()
         raise ValueError(
-            f"Asset id {db_id} is referenced by a debt; remove or change assetRef first"
+            f"Asset id {holding_id} is referenced by a debt; "
+            "remove or change assetRef first"
         ) from e
+    if deleted == 0:
+        raise ValueError(f"Asset/debt id {holding_id} not found")
     conn.commit()
 
 
 def move_asset_entry(
-    conn: Connection, snapshot_id: int, index: int, direction: str
+    conn: Connection, snapshot_id: int, holding_id: int, direction: str
 ) -> None:
-    db_id = _index_to_db_id(conn, snapshot_id, index)
-    swap_adjacent(conn, snapshot_id, _ASSET_GROUPS, db_id, direction)
+    swap_adjacent(conn, snapshot_id, _ASSET_GROUPS, holding_id, direction)
     conn.commit()
 
 
@@ -240,10 +240,3 @@ def reorder_asset_entries(
     loan + asset list, group-locally decomposed)."""
     reorder_merged(conn, snapshot_id, _ASSET_GROUPS, new_order)
     conn.commit()
-
-
-def _index_to_db_id(conn: Connection, snapshot_id: int, index: int) -> int:
-    rows = load_holdings(conn, snapshot_id, _ASSET_GROUPS)
-    if index < 0 or index >= len(rows):
-        raise ValueError(f"Assets index {index} out of range (0..{len(rows) - 1})")
-    return rows[index]["id"]

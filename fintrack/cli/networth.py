@@ -616,11 +616,9 @@ def assets_edit(cli, index, **kwargs):
         raise click.ClickException("specify at least one field to update")
     with cli.connect() as conn:
         snapshot_id, data = _load(cli, conn)
-        global_index, _ = _indexed_by_kind(
-            data.get("assets") or [], "asset", index, "Asset"
-        )
+        _, entry = _indexed_by_kind(data.get("assets") or [], "asset", index, "Asset")
         try:
-            repo_assets.update_asset_entry(conn, snapshot_id, global_index, updates)
+            repo_assets.update_asset_entry(conn, snapshot_id, entry["id"], updates)
         except ValueError as e:
             raise click.ClickException(str(e))
     click.echo(f"Updated asset at index {index}")
@@ -633,14 +631,12 @@ def assets_edit(cli, index, **kwargs):
 def assets_delete(cli, index, dry_run):
     with cli.connect() as conn:
         snapshot_id, data = _load(cli, conn)
-        global_index, entry = _indexed_by_kind(
-            data.get("assets") or [], "asset", index, "Asset"
-        )
+        _, entry = _indexed_by_kind(data.get("assets") or [], "asset", index, "Asset")
         if dry_run:
             click.echo(f"Would delete asset at index {index}: {entry.get('name', '?')}")
             return
         try:
-            repo_assets.delete_asset_entry(conn, snapshot_id, global_index)
+            repo_assets.delete_asset_entry(conn, snapshot_id, entry["id"])
         except ValueError as e:
             raise click.ClickException(str(e))
     click.echo(f"Deleted asset at index {index}")
@@ -769,11 +765,9 @@ def debts_edit(cli, index, **kwargs):
         raise click.ClickException("specify at least one field to update")
     with cli.connect() as conn:
         snapshot_id, data = _load(cli, conn)
-        global_index, _ = _indexed_by_kind(
-            data.get("assets") or [], "debt", index, "Debt"
-        )
+        _, entry = _indexed_by_kind(data.get("assets") or [], "debt", index, "Debt")
         try:
-            repo_assets.update_asset_entry(conn, snapshot_id, global_index, updates)
+            repo_assets.update_asset_entry(conn, snapshot_id, entry["id"], updates)
         except ValueError as e:
             raise click.ClickException(str(e))
     click.echo(f"Updated debt at index {index}")
@@ -786,14 +780,12 @@ def debts_edit(cli, index, **kwargs):
 def debts_delete(cli, index, dry_run):
     with cli.connect() as conn:
         snapshot_id, data = _load(cli, conn)
-        global_index, entry = _indexed_by_kind(
-            data.get("assets") or [], "debt", index, "Debt"
-        )
+        _, entry = _indexed_by_kind(data.get("assets") or [], "debt", index, "Debt")
         if dry_run:
             click.echo(f"Would delete debt at index {index}: {entry.get('name', '?')}")
             return
         try:
-            repo_assets.delete_asset_entry(conn, snapshot_id, global_index)
+            repo_assets.delete_asset_entry(conn, snapshot_id, entry["id"])
         except ValueError as e:
             raise click.ClickException(str(e))
     click.echo(f"Deleted debt at index {index}")

@@ -452,28 +452,34 @@ def test_add_asset_entry_debt(conn):
     result = add_asset_entry(
         c, snap_id, {"kind": "debt", "name": "Student Loan", "balance": 30000}
     )
+    # add_asset_entry returns an id only for assets (referenced by debt refs);
+    # a debt returns None, but every entry now carries its holding id as the
+    # handle the repository mutates by.
     assert result is None
     assets = get_asset_entries(c, snap_id)
     assert len(assets) == 5
     assert assets[4]["name"] == "Student Loan"
     assert assets[4]["kind"] == "debt"
-    assert "id" not in assets[4]
+    assert assets[4]["id"] is not None
+
+
+def _eid(c, snap_id, name):
+    """Holding id of the asset/debt entry named `name` (id-based mutation)."""
+    return next(e["id"] for e in get_asset_entries(c, snap_id) if e["name"] == name)
 
 
 def test_update_asset_entry(conn):
     c, snap_id = conn
-    update_asset_entry(c, snap_id, 0, {"value": 550000})
-    assets = get_asset_entries(c, snap_id)
-    assert assets[0]["value"] == 550000
+    update_asset_entry(c, snap_id, _eid(c, snap_id, "Home"), {"value": 550000})
+    assert get_asset_entries(c, snap_id)[0]["value"] == 550000
 
-    update_asset_entry(c, snap_id, 2, {"balance": 395000})
-    assets = get_asset_entries(c, snap_id)
-    assert assets[2]["balance"] == 395000
+    update_asset_entry(c, snap_id, _eid(c, snap_id, "Mortgage"), {"balance": 395000})
+    assert get_asset_entries(c, snap_id)[2]["balance"] == 395000
 
 
 def test_delete_asset_entry_debt(conn):
     c, snap_id = conn
-    delete_asset_entry(c, snap_id, 3)  # Car Loan (index 3)
+    delete_asset_entry(c, snap_id, _eid(c, snap_id, "Car Loan"))
     assets = get_asset_entries(c, snap_id)
     assert len(assets) == 3
     assert assets[2]["name"] == "Mortgage"
@@ -481,8 +487,8 @@ def test_delete_asset_entry_debt(conn):
 
 def test_delete_asset_entry_asset(conn):
     c, snap_id = conn
-    delete_asset_entry(c, snap_id, 3)  # Remove Car Loan first
-    delete_asset_entry(c, snap_id, 1)  # Then Car
+    delete_asset_entry(c, snap_id, _eid(c, snap_id, "Car Loan"))  # remove secured debt
+    delete_asset_entry(c, snap_id, _eid(c, snap_id, "Car"))
     assets = get_asset_entries(c, snap_id)
     assert len(assets) == 2
     assert assets[0]["name"] == "Home"
@@ -491,12 +497,12 @@ def test_delete_asset_entry_asset(conn):
 def test_delete_asset_entry_referenced_by_debt(conn):
     c, snap_id = conn
     with pytest.raises(ValueError, match="referenced by a debt"):
-        delete_asset_entry(c, snap_id, 0)  # Home is referenced by Mortgage
+        delete_asset_entry(c, snap_id, _eid(c, snap_id, "Home"))  # Mortgage secures it
 
 
 def test_move_asset_entry(conn):
     c, snap_id = conn
-    move_asset_entry(c, snap_id, 1, "up")
+    move_asset_entry(c, snap_id, _eid(c, snap_id, "Car"), "up")
     assets = get_asset_entries(c, snap_id)
     assert assets[0]["name"] == "Car"
     assert assets[1]["name"] == "Home"
@@ -507,7 +513,7 @@ def test_move_asset_does_not_cross_kinds(conn):
     # Assets and loans are separate Holdings bands now, so a move never crosses
     # the kind boundary: moving the first loan (Mortgage) "up" past the last
     # asset (Car) is a no-op rather than interleaving the two groups.
-    move_asset_entry(c, snap_id, 2, "up")
+    move_asset_entry(c, snap_id, _eid(c, snap_id, "Mortgage"), "up")
     assets = get_asset_entries(c, snap_id)
     assert [a["name"] for a in assets] == ["Home", "Car", "Mortgage", "Car Loan"]
 
@@ -553,8 +559,7 @@ def test_asset_entry_type_round_trip():
         by_name = {e["name"]: e for e in get_asset_entries(c, snap_id)}
         assert by_name["BTC"]["type"] == "brokerage"
         assert by_name["Mortgage"]["type"] == "loan"
-        # BTC is the first entry (sort_order); reclassify it.
-        update_asset_entry(c, snap_id, 0, {"type": "retirement"})
+        update_asset_entry(c, snap_id, by_name["BTC"]["id"], {"type": "retirement"})
         assert get_asset_entries(c, snap_id)[0]["type"] == "retirement"
 
 
@@ -573,8 +578,7 @@ def test_asset_entry_unit_defaults_usd_and_round_trips():
         by_name = {e["name"]: e for e in get_asset_entries(c, snap_id)}
         assert by_name["Home"]["unit"] == "USD"  # default
         assert by_name["BTC"]["unit"] == "BTC"  # override persists
-        # Home is the first entry (sort_order); change its unit.
-        update_asset_entry(c, snap_id, 0, {"unit": "ETH"})
+        update_asset_entry(c, snap_id, by_name["Home"]["id"], {"unit": "ETH"})
         assert get_asset_entries(c, snap_id)[0]["unit"] == "ETH"
 
 
@@ -607,7 +611,7 @@ def test_loan_origination_fields_round_trip():
         update_asset_entry(
             c,
             snap_id,
-            0,
+            loan["id"],
             {
                 "originalPrincipal": Decimal("310000"),
                 "termMonths": 180,

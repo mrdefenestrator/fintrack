@@ -235,7 +235,7 @@ class AssetEntry(TypedDict, total=False):
     type: AssetType  # Liquidity-tier subtype (brokerage, retirement, loan, …)
     unit: str  # Denomination of quantity: "USD" (default) or a ticker/symbol
     name: str  # Required - display name
-    id: int  # For asset entries - unique identifier; referenced by debt assetRef
+    id: int  # Holding id (every entry); an asset's is referenced by debt assetRef
     institution: str  # Optional provider/lender name
     # Asset-only fields
     value: Decimal  # Estimated value per unit

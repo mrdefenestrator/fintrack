@@ -508,7 +508,6 @@ def _asset_row(
     e: dict,
     pair: dict | None,
     linked: str,
-    index: int,
     today: date,
     rates: dict | None = None,
 ):
@@ -592,7 +591,7 @@ def _asset_row(
         e.get("institution") or "",
         today,
         "asset",
-        index,
+        e["id"],  # the holding id is the edit/delete handle
         _GROUP_COLS[group_key],
         _asset_col_fields(e),
         edit_raw,
@@ -646,9 +645,9 @@ def _all_rows(ctx: dict, today: date) -> dict[str, list[dict]]:
     for a in accounts:
         key, row = _account_row(a, funding_by_id, account_display, today)
         rows[key].append(row)
-    for idx, e in enumerate(assets):
+    for e in assets:
         key, row = _asset_row(
-            e, equity_by_debt.get(id(e)), _linked(e), idx, today, rates=rates
+            e, equity_by_debt.get(id(e)), _linked(e), today, rates=rates
         )
         rows[key].append(row)
     return rows
@@ -821,16 +820,15 @@ def holdings_view(filename):
 
 
 def _load_entity(snapshot_id: int, source: str, ref: int):
-    """The account (by id) or asset entry (by sort-order index) for a row."""
+    """The account or asset entry with holding id == ref (both address by id)."""
     engine = current_app.config["engine"]
     with engine.connect() as conn:
-        if source == "account":
-            return next(
-                (a for a in get_accounts(conn, snapshot_id) if a.get("id") == ref),
-                None,
-            )
-        entries = get_asset_entries(conn, snapshot_id)
-        return entries[ref] if 0 <= ref < len(entries) else None
+        rows = (
+            get_accounts(conn, snapshot_id)
+            if source == "account"
+            else get_asset_entries(conn, snapshot_id)
+        )
+        return next((r for r in rows if r.get("id") == ref), None)
 
 
 def _field_editable(source: str, entity: dict | None, field: str) -> bool:

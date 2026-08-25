@@ -174,13 +174,10 @@ _MAX_COLS = max(len(cols) for cols in _GROUP_COLS.values())
 
 
 def _account_group_key(a: dict) -> str:
-    """Which group an account row belongs to (by type)."""
-    t = a.get("type")
-    if t == "credit_card":
-        return "credit"
-    if t == "loan":
-        return "loan"
-    return "cash"
+    """Which group an account row belongs to. get_accounts returns only the
+    cash and credit-card bands (loans live in their own band, served as debt
+    entries), so an account is a credit card or cash."""
+    return "credit" if a.get("type") == "credit_card" else "cash"
 
 
 def _asset_group_key(e: dict) -> str:
@@ -243,30 +240,14 @@ _ALWAYS_EDITABLE = ("institution", "type", "name")
 def _account_col_fields(a: dict) -> dict:
     """Column key -> account field, gated by account_field_editable (CC vs cash,
     reserve types), so Holdings matches the Accounts page's editability. The map
-    depends on the account's group (cash vs credit vs loan)."""
-    key = _account_group_key(a)
-    # Credit cards + account-loans edit the balance directly (Amount), since
-    # Available is the computed column now (QA #10) — so `balance` is always
-    # editable for them, overriding account_field_editable's Accounts-sheet rule
-    # that treats a credit-card balance as derived/read-only.
-    always = _ALWAYS_EDITABLE
-    if key == "credit":
-        col_field = _CREDIT_COL_FIELD
-        always = _ALWAYS_EDITABLE + ("balance",)
-    elif key == "loan":
-        # A loan tracked as an account: Due + Linked activated (QA #9), amount
-        # editable; no interest/equity/LTV (those are debt-entry concepts).
-        col_field = [
-            ("institution", "institution"),
-            ("type", "type"),
-            ("name", "name"),
-            ("amount", "balance"),
-            ("due", "statement_due_day_of_month"),
-            ("linked", "paymentAccountRef"),
-        ]
-        always = _ALWAYS_EDITABLE + ("balance",)
-    else:
-        col_field = _CASH_COL_FIELD
+    depends on the account's group (cash vs credit)."""
+    is_credit = _account_group_key(a) == "credit"
+    # Credit cards edit the balance directly (Amount), since Available is the
+    # computed column now (QA #10) — so `balance` is always editable for them,
+    # overriding account_field_editable's rule that treats a credit-card balance
+    # as derived/read-only.
+    col_field = _CREDIT_COL_FIELD if is_credit else _CASH_COL_FIELD
+    always = _ALWAYS_EDITABLE + ("balance",) if is_credit else _ALWAYS_EDITABLE
     return {
         col_key: field
         for col_key, field in col_field
@@ -667,17 +648,14 @@ def _groups_ctx(rows_by_group: dict[str, list[dict]], accounts, assets, rates=No
     """The four domain groups (headers, rows, group total, reorder wiring) + the
     master footer (Liquid + Net worth).
 
-    A group's rows can only be drag-reordered when they all share one source
-    table (the normal case); a mixed group (e.g. an account-loan sitting beside
-    debt-entry loans) is left non-reorderable rather than trying to permute two
-    tables at once.
+    Each band now draws from exactly one source table (Cash/Credit from
+    accounts; Loans/Assets from asset_entries — loans no longer straddle both),
+    so every band is drag-reorderable.
     """
     groups = []
     for key, label, source, add_noun, cols in _GROUPS:
         grp_rows = rows_by_group.get(key, [])
         total = sum((r["amount"] for r in grp_rows), Decimal("0"))
-        sources = {r["source"] for r in grp_rows}
-        reorderable = len(sources) == 1
         groups.append(
             {
                 "key": key,
@@ -691,7 +669,7 @@ def _groups_ctx(rows_by_group: dict[str, list[dict]], accounts, assets, rates=No
                 "ncols": len(cols),
                 "rows": grp_rows,
                 "total": fmt_money(total),
-                "reorderable": reorderable,
+                "reorderable": True,
             }
         )
 

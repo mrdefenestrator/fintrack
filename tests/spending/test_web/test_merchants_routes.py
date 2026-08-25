@@ -9,7 +9,8 @@ import pytest
 from sqlalchemy import create_engine, insert, select
 
 from fintrack.core.db import init_db
-from fintrack.core.models import accounts, imports, merchant_cache, transactions
+from fintrack.core.models import imports, merchant_cache, transactions
+from fintrack.ledger.repository.accounts import add_account
 from fintrack.ledger.repository.merchants import (
     get_cached_category,
     set_merchant_category,
@@ -31,16 +32,17 @@ def merchant_id(db_engine):
         snapshot_id = create_snapshot(conn, "ledger")
         set_merchant_category(conn, "WHOLE FOODS", "Groceries", source="api")
 
-        acc_id = conn.execute(
-            insert(accounts).values(
-                snapshot_id=snapshot_id,
-                name="Checking",
-                account_type="checking",
-            )
-        ).inserted_primary_key[0]
+        acc_id = add_account(
+            conn,
+            name="Checking",
+            institution="",
+            account_type="checking",
+            snapshot_id=snapshot_id,
+        )
         imp_id = conn.execute(
             insert(imports).values(
                 account_id=acc_id,
+                holding_group="cash",
                 filename="test.ofx",
                 file_hash="abc",
                 status="confirmed",

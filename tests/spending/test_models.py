@@ -6,14 +6,17 @@ def test_all_tables_created(engine):
     table_names = set(inspector.get_table_names())
     expected = {
         "snapshots",
-        "accounts",
+        "holdings",
+        "cash_details",
+        "credit_card_details",
+        "loan_details",
+        "asset_details",
         "imports",
         "transactions",
         "merchant_cache",
         "transaction_corrections",
         "categories",
         "budget_entries",
-        "asset_entries",
         "balance_history",
         "price_cache",
     }

@@ -502,12 +502,14 @@ def test_move_asset_entry(conn):
     assert assets[1]["name"] == "Home"
 
 
-def test_move_asset_crosses_kinds(conn):
+def test_move_asset_does_not_cross_kinds(conn):
     c, snap_id = conn
-    move_asset_entry(c, snap_id, 2, "up")  # Mortgage up past Car
+    # Assets and loans are separate Holdings bands now, so a move never crosses
+    # the kind boundary: moving the first loan (Mortgage) "up" past the last
+    # asset (Car) is a no-op rather than interleaving the two groups.
+    move_asset_entry(c, snap_id, 2, "up")
     assets = get_asset_entries(c, snap_id)
-    assert assets[1]["name"] == "Mortgage"
-    assert assets[2]["name"] == "Car"
+    assert [a["name"] for a in assets] == ["Home", "Car", "Mortgage", "Car Loan"]
 
 
 def test_move_invalid_direction(conn):

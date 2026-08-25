@@ -8,7 +8,15 @@ from typing import Iterable
 import pytest
 from sqlalchemy import create_engine, insert
 
-from fintrack.core.models import imports, merchant_cache, metadata, transactions
+from sqlalchemy import select
+
+from fintrack.core.models import (
+    holdings,
+    imports,
+    merchant_cache,
+    metadata,
+    transactions,
+)
 from fintrack.snapshots.repository import create_snapshot
 
 
@@ -37,9 +45,13 @@ def seed_transactions(
     rows: Iterable[tuple[date, str, str, str]],
 ) -> None:
     """Insert confirmed ledger transactions: (date, amount, merchant, category)."""
+    holding_group = conn.execute(
+        select(holdings.c.group_key).where(holdings.c.id == account_id)
+    ).scalar()
     import_id = conn.execute(
         insert(imports).values(
             account_id=account_id,
+            holding_group=holding_group,
             filename="seed.ofx",
             file_hash=uuid.uuid4().hex,
             status="confirmed",

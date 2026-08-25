@@ -538,17 +538,17 @@ def test_holdings_delete_account_dispatches(client, db_engine):
 def test_holdings_reorder_accounts_dispatches(client, db_engine):
     from fintrack.accounts.repository import add_account, get_accounts
 
-    # Add a second cash account so the Cash group has two rows to reorder; the
-    # Visa credit card sits between them (global position 1) and must not move.
+    # Add a second cash account so the Cash group has two rows to reorder. The
+    # Visa credit card is a separate band, so it stays put while the two cash
+    # rows swap; get_accounts lists the cash band before the credit band.
     with db_engine.connect() as conn:
         add_account(conn, 1, {"name": "Savings", "type": "savings", "balance": 50})
-    # Reverse the two Cash rows (local order 1,0). Their global slots are 0 and
-    # 2 (Checking, Savings) with Visa at slot 1.
+    # Reverse the two Cash rows (local order 1,0).
     resp = client.post("/s/finances/holdings/reorder/cash", data={"order": "1,0"})
     assert resp.status_code == 204
     with db_engine.connect() as conn:
         after = [a["name"] for a in get_accounts(conn, 1)]
-    assert after == ["Savings", "Visa", "Checking"]
+    assert after == ["Savings", "Checking", "Visa"]
 
 
 def test_holdings_add_account(client, db_engine):

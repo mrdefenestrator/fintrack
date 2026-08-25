@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from sqlalchemy import Connection, func, insert, select, update
 
 from fintrack.core.models import (
-    accounts,
+    holdings,
     imports,
     merchant_cache,
     transaction_corrections,
@@ -90,8 +90,8 @@ def _stats_query(snapshot_id: int | None = None):
                 transactions,
                 transactions.c.normalized_merchant == merchant_cache.c.merchant_name,
             )
-            .join(accounts, transactions.c.account_id == accounts.c.id)
-            .where(accounts.c.snapshot_id == snapshot_id)
+            .join(holdings, transactions.c.account_id == holdings.c.id)
+            .where(holdings.c.snapshot_id == snapshot_id)
         )
     else:
         q = q.outerjoin(

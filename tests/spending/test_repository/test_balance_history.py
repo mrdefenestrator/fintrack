@@ -318,8 +318,10 @@ def test_cc_sync_fills_null_credit_limit_from_available(conn):
 
 def test_cc_sync_never_overwrites_user_credit_limit(conn):
     _, account_id = _cc_account(conn, name="CCKeep", credit_limit=Decimal("5000"))
-    # Statement implies a different limit (4000 - (-600) = 4600); the
-    # user-set credit_limit must survive, available follows the statement.
+    # The user-set credit_limit must survive a statement import. available is
+    # no longer stored (schema split D4): it is computed as credit_limit +
+    # balance, so the statement's reported available (4000, which would embed
+    # pending holds) is deliberately discarded in favor of 5000 + (-600).
     record_balance(
         conn,
         account_id=account_id,
@@ -330,7 +332,7 @@ def test_cc_sync_never_overwrites_user_credit_limit(conn):
     )
     acct = get_account_by_id(conn, account_id)
     assert acct["credit_limit"] == Decimal("5000")
-    assert acct["available"] == Decimal("4000.00")
+    assert acct["available"] == Decimal("4400.00")  # computed: limit + balance
 
 
 def test_cc_sync_no_available_no_limit_leaves_available_null(conn):

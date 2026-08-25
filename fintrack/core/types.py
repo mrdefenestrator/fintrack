@@ -130,6 +130,56 @@ ASSET_TYPE_VALUES: list[str] = list(_ASSET_TYPE_KEYS)
 # counts toward net worth but never inflates the spendable/investable totals.
 DEFAULT_TIER: LiquidityTier = "illiquid"
 
+# ---------------------------------------------------------------------------
+# Holding groups (the four subtype tables behind the Holdings sheet)
+# ---------------------------------------------------------------------------
+#
+# Every holding lives in exactly one group; the group picks its detail table
+# (cash_details / credit_card_details / loan_details / asset_details) and the
+# Holdings sheet renders one band per group. group_key is redundant with type
+# for credit cards and loans (enforced by a CHECK) — the type column keeps the
+# tier map and Type filter working off one vocabulary, while group_key is the
+# discriminator the subtype foreign keys hang off.
+GroupKey = Literal["cash", "credit_card", "loan", "asset"]
+GROUP_KEYS: tuple[str, ...] = ("cash", "credit_card", "loan", "asset")
+
+# Which types each group admits (mirrored by ck_holdings_type_matches_group).
+# The asset group alone may leave type NULL (unclassified -> DEFAULT_TIER).
+CASH_TYPES: tuple[str, ...] = (
+    "checking",
+    "savings",
+    "wallet",
+    "digital_wallet",
+    "gift_card",
+)
+ASSET_GROUP_TYPES: tuple[str, ...] = (
+    "brokerage",
+    "hsa",
+    "retirement",
+    "real_estate",
+    "vehicle",
+    "digital_wallet",
+)
+
+# Groups whose holdings can receive statement imports (and therefore must obey
+# the importable-name uniqueness rule).
+IMPORTABLE_GROUPS: tuple[str, ...] = ("cash", "credit_card", "loan")
+
+
+def group_for_account_type(account_type: str | None) -> GroupKey:
+    """Group for an account-style holding, from its type."""
+    if account_type == "credit_card":
+        return "credit_card"
+    if account_type == "loan":
+        return "loan"
+    return "cash"
+
+
+def group_for_kind(kind: str) -> GroupKey:
+    """Group for an asset/debt-style holding, from its kind."""
+    return "loan" if kind == "debt" else "asset"
+
+
 # Income types enum
 IncomeType = Literal["salary", "refund", "bonus", "remittance"]
 
@@ -195,8 +245,9 @@ class AssetEntry(TypedDict, total=False):
     # Shared (asset + debt) fields
     quantity: Decimal  # Optional; default 1. Assets: value × quantity. Debts: balance × quantity
     # Debt-only fields
-    balance: Decimal  # Amount owed per unit
+    balance: Decimal  # Amount owed (positive; stored signed in loan_details)
     assetRef: int  # Optional link to asset entry id
+    paymentAccountRef: int  # Optional cash holding the loan is paid from
     interestRate: Decimal  # Optional annual rate as decimal
     originalPrincipal: Decimal  # Optional original financed principal
     termMonths: int  # Optional original amortization term in months

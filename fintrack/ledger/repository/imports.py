@@ -6,7 +6,7 @@ from pathlib import Path
 from sqlalchemy import Connection, delete, func, insert, select, update
 from sqlalchemy.sql.functions import coalesce
 
-from fintrack.core.models import accounts, imports, merchant_cache, transactions
+from fintrack.core.models import holdings, imports, merchant_cache, transactions
 
 
 def compute_file_hash(file_path: str | Path) -> str:
@@ -39,9 +39,17 @@ def create_import(
     available_balance_date: date | None = None,
     beginning_balance: Decimal | None = None,
 ) -> int:
+    # The denormalized group copy backs the DB-level importability check
+    # (imports may only target cash/credit-card/loan holdings).
+    holding_group = conn.execute(
+        select(holdings.c.group_key).where(holdings.c.id == account_id)
+    ).scalar()
+    if holding_group is None:
+        raise ValueError(f"Account id {account_id} not found")
     result = conn.execute(
         insert(imports).values(
             account_id=account_id,
+            holding_group=holding_group,
             filename=filename,
             file_hash=file_hash,
             ledger_balance=ledger_balance,
@@ -112,13 +120,13 @@ def get_staging_transactions(conn: Connection, import_id: int) -> list[dict]:
 def get_staging_imports(conn: Connection, snapshot_id: int | None = None) -> list[dict]:
     stmt = (
         select(imports, func.count(transactions.c.id).label("txn_count"))
-        .select_from(imports.join(accounts, imports.c.account_id == accounts.c.id))
+        .select_from(imports.join(holdings, imports.c.account_id == holdings.c.id))
         .outerjoin(transactions, transactions.c.import_id == imports.c.id)
         .where(imports.c.status == "staging")
         .group_by(imports.c.id)
     )
     if snapshot_id is not None:
-        stmt = stmt.where(accounts.c.snapshot_id == snapshot_id)
+        stmt = stmt.where(holdings.c.snapshot_id == snapshot_id)
     stmt = stmt.order_by(imports.c.imported_at.desc())
     rows = conn.execute(stmt).fetchall()
     return [dict(row._mapping) for row in rows]

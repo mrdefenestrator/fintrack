@@ -6,7 +6,7 @@ from sqlalchemy import Connection, extract, func, select
 from sqlalchemy.sql.functions import coalesce
 
 from fintrack.core.models import (
-    accounts,
+    holdings,
     imports,
     merchant_cache,
     transaction_corrections,
@@ -47,7 +47,7 @@ def base_transaction_query(snapshot_id: int | None = None):
             _resolved_category(),
             transaction_corrections.c.id.label("correction_id"),
             transaction_corrections.c.notes.label("notes"),
-            accounts.c.name.label("account_name"),
+            holdings.c.name.label("account_name"),
         )
         .select_from(
             transactions.join(imports, transactions.c.import_id == imports.c.id)
@@ -64,11 +64,11 @@ def base_transaction_query(snapshot_id: int | None = None):
             )
             == merchant_cache.c.merchant_name,
         )
-        .outerjoin(accounts, transactions.c.account_id == accounts.c.id)
+        .outerjoin(holdings, transactions.c.account_id == holdings.c.id)
         .where(imports.c.status == "confirmed")
     )
     if snapshot_id is not None:
-        stmt = stmt.where(accounts.c.snapshot_id == snapshot_id)
+        stmt = stmt.where(holdings.c.snapshot_id == snapshot_id)
     return stmt
 
 

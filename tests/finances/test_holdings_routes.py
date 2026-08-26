@@ -223,6 +223,13 @@ def _account_by_name(db_engine, name):
         return next(a for a in get_accounts(conn, 1) if a["name"] == name)
 
 
+def _asset_by_name(db_engine, name):
+    from fintrack.networth.repository import get_asset_entries
+
+    with db_engine.connect() as conn:
+        return next(e for e in get_asset_entries(conn, 1) if e["name"] == name)
+
+
 def test_holdings_edit_mode_makes_cells_clickable(client):
     resp = client.get("/s/finances/holdings?edit=1")
     assert resp.status_code == 200
@@ -253,15 +260,14 @@ def test_holdings_update_asset_type_and_unit_dispatch_to_assets(client, db_engin
     from fintrack.networth.repository import add_asset_entry, get_asset_entries
 
     with db_engine.connect() as conn:
-        add_asset_entry(conn, 1, {"kind": "asset", "name": "Coins", "value": 100})
+        aid = add_asset_entry(conn, 1, {"kind": "asset", "name": "Coins", "value": 100})
 
-    # First (index 0) asset entry.
     r1 = client.post(
-        "/s/finances/holdings/update/asset/0",
+        f"/s/finances/holdings/update/asset/{aid}",
         data={"field": "type", "value": "digital_wallet"},
     )
     r2 = client.post(
-        "/s/finances/holdings/update/asset/0",
+        f"/s/finances/holdings/update/asset/{aid}",
         data={"field": "unit", "value": "btc"},
     )
     assert r1.status_code == 200 and r2.status_code == 200
@@ -369,14 +375,16 @@ def test_holdings_update_asset_value_and_qty(client, db_engine):
     from fintrack.networth.repository import add_asset_entry, get_asset_entries
 
     with db_engine.connect() as conn:
-        add_asset_entry(conn, 1, {"kind": "asset", "name": "Home", "value": 400000})
+        aid = add_asset_entry(
+            conn, 1, {"kind": "asset", "name": "Home", "value": 400000}
+        )
 
     r1 = client.post(
-        "/s/finances/holdings/update/asset/0",
+        f"/s/finances/holdings/update/asset/{aid}",
         data={"field": "value", "value": "450000"},
     )
     r2 = client.post(
-        "/s/finances/holdings/update/asset/0",
+        f"/s/finances/holdings/update/asset/{aid}",
         data={"field": "quantity", "value": "2"},
     )
     assert r1.status_code == 200 and r2.status_code == 200
@@ -391,9 +399,10 @@ def test_holdings_update_debt_interest(client, db_engine):
 
     with db_engine.connect() as conn:
         add_asset_entry(conn, 1, {"kind": "debt", "name": "Loan", "balance": 1000})
+    loan_id = _asset_by_name(db_engine, "Loan")["id"]
 
     resp = client.post(
-        "/s/finances/holdings/update/asset/0",
+        f"/s/finances/holdings/update/asset/{loan_id}",
         data={"field": "interestRate", "value": "0.055"},
     )
     assert resp.status_code == 200
@@ -430,6 +439,7 @@ def test_holdings_loan_origination_fields_and_derived_values(client, db_engine):
     assert "20.0%" in body
     assert "31st" in body
 
+    mortgage_id = _asset_by_name(db_engine, "Mortgage")["id"]
     for field, value in (
         ("originalPrincipal", "310000"),
         ("termMonths", "180"),
@@ -437,7 +447,7 @@ def test_holdings_loan_origination_fields_and_derived_values(client, db_engine):
         ("statement_due_day_of_month", "15"),
     ):
         resp = client.post(
-            "/s/finances/holdings/update/asset/0",
+            f"/s/finances/holdings/update/asset/{mortgage_id}",
             data={"field": field, "value": value},
         )
         assert resp.status_code == 200
@@ -457,8 +467,9 @@ def test_holdings_rejects_invalid_loan_due_day(client, db_engine):
             1,
             {"kind": "debt", "type": "loan", "name": "Loan", "balance": 1000},
         )
+    loan_id = _asset_by_name(db_engine, "Loan")["id"]
     resp = client.post(
-        "/s/finances/holdings/update/asset/0",
+        f"/s/finances/holdings/update/asset/{loan_id}",
         data={"field": "statement_due_day_of_month", "value": "32"},
     )
     assert resp.status_code == 422
@@ -491,9 +502,9 @@ def test_holdings_update_debt_asset_ref(client, db_engine):
         )
         add_asset_entry(conn, 1, {"kind": "debt", "name": "Mortgage", "balance": 1})
 
-    # The debt is the 2nd asset entry (index 1); link it to the Home asset.
+    mortgage_id = _asset_by_name(db_engine, "Mortgage")["id"]
     resp = client.post(
-        "/s/finances/holdings/update/asset/1",
+        f"/s/finances/holdings/update/asset/{mortgage_id}",
         data={"field": "assetRef", "value": str(asset_id)},
     )
     assert resp.status_code == 200
@@ -538,17 +549,17 @@ def test_holdings_delete_account_dispatches(client, db_engine):
 def test_holdings_reorder_accounts_dispatches(client, db_engine):
     from fintrack.accounts.repository import add_account, get_accounts
 
-    # Add a second cash account so the Cash group has two rows to reorder; the
-    # Visa credit card sits between them (global position 1) and must not move.
+    # Add a second cash account so the Cash group has two rows to reorder. The
+    # Visa credit card is a separate band, so it stays put while the two cash
+    # rows swap; get_accounts lists the cash band before the credit band.
     with db_engine.connect() as conn:
         add_account(conn, 1, {"name": "Savings", "type": "savings", "balance": 50})
-    # Reverse the two Cash rows (local order 1,0). Their global slots are 0 and
-    # 2 (Checking, Savings) with Visa at slot 1.
+    # Reverse the two Cash rows (local order 1,0).
     resp = client.post("/s/finances/holdings/reorder/cash", data={"order": "1,0"})
     assert resp.status_code == 204
     with db_engine.connect() as conn:
         after = [a["name"] for a in get_accounts(conn, 1)]
-    assert after == ["Savings", "Visa", "Checking"]
+    assert after == ["Savings", "Checking", "Visa"]
 
 
 def test_holdings_add_account(client, db_engine):
@@ -576,10 +587,11 @@ def test_holdings_delete_asset_dispatches(client, db_engine):
     from fintrack.networth.repository import add_asset_entry, get_asset_entries
 
     with db_engine.connect() as conn:
-        add_asset_entry(conn, 1, {"kind": "asset", "name": "Boat", "value": 5000})
+        boat_id = add_asset_entry(
+            conn, 1, {"kind": "asset", "name": "Boat", "value": 5000}
+        )
 
-    # First (index 0) asset entry.
-    resp = client.post("/s/finances/holdings/delete/asset/0")
+    resp = client.post(f"/s/finances/holdings/delete/asset/{boat_id}")
     assert resp.status_code == 200
     with db_engine.connect() as conn:
         names = [e["name"] for e in get_asset_entries(conn, 1)]

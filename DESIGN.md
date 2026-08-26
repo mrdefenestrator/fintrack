@@ -99,10 +99,10 @@ Single `MetaData` in `fintrack/core/models.py`.
 ### Scoping conventions
 
 - Every household-owned row belongs to a **snapshot**, either directly
-  (`accounts`, `budget_entries`, `asset_entries`) or via its account
-  (`imports`, `transactions`, `balance_history`). Imports and transactions
-  deliberately carry **no** `snapshot_id` — it is derived through
-  `account_id`, avoiding a denormalized consistency invariant.
+  (`holdings`, `budget_entries`) or via its holding (`imports`,
+  `transactions`, `balance_history`). Imports and transactions deliberately
+  carry **no** `snapshot_id` — it is derived through `account_id` (a holding
+  id), avoiding a denormalized consistency invariant.
 - `merchant_cache` and `categories` are deliberately **global**: classification
   knowledge and the category taxonomy are shared across snapshots. A merchant
   classified in one household is classified in all of them.
@@ -110,23 +110,50 @@ Single `MetaData` in `fintrack/core/models.py`.
   to exactly one transaction and therefore inherits that transaction's account
   and snapshot scope.
 - `snapshot_id` foreign keys cascade on delete; ownership references between
-  rows (`payment_account_ref`, `auto_account_ref`, `asset_ref`) use NO ACTION,
-  so deleting a referenced row directly is blocked while a snapshot-level
-  cascade still cleans up. SQLite runs with `foreign_keys=ON` (engine-level
-  pragma listener).
+  rows (`payment_account_ref`, `auto_account_ref`, `secured_asset_ref`) use
+  NO ACTION, so deleting a referenced row directly is blocked while a
+  snapshot-level cascade still cleans up. These refs are **composite**
+  (`(ref, snapshot_id)` → the target's `(id, snapshot_id)`), so a reference
+  can never cross snapshots, and the typed ones point at the right detail
+  table (a payment account must be a cash holding, a secured asset an asset
+  holding). SQLite runs with `foreign_keys=ON` (engine-level pragma listener).
 
 ### Tables
 
 - **snapshots** — `name` (unique), `created_at`. A snapshot is an independent
   household; the whole app is scoped by it.
-- **accounts** — merged from both predecessors: identity (`name` constrained
-  unique per `(snapshot, institution)`, `institution`, `account_type`; partial
-  account numbers live in the name itself, e.g. "Checking [1234]"), balance state
-  (`balance`, `available`,
-  `credit_limit`, `rewards_balance`, `as_of_date`), autopay/funding config
-  (`statement_balance`, `statement_due_day_of_month`, `payment_account_ref`
-  self-FK, `minimum_balance`), and `sort_order`.
-- **imports** — one row per statement file: `filename`, `file_hash`, `status`
+- **holdings** (supertype) — every account and asset/debt is one row here,
+  carrying only the shared spine: `snapshot_id`, `group_key`
+  (`cash|credit_card|loan|asset`), `type` (the liquidity-tier vocabulary),
+  `name`, `institution`, `as_of_date`, and a per-`(snapshot, group_key)`
+  `sort_order`. CHECK constraints keep `type` consistent with `group_key`; a
+  partial unique index makes importable holdings (`group_key != 'asset'`)
+  unique per `(snapshot, institution, name)`, the rule the OFX
+  create-account flow relies on. Two extra unique keys (`(id, group_key)`,
+  `(id, snapshot_id)`) exist purely as composite-FK targets.
+- **cash_details / credit_card_details / loan_details / asset_details**
+  (subtypes) — one row per holding, keyed by `holding_id` (PK = FK to
+  `holdings`), holding only that group's columns:
+  - *cash* — `balance`, `minimum_balance` (reserve target).
+  - *credit_card* — `balance`, `credit_limit`, `rewards_balance`,
+    `statement_balance`, `statement_due_day_of_month`, `payment_account_ref`
+    (→ a cash holding). Available is **not stored** — it is computed as
+    `credit_limit + balance`.
+  - *loan* — `balance`, `interest_rate`, loan origination fields
+    (`original_principal`, `term_months`, `origination_date`),
+    `statement_due_day_of_month`, `payment_account_ref` (→ cash) and
+    `secured_asset_ref` (→ an asset). Loans that used to be account rows and
+    loans that used to be debt entries are the same shape here.
+  - *asset* — `unit`, `quantity`, `value`, valuation `source`,
+    `annual_return_rate`, `monthly_contribution`.
+  Each detail row denormalizes `group_key` and `snapshot_id` from its spine
+  as composite-FK material: the DB rejects a wrong-group detail row, and a
+  group change on the spine is rejected while a detail row exists (so the
+  repositories do delete-detail → move-spine → insert-detail).
+- **imports** — one row per statement file: `account_id` (a holding id) plus
+  a denormalized `holding_group` (constrained to the importable groups, kept
+  in sync by ON UPDATE CASCADE, so a holding with import history can't be
+  retyped into the asset group), `filename`, `file_hash`, `status`
   (`staging|confirmed|rejected`), plus captured statement balances
   (`ledger_balance(_date)`, `available_balance(_date)`, `beginning_balance`).
 - **transactions** — immutable imported rows: `date`, `amount`,
@@ -143,29 +170,34 @@ Single `MetaData` in `fintrack/core/models.py`.
   moves through), and a nullable `category` linking to the ledger taxonomy so
   projections don't double-count a budgeted expense against estimated
   category spend.
-- **asset_entries** — assets and debts: `kind`, a liquidity-tier `type` (see
-  below), `unit`, `value`/`quantity`/`balance`, valuation source, estimated
-  return and monthly contribution, `asset_ref` (e.g. a loan against an asset,
-  which surfaces as equity/LTV), `interest_rate`, loan origination fields, and
-  `statement_due_day_of_month`.
-- **balance_history** — the time series behind `accounts.balance`; see below.
+- **balance_history** — the time series behind a holding's cached balance;
+  see below. Its `account_id` is a holding id and is not restricted to the
+  importable groups, leaving room for asset value history later.
 
-Money columns are `Numeric(12,2)` (asset values `14,2`); date columns are real
-`Date` types.
+Money columns are `Numeric(14,2)`; date columns are real `Date` types.
+
+The dict API the repositories expose (the `Account` / `AssetEntry`
+TypedDicts, field names like `limit`, `asOfDate`, `assetRef`) is unchanged by
+the supertype split: routes, templates, calculations, and the CLI still work
+off flat dicts. The two-level table mechanics live behind
+`fintrack/core/holdings.py` and the domain repositories. The legacy migration
+predates the split; assets/debts still enter only via `fintrack
+migrate-legacy` or `yaml_import`, both of which now write the split schema.
 
 ### Canonical signed balance
 
-`accounts.balance` is the canonical **signed** balance for every account type:
-negative means owed (credit cards). This gives `balance_history` one semantics
-across sources — OFX statements provide a signed ledger balance directly,
-while credit-card editing in the UI works in available/limit terms and derives
-`balance = available − credit_limit` on save. Calculations prefer `balance`
-and fall back to available−limit.
+A holding's detail `balance` is the canonical **signed** balance: negative
+means owed (credit cards and loans). This gives `balance_history` one
+semantics across sources — OFX statements provide a signed ledger balance
+directly, while credit-card editing in the UI works in limit/balance terms
+and available is computed (`credit_limit + balance`) rather than stored, so it
+never drifts from the imported balance. The debt-side dict API still presents
+a loan's amount owed as positive; the repository negates at the boundary.
 
 ### Liquidity tiers & holdings
 
-Every holding — an `accounts` row or an `asset_entries` row — maps to one of
-three **liquidity tiers**, fixed by its type with no per-holding override
+Every holding — one `holdings` row — maps to one of three **liquidity
+tiers**, fixed by its type with no per-holding override
 (`fintrack/core/types.py`: `HOLDING_TYPE_TIER`; unknown/unset types default to
 `illiquid`). A non-USD unit caps a nominally liquid type at `semi_liquid`:
 
@@ -234,9 +266,10 @@ Every balance write is a row in `balance_history`:
 - **Upsert** on `UNIQUE (account_id, as_of, source)` — two statements covering
   the same as-of date collapse to the latest write; a manual edit and a
   statement on the same day coexist.
-- **Re-sync**: `accounts.balance`/`available`/`as_of_date` are a denormalized
-  cache of the latest history point ordered by `(as_of DESC, id DESC)`. The
-  history upsert and cache update are committed together by `record_balance()`.
+- **Re-sync**: the holding's detail `balance` and its spine `as_of_date` are a
+  denormalized cache of the latest history point ordered by
+  `(as_of DESC, id DESC)`. The history upsert and cache update are committed
+  together by `record_balance()`.
 - **Reconciliation** (informational, non-blocking): on statement confirm, the
   expected balance (previous point + sum of transactions in between) is
   compared to the statement's; a mismatch beyond a half-cent tolerance is
@@ -319,11 +352,12 @@ and theme behavior.
 
 ### Holdings sheet
 
-Holdings is one table split into four **type-based** groups, rendered top to
-bottom: **Cash · Credit Cards · Loans · Assets**. Cash and Credit Cards are type
-slices of `accounts`; Loans combines account-type loans with `kind=debt`
-`asset_entries`; Assets contains `kind=asset` entries. The split is a display
-grouping only—there is no data migration—and debt↔asset equity/LTV pairing
+Holdings is one table split into four **group-based** bands, rendered top to
+bottom: **Cash · Credit Cards · Loans · Assets**. Each band maps directly to a
+`holdings.group_key` and its detail table — Cash and Credit Cards come from
+`get_accounts`, Loans and Assets from `get_asset_entries`. Every band draws
+from exactly one source now (loans no longer straddle two tables), so each is
+independently drag-reorderable; debt↔asset equity/LTV pairing
 (`calculations.equity_pairs`) is unchanged.
 
 - **Ragged right edge with shared leading columns.** The first four columns —

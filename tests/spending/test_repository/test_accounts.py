@@ -24,9 +24,10 @@ def test_add_and_list_accounts(conn):
     add_account(conn, name="BofA Checking", institution="BofA", account_type="checking")
     accts = list_accounts(conn)
     assert len(accts) == 2
-    # Ordered by sort_order (insertion order), matching the Accounts page — not
-    # alphabetically. Chase Visa was added first, so it sorts first.
-    assert [a["name"] for a in accts] == ["Chase Visa", "BofA Checking"]
+    # Ordered by holdings band then in-band sort_order, matching the Holdings
+    # page (Cash before Credit Cards) — so the checking account sorts ahead of
+    # the credit card regardless of insertion order.
+    assert [a["name"] for a in accts] == ["BofA Checking", "Chase Visa"]
 
 
 def test_add_duplicate_name_fails(conn):

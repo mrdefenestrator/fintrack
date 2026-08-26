@@ -51,7 +51,7 @@ degrades to a warning without it).
 
 ## Project Structure
 
-- `fintrack/core/` — engine/FK pragma, unified models (single MetaData), config paths, formatting
+- `fintrack/core/` — engine/FK pragma, unified models (single MetaData), the holdings supertype/subtype CRUD helper (`holdings.py`), config paths, formatting
 - `fintrack/ledger/` — statement importer (OFX/CSV, normalization, dedup), classifier, ledger repositories
 - `fintrack/accounts/` — unified accounts repository, balance_history, OFX account matching
 - `fintrack/budget/` — budget entries, recurrence/proration engine
@@ -86,12 +86,25 @@ degrades to a warning without it).
   transaction_corrections overlay.
 - Imports stage until confirmed; new merchants are classified at import time,
   and confirming records statement balances into balance_history.
-- `accounts.balance` is the canonical signed balance (negative = owed on CCs);
-  it is a denormalized cache of the latest balance_history point — always
-  write through `record_balance()`, never update the column directly.
-- Loan origination/amortization fields belong only to `asset_entries` debt rows,
-  not account-type loans. Loan Due is a recurring day of month (1–31), matching
-  account Due; nonexistent days clamp to month-end.
+- Holdings are a supertype/subtype split: one slim `holdings` spine
+  (`group_key` = cash/credit_card/loan/asset, `type`, `name`, institution,
+  as_of, per-group sort_order) plus four detail tables
+  (`cash_details`/`credit_card_details`/`loan_details`/`asset_details`).
+  Composite FKs make wrong-group detail rows, cross-snapshot refs, and
+  retyping an imported holding out of the importable groups unrepresentable.
+  The repositories keep a **frozen dict API** (`Account`/`AssetEntry`
+  TypedDicts) over this via `fintrack/core/holdings.py`; routes, CLI, and
+  calculations never see the two-level tables. See DESIGN.md "Data model".
+- A holding's detail `balance` is the canonical signed balance (negative =
+  owed on CCs and loans); it is a denormalized cache of the latest
+  balance_history point — always write through `record_balance()`, never
+  update the column directly. A credit card's `available` is **computed**
+  (`credit_limit + balance`), never stored.
+- A loan is its own group (`loan_details`), unifying what used to be
+  account-type loans and debt entries; loans are created only as debt
+  entries (`type` fixed to `loan`), never as accounts, and carry the
+  origination/amortization fields. Loan Due is a recurring day of month
+  (1–31), matching account Due; nonexistent days clamp to month-end.
 - Liquidity tier (liquid/semi-liquid/illiquid) is fixed by holding **type**
   with no per-holding override; the type→tier maps in `fintrack/core/types.py`
   are the single source of truth (add new types there, not ad-hoc). Tier
@@ -104,12 +117,13 @@ degrades to a warning without it).
   drawers. Information density is not a concern and horizontal scroll is fine;
   be prudent about what data is *relevant*, not about decluttering.
 - **Holdings direction.** Holdings unifies the Accounts and Assets sheets into
-  one spreadsheet, split into four **type-based** groups — Cash · Credit Cards ·
+  one spreadsheet, split into four **group-based** bands — Cash · Credit Cards ·
   Loans · Assets — using a shared Institution·Type·Name·Amount·Details·Due·
   Linked·As Of spine. Details contains a compact group-specific CSS grid, so
-  common fields align without blank padding columns. Grouping is a
-  display concern over the same two tables (`accounts`; `asset_entries` by
-  `kind`) — no data migration. The standalone Accounts and Assets **web pages**
+  common fields align without blank padding columns. Each band maps to one
+  `holdings.group_key` and its detail table (Cash/Credit from `get_accounts`,
+  Loans/Assets from `get_asset_entries`); no band mixes source tables, so each
+  reorders independently. The standalone Accounts and Assets **web pages**
   have been retired; Holdings is the finances landing page. See DESIGN.md
   "Holdings sheet" for the columns, the Liquid/Net worth footer, computed CC
   Available, per-group reorder, and the **sticky-row border invariant** (sticky
@@ -121,7 +135,8 @@ degrades to a warning without it).
   net-worth projections.
 - Sequence-aware fingerprinting for transaction dedup.
 - SQLite runs with `foreign_keys=ON`; snapshot FKs cascade, ownership refs
-  (payment_account_ref, auto_account_ref, asset_ref) do not.
+  (payment_account_ref, auto_account_ref, secured_asset_ref) do not. Those
+  refs are composite (`(ref, snapshot_id)`), so they can't cross snapshots.
 - Legacy spending/finances data enters only via `fintrack migrate-legacy`,
   never via Alembic upgrade of an old DB.
 

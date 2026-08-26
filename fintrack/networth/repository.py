@@ -1,250 +1,242 @@
-"""Asset/debt repository: CRUD + move for asset_entries within a snapshot."""
+"""Asset/debt repository: CRUD + move for asset and loan holdings.
+
+Serves the unified loan group (which includes loans formerly tracked as
+accounts) as `kind="debt"` dicts and the asset group as `kind="asset"`
+dicts. The dict API keeps the historical positive amount-owed convention for
+a debt's `balance`; the stored loan_details.balance is signed (negative =
+owed) like every other balance, and the sign flips at this boundary.
+
+Debts no longer carry unit/quantity (docs/notes-schema-split.md D2): an add
+with a quantity folds it into the balance; on existing rows the fields are
+gone.
+"""
 
 from typing import Any
 
-from sqlalchemy import Connection, delete, func, insert, select, update
+from sqlalchemy import Connection
 from sqlalchemy.exc import IntegrityError
 
 from fintrack.core.coerce import to_date
-from fintrack.core.models import asset_entries
-from fintrack.core.ordering import reorder_by_positions
-from fintrack.core.types import AssetEntry
+from fintrack.core.holdings import (
+    delete_holding,
+    get_holding,
+    insert_holding,
+    load_holdings,
+    reorder_merged,
+    swap_adjacent,
+    update_holding,
+)
+from fintrack.core.types import ASSET_GROUP_TYPES, AssetEntry
+
+# Order of the merged asset/debt list behind the sort-order index API. Assets
+# precede loans to match the old single-table insertion order the index-based
+# callers (and their tests) assume; each group is still ordered by its own
+# sort_order. (The Holdings page groups rows itself, so this order only fixes
+# the opaque index handle, not any on-screen order.)
+_ASSET_GROUPS = ("asset", "loan")
 
 _DATE_COLS = ("origination_date", "as_of_date")
 
+_SPINE_FIELD_TO_COL = {
+    "name": "name",
+    "institution": "institution",
+    "type": "type",
+    "asOfDate": "as_of_date",
+}
 
-def _row_to_asset_entry(row) -> AssetEntry:
-    r = dict(row)
-    entry: AssetEntry = {
-        "kind": r["kind"],
-        "name": r["name"],
-    }
-    # Asset-only: id for cross-reference
-    if r["kind"] == "asset":
-        entry["id"] = r["id"]
-    optional_map = {
-        "type": "type",
+_DETAIL_FIELD_TO_COL: dict[str, dict[str, str]] = {
+    "asset": {
         "unit": "unit",
-        "institution": "institution",
+        "quantity": "quantity",
         "value": "value",
         "source": "source",
-        "annual_return_rate": "annualReturnRate",
-        "monthly_contribution": "monthlyContribution",
-        "quantity": "quantity",
+        "annualReturnRate": "annual_return_rate",
+        "monthlyContribution": "monthly_contribution",
+    },
+    "loan": {
         "balance": "balance",
-        "asset_ref": "assetRef",
-        "interest_rate": "interestRate",
-        "original_principal": "originalPrincipal",
-        "term_months": "termMonths",
-        "origination_date": "originationDate",
+        "interestRate": "interest_rate",
+        "originalPrincipal": "original_principal",
+        "termMonths": "term_months",
+        "originationDate": "origination_date",
         "statement_due_day_of_month": "statement_due_day_of_month",
-        "as_of_date": "asOfDate",
+        "assetRef": "secured_asset_ref",
+        "paymentAccountRef": "payment_account_ref",
+    },
+}
+
+
+def _negate(value: Any) -> Any:
+    return None if value is None else -value
+
+
+def _row_to_asset_entry(row: dict[str, Any]) -> AssetEntry:
+    is_loan = row["group_key"] == "loan"
+    entry: AssetEntry = {
+        "kind": "debt" if is_loan else "asset",
+        "name": row["name"],
+        # The holding id, on every entry: an asset's is the target a debt's
+        # assetRef points at; both are the handle the repository mutates by.
+        "id": row["id"],
     }
+    if is_loan:
+        optional_map = {
+            "type": "type",
+            "institution": "institution",
+            "interest_rate": "interestRate",
+            "original_principal": "originalPrincipal",
+            "term_months": "termMonths",
+            "origination_date": "originationDate",
+            "statement_due_day_of_month": "statement_due_day_of_month",
+            "secured_asset_ref": "assetRef",
+            "payment_account_ref": "paymentAccountRef",
+            "as_of_date": "asOfDate",
+        }
+        # Dict API convention: positive amount owed (stored signed).
+        if row.get("balance") is not None:
+            entry["balance"] = -row["balance"]
+    else:
+        optional_map = {
+            "type": "type",
+            "unit": "unit",
+            "institution": "institution",
+            "value": "value",
+            "source": "source",
+            "annual_return_rate": "annualReturnRate",
+            "monthly_contribution": "monthlyContribution",
+            "quantity": "quantity",
+            "as_of_date": "asOfDate",
+        }
     for col, field in optional_map.items():
-        val = r.get(col)
+        val = row.get(col)
         if val is not None:
-            # Money columns stay Decimal (Numeric); asset_ref stays int. No
-            # float coercion — see calculations._money. Date columns are
-            # exposed as ISO strings in the dict API.
+            # Money columns stay Decimal (Numeric); refs stay int. No float
+            # coercion — see calculations._money. Date columns are exposed as
+            # ISO strings in the dict API.
             entry[field] = val.isoformat() if col in _DATE_COLS else val
-    # Store DB id for index operations (not exposed in TypedDict)
-    entry["_db_id"] = r["id"]
     return entry
 
 
 def get_asset_entries(conn: Connection, snapshot_id: int) -> list[AssetEntry]:
-    rows = (
-        conn.execute(
-            select(asset_entries)
-            .where(asset_entries.c.snapshot_id == snapshot_id)
-            .order_by(asset_entries.c.sort_order)
-        )
-        .mappings()
-        .all()
-    )
+    rows = load_holdings(conn, snapshot_id, _ASSET_GROUPS)
     return [_row_to_asset_entry(r) for r in rows]
 
 
-def _next_sort_order(conn: Connection, snapshot_id: int) -> int:
-    row = conn.execute(
-        select(func.max(asset_entries.c.sort_order)).where(
-            asset_entries.c.snapshot_id == snapshot_id
-        )
-    ).scalar()
-    return (row or 0) + 1
+def _split_entry(entry: dict[str, Any], group: str) -> tuple[dict, dict]:
+    """(spine, detail) column dicts for an insert, from a dict-API entry."""
+    spine: dict[str, Any] = {"name": entry.get("name", "")}
+    if group == "loan":
+        spine["type"] = "loan"
+    elif entry.get("type") is not None:
+        if entry["type"] not in ASSET_GROUP_TYPES:
+            raise ValueError(f"Invalid asset type: {entry['type']}")
+        spine["type"] = entry["type"]
+    for field in ("institution", "asOfDate"):
+        val = entry.get(field)
+        if val is not None:
+            spine[_SPINE_FIELD_TO_COL[field]] = (
+                to_date(val) if field == "asOfDate" else val
+            )
+    detail: dict[str, Any] = {}
+    for field, col in _DETAIL_FIELD_TO_COL[group].items():
+        val = entry.get(field)
+        if val is not None:
+            detail[col] = to_date(val) if col in _DATE_COLS else val
+    if group == "loan" and detail.get("balance") is not None:
+        # Fold a legacy quantity into the total owed, then store signed.
+        qty = entry.get("quantity")
+        if qty is not None:
+            detail["balance"] = detail["balance"] * qty
+        detail["balance"] = -detail["balance"]
+    return spine, detail
 
 
 def add_asset_entry(
     conn: Connection, snapshot_id: int, entry: dict[str, Any]
 ) -> int | None:
-    sort_order = _next_sort_order(conn, snapshot_id)
-    row = _entry_dict_to_row(entry, snapshot_id, sort_order)
-    result = conn.execute(insert(asset_entries).values(**row))
+    group = "loan" if entry.get("kind") == "debt" else "asset"
+    spine, detail = _split_entry(entry, group)
+    # IntegrityError propagates, matching the pre-split dict API.
+    holding_id = insert_holding(conn, snapshot_id, group, spine, detail)
     conn.commit()
     if entry.get("kind") == "asset":
-        return result.inserted_primary_key[0]
+        return holding_id
     return None
 
 
 def update_asset_entry(
     conn: Connection,
     snapshot_id: int,
-    index: int,
+    holding_id: int,
     updates: dict[str, Any],
     delete_keys: list[str] | None = None,
 ) -> None:
-    db_id = _index_to_db_id(conn, snapshot_id, index)
-    row = (
-        conn.execute(select(asset_entries).where(asset_entries.c.id == db_id))
-        .mappings()
-        .first()
-    )
-    if row is None:
-        raise ValueError(f"Assets index {index} out of range")
+    row = get_holding(conn, snapshot_id, holding_id)
+    if row is None or row["group_key"] not in _ASSET_GROUPS:
+        raise ValueError(f"Asset/debt id {holding_id} not found")
+    group = row["group_key"]
+    if "kind" in updates:
+        raise ValueError("An entry's kind cannot be changed")
+    if group == "loan" and updates.get("type") not in (None, "loan"):
+        raise ValueError("A loan's type is fixed")
+    dmap = _DETAIL_FIELD_TO_COL[group]
+
     merged = dict(row)
-    for k, v in updates.items():
-        col = _field_to_col(k)
-        if col:
-            merged[col] = to_date(v) if col in _DATE_COLS else v
-    for k in delete_keys or []:
-        col = _field_to_col(k)
-        if col:
-            merged[col] = None
-    conn.execute(
-        update(asset_entries)
-        .where(asset_entries.c.id == db_id)
-        .values(**{k: merged[k] for k in merged if k not in ("id", "snapshot_id")})
+    spine_updates: dict[str, Any] = {}
+
+    def _apply(field: str, val: Any) -> None:
+        if field in _SPINE_FIELD_TO_COL:
+            col = _SPINE_FIELD_TO_COL[field]
+            spine_updates[col] = to_date(val) if col == "as_of_date" else val
+            merged[col] = spine_updates[col]
+        elif field in dmap:
+            col = dmap[field]
+            if col in _DATE_COLS:
+                val = to_date(val)
+            if group == "loan" and col == "balance":
+                val = _negate(val)
+            merged[col] = val
+
+    for field, val in updates.items():
+        _apply(field, val)
+    for field in delete_keys or []:
+        _apply(field, None)
+
+    detail_values = {col: merged.get(col) for col in dmap.values()}
+    # IntegrityError propagates, matching the pre-split dict API.
+    update_holding(
+        conn, snapshot_id, holding_id, group, group, spine_updates, detail_values
     )
     conn.commit()
 
 
-def delete_asset_entry(conn: Connection, snapshot_id: int, index: int) -> None:
-    rows = conn.execute(
-        select(asset_entries.c.id, asset_entries.c.kind)
-        .where(asset_entries.c.snapshot_id == snapshot_id)
-        .order_by(asset_entries.c.sort_order)
-    ).all()
-    if index < 0 or index >= len(rows):
-        raise ValueError(f"Assets index {index} out of range (0..{len(rows) - 1})")
-    db_id, kind = rows[index]
+def delete_asset_entry(conn: Connection, snapshot_id: int, holding_id: int) -> None:
     try:
-        conn.execute(delete(asset_entries).where(asset_entries.c.id == db_id))
+        deleted = delete_holding(conn, snapshot_id, holding_id, _ASSET_GROUPS)
     except IntegrityError as e:
         # NO ACTION foreign key: this asset is still referenced by a debt
-        # (asset_ref).
+        # (assetRef) or the holding by a budget entry.
         conn.rollback()
         raise ValueError(
-            f"Asset id {db_id} is referenced by a debt; remove or change assetRef first"
+            f"Asset id {holding_id} is referenced by a debt; "
+            "remove or change assetRef first"
         ) from e
+    if deleted == 0:
+        raise ValueError(f"Asset/debt id {holding_id} not found")
     conn.commit()
 
 
 def move_asset_entry(
-    conn: Connection, snapshot_id: int, index: int, direction: str
+    conn: Connection, snapshot_id: int, holding_id: int, direction: str
 ) -> None:
-    if direction not in ("up", "down"):
-        raise ValueError("direction must be 'up' or 'down'")
-    rows = conn.execute(
-        select(asset_entries.c.id, asset_entries.c.sort_order)
-        .where(asset_entries.c.snapshot_id == snapshot_id)
-        .order_by(asset_entries.c.sort_order)
-    ).all()
-    n = len(rows)
-    if index < 0 or index >= n:
-        raise ValueError(f"Assets index {index} out of range")
-    if direction == "up" and index <= 0:
-        return
-    if direction == "down" and index >= n - 1:
-        return
-    swap_idx = index - 1 if direction == "up" else index + 1
-    db_id_a, order_a = rows[index]
-    db_id_b, order_b = rows[swap_idx]
-    conn.execute(
-        update(asset_entries)
-        .where(asset_entries.c.id == db_id_a)
-        .values(sort_order=order_b)
-    )
-    conn.execute(
-        update(asset_entries)
-        .where(asset_entries.c.id == db_id_b)
-        .values(sort_order=order_a)
-    )
+    swap_adjacent(conn, snapshot_id, _ASSET_GROUPS, holding_id, direction)
     conn.commit()
 
 
 def reorder_asset_entries(
     conn: Connection, snapshot_id: int, new_order: list[int]
 ) -> None:
-    """Persist a drag-reordered asset-entry order (see core.ordering)."""
-    reorder_by_positions(conn, asset_entries, snapshot_id, new_order)
-
-
-def _index_to_db_id(conn: Connection, snapshot_id: int, index: int) -> int:
-    rows = conn.execute(
-        select(asset_entries.c.id)
-        .where(asset_entries.c.snapshot_id == snapshot_id)
-        .order_by(asset_entries.c.sort_order)
-    ).all()
-    if index < 0 or index >= len(rows):
-        raise ValueError(f"Assets index {index} out of range (0..{len(rows) - 1})")
-    return rows[index][0]
-
-
-_FIELD_TO_COL = {
-    "kind": "kind",
-    "type": "type",
-    "unit": "unit",
-    "name": "name",
-    "institution": "institution",
-    "value": "value",
-    "source": "source",
-    "quantity": "quantity",
-    "balance": "balance",
-    "annualReturnRate": "annual_return_rate",
-    "monthlyContribution": "monthly_contribution",
-    "assetRef": "asset_ref",
-    "interestRate": "interest_rate",
-    "originalPrincipal": "original_principal",
-    "termMonths": "term_months",
-    "originationDate": "origination_date",
-    "statement_due_day_of_month": "statement_due_day_of_month",
-    "asOfDate": "as_of_date",
-}
-
-
-def _field_to_col(field: str) -> str | None:
-    return _FIELD_TO_COL.get(field)
-
-
-def _entry_dict_to_row(
-    entry: dict[str, Any], snapshot_id: int, sort_order: int
-) -> dict[str, Any]:
-    row: dict[str, Any] = {
-        "snapshot_id": snapshot_id,
-        "kind": entry["kind"],
-        "name": entry.get("name", ""),
-        "sort_order": sort_order,
-    }
-    optional_map = {
-        "type": "type",
-        "unit": "unit",
-        "institution": "institution",
-        "value": "value",
-        "source": "source",
-        "annualReturnRate": "annual_return_rate",
-        "monthlyContribution": "monthly_contribution",
-        "quantity": "quantity",
-        "balance": "balance",
-        "assetRef": "asset_ref",
-        "interestRate": "interest_rate",
-        "originalPrincipal": "original_principal",
-        "termMonths": "term_months",
-        "originationDate": "origination_date",
-        "statement_due_day_of_month": "statement_due_day_of_month",
-        "asOfDate": "as_of_date",
-    }
-    for field, col in optional_map.items():
-        val = entry.get(field)
-        if val is not None:
-            row[col] = to_date(val) if col in _DATE_COLS else val
-    return row
+    """Persist a drag-reordered entry order (permutation of the merged
+    loan + asset list, group-locally decomposed)."""
+    reorder_merged(conn, snapshot_id, _ASSET_GROUPS, new_order)
+    conn.commit()

@@ -31,12 +31,31 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from fintrack.core import models
 from fintrack.core.config import CATEGORIES_CONFIG
 from fintrack.core.db import get_engine, init_db
+from fintrack.core.holdings import DETAIL_TABLES, insert_holding
+from fintrack.core.types import group_for_account_type, group_for_kind
 from fintrack.ledger.importer.dedup import compute_fingerprints
 from fintrack.networth.calculations import liquid_minus_cc, liquid_total
 
 
 class MigrationError(Exception):
     """A condition that must be resolved before the migration can run."""
+
+
+# Per-group detail columns for a finances account, as (source key -> column).
+_ACCOUNT_DETAIL_FIELDS = {
+    "cash": (("balance", "balance"), ("minimum_balance", "minimum_balance")),
+    "credit_card": (
+        ("balance", "balance"),
+        ("credit_limit", "credit_limit"),
+        ("rewards_balance", "rewards_balance"),
+        ("statement_balance", "statement_balance"),
+        ("statement_due_day_of_month", "statement_due_day_of_month"),
+    ),
+    "loan": (
+        ("balance", "balance"),
+        ("statement_due_day_of_month", "statement_due_day_of_month"),
+    ),
+}
 
 
 # ---------------------------------------------------------------------------
@@ -343,7 +362,7 @@ def _self_check_fingerprints(sp: dict[str, list[dict[str, Any]]]) -> int:
 
 
 def _assert_target_empty(conn: Connection) -> None:
-    for table in (models.snapshots, models.accounts, models.transactions):
+    for table in (models.snapshots, models.holdings, models.transactions):
         count = conn.execute(select(func.count()).select_from(table)).scalar()
         if count:
             raise MigrationError(
@@ -413,6 +432,8 @@ def apply_migration(
         # --- finances accounts -------------------------------------------
         disambiguate_fin_accounts(fin["accounts"], warnings)
         fin_map: dict[int, int] = {}
+        fin_group: dict[int, str] = {}  # finances account id -> holding group
+        sp_group: dict[int, str] = {}  # spending account id -> holding group
         unified_by_key: dict[tuple[str, str], int] = {}  # (snapshot, name) -> id
         for a in fin["accounts"]:
             balance = a.get("balance")
@@ -433,35 +454,44 @@ def apply_migration(
             partial = a.get("partial_account_number")
             if partial and str(partial) not in stored_name:
                 stored_name = f"{stored_name} [{partial}]"
-            new_id = conn.execute(
-                insert(models.accounts).values(
-                    snapshot_id=snap_map[a["snapshot_id"]],
-                    name=stored_name,
-                    institution=a.get("institution"),
-                    account_type=a["type"],
-                    balance=balance,
-                    credit_limit=a.get("limit"),
-                    available=a.get("available"),
-                    rewards_balance=a.get("rewards_balance"),
-                    statement_balance=a.get("statement_balance"),
-                    statement_due_day_of_month=a.get("statement_due_day_of_month"),
-                    as_of_date=_lenient_date(
-                        a.get("as_of_date"), f"account '{a['name']}'", warnings
-                    ),
-                    minimum_balance=a.get("minimum_balance"),
-                    sort_order=a.get("sort_order") or 0,
-                )
-            ).inserted_primary_key[0]
+            group = group_for_account_type(a["type"])
+            # Source uses the finances "limit" key; the credit_card detail
+            # column is credit_limit — normalize before the field map reads it.
+            source = {**a, "credit_limit": a.get("limit"), "balance": balance}
+            spine = {
+                "type": a["type"],
+                "name": stored_name,
+                "institution": a.get("institution"),
+                "as_of_date": _lenient_date(
+                    a.get("as_of_date"), f"account '{a['name']}'", warnings
+                ),
+            }
+            detail = {
+                col: source.get(key)
+                for key, col in _ACCOUNT_DETAIL_FIELDS[group]
+                if source.get(key) is not None
+            }
+            new_id = insert_holding(
+                conn,
+                snap_map[a["snapshot_id"]],
+                group,
+                spine,
+                detail,
+                sort_order=a.get("sort_order") or 0,
+            )
             fin_map[a["id"]] = new_id
+            fin_group[a["id"]] = group
             unified_by_key[(snapshot_names[a["snapshot_id"]], a["final_name"])] = new_id
         for a in fin["accounts"]:  # second pass: self-references
             ref = a.get("payment_account_ref")
             if ref is not None and ref in fin_map:
-                conn.execute(
-                    update(models.accounts)
-                    .where(models.accounts.c.id == fin_map[a["id"]])
-                    .values(payment_account_ref=fin_map[ref])
-                )
+                detail = DETAIL_TABLES[fin_group[a["id"]]]
+                if "payment_account_ref" in detail.c:
+                    conn.execute(
+                        update(detail)
+                        .where(detail.c.holding_id == fin_map[a["id"]])
+                        .values(payment_account_ref=fin_map[ref])
+                    )
 
         # --- spending accounts (merge or create per mapping) --------------
         sp_map: dict[int, int] = {}
@@ -477,25 +507,30 @@ def apply_migration(
                     )
                 uid = unified_by_key[key]
                 sp_map[a["id"]] = uid
+                sp_group[a["id"]] = conn.execute(
+                    select(models.holdings.c.group_key).where(
+                        models.holdings.c.id == uid
+                    )
+                ).scalar()
                 merged_count += 1
                 row = (
                     conn.execute(
-                        select(models.accounts).where(models.accounts.c.id == uid)
+                        select(models.holdings).where(models.holdings.c.id == uid)
                     )
                     .mappings()
                     .one()
                 )
                 if row["institution"] is None and a.get("institution"):
                     conn.execute(
-                        update(models.accounts)
-                        .where(models.accounts.c.id == uid)
+                        update(models.holdings)
+                        .where(models.holdings.c.id == uid)
                         .values(institution=a["institution"])
                     )
-                if row["account_type"] != a["account_type"]:
+                if row["type"] != a["account_type"]:
                     warnings.append(
                         f"account '{a['name']}': spending type "
                         f"'{a['account_type']}' differs from finances type "
-                        f"'{row['account_type']}'; kept finances type"
+                        f"'{row['type']}'; kept finances type"
                     )
             else:
                 if (action["snapshot"], a["name"]) in unified_by_key:
@@ -505,24 +540,29 @@ def apply_migration(
                         "use merge_into if they are the same account"
                     )
                 sid = snapshot_id_for(action["snapshot"])
+                group = group_for_account_type(a["account_type"])
                 next_order = (
                     conn.execute(
-                        select(func.max(models.accounts.c.sort_order)).where(
-                            models.accounts.c.snapshot_id == sid
+                        select(func.max(models.holdings.c.sort_order)).where(
+                            models.holdings.c.snapshot_id == sid,
+                            models.holdings.c.group_key == group,
                         )
                     ).scalar()
                     or 0
                 ) + 1
-                sp_map[a["id"]] = conn.execute(
-                    insert(models.accounts).values(
-                        snapshot_id=sid,
-                        name=a["name"],
-                        institution=a.get("institution"),
-                        account_type=a["account_type"],
-                        sort_order=next_order,
-                        created_at=a.get("created_at"),
-                    )
-                ).inserted_primary_key[0]
+                sp_map[a["id"]] = insert_holding(
+                    conn,
+                    sid,
+                    group,
+                    {
+                        "type": a["account_type"],
+                        "name": a["name"],
+                        "institution": a.get("institution"),
+                    },
+                    {},
+                    sort_order=next_order,
+                )
+                sp_group[a["id"]] = group
                 created_count += 1
 
         # --- categories (seed config ∪ legacy) ----------------------------
@@ -567,6 +607,7 @@ def apply_migration(
             imp_map[i["id"]] = conn.execute(
                 insert(models.imports).values(
                     account_id=sp_map[i["account_id"]],
+                    holding_group=sp_group[i["account_id"]],
                     filename=i["filename"],
                     file_hash=i["file_hash"],
                     imported_at=i.get("imported_at"),
@@ -649,38 +690,55 @@ def apply_migration(
             )
 
         # --- asset entries -----------------------------------------------------
+        # asset -> asset_details; debt -> loan_details (balance stored signed,
+        # negative = owed; a legacy quantity folds into the total — D1/D2).
         asset_map: dict[int, int] = {}
         for a in fin["assets"]:
+            group = group_for_kind(a["kind"])
             legacy_due_date = _lenient_date(
                 a.get("next_due_date"), f"asset '{a['name']}'", warnings
             )
-            asset_map[a["id"]] = conn.execute(
-                insert(models.asset_entries).values(
-                    snapshot_id=snap_map[a["snapshot_id"]],
-                    kind=a["kind"],
-                    name=a["name"],
-                    institution=a.get("institution"),
-                    value=a.get("value"),
-                    source=a.get("source"),
-                    quantity=a.get("quantity"),
-                    balance=a.get("balance"),
-                    interest_rate=a.get("interest_rate"),
-                    statement_due_day_of_month=(
+            spine = {
+                "name": a["name"],
+                "institution": a.get("institution"),
+                "as_of_date": _lenient_date(
+                    a.get("as_of_date"), f"asset '{a['name']}'", warnings
+                ),
+            }
+            if group == "loan":
+                spine["type"] = "loan"
+                balance = a.get("balance")
+                if balance is not None and a.get("quantity") is not None:
+                    balance = balance * a["quantity"]
+                detail = {
+                    "balance": -balance if balance is not None else None,
+                    "interest_rate": a.get("interest_rate"),
+                    "statement_due_day_of_month": (
                         legacy_due_date.day if legacy_due_date else None
                     ),
-                    as_of_date=_lenient_date(
-                        a.get("as_of_date"), f"asset '{a['name']}'", warnings
-                    ),
-                    sort_order=a.get("sort_order") or 0,
-                )
-            ).inserted_primary_key[0]
+                }
+            else:
+                detail = {
+                    "value": a.get("value"),
+                    "source": a.get("source"),
+                    "quantity": a.get("quantity"),
+                }
+            detail = {k: v for k, v in detail.items() if v is not None}
+            asset_map[a["id"]] = insert_holding(
+                conn,
+                snap_map[a["snapshot_id"]],
+                group,
+                spine,
+                detail,
+                sort_order=a.get("sort_order") or 0,
+            )
         for a in fin["assets"]:  # second pass: debt -> asset references
             ref = a.get("asset_ref")
-            if ref is not None and ref in asset_map:
+            if ref is not None and ref in asset_map and a["kind"] == "debt":
                 conn.execute(
-                    update(models.asset_entries)
-                    .where(models.asset_entries.c.id == asset_map[a["id"]])
-                    .values(asset_ref=asset_map[ref])
+                    update(models.loan_details)
+                    .where(models.loan_details.c.holding_id == asset_map[a["id"]])
+                    .values(secured_asset_ref=asset_map[ref])
                 )
 
         # --- balance history ------------------------------------------------
@@ -738,27 +796,17 @@ def apply_migration(
             )
             migration_rows += 1
 
-        # --- re-sync account balances from latest history --------------------
+        # --- re-sync holding balances from latest history --------------------
+        # Same cache-refresh the repositories use on every write: the holding's
+        # detail balance + spine as_of follow its latest balance_history point.
+        from fintrack.accounts.balance_history import _sync_account_to_latest
+
         bh = models.balance_history
         account_ids = {
             r[0] for r in conn.execute(select(bh.c.account_id).distinct()).all()
         }
         for aid in account_ids:
-            latest = (
-                conn.execute(
-                    select(bh)
-                    .where(bh.c.account_id == aid)
-                    .order_by(bh.c.as_of.desc(), bh.c.id.desc())
-                    .limit(1)
-                )
-                .mappings()
-                .one()
-            )
-            conn.execute(
-                update(models.accounts)
-                .where(models.accounts.c.id == aid)
-                .values(balance=latest["balance"], as_of_date=latest["as_of"])
-            )
+            _sync_account_to_latest(conn, aid)
 
         # --- verify -----------------------------------------------------------
         report = _build_report(
@@ -814,7 +862,7 @@ def _build_report(
         (
             "accounts",
             f"{len(fin['accounts'])} fin + {len(sp['accounts'])} spending",
-            models.accounts,
+            models.holdings,
         ),
         ("imports", len(sp["imports"]), models.imports),
         ("transactions", len(sp["transactions"]), models.transactions),
@@ -825,9 +873,14 @@ def _build_report(
             models.transaction_corrections,
         ),
         ("budget_entries", len(fin["budget"]), models.budget_entries),
-        ("asset_entries", len(fin["assets"]), models.asset_entries),
     ):
         lines.append(f"  {label:16} {legacy_count} -> {_count(conn, table)}")
+    # accounts + assets both live in holdings now; report the holdings total
+    # (accounts row above) and the asset/loan slice separately.
+    asset_holdings = conn.execute(
+        select(func.count()).where(models.holdings.c.group_key.in_(("asset", "loan")))
+    ).scalar()
+    lines.append(f"  {'asset_entries':16} {len(fin['assets'])} -> {asset_holdings}")
     lines.append(
         f"  accounts merged: {merged_count}; created from spending: {created_count}"
     )

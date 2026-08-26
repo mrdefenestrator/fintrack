@@ -16,12 +16,48 @@ from sqlalchemy import select
 from fintrack.core import models
 from fintrack.core.db import get_engine
 from fintrack.ledger.importer.dedup import compute_fingerprints
+from fintrack.ledger.repository.accounts import get_account_by_id
 from fintrack.migrate.legacy import (
     MigrationError,
     apply_migration,
     load_mapping,
     render_mapping_template,
 )
+
+
+def _merged_accounts(conn):
+    """The cash/credit holdings (what the old accounts table held) as flat
+    dicts (spine + detail merged, old column names), keyed by name. Loans live
+    in their own band now and are checked via _merged_assets."""
+    ids = conn.execute(
+        select(models.holdings.c.id).where(
+            models.holdings.c.group_key.in_(("cash", "credit_card"))
+        )
+    ).all()
+    accounts = [get_account_by_id(conn, r[0]) for r in ids]
+    return accounts, {a["name"]: a for a in accounts}
+
+
+def _merged_assets(conn):
+    """asset/loan holdings merged with their detail rows, keyed by name."""
+    result = {}
+    for group, detail in (
+        ("asset", models.asset_details),
+        ("loan", models.loan_details),
+    ):
+        rows = conn.execute(
+            select(models.holdings, detail)
+            .select_from(
+                models.holdings.join(
+                    detail, models.holdings.c.id == detail.c.holding_id
+                )
+            )
+            .where(models.holdings.c.group_key == group)
+        ).mappings()
+        for r in rows:
+            result[r["name"]] = dict(r)
+    return result
+
 
 _SPENDING_DDL = """
 CREATE TABLE accounts (
@@ -243,9 +279,8 @@ def test_apply_full_migration(
     engine = get_engine(target)
     with engine.connect() as conn:
         # Accounts: 3 finances + 1 created (Venmo); Chase Checking merged
-        accounts = conn.execute(select(models.accounts)).mappings().all()
+        accounts, by_name = _merged_accounts(conn)
         assert len(accounts) == 4
-        by_name = {a["name"]: a for a in accounts}
 
         # partial_account_number is a dropped column; its value is folded
         # into the stored name instead ("Chase Checking [1234]").
@@ -259,9 +294,11 @@ def test_apply_full_migration(
         assert visa["balance"] == Decimal("-500.00")
         # payment_account_ref remapped to the new checking id
         assert visa["payment_account_ref"] == checking["id"]
-        # unmatched spending account created in mike with appended sort_order
+        # unmatched spending account created in mike, appended to the Cash band.
+        # sort_order is per-band now, so it follows only the other cash account
+        # (Chase Checking); the Visa credit card is a separate band.
         assert venmo["snapshot_id"] == checking["snapshot_id"]
-        assert venmo["sort_order"] == 3
+        assert venmo["sort_order"] == 2
 
         # Bad as_of_date stored as null, balance still migrated
         assert by_name["D Savings"]["as_of_date"] == date.today()  # from history resync
@@ -285,11 +322,8 @@ def test_apply_full_migration(
         # Budget/auto ref + asset/debt ref remapped
         budget = conn.execute(select(models.budget_entries)).mappings().one()
         assert budget["auto_account_ref"] == checking["id"]
-        assets = {
-            a["name"]: a
-            for a in conn.execute(select(models.asset_entries)).mappings().all()
-        }
-        assert assets["Mortgage"]["asset_ref"] == assets["House"]["id"]
+        assets = _merged_assets(conn)
+        assert assets["Mortgage"]["secured_asset_ref"] == assets["House"]["id"]
         assert assets["Mortgage"]["statement_due_day_of_month"] is None
 
         # balance_history: 1 statement row + 3 migration rows
@@ -326,7 +360,7 @@ def test_dry_run_rolls_back(
     assert "DRY RUN" in report
     engine = get_engine(target)
     with engine.connect() as conn:
-        for table in (models.snapshots, models.accounts, models.transactions):
+        for table in (models.snapshots, models.holdings, models.transactions):
             assert conn.execute(select(table)).first() is None
 
 
@@ -395,7 +429,7 @@ def test_duplicate_fin_account_names_disambiguated(
 
     engine = get_engine(target)
     with engine.connect() as conn:
-        names = {r[0] for r in conn.execute(select(models.accounts.c.name)).all()}
+        names = {r[0] for r in conn.execute(select(models.holdings.c.name)).all()}
         # id=10 (Chase Checking, partial_account_number '1234') gets both the
         # institution qualifier from disambiguation and the folded partial
         # number appended, since the column that used to hold it is gone.

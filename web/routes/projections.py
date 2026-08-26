@@ -37,12 +37,9 @@ def _row_group_key(row: dict) -> str:
         return "loan"
     if row.get("_source") == "asset":
         return "asset"
-    t = row["account"].get("type")
-    if t == "credit_card":
-        return "credit"
-    if t == "loan":
-        return "loan"
-    return "cash"
+    # Account rows are only cash or credit cards; loans come through as debt
+    # entries (the _source == "debt" branch above), not account rows.
+    return "credit" if row["account"].get("type") == "credit_card" else "cash"
 
 
 def _group_rows(result) -> list[dict]:

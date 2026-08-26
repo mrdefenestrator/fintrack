@@ -174,13 +174,10 @@ _MAX_COLS = max(len(cols) for cols in _GROUP_COLS.values())
 
 
 def _account_group_key(a: dict) -> str:
-    """Which group an account row belongs to (by type)."""
-    t = a.get("type")
-    if t == "credit_card":
-        return "credit"
-    if t == "loan":
-        return "loan"
-    return "cash"
+    """Which group an account row belongs to. get_accounts returns only the
+    cash and credit-card bands (loans live in their own band, served as debt
+    entries), so an account is a credit card or cash."""
+    return "credit" if a.get("type") == "credit_card" else "cash"
 
 
 def _asset_group_key(e: dict) -> str:
@@ -243,30 +240,14 @@ _ALWAYS_EDITABLE = ("institution", "type", "name")
 def _account_col_fields(a: dict) -> dict:
     """Column key -> account field, gated by account_field_editable (CC vs cash,
     reserve types), so Holdings matches the Accounts page's editability. The map
-    depends on the account's group (cash vs credit vs loan)."""
-    key = _account_group_key(a)
-    # Credit cards + account-loans edit the balance directly (Amount), since
-    # Available is the computed column now (QA #10) — so `balance` is always
-    # editable for them, overriding account_field_editable's Accounts-sheet rule
-    # that treats a credit-card balance as derived/read-only.
-    always = _ALWAYS_EDITABLE
-    if key == "credit":
-        col_field = _CREDIT_COL_FIELD
-        always = _ALWAYS_EDITABLE + ("balance",)
-    elif key == "loan":
-        # A loan tracked as an account: Due + Linked activated (QA #9), amount
-        # editable; no interest/equity/LTV (those are debt-entry concepts).
-        col_field = [
-            ("institution", "institution"),
-            ("type", "type"),
-            ("name", "name"),
-            ("amount", "balance"),
-            ("due", "statement_due_day_of_month"),
-            ("linked", "paymentAccountRef"),
-        ]
-        always = _ALWAYS_EDITABLE + ("balance",)
-    else:
-        col_field = _CASH_COL_FIELD
+    depends on the account's group (cash vs credit)."""
+    is_credit = _account_group_key(a) == "credit"
+    # Credit cards edit the balance directly (Amount), since Available is the
+    # computed column now (QA #10) — so `balance` is always editable for them,
+    # overriding account_field_editable's rule that treats a credit-card balance
+    # as derived/read-only.
+    col_field = _CREDIT_COL_FIELD if is_credit else _CASH_COL_FIELD
+    always = _ALWAYS_EDITABLE + ("balance",) if is_credit else _ALWAYS_EDITABLE
     return {
         col_key: field
         for col_key, field in col_field
@@ -283,9 +264,12 @@ def _asset_col_fields(e: dict) -> dict:
     single_unit = qty is None or qty == 1
     m = {
         "institution": "institution",
-        "type": "type",
         "name": "name",
     }
+    # An asset's type is user-chosen; a loan's is fixed at "loan" (its band),
+    # so only assets get an editable Type cell.
+    if not is_debt:
+        m["type"] = "type"
     if is_debt:
         m["interest"] = "interestRate"
         m["due"] = "statement_due_day_of_month"
@@ -508,7 +492,6 @@ def _asset_row(
     e: dict,
     pair: dict | None,
     linked: str,
-    index: int,
     today: date,
     rates: dict | None = None,
 ):
@@ -592,7 +575,7 @@ def _asset_row(
         e.get("institution") or "",
         today,
         "asset",
-        index,
+        e["id"],  # the holding id is the edit/delete handle
         _GROUP_COLS[group_key],
         _asset_col_fields(e),
         edit_raw,
@@ -646,9 +629,9 @@ def _all_rows(ctx: dict, today: date) -> dict[str, list[dict]]:
     for a in accounts:
         key, row = _account_row(a, funding_by_id, account_display, today)
         rows[key].append(row)
-    for idx, e in enumerate(assets):
+    for e in assets:
         key, row = _asset_row(
-            e, equity_by_debt.get(id(e)), _linked(e), idx, today, rates=rates
+            e, equity_by_debt.get(id(e)), _linked(e), today, rates=rates
         )
         rows[key].append(row)
     return rows
@@ -668,17 +651,14 @@ def _groups_ctx(rows_by_group: dict[str, list[dict]], accounts, assets, rates=No
     """The four domain groups (headers, rows, group total, reorder wiring) + the
     master footer (Liquid + Net worth).
 
-    A group's rows can only be drag-reordered when they all share one source
-    table (the normal case); a mixed group (e.g. an account-loan sitting beside
-    debt-entry loans) is left non-reorderable rather than trying to permute two
-    tables at once.
+    Each band now draws from exactly one source table (Cash/Credit from
+    accounts; Loans/Assets from asset_entries — loans no longer straddle both),
+    so every band is drag-reorderable.
     """
     groups = []
     for key, label, source, add_noun, cols in _GROUPS:
         grp_rows = rows_by_group.get(key, [])
         total = sum((r["amount"] for r in grp_rows), Decimal("0"))
-        sources = {r["source"] for r in grp_rows}
-        reorderable = len(sources) == 1
         groups.append(
             {
                 "key": key,
@@ -692,7 +672,7 @@ def _groups_ctx(rows_by_group: dict[str, list[dict]], accounts, assets, rates=No
                 "ncols": len(cols),
                 "rows": grp_rows,
                 "total": fmt_money(total),
-                "reorderable": reorderable,
+                "reorderable": True,
             }
         )
 
@@ -821,16 +801,15 @@ def holdings_view(filename):
 
 
 def _load_entity(snapshot_id: int, source: str, ref: int):
-    """The account (by id) or asset entry (by sort-order index) for a row."""
+    """The account or asset entry with holding id == ref (both address by id)."""
     engine = current_app.config["engine"]
     with engine.connect() as conn:
-        if source == "account":
-            return next(
-                (a for a in get_accounts(conn, snapshot_id) if a.get("id") == ref),
-                None,
-            )
-        entries = get_asset_entries(conn, snapshot_id)
-        return entries[ref] if 0 <= ref < len(entries) else None
+        rows = (
+            get_accounts(conn, snapshot_id)
+            if source == "account"
+            else get_asset_entries(conn, snapshot_id)
+        )
+        return next((r for r in rows if r.get("id") == ref), None)
 
 
 def _field_editable(source: str, entity: dict | None, field: str) -> bool:

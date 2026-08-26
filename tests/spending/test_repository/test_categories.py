@@ -176,24 +176,24 @@ def _insert_dummy_transaction(conn, snapshot_id, fitid):
     from datetime import date
     from decimal import Decimal
 
-    from fintrack.core.models import accounts, imports, transactions
+    from fintrack.core.models import holdings, imports, transactions
+    from fintrack.ledger.repository.accounts import add_account
 
     acc_id = conn.execute(
-        select(accounts.c.id).where(accounts.c.snapshot_id == snapshot_id)
+        select(holdings.c.id).where(holdings.c.snapshot_id == snapshot_id)
     ).scalar()
     if acc_id is None:
-        acc_id = conn.execute(
-            insert(accounts).values(
-                snapshot_id=snapshot_id,
-                name="Test Checking",
-                account_type="checking",
-                sort_order=0,
-                balance=Decimal("0"),
-            )
-        ).inserted_primary_key[0]
+        acc_id = add_account(
+            conn,
+            name="Test Checking",
+            institution="",
+            account_type="checking",
+            snapshot_id=snapshot_id,
+        )
     import_id = conn.execute(
         insert(imports).values(
             account_id=acc_id,
+            holding_group="cash",
             filename=f"{fitid}.ofx",
             file_hash=fitid,
             status="confirmed",

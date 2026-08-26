@@ -15,7 +15,9 @@ from sqlalchemy import Connection, insert, select, update
 
 from fintrack.core.coerce import to_date
 from fintrack.core.db import get_engine, init_db
-from fintrack.core.models import accounts, asset_entries, budget_entries, snapshots
+from fintrack.core.holdings import DETAIL_TABLES, insert_holding
+from fintrack.core.models import budget_entries, loan_details, snapshots
+from fintrack.core.types import group_for_account_type
 
 
 def import_yaml(conn: Connection, path: Path, name: str | None = None) -> int:
@@ -39,37 +41,50 @@ def import_yaml(conn: Connection, path: Path, name: str | None = None) -> int:
 
     # Import accounts; build yaml_id → db_id map for cross-reference rewriting
     account_id_map: dict[int, int] = {}
-    for sort_order, acc in enumerate(data.get("accounts") or []):
-        yaml_id = acc.get("id")
-        row: dict[str, Any] = {
-            "snapshot_id": snapshot_id,
-            "name": acc.get("name", ""),
-            "account_type": acc.get("type", "checking"),
-            "sort_order": sort_order,
-        }
-        for field, col in (
+    account_groups: dict[int, str] = {}  # db_id -> group (for the ref pass)
+    sort_orders: dict[str, int] = {}
+    _ACCOUNT_DETAIL_FIELDS = {
+        "cash": (("balance", "balance"), ("minimum_balance", "minimum_balance")),
+        "credit_card": (
             ("balance", "balance"),
             ("limit", "credit_limit"),
-            ("available", "available"),
             ("rewards_balance", "rewards_balance"),
             ("statement_balance", "statement_balance"),
             ("statement_due_day_of_month", "statement_due_day_of_month"),
-            ("asOfDate", "as_of_date"),
-            ("minimum_balance", "minimum_balance"),
-            ("institution", "institution"),
-        ):
+        ),
+        "loan": (
+            ("balance", "balance"),
+            ("statement_due_day_of_month", "statement_due_day_of_month"),
+        ),
+    }
+    for acc in data.get("accounts") or []:
+        yaml_id = acc.get("id")
+        account_type = acc.get("type", "checking")
+        group = group_for_account_type(account_type)
+        spine: dict[str, Any] = {"type": account_type, "name": acc.get("name", "")}
+        if acc.get("institution") is not None:
+            spine["institution"] = acc["institution"]
+        if acc.get("asOfDate") is not None:
+            spine["as_of_date"] = to_date(acc["asOfDate"])
+        detail: dict[str, Any] = {}
+        for field, col in _ACCOUNT_DETAIL_FIELDS[group]:
             val = acc.get(field)
             if val is not None:
-                row[col] = to_date(val) if col == "as_of_date" else val
+                detail[col] = val
         # Canonical signed balance for credit cards (negative = owed)
         if (
-            row["account_type"] == "credit_card"
-            and row.get("balance") is None
-            and row.get("available") is not None
-            and row.get("credit_limit") is not None
+            group == "credit_card"
+            and detail.get("balance") is None
+            and acc.get("available") is not None
+            and detail.get("credit_limit") is not None
         ):
-            row["balance"] = row["available"] - row["credit_limit"]
-        db_id = conn.execute(insert(accounts).values(**row)).inserted_primary_key[0]
+            detail["balance"] = acc["available"] - detail["credit_limit"]
+        order = sort_orders.get(group, 0)
+        sort_orders[group] = order + 1
+        db_id = insert_holding(
+            conn, snapshot_id, group, spine, detail, sort_order=order
+        )
+        account_groups[db_id] = group
         if yaml_id is not None:
             account_id_map[yaml_id] = db_id
 
@@ -79,11 +94,13 @@ def import_yaml(conn: Connection, path: Path, name: str | None = None) -> int:
         ref = acc.get("paymentAccountRef")
         if yaml_id is not None and ref is not None and ref in account_id_map:
             db_id = account_id_map[yaml_id]
-            conn.execute(
-                update(accounts)
-                .where(accounts.c.id == db_id)
-                .values(payment_account_ref=account_id_map[ref])
-            )
+            detail = DETAIL_TABLES[account_groups[db_id]]
+            if "payment_account_ref" in detail.c:
+                conn.execute(
+                    update(detail)
+                    .where(detail.c.holding_id == db_id)
+                    .values(payment_account_ref=account_id_map[ref])
+                )
 
     # Import budget entries
     for sort_order, entry in enumerate(data.get("budget") or []):
@@ -114,40 +131,57 @@ def import_yaml(conn: Connection, path: Path, name: str | None = None) -> int:
     # Import asset entries; build yaml_asset_id → db_id map for assetRef rewriting
     asset_id_map: dict[int, int] = {}
     asset_db_ids: list[tuple[int, dict]] = []  # (db_id, original_entry)
-    for sort_order, entry in enumerate(data.get("assets") or []):
-        row = {
-            "snapshot_id": snapshot_id,
-            "kind": entry.get("kind", "asset"),
-            "name": entry.get("name", ""),
-            "sort_order": sort_order,
-        }
-        for field, col in (
-            ("institution", "institution"),
-            ("value", "value"),
-            ("source", "source"),
-            ("quantity", "quantity"),
-            ("balance", "balance"),
-            ("interestRate", "interest_rate"),
-            ("originalPrincipal", "original_principal"),
-            ("termMonths", "term_months"),
-            ("originationDate", "origination_date"),
-            ("statement_due_day_of_month", "statement_due_day_of_month"),
-            ("asOfDate", "as_of_date"),
-        ):
-            val = entry.get(field)
-            if val is not None:
-                row[col] = (
-                    to_date(val) if col in ("origination_date", "as_of_date") else val
-                )
-        # Backward compatibility for pre-origination YAML exports.
-        if (
-            row.get("statement_due_day_of_month") is None
-            and entry.get("nextDueDate") is not None
-        ):
-            row["statement_due_day_of_month"] = to_date(entry["nextDueDate"]).day
-        db_id = conn.execute(insert(asset_entries).values(**row)).inserted_primary_key[
-            0
-        ]
+    for entry in data.get("assets") or []:
+        is_debt = entry.get("kind") == "debt"
+        group = "loan" if is_debt else "asset"
+        spine: dict[str, Any] = {"name": entry.get("name", "")}
+        if is_debt:
+            spine["type"] = "loan"
+        elif entry.get("type") is not None:
+            spine["type"] = entry["type"]
+        if entry.get("institution") is not None:
+            spine["institution"] = entry["institution"]
+        if entry.get("asOfDate") is not None:
+            spine["as_of_date"] = to_date(entry["asOfDate"])
+        detail: dict[str, Any] = {}
+        if is_debt:
+            for field, col in (
+                ("interestRate", "interest_rate"),
+                ("originalPrincipal", "original_principal"),
+                ("termMonths", "term_months"),
+                ("originationDate", "origination_date"),
+                ("statement_due_day_of_month", "statement_due_day_of_month"),
+            ):
+                val = entry.get(field)
+                if val is not None:
+                    detail[col] = to_date(val) if col == "origination_date" else val
+            # Backward compatibility for pre-origination YAML exports.
+            if (
+                detail.get("statement_due_day_of_month") is None
+                and entry.get("nextDueDate") is not None
+            ):
+                detail["statement_due_day_of_month"] = to_date(entry["nextDueDate"]).day
+            # Debts fold any quantity into the total owed, stored signed
+            # (negative = owed) — docs/notes-schema-split.md D1/D2.
+            if entry.get("balance") is not None:
+                balance = entry["balance"]
+                if entry.get("quantity") is not None:
+                    balance = balance * entry["quantity"]
+                detail["balance"] = -balance
+        else:
+            for field, col in (
+                ("value", "value"),
+                ("source", "source"),
+                ("quantity", "quantity"),
+            ):
+                val = entry.get(field)
+                if val is not None:
+                    detail[col] = val
+        order = sort_orders.get(group, 0)
+        sort_orders[group] = order + 1
+        db_id = insert_holding(
+            conn, snapshot_id, group, spine, detail, sort_order=order
+        )
         asset_db_ids.append((db_id, entry))
         yaml_asset_id = entry.get("id")
         if yaml_asset_id is not None:
@@ -158,9 +192,9 @@ def import_yaml(conn: Connection, path: Path, name: str | None = None) -> int:
         ref = entry.get("assetRef")
         if ref is not None and ref in asset_id_map:
             conn.execute(
-                update(asset_entries)
-                .where(asset_entries.c.id == db_id)
-                .values(asset_ref=asset_id_map[ref])
+                update(loan_details)
+                .where(loan_details.c.holding_id == db_id)
+                .values(secured_asset_ref=asset_id_map[ref])
             )
 
     conn.commit()

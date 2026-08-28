@@ -6,18 +6,19 @@ purely for URL / navigation consistency (url_for needs `filename` to build
 links back into the current snapshot, and the shared chrome + sidebar are
 snapshot-scoped). None of the repository calls below use snapshot_id.
 
-The page reuses the shared spreadsheet chrome (sheet.thead + editable-table +
-.table-scroll-container) like Holdings/Budget: one "Category" column with
-click-to-edit rename, an inline delete confirm in the actions column, and a
-trailing add row. Every add / rename / delete re-renders the tbody
-(#categories-tbody); an error (duplicate name, in-use delete) comes back as a
-422 carrying the same tbody plus an inline error row (base.html's
-htmx:beforeSwap hook swaps non-empty 422 bodies in).
+The page is rendered by the generic data-driven sheet renderer (web.sheets):
+one editable "Category" column with click-to-edit rename, an inline delete
+confirm in the actions column, and a trailing add row. Every add / rename /
+delete re-renders the tbody (#categories-tbody); an error (duplicate name,
+in-use delete) comes back as a 422 carrying the same tbody plus an inline error
+row (base.html's htmx:beforeSwap hook swaps non-empty 422 bodies in).
 """
 
 from flask import Blueprint, current_app, g, render_template, request, url_for
 
+from web import sheets
 from web.routes.common import snapshot_scoped
+from web.sheets import Cell, Column, Group, Row, TableSpec
 
 from fintrack.ledger.repository.categories import (
     add_category,
@@ -28,43 +29,76 @@ from fintrack.ledger.repository.categories import (
 
 bp = snapshot_scoped(Blueprint("categories", __name__, url_prefix="/s/<filename>"))
 
+_ENDPOINTS = {
+    "cell_edit": "categories.cell_edit",
+    "update": "categories.rename",
+    "delete_confirm": "categories.delete_confirm",
+    "delete_btn": "categories.delete_btn",
+    "delete": "categories.delete",
+    "add": "categories.add",
+}
 
-def _is_edit_mode():
-    return request.args.get("edit") == "1"
+
+def _spec(cats) -> TableSpec:
+    label = f"{len(cats)} categor{'ies' if len(cats) != 1 else 'y'}"
+    return TableSpec(
+        dom_id="categories-tbody",
+        endpoints=_ENDPOINTS,
+        columns=[Column("name", "Category", editable=True)],
+        editable=True,
+        deletable=True,
+        reorderable=False,
+        row_id_prefix="category-row",
+        footer=[[label]] if cats else None,
+        empty_text="No categories yet.",
+        container_class=(
+            "rounded-lg border border-gray-300 dark:border-gray-600 shadow-sm"
+        ),
+    )
 
 
-def _tbody(error=None, editing_id=None, edit_mode=True, status=200):
-    """Render the categories tbody rows (the swap target of every mutation).
+def _group(cats) -> Group:
+    rows = [
+        Row(
+            params={"category_id": c["id"]},
+            dom_id=f"category-row-{c['id']}",
+            cells={"name": Cell(c["name"], raw=c["name"], editable=True)},
+        )
+        for c in cats
+    ]
+    return Group(
+        key="_", rows=rows, add_noun="category", empty_text="No categories yet."
+    )
 
-    edit_mode defaults to True because htmx partials (edit, rename, row) are
-    only reachable while editing — they don't carry the parent page's ?edit=1
-    query param.
-    """
+
+def _tbody(error=None, editing_id=None, status=200):
+    """Render the categories tbody (the swap target of every mutation)."""
     engine = current_app.config["engine"]
     with engine.connect() as conn:
         cats = list_categories(conn)
-    html = render_template(
-        "partials/categories_tbody.html",
-        cats=cats,
-        error=error,
-        editing_id=editing_id,
-        edit_mode=edit_mode,
+    editing = (
+        {"params": {"category_id": editing_id}, "field": "name"}
+        if editing_id is not None
+        else None
     )
+    ctx = sheets.render_context(
+        _spec(cats), [_group(cats)], filename=g.filename, editing=editing, error=error
+    )
+    html = render_template("partials/sheet_body.html", **ctx)
     return html if status == 200 else (html, status)
 
 
 @bp.route("/categories")
 def index():
     """The Categories page (full chrome)."""
-    edit_mode = _is_edit_mode()
+    edit_mode = request.args.get("edit") == "1"
     engine = current_app.config["engine"]
     with engine.connect() as conn:
         cats = list_categories(conn)
+    spec = _spec(cats)
+    ctx = sheets.render_context(spec, [_group(cats)], filename=g.filename)
     return render_template(
-        "categories.html",
-        active_tab="categories",
-        cats=cats,
-        edit_mode=edit_mode,
+        "categories.html", active_tab="categories", edit_mode=edit_mode, **ctx
     )
 
 
@@ -85,16 +119,12 @@ def add():
     return resp
 
 
-@bp.route("/categories/<int:category_id>/edit")
-def edit(category_id):
-    """Switch one row into its inline rename editor."""
+@bp.route("/categories/<int:category_id>/cell")
+def cell_edit(category_id):
+    """Switch one row into its inline rename editor, or revert on ?display=1."""
+    if request.args.get("display") == "1":
+        return _tbody()
     return _tbody(editing_id=category_id)
-
-
-@bp.route("/categories/<int:category_id>/row")
-def row(category_id):
-    """Revert a row back to display (cancel rename, e.g. on blur)."""
-    return _tbody()
 
 
 @bp.route("/categories/<int:category_id>/rename", methods=["POST"])
@@ -122,20 +152,30 @@ def delete_btn(category_id):
     return render_template(
         "partials/editable_table_delete_icon.html",
         delete_confirm_url=url_for(
-            "categories.delete_confirm",
-            category_id=category_id,
+            "categories.delete_confirm", filename=g.filename, category_id=category_id
         ),
         edit_mode=True,
+        reorderable=False,
     )
 
 
 @bp.route("/categories/<int:category_id>/delete-confirm")
 def delete_confirm(category_id):
-    """Show the inline Yes/No delete confirmation for one row."""
+    """Show the inline Yes/No delete confirmation for one row.
+
+    Targets #categories-tbody (not the row) so a failed delete (category in use)
+    surfaces its error row inside the tbody.
+    """
     return render_template(
-        "partials/categories_delete_confirm.html",
-        filename=g.filename,
-        category_id=category_id,
+        "partials/editable_table_delete_confirm.html",
+        delete_url=url_for(
+            "categories.delete", filename=g.filename, category_id=category_id
+        ),
+        cancel_url=url_for(
+            "categories.delete_btn", filename=g.filename, category_id=category_id
+        ),
+        delete_target="#categories-tbody",
+        delete_swap="innerHTML",
     )
 
 

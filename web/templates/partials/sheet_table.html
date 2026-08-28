@@ -11,7 +11,7 @@
    header rows inside each <tbody> (so group chrome sticks independently), so the
    shared <thead> is emitted for flat tables only. #}
 {%- set tid = spec.dom_id -%}
-<div class="table-scroll-container rounded-b-lg border-l border-b border-r border-gray-300 dark:border-gray-600 shadow-sm"{% if spec.scroll_shadows %} data-sheet-scroll{% endif %}{% if spec.editable %} data-sticky-actions{% endif %}>
+<div class="table-scroll-container {{ spec.container_class }}"{% if spec.scroll_shadows %} data-sheet-scroll{% endif %}{% if spec.editable %} data-sticky-actions{% endif %}>
 <table {% if spec.grouped %}id="{{ tid }}" {% endif %}class="editable-table w-full text-sm border-collapse bg-white dark:bg-gray-800"{% if spec.keyboard_nav %} data-cell-nav="{{ tid }}"{% endif %} style="white-space:nowrap">
     {%- if spec.colgroup or spec.columns %}
     <colgroup>

@@ -2,10 +2,14 @@
 Parameters:
 - delete_url: URL for delete action (hx-post)
 - cancel_url: URL to restore delete button (hx-get)
+- delete_target: hx-target for the confirm form (default "closest tr"). A table
+  that needs a failed delete to surface an error row (e.g. Categories, where an
+  in-use category can't be deleted) passes its tbody id so the 422 body swaps in.
+- delete_swap: hx-swap for the confirm form (default "outerHTML").
 #}
 <td class="table-actions-cell px-1.5 py-0.5 border-r border-gray-100 dark:border-gray-700 text-center align-middle bg-red-50 dark:bg-red-900/20">
     <span class="table-actions-inner">
-        <form class="inline" hx-post="{{ delete_url }}" hx-target="closest tr" hx-swap="outerHTML">
+        <form class="inline" hx-post="{{ delete_url }}" hx-target="{{ delete_target | default('closest tr', true) }}" hx-swap="{{ delete_swap | default('outerHTML', true) }}">
             <button type="submit"
                 class="table-action-btn text-red-700 dark:text-red-400 bg-white dark:bg-gray-700 hover:bg-red-100 dark:hover:bg-red-800 border border-red-300 dark:border-red-700 rounded shrink-0 font-bold text-sm px-1.5"
                 title="Confirm delete">✓</button>

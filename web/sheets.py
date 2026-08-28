@@ -158,6 +158,13 @@ class TableSpec:
     footer: list[list[str]] | None = None  # footer/master-footer rows
     footer_amount_pos: int | None = None  # right-aligned col in the footer
     empty_text: str = "Nothing to show."
+    # Scroll-container border/rounding. Default borrows its top edge from a
+    # filter bar above (left/bottom/right only); a table with no filter bar
+    # (e.g. Categories) overrides with all four borders.
+    container_class: str = (
+        "rounded-b-lg border-l border-b border-r "
+        "border-gray-300 dark:border-gray-600 shadow-sm"
+    )
 
 
 def _group_ncols(group: Group, spec: TableSpec) -> int:

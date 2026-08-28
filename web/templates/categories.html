@@ -1,16 +1,10 @@
 {% extends "base.html" %}
 {% block title %}Categories — fintrack{% endblock %}
 {% block content %}
-{# Categories reuse the shared sheet chrome (sticky header, edge shadows, grid
-   canvas) like Holdings/Budget — no page-specific table CSS. Global table (not
-   snapshot-scoped), so there's no filter bar; the card carries all four borders
-   itself instead of borrowing its top edge from a filter bar. #}
-<div class="table-scroll-container rounded-lg border border-gray-300 dark:border-gray-600 shadow-sm" data-sheet-scroll>
-<table id="categories-table" class="editable-table sortable w-full text-sm border-collapse bg-white dark:bg-gray-800" data-cell-nav="categories-tbody" style="white-space:nowrap">
-    {% with headers=['Category'], right_align_cols=[] %}{% include "partials/editable_table_thead.html" %}{% endwith %}
-    <tbody id="categories-tbody">
-        {% include "partials/categories_tbody.html" %}
-    </tbody>
-</table>
+{# Categories is a plain flat sheet rendered by the generic sheet renderer
+   (web.sheets). Global table (not snapshot-scoped), so there's no filter bar;
+   the card carries all four borders itself. #}
+<div class="p-0">
+    {% include "partials/sheet_table.html" %}
 </div>
 {% endblock %}

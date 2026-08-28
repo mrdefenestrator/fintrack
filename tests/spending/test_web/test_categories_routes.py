@@ -93,7 +93,7 @@ def test_add_category_generates_sequential_names(client, db_engine):
 
 def test_edit_returns_inline_editor(client, db_engine):
     cat_id = _add(db_engine, "Groceries")
-    resp = client.get(f"/s/ledger/categories/{cat_id}/edit?edit=1")
+    resp = client.get(f"/s/ledger/categories/{cat_id}/cell?field=name")
     assert resp.status_code == 200
     body = resp.get_data(as_text=True)
     assert 'name="value"' in body
@@ -102,7 +102,7 @@ def test_edit_returns_inline_editor(client, db_engine):
 
 def test_row_reverts_to_display(client, db_engine):
     cat_id = _add(db_engine, "Groceries")
-    resp = client.get(f"/s/ledger/categories/{cat_id}/row")
+    resp = client.get(f"/s/ledger/categories/{cat_id}/cell?display=1")
     assert resp.status_code == 200
     body = resp.get_data(as_text=True)
     assert 'name="value"' not in body

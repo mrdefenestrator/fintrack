@@ -294,6 +294,20 @@ def test_swap_body_is_full_table_content_not_nested_tbody(render_body):
     assert 'hx-target="#t-tbody"' in html
 
 
+def test_locked_table_still_has_sort_hooks(client):
+    """Sorting is a read op and must work locked or unlocked: even a
+    non-editable table carries the data-sheet hook and sortable-th headers so
+    sheet-sort.js binds it. (Regression: sort was bound to data-cell-nav, which
+    is emitted only in edit mode, so the locked view could not sort.)"""
+    html = client.get("/_sheet_demo/").data.decode()
+    start = html.index('id="demo-locked-table"')
+    tag = html[start : html.index(">", start)]  # the <table ...> opening tag
+    assert "data-sheet" in tag
+    locked = html[start : html.index("</table>", start)]
+    assert "sortable-th" in locked
+    assert "data-sort-key" in locked
+
+
 def test_locked_table_hides_all_edit_affordances(client):
     """A locked (non-editable) sheet must show no add row, no actions column,
     and no clickable cells — the regression behind 'add row / drag+delete column

@@ -122,6 +122,32 @@ def test_locked_table_hides_edit_affordances(page, demo_server):
     assert locked.locator("input[name='value']").count() == 0
 
 
+def test_sort_works_when_locked(page, demo_server):
+    """Sorting must work in the locked (non-editable) view — it's a read op.
+    Regression: sort was bound to the edit-mode-only data-cell-nav hook, so the
+    default locked view could not sort."""
+    _goto(page, demo_server)
+    lrows = f"{LOCKED} tbody > tr[id]"
+    page.locator(f"{LOCKED} thead th", has_text="Amount").first.click()
+    page.wait_for_timeout(200)
+    # ascending by amount: the negative (340.00) row (Beta) sorts to the top
+    assert "Beta" in page.locator(lrows).first.inner_text()
+
+
+def test_footer_pins_to_bottom_when_content_short(page, demo_server):
+    """With few rows, the total row is pushed to the container's bottom (the
+    grid filler + sticky bottom), rather than floating just under the last row."""
+    _goto(page, demo_server)
+    gap = page.evaluate(
+        """() => {
+            const c = document.querySelector('#demo-flat-table').closest('[data-sheet-scroll]');
+            const tr = document.querySelector('#demo-flat-table tr.total-row');
+            return Math.round(c.getBoundingClientRect().bottom - tr.getBoundingClientRect().bottom);
+        }"""
+    )
+    assert abs(gap) <= 3
+
+
 def test_vertical_scroll_works(page, demo_server):
     """The sheet container scrolls vertically (regression: a wrapper broke the
     flex height and the table wouldn't scroll)."""

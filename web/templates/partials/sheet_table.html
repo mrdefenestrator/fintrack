@@ -10,7 +10,7 @@
    column), data-cell-nav (keyboard nav). #}
 {%- set tid = spec.dom_id -%}
 <div class="table-scroll-container {{ spec.container_class }}"{% if spec.scroll_shadows %} data-sheet-scroll{% endif %}{% if spec.editable and spec.deletable %} data-sticky-actions{% endif %}>
-<table id="{{ tid }}" class="editable-table w-full text-sm border-collapse bg-white dark:bg-gray-800"{% if spec.keyboard_nav and spec.editable %} data-cell-nav="{{ tid }}"{% endif %} style="white-space:nowrap">
+<table id="{{ tid }}" class="editable-table w-full text-sm border-collapse bg-white dark:bg-gray-800"{% if spec.column_sort %} data-sheet{% endif %}{% if spec.keyboard_nav and spec.editable %} data-cell-nav="{{ tid }}"{% endif %} style="white-space:nowrap">
     {% include "partials/sheet_body.html" %}
 </table>
 </div>

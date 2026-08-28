@@ -142,8 +142,8 @@
     }
 
     function scan() {
-        document.querySelectorAll("table[data-cell-nav]").forEach(function (table) {
-            var tableId = table.getAttribute("data-cell-nav");
+        document.querySelectorAll("table[data-sheet]").forEach(function (table) {
+            var tableId = table.id || table.getAttribute("data-cell-nav") || "sheet";
             // Grouped: header rows inside each group tbody.
             var groupBodies = table.querySelectorAll(":scope > tbody:has(> .sheet-group-header)");
             if (groupBodies.length) {
@@ -163,7 +163,7 @@
 
     document.addEventListener("DOMContentLoaded", scan);
     document.addEventListener("htmx:afterSwap", function () {
-        document.querySelectorAll("table[data-cell-nav] tbody[data-group]").forEach(function (t) {
+        document.querySelectorAll("table[data-sheet] tbody[data-group]").forEach(function (t) {
             delete t._origOrder;
             delete t._sheetSort;
         });

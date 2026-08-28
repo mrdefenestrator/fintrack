@@ -39,13 +39,13 @@ _ENDPOINTS = {
 }
 
 
-def _spec(cats) -> TableSpec:
+def _spec(cats, editable=True) -> TableSpec:
     label = f"{len(cats)} categor{'ies' if len(cats) != 1 else 'y'}"
     return TableSpec(
-        dom_id="categories-tbody",
+        dom_id="categories-table",
         endpoints=_ENDPOINTS,
         columns=[Column("name", "Category", editable=True)],
-        editable=True,
+        editable=editable,
         deletable=True,
         reorderable=False,
         row_id_prefix="category-row",
@@ -95,7 +95,7 @@ def index():
     engine = current_app.config["engine"]
     with engine.connect() as conn:
         cats = list_categories(conn)
-    spec = _spec(cats)
+    spec = _spec(cats, editable=edit_mode)
     ctx = sheets.render_context(spec, [_group(cats)], filename=g.filename)
     return render_template(
         "categories.html", active_tab="categories", edit_mode=edit_mode, **ctx
@@ -174,7 +174,7 @@ def delete_confirm(category_id):
         cancel_url=url_for(
             "categories.delete_btn", filename=g.filename, category_id=category_id
         ),
-        delete_target="#categories-tbody",
+        delete_target="#categories-table",
         delete_swap="innerHTML",
     )
 

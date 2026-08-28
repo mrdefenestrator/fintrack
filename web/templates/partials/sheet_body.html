@@ -18,6 +18,28 @@
 {%- set tid = spec.dom_id -%}
 {%- set span = max_cols + (1 if spec.editable else 0) -%}
 
+{# colgroup + (flat) thead live inside the swap target so they survive the
+   whole-table innerHTML swap that every edit performs. Grouped tables carry
+   their header rows inside each <tbody> instead (so group chrome sticks
+   independently), so the shared <thead> is emitted for flat tables only. #}
+{%- if spec.colgroup or spec.columns %}
+<colgroup>
+    {% if spec.colgroup %}{% for w in spec.colgroup %}<col{% if w %} style="width: {{ w }}"{% endif %}>{% endfor %}
+    {% else %}{% for col in spec.columns %}<col{% if col.width %} style="width: {{ col.width }}"{% endif %}>{% endfor %}{% endif %}
+</colgroup>
+{%- endif %}
+{% if not spec.grouped %}
+<thead>
+    <tr class="bg-gray-100 dark:bg-gray-700">
+        {% for col in spec.columns %}
+        <th class="sortable-th px-1.5 py-0.5 font-medium text-gray-800 dark:text-gray-100 cursor-pointer select-none hover:bg-gray-200 dark:hover:bg-gray-600 {% if col.right %}text-right{% else %}text-left{% endif %}"
+            data-sort-key="c{{ loop.index0 }}"{% if not col.sortable %} data-sort-disabled{% endif %} role="button" tabindex="0" title="{{ col.tooltip or col.label }}">{{ col.label }} <span class="sort-indicator"></span></th>
+        {% endfor %}
+        {% if spec.editable %}<th class="table-actions-cell px-1.5 py-0.5" aria-label="Actions"></th>{% endif %}
+    </tr>
+</thead>
+{% endif %}
+
 {% if error %}
 <tbody>
     <tr id="sheet-error-row">
@@ -29,7 +51,7 @@
 {% for group in groups %}
 {%- set cols = group.columns or spec.columns -%}
 {%- set ncols = group_ncols(group, spec) -%}
-<tbody class="sheet-group"{% if not spec.grouped %} id="{{ tid }}"{% endif %} data-group="{{ group.key }}"{% if spec.editable and spec.reorderable and group.reorderable %} data-reorder-url="{{ url_for(spec.endpoints['reorder'], filename=filename, **group.add_params) }}"{% endif %}>
+<tbody class="sheet-group" data-group="{{ group.key }}"{% if spec.editable and spec.reorderable and group.reorderable %} data-reorder-url="{{ url_for(spec.endpoints['reorder'], filename=filename, **group.add_params) }}"{% endif %}>
     {% if spec.grouped %}
     <tr class="sheet-group-heading">
         <td colspan="{{ spec.heading_label_span }}" class="px-2 py-1.5 text-xs font-semibold uppercase tracking-wide">{{ group.label }}</td>

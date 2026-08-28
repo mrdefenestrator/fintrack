@@ -28,5 +28,14 @@
             {% include "partials/sheet_table.html" %}
         {% endwith %}
     </div>
+    <h2 class="text-sm font-semibold mb-1 mt-4" id="locked-heading">Locked sheet</h2>
+    <div class="demo-wrap">
+        {% with spec=locked.spec, groups=locked.groups, filename=locked.filename,
+                editing=locked.editing, updated=locked.updated, error=locked.error,
+                max_cols=locked.max_cols, row_dom_id=locked.row_dom_id,
+                group_ncols=locked.group_ncols %}
+            {% include "partials/sheet_table.html" %}
+        {% endwith %}
+    </div>
 </div>
 {% endblock %}

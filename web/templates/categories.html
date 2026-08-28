@@ -3,8 +3,7 @@
 {% block content %}
 {# Categories is a plain flat sheet rendered by the generic sheet renderer
    (web.sheets). Global table (not snapshot-scoped), so there's no filter bar;
-   the card carries all four borders itself. #}
-<div class="p-0">
-    {% include "partials/sheet_table.html" %}
-</div>
+   the container is a direct flex child of <main> (block content) so the sheet
+   fills the height and scrolls. #}
+{% include "partials/sheet_table.html" %}
 {% endblock %}

@@ -48,7 +48,7 @@ def test_page_lists_categories(client, db_engine):
     body = resp.get_data(as_text=True)
     assert "No categories yet." not in body
     # The sheet lists the category inside its tbody.
-    tbody_start = body.index('id="categories-tbody"')
+    tbody_start = body.index('id="categories-table"')
     tbody_html = body[tbody_start : tbody_start + 2000]
     assert "Groceries" in tbody_html
 

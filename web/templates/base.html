@@ -354,6 +354,31 @@
             min-width: 2.75rem;
         }
 
+        /* Sticky actions column (opt-in via data-sticky-actions on the scroll
+           container): the drag/delete column pins to the right edge while data
+           scrolls behind it, so entering edit mode on a narrow table doesn't
+           leave the actions cell floating next to the edited cell. A solid
+           background keeps scrolled cells from showing through. Holdings adds
+           id-scoped overrides on top of this (higher specificity wins). */
+        .table-scroll-container[data-sticky-actions] .table-actions-cell {
+            position: sticky;
+            right: 0;
+            z-index: 6;
+            background: #ffffff;
+        }
+        .dark .table-scroll-container[data-sticky-actions] .table-actions-cell {
+            background: #1f2937;   /* gray-800 */
+        }
+        .table-scroll-container[data-sticky-actions] thead th.table-actions-cell,
+        .table-scroll-container[data-sticky-actions] tr.total-row .table-actions-cell {
+            z-index: 7;
+            background: #f3f4f6;   /* gray-100 */
+        }
+        .dark .table-scroll-container[data-sticky-actions] thead th.table-actions-cell,
+        .dark .table-scroll-container[data-sticky-actions] tr.total-row .table-actions-cell {
+            background: #374151;   /* gray-700 */
+        }
+
         /* Scrollable table container: data rows scroll, header/footer rows stick */
         .table-scroll-container {
             overflow: auto;

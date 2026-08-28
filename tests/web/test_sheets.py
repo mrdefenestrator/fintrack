@@ -272,11 +272,38 @@ def test_sticky_group_chrome_uses_no_border_collapse_borders(render_body):
 
 def test_scroll_shadow_and_cellnav_hooks_present_on_shell(client):
     html = client.get("/_sheet_demo/").data.decode()
-    assert 'data-cell-nav="demo-flat-tbody"' in html
+    assert 'data-cell-nav="demo-flat-table"' in html
     assert 'data-cell-nav="demo-grouped-table"' in html
     assert html.count("data-sticky-actions") >= 2
     # the sheet-scroll opt-in attribute is present on the containers
     assert "data-sheet-scroll" in html
+
+
+def test_swap_body_is_full_table_content_not_nested_tbody(render_body):
+    """The swap target is the <table>, so a cell-edit body must carry the
+    colgroup + (flat) thead and a flat, non-nested set of tbodies — otherwise
+    swapping it into a <tbody> nests tbodies and breaks the page (QA)."""
+    html = render_body(_spec(), [_group([_row()])])
+    assert "<colgroup>" in html
+    assert "<thead>" in html
+    # exactly the data tbody(ies); no <tbody> nested inside another <tbody>
+    import re as _re
+
+    assert not _re.search(r"<tbody[^>]*>\s*<tbody", html)
+    # editors target the table id via innerHTML, never a bare tbody
+    assert 'hx-target="#t-tbody"' in html
+
+
+def test_locked_table_hides_all_edit_affordances(client):
+    """A locked (non-editable) sheet must show no add row, no actions column,
+    and no clickable cells — the regression behind 'add row / drag+delete column
+    always show when the table is locked'."""
+    html = client.get("/_sheet_demo/").data.decode()
+    start = html.index('id="demo-locked-table"')
+    locked = html[start : html.index("</table>", start)]
+    assert "data-add-row" not in locked
+    assert "table-actions-cell" not in locked
+    assert "hx-get" not in locked  # cells not clickable
 
 
 # --------------------------------------------------------------------------- #

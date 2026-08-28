@@ -71,18 +71,29 @@ _FLAT_ENDPOINTS = {
 }
 
 
-def flat_spec() -> TableSpec:
+def flat_spec(
+    editable=True, dom_id="demo-flat-table", row_id_prefix="demo-flat"
+) -> TableSpec:
     return TableSpec(
-        dom_id="demo-flat-tbody",
+        dom_id=dom_id,
         endpoints=_FLAT_ENDPOINTS,
         columns=_FLAT_COLUMNS,
-        editable=True,
+        editable=editable,
         reorderable=True,
         deletable=True,
         options={"color": _COLOR_OPTIONS},
-        row_id_prefix="demo-flat",
+        row_id_prefix=row_id_prefix,
         footer=[["", "", "Total", "", ""]],
         empty_text="No items yet.",
+    )
+
+
+def locked_spec() -> TableSpec:
+    """The flat sheet with editing off (edit-mode locked) — same data, so the
+    framework's locked state (no add row, no actions column, no clickable cells)
+    is exercised by the e2e suite."""
+    return flat_spec(
+        editable=False, dom_id="demo-locked-table", row_id_prefix="demo-locked"
     )
 
 
@@ -246,7 +257,8 @@ def reset():
 def demo_page():
     flat = sheets.render_context(flat_spec(), _flat_groups(), filename=None)
     grouped = sheets.render_context(grouped_spec(), _grouped_groups(), filename=None)
-    return render_template("sheet_demo.html", flat=flat, grouped=grouped)
+    locked = sheets.render_context(locked_spec(), _flat_groups(), filename=None)
+    return render_template("sheet_demo.html", flat=flat, grouped=grouped, locked=locked)
 
 
 def _find_flat(item_id: int):

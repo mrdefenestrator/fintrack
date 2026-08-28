@@ -1,35 +1,16 @@
-{# Generic sheet page shell — the scroll container, <table>, <colgroup>, the
-   shared <thead> (flat tables only), and the swap-target body. Include this
-   from a page's content block after building the render context with
-   web.sheets.render_context(...). Cell-edit/update HTMX responses re-render just
-   partials/sheet_body.html (the tbody), so the shell here and those swaps share
-   the same context keys.
+{# Generic sheet page shell — the scroll container and the <table>. The table's
+   entire inner content (colgroup, the shared <thead> for flat tables, the group
+   tbodies, and the footer) is rendered by partials/sheet_body.html, which is
+   ALSO exactly what every cell-edit/update HTMX response returns. So the swap
+   target is always the <table> (hx-target="#{{spec.dom_id}}", innerHTML) for
+   both flat and grouped tables — one contract, no nested-tbody hazard.
 
-   All chrome is opt-in via data attributes the shared JS/CSS key off:
-   data-sheet-scroll (scroll shadows), data-sticky-actions (reserve the sticky
-   actions column), data-cell-nav (keyboard nav). Grouped tables carry their
-   header rows inside each <tbody> (so group chrome sticks independently), so the
-   shared <thead> is emitted for flat tables only. #}
+   Chrome is opt-in via data attributes the shared JS/CSS key off:
+   data-sheet-scroll (scroll shadows), data-sticky-actions (sticky actions
+   column), data-cell-nav (keyboard nav). #}
 {%- set tid = spec.dom_id -%}
-<div class="table-scroll-container {{ spec.container_class }}"{% if spec.scroll_shadows %} data-sheet-scroll{% endif %}{% if spec.editable %} data-sticky-actions{% endif %}>
-<table {% if spec.grouped %}id="{{ tid }}" {% endif %}class="editable-table w-full text-sm border-collapse bg-white dark:bg-gray-800"{% if spec.keyboard_nav %} data-cell-nav="{{ tid }}"{% endif %} style="white-space:nowrap">
-    {%- if spec.colgroup or spec.columns %}
-    <colgroup>
-        {% if spec.colgroup %}{% for w in spec.colgroup %}<col{% if w %} style="width: {{ w }}"{% endif %}>{% endfor %}
-        {% else %}{% for col in spec.columns %}<col{% if col.width %} style="width: {{ col.width }}"{% endif %}>{% endfor %}{% endif %}
-    </colgroup>
-    {%- endif %}
-    {% if not spec.grouped %}
-    <thead>
-        <tr class="bg-gray-100 dark:bg-gray-700">
-            {% for col in spec.columns %}
-            <th class="sortable-th px-1.5 py-0.5 font-medium text-gray-800 dark:text-gray-100 cursor-pointer select-none hover:bg-gray-200 dark:hover:bg-gray-600 {% if col.right %}text-right{% else %}text-left{% endif %}"
-                data-sort-key="c{{ loop.index0 }}"{% if not col.sortable %} data-sort-disabled{% endif %} role="button" tabindex="0" title="{{ col.tooltip or col.label }}">{{ col.label }} <span class="sort-indicator"></span></th>
-            {% endfor %}
-            {% if spec.editable %}<th class="table-actions-cell px-1.5 py-0.5" aria-label="Actions"></th>{% endif %}
-        </tr>
-    </thead>
-    {% endif %}
+<div class="table-scroll-container {{ spec.container_class }}"{% if spec.scroll_shadows %} data-sheet-scroll{% endif %}{% if spec.editable and spec.deletable %} data-sticky-actions{% endif %}>
+<table id="{{ tid }}" class="editable-table w-full text-sm border-collapse bg-white dark:bg-gray-800"{% if spec.keyboard_nav and spec.editable %} data-cell-nav="{{ tid }}"{% endif %} style="white-space:nowrap">
     {% include "partials/sheet_body.html" %}
 </table>
 </div>

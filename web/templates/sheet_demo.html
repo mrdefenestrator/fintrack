@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Sheet demo — fintrack{% endblock %}
+{% block content %}
+{# Test harness layout: the sheet container is built to flex-fill its parent on
+   a real page; here we give each demo table a definite height and neutralise
+   the flex sizing so both a flat and a grouped sheet can stack on one page. #}
+<style>
+    .demo-wrap { height: 38vh; }
+    .demo-wrap .sheet-scroll-frame,
+    .demo-wrap .table-scroll-container { flex: none; height: 100%; }
+</style>
+<div class="p-3 overflow-auto">
+    <h2 class="text-sm font-semibold mb-1" id="flat-heading">Flat sheet</h2>
+    <div class="demo-wrap">
+        {% with spec=flat.spec, groups=flat.groups, filename=flat.filename,
+                editing=flat.editing, updated=flat.updated, error=flat.error,
+                max_cols=flat.max_cols, row_dom_id=flat.row_dom_id,
+                group_ncols=flat.group_ncols %}
+            {% include "partials/sheet_table.html" %}
+        {% endwith %}
+    </div>
+    <h2 class="text-sm font-semibold mb-1 mt-4" id="grouped-heading">Grouped sheet</h2>
+    <div class="demo-wrap">
+        {% with spec=grouped.spec, groups=grouped.groups, filename=grouped.filename,
+                editing=grouped.editing, updated=grouped.updated, error=grouped.error,
+                max_cols=grouped.max_cols, row_dom_id=grouped.row_dom_id,
+                group_ncols=grouped.group_ncols %}
+            {% include "partials/sheet_table.html" %}
+        {% endwith %}
+    </div>
+</div>
+{% endblock %}

@@ -76,9 +76,14 @@ def _register_filters(app: Flask) -> None:
         return f"{float(value):,.{decimals}f}"
 
 
-def create_app(db_path: str | None = None) -> Flask:
+def create_app(db_path: str | None = None, *, enable_sheet_demo: bool = False) -> Flask:
     """Application factory. Creates the engine, initialises the schema, and
-    wires up filters, blueprints, and error handlers."""
+    wires up filters, blueprints, and error handlers.
+
+    `enable_sheet_demo` mounts the test-only kitchen-sink sheet blueprint
+    (web.routes.sheet_demo) used by the framework unit + e2e tests; it is never
+    enabled in production.
+    """
     app = Flask(__name__)
 
     if db_path is None:
@@ -93,6 +98,11 @@ def create_app(db_path: str | None = None) -> Flask:
 
     _register_filters(app)
     register_blueprints(app)
+
+    if enable_sheet_demo:
+        from web.routes.sheet_demo import sheet_demo_bp
+
+        app.register_blueprint(sheet_demo_bp)
 
     @app.context_processor
     def _base_defaults():
@@ -146,7 +156,7 @@ def create_app(db_path: str | None = None) -> Flask:
 
 
 if __name__ == "__main__":
-    app = create_app()
+    app = create_app(enable_sheet_demo=os.environ.get("FINTRACK_SHEET_DEMO") == "1")
     port = int(os.environ.get("FINTRACK_PORT", 5003))
     debug = os.environ.get("FLASK_DEBUG", "1") != "0"
     app.run(debug=debug, host="0.0.0.0", port=port)

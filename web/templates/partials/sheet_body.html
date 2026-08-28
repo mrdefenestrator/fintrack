@@ -1,0 +1,114 @@
+{# The single generic sheet body — the htmx swap target rendered by every
+   editable table. Driven entirely by a `spec` (web.sheets.TableSpec) plus a
+   list of `groups` (web.sheets.Group). Flat tables pass one implicit group
+   (key "_"); grouped tables (Holdings) pass several, each with its own heading
+   band + column-header row so the group chrome can stick independently.
+
+   Context (built by web.sheets.render_context): spec, groups, filename,
+   editing, updated, error, max_cols, row_dom_id, group_ncols.
+
+   Cell/row styling and the edit-cell HTMX wiring come from the shared macros so
+   they stay identical to every other sheet; ALL sticky borders are drawn as
+   box-shadows in base.html (never border-collapse borders) — the renderer only
+   emits class hooks (.sheet-group-heading/-header, .table-actions-cell,
+   .total-row, data-accent). #}
+{% import "partials/sheet.html" as sheet %}
+{% from "macros/table.html" import cell_display, cell_edit_input, cell_edit_select, cell_non_editable %}
+
+{%- set tid = spec.dom_id -%}
+{%- set span = max_cols + (1 if spec.editable else 0) -%}
+
+{% if error %}
+<tbody>
+    <tr id="sheet-error-row">
+        <td colspan="{{ span }}" class="px-2 py-1 text-sm text-red-500 bg-red-50 dark:bg-red-950/40 border-b border-red-200 dark:border-red-800">{{ error }}</td>
+    </tr>
+</tbody>
+{% endif %}
+
+{% for group in groups %}
+{%- set cols = group.columns or spec.columns -%}
+{%- set ncols = group_ncols(group, spec) -%}
+<tbody class="sheet-group"{% if not spec.grouped %} id="{{ tid }}"{% endif %} data-group="{{ group.key }}"{% if spec.editable and spec.reorderable and group.reorderable %} data-reorder-url="{{ url_for(spec.endpoints['reorder'], filename=filename, **group.add_params) }}"{% endif %}>
+    {% if spec.grouped %}
+    <tr class="sheet-group-heading">
+        <td colspan="{{ spec.heading_label_span }}" class="px-2 py-1.5 text-xs font-semibold uppercase tracking-wide">{{ group.label }}</td>
+        <td class="px-1.5 py-1.5 text-right tabular-nums text-sm font-semibold text-gray-900 dark:text-gray-100 {% if group.subtotal and group.subtotal | display_is_negative %}!text-red-600 dark:!text-red-400{% endif %}">{{ group.subtotal or "" }}</td>
+        <td colspan="{{ span - spec.heading_label_span - 1 }}"></td>
+    </tr>
+    <tr class="sheet-group-header bg-gray-100 dark:bg-gray-700">
+        {% for col in cols %}
+        {% if col.label %}
+        <th class="sortable-th px-1.5 py-0.5 font-medium text-gray-800 dark:text-gray-100 cursor-pointer select-none hover:bg-gray-200 dark:hover:bg-gray-600 {% if col.right %}text-right{% else %}text-left{% endif %}"
+            {% if col.colspan > 1 %}colspan="{{ col.colspan }}" {% endif %}data-sort-key="c{{ loop.index0 }}"{% if not col.sortable %} data-sort-disabled{% endif %} role="button" tabindex="0" title="{{ col.tooltip or col.label }}">{{ col.label }} <span class="sort-indicator"></span></th>
+        {% else %}
+        <th class="sheet-blank-slot px-1.5 py-0.5"{% if col.colspan > 1 %} colspan="{{ col.colspan }}"{% endif %}></th>
+        {% endif %}
+        {% endfor %}
+        {% if ncols < max_cols %}<th class="sheet-blank-slot px-1.5 py-0.5" colspan="{{ max_cols - ncols }}"></th>{% endif %}
+        {% if spec.editable %}<th class="table-actions-cell px-1.5 py-0.5"></th>{% endif %}
+    </tr>
+    {% endif %}
+
+    {% for row in group.rows %}
+    <tr class="{{ sheet.row_class() }}" id="{{ row_dom_id(spec, row) }}"{% if row.accent %} data-accent="{{ row.accent }}"{% endif %}{% if spec.reorderable and group.reorderable %} data-reorder-index="{{ loop.index0 }}"{% endif %}>
+        {% for col in cols %}
+        {%- set cell = row.cells.get(col.key) -%}
+        {%- set colspan = (cell.colspan if cell and cell.colspan) or col.colspan -%}
+        {%- set is_editing = spec.editable and cell and cell.editable and editing and editing.params == row.params and editing.field == col.key -%}
+        {% if is_editing %}
+            {%- set update_url = url_for(spec.endpoints['update'], filename=filename, **row.params) -%}
+            {%- set display_url = url_for(spec.endpoints['cell_edit'], filename=filename, display=1, **row.params) -%}
+            {% if col.is_select %}
+                {%- set opts = cell.options if cell.options is not none else spec.options.get(col.options_key, []) -%}
+                {% call(caller) cell_edit_select(col.key, cell.raw, col.right, update_url, display_url, tid, none, none, colspan=colspan) %}
+                    {% for value, label in opts %}
+                    <option value="{{ value }}"{% if value | string == cell.raw | string %} selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                {% endcall %}
+            {% elif col.custom_editor %}
+                {% include col.custom_editor %}
+            {% else %}
+                {{ cell_edit_input(col.key, cell.raw, col.right, update_url, display_url, tid, col.inputmode, col.input_type, colspan=colspan) }}
+            {% endif %}
+        {% elif spec.editable and cell and cell.editable %}
+            {%- set is_updated = updated and updated.params == row.params and updated.field == col.key -%}
+            {{ cell_display(cell.display, col.right, cell.is_negative, url_for(spec.endpoints['cell_edit'], filename=filename, field=col.key, **row.params), tid, is_updated, colspan=colspan, sort_value=cell.sort_value) }}
+        {% elif spec.editable %}
+            {{ cell_non_editable(cell.display if cell else "", col.right, cell.is_negative if cell else false, colspan=colspan) }}
+        {% else %}
+            <td class="{{ sheet.cell_class('text-right tabular-nums' if col.right else '', (sheet.neg(cell.is_negative if cell else false) ~ ' ' ~ (cell.css if cell else '')) | trim) }}"{% if colspan > 1 %} colspan="{{ colspan }}"{% endif %}{% if cell and cell.sort_value is not none %} data-sort-value="{{ cell.sort_value }}"{% endif %}>{{ cell.display if cell else "" }}</td>
+        {% endif %}
+        {% endfor %}
+        {% if ncols < max_cols %}<td colspan="{{ max_cols - ncols }}"></td>{% endif %}
+        {% if spec.editable and spec.deletable %}{% with delete_confirm_url=url_for(spec.endpoints['delete_confirm'], filename=filename, **row.params), edit_mode=true, reorderable=(spec.reorderable and group.reorderable) %}{% include "partials/editable_table_delete_icon.html" %}{% endwith %}
+        {% elif spec.editable %}<td class="table-actions-cell px-1.5 py-px"></td>{% endif %}
+    </tr>
+    {% else %}
+    <tr>
+        <td colspan="{{ span }}" class="px-1.5 py-2 text-center text-gray-500 dark:text-gray-400">{{ group.empty_text or spec.empty_text }}</td>
+    </tr>
+    {% endfor %}
+
+    {% if spec.editable and spec.endpoints.get('add') and group.add_noun %}
+    {% with add_url=url_for(spec.endpoints['add'], filename=filename, **group.add_params), add_noun=group.add_noun, span=span %}{% include "partials/sheet_add_row.html" %}{% endwith %}
+    {% endif %}
+</tbody>
+{% endfor %}
+
+{% if spec.footer %}
+<tbody>
+    {% for frow in spec.footer %}
+    <tr class="total-row {% if not loop.last %}total-upper{% endif %} bg-gray-100 dark:bg-gray-700 {% if loop.first %}border-t-2 border-gray-400 dark:border-gray-500{% endif %} font-semibold">
+        {% for cell in frow %}
+        {% if cell == "" %}
+        <td class="{{ sheet.cell_class() }}"></td>
+        {% else %}
+        <td class="{{ sheet.cell_class('text-right tabular-nums' if loop.index0 == spec.footer_amount_pos else '', sheet.neg(cell | display_is_negative)) }}">{{ cell }}</td>
+        {% endif %}
+        {% endfor %}
+        {% if spec.editable %}<td class="table-actions-cell px-1.5 py-0.5"></td>{% endif %}
+    </tr>
+    {% endfor %}
+</tbody>
+{% endif %}

@@ -1,0 +1,10 @@
+{# Inline "+ Add …" row for an editable sheet group. Creates a default row
+   (stub-then-edit), the user edits it inline. Params: add_url, add_noun, span. #}
+<tr data-add-row>
+    <td colspan="{{ span }}" class="px-1.5 py-1 border-b border-gray-200 dark:border-gray-700">
+        <button type="button" class="text-xs font-medium text-blue-600 dark:text-blue-400 hover:underline"
+            hx-post="{{ add_url }}" hx-trigger="click" hx-swap="none">
+            + Add {{ add_noun }}
+        </button>
+    </td>
+</tr>

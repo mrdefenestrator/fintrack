@@ -192,6 +192,9 @@ def delete(category_id):
             delete_category(conn, name=current["name"])
         except ValueError as e:
             return _tbody(error=str(e), status=422)
-    resp = current_app.make_response("")
-    resp.headers["HX-Refresh"] = "true"
-    return resp
+    # Re-render the table in place (row gone) rather than a full-page HX-Refresh
+    # reload. The reload was the one action that didn't swap the tbody, and a
+    # full reload is where iOS Safari's re-init quirks disabled editing/deleting
+    # afterward. Swapping keeps us on the page, in edit mode, consistent with
+    # cell edits.
+    return _tbody()

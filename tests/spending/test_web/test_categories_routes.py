@@ -188,7 +188,11 @@ def test_delete_unused_category_succeeds(client, db_engine):
     cat_id = _add(db_engine, "Groceries")
     resp = client.post(f"/s/ledger/categories/{cat_id}/delete")
     assert resp.status_code == 200
-    assert resp.headers.get("HX-Refresh") == "true"
+    # Delete swaps the re-rendered table in place (no full-page HX-Refresh reload)
+    # so editing/deleting keeps working afterward, esp. on iOS Safari.
+    assert "HX-Refresh" not in resp.headers
+    body = resp.get_data(as_text=True)
+    assert "Groceries" not in body  # the row is gone from the re-rendered table
     with db_engine.connect() as conn:
         assert not conn.execute(
             select(categories.c.id).where(categories.c.name == "Groceries")

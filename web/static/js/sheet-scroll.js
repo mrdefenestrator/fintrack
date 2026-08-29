@@ -245,9 +245,28 @@
     document.addEventListener("htmx:afterSettle", scan);
     window.addEventListener("resize", scan);
 
+    // The grid-filler + shadow visibility are computed from measured heights, so
+    // they must be recomputed after the layout actually settles. On DOMContentLoaded
+    // the async Tailwind CDN and web fonts often haven't applied yet, so a single
+    // early pass measures a collapsed/short container and the footer ends up
+    // following the content instead of pinned to the bottom — and whether it's
+    // right came down to timing ("random after refresh"). Re-scan after full load,
+    // on bfcache restore (iOS Safari back/forward), and on a couple of deferred
+    // ticks so a late style/font application is always caught.
+    window.addEventListener("load", scan);
+    window.addEventListener("pageshow", scan);
+    function deferredScans() {
+        requestAnimationFrame(scan);
+        setTimeout(scan, 250);
+        setTimeout(scan, 800);
+    }
+
     // In case this script runs after DOMContentLoaded already fired (e.g.
     // loaded async/late).
     if (document.readyState !== "loading") {
         scan();
     }
+    deferredScans();
+    document.addEventListener("DOMContentLoaded", deferredScans);
+    window.addEventListener("load", deferredScans);
 })();

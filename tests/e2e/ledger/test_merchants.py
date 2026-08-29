@@ -216,9 +216,9 @@ def _add_category(page, base_url, name):
         page.locator("button", has_text="+ Add category").click()
     page.wait_for_load_state("networkidle")
     # The stub is created as "New category" (or "New category N"); rename it.
-    stub_cell = page.locator("#categories-tbody td", has_text="New category").first
+    stub_cell = page.locator("#categories-table td", has_text="New category").first
     _open_inline_editor(page, stub_cell)
-    rename_input = page.locator("#categories-tbody input[name='value']")
+    rename_input = page.locator("#categories-table input[name='value']")
     rename_input.wait_for()
     rename_input.fill(name)
     with page.expect_response(
@@ -248,7 +248,7 @@ def test_categories_add_new_category(page, confirmed_server):
     """Adding a category adds a row and makes it available in the Merchants
     Category filter (which reads live from the categories table)."""
     _add_category(page, confirmed_server, "TempCat")
-    assert page.locator("#categories-tbody", has_text="TempCat").is_visible()
+    assert page.locator("#categories-table", has_text="TempCat").is_visible()
 
     page.goto(f"{confirmed_server}/s/ledger/merchants")
     labels = (
@@ -262,10 +262,10 @@ def test_categories_rename_to_duplicate_shows_inline_error(page, confirmed_serve
     _add_category(page, confirmed_server, "DupCat")
     _add_category(page, confirmed_server, "DupCat2")
 
-    cell = page.locator("#categories-tbody td", has_text="DupCat2").first
+    cell = page.locator("#categories-table td", has_text="DupCat2").first
     _open_inline_editor(page, cell)
 
-    rename_input = page.locator("#categories-tbody input[name='value']")
+    rename_input = page.locator("#categories-table input[name='value']")
     rename_input.wait_for()
     rename_input.fill("DupCat")
     with page.expect_response(
@@ -273,17 +273,17 @@ def test_categories_rename_to_duplicate_shows_inline_error(page, confirmed_serve
     ) as resp_info:
         rename_input.press("Enter")
     assert resp_info.value.status == 422
-    assert "already exists" in page.locator("#categories-tbody").inner_text()
+    assert "already exists" in page.locator("#categories-table").inner_text()
 
 
 def test_categories_rename(page, confirmed_server):
     """Clicking a category cell opens its inline editor; saving renames it."""
     _add_category(page, confirmed_server, "RenameMeCat")
 
-    cell = page.locator("#categories-tbody td", has_text="RenameMeCat").first
+    cell = page.locator("#categories-table td", has_text="RenameMeCat").first
     _open_inline_editor(page, cell)
 
-    rename_input = page.locator("#categories-tbody input[name='value']")
+    rename_input = page.locator("#categories-table input[name='value']")
     rename_input.wait_for()
     rename_input.fill("RenamedCat")
     with page.expect_response(
@@ -292,8 +292,8 @@ def test_categories_rename(page, confirmed_server):
         rename_input.press("Enter")
     page.wait_for_load_state("networkidle")
 
-    assert page.locator("#categories-tbody", has_text="RenamedCat").is_visible()
-    assert page.locator("#categories-tbody td", has_text="RenameMeCat").count() == 0
+    assert page.locator("#categories-table", has_text="RenamedCat").is_visible()
+    assert page.locator("#categories-table td", has_text="RenameMeCat").count() == 0
 
 
 def test_categories_blocked_delete_shows_breakdown(page, confirmed_server):
@@ -303,7 +303,7 @@ def test_categories_blocked_delete_shows_breakdown(page, confirmed_server):
     _seed_merchant_via_transaction(page, confirmed_server, category="ProtectedCat")
 
     page.goto(f"{confirmed_server}/s/ledger/categories?edit=1")
-    row = page.locator("#categories-tbody tr", has_text="ProtectedCat")
+    row = page.locator("#categories-table tr", has_text="ProtectedCat")
     with page.expect_response(lambda r: "/delete-confirm" in r.url):
         row.get_by_title("Delete").click()
     with page.expect_response(
@@ -312,9 +312,9 @@ def test_categories_blocked_delete_shows_breakdown(page, confirmed_server):
         row.get_by_title("Confirm delete").click()
     assert resp_info.value.status == 422
 
-    tbody_text = page.locator("#categories-tbody").inner_text()
+    tbody_text = page.locator("#categories-table").inner_text()
     assert "In use by" in tbody_text
     assert "1 merchant" in tbody_text
 
     # Category must still exist (delete was blocked).
-    assert page.locator("#categories-tbody", has_text="ProtectedCat").is_visible()
+    assert page.locator("#categories-table", has_text="ProtectedCat").is_visible()

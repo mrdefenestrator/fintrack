@@ -167,8 +167,14 @@ def _free_port() -> int:
         return s.getsockname()[1]
 
 
-def _wait_for_server(port: int, timeout: float = 10.0) -> None:
-    """Block until the Flask server is accepting connections."""
+def _wait_for_server(port: int, timeout: float = 30.0) -> None:
+    """Block until the Flask server is accepting connections.
+
+    30s, not 10s: on a loaded CI runner (the browser matrix runs two engine legs
+    that each cold-start these per-module Flask subprocesses) the interpreter +
+    SQLAlchemy/Flask import can take well over 10s, which showed up as flaky
+    "Flask server did not start" errors on the WebKit leg.
+    """
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         try:

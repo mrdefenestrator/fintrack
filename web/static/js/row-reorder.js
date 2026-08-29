@@ -81,6 +81,13 @@
             // lets Playwright drive the drag in WebKit for the e2e test.
             forceFallback: true,
             fallbackClass: "row-reorder-fallback",
+            // Drive the fallback with touch/mouse events, not Pointer Events. On
+            // iOS Safari the pointer path (SortableJS's default) fires onChoose
+            // on pointerdown but the drag never starts — the handle just
+            // highlights — because iOS's pointer-capture/cancel behaviour eats
+            // the follow-up pointermoves. Touch events reach document reliably,
+            // so the drag actually begins on iOS while desktop still uses mouse.
+            supportPointer: false,
             // Ignore a tiny move so a tap on the handle isn't read as a drag.
             fallbackTolerance: 4,
             // Keep dragged rows within the contiguous data block — don't cross a

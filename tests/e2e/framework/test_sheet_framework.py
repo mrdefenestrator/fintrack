@@ -89,6 +89,28 @@ def test_column_sort_persists_across_tbody_swap(page, demo_server):
     assert page.locator(ROWS).first.locator("td").first.inner_text() == name_before
 
 
+def test_sort_holds_edited_row_in_place(page, demo_server):
+    """Regression: opening a cell editor mid-sort re-rendered the row with an
+    empty <input>, whose textContent read blank, so the edited row jumped to the
+    top/bottom of the sort and snapped back on revert. The sorter now reads the
+    live editor value, so the row keeps its sorted position while editing."""
+    _goto(page, demo_server)
+    # sort ascending by Name -> Alpha, Beta, Gamma
+    page.locator(f"{FLAT} thead th", has_text="Name").first.click()
+    page.wait_for_timeout(200)
+    order = [
+        r.locator("td").first.inner_text().strip() for r in page.locator(ROWS).all()
+    ]
+    assert order[:3] == ["Alpha", "Beta", "Gamma"]
+    # edit the middle row (Beta, #demo-flat-2)
+    page.locator("#demo-flat-2 td", has_text="Beta").first.click()
+    page.locator("#demo-flat-2 input[name='value']").wait_for(state="visible")
+    page.wait_for_timeout(200)
+    # the editing row is still the 2nd data row, not sorted to an edge
+    ids = [r.get_attribute("id") for r in page.locator(ROWS).all()]
+    assert ids[1] == "demo-flat-2"
+
+
 def test_delete_confirm_flow(page, demo_server):
     _goto(page, demo_server)
     row = page.locator("#demo-flat-1")

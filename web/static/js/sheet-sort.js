@@ -44,7 +44,16 @@
         var cell = row.cells[col];
         if (!cell) return "";
         var sv = cell.getAttribute("data-sort-value");
-        return sv !== null ? sv : cell.textContent;
+        if (sv !== null) return sv;
+        // When a cell is mid-edit its content is an <input>/<select>, whose
+        // textContent is empty — reading that would sort the edited row to the
+        // top/bottom (it "jumps" while editing, then returns on revert). Read
+        // the live editor value so the row keeps its sorted position. Skip the
+        // hidden <input name="field"> the edit form carries; the value editor is
+        // the visible text input or the select.
+        var editor = cell.querySelector("input:not([type=hidden]), select");
+        if (editor) return editor.value;
+        return cell.textContent;
     }
 
     function apply(tbody, key, dir) {

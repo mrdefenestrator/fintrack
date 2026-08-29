@@ -30,14 +30,33 @@ jobs:
       - name: Unit tests
         run: mise run test-unit
 
-      - name: Install Playwright browsers
-        run: mise run playwright-install
+  e2e:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The web UI targets Safari first, then Chrome, so exercise the sheet
+        # framework against both engines (webkit == the Safari engine). fail-fast
+        # is off so one engine's failure still reports the other's result.
+        browser: [chromium, webkit]
 
-      - name: E2E tests
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install mise
+        uses: jdx/mise-action@v2
+
+      - name: Install Playwright browser (${{ matrix.browser }})
+        run: uv run playwright install --with-deps ${{ matrix.browser }}
+
+      - name: E2E tests (${{ matrix.browser }})
+        env:
+          E2E_BROWSER: ${{ matrix.browser }}
         run: mise run test-e2e
 
   build-and-push:
-    needs: ci
+    needs: [ci, e2e]
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
 

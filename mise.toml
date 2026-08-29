@@ -34,12 +34,20 @@ run = "uv run pytest tests/ -v --cov=fintrack --cov-report=term-missing -m 'not 
 description = "Run unit tests for both apps with coverage"
 
 [tasks.test-e2e]
-run = "uv run pytest tests/ -v -m e2e"
-description = "Run e2e browser tests with Playwright (run playwright-install first)"
+run = "uv run pytest tests/ -v -m e2e --browser ${E2E_BROWSER:-chromium}"
+description = "Run e2e browser tests (set E2E_BROWSER=webkit|firefox|chromium; default chromium)"
+
+[tasks.test-e2e-webkit]
+run = "E2E_BROWSER=webkit uv run pytest tests/ -v -m e2e --browser webkit"
+description = "Run e2e browser tests against WebKit (Safari engine; run playwright-install-webkit first)"
 
 [tasks.playwright-install]
 run = "uv run playwright install chromium"
-description = "Install Playwright browser binaries"
+description = "Install the Chromium Playwright browser binary"
+
+[tasks.playwright-install-webkit]
+run = "uv run playwright install webkit"
+description = "Install the WebKit (Safari engine) Playwright browser binary"
 
 [tasks.migrate]
 run = "uv run alembic upgrade head"

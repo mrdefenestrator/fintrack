@@ -245,6 +245,19 @@
     document.addEventListener("htmx:afterSettle", scan);
     window.addEventListener("resize", scan);
 
+    // iOS Safari collapses/expands its URL bar as the page scrolls, which
+    // changes the usable viewport height (and thus the scroll container's
+    // height) but fires a `visualViewport` resize, NOT a window `resize`. Without
+    // this, the grid-filler that pins the footer is measured against the old
+    // height and goes stale — the footer "un-pins" and follows the content after
+    // a scroll, inconsistently. Recomputing on visualViewport changes re-pins it.
+    // Feature-gated; where it's absent the window `resize` above already covers
+    // the desktop case. (This is the one iOS behaviour desktop CI can't emulate,
+    // since neither Chromium nor desktop WebKit has a collapsing URL bar.)
+    if (window.visualViewport) {
+        window.visualViewport.addEventListener("resize", scan);
+    }
+
     // The grid-filler + shadow visibility are computed from measured heights, so
     // they must be recomputed after the layout actually settles. On DOMContentLoaded
     // the async Tailwind CDN and web fonts often haven't applied yet, so a single

@@ -188,18 +188,54 @@ def test_sort_works_when_locked(page, demo_server):
     assert "Beta" in page.locator(lrows).first.inner_text()
 
 
-def test_footer_pins_to_bottom_when_content_short(page, demo_server):
-    """With few rows, the total row is pushed to the container's bottom (the
-    grid filler + sticky bottom), rather than floating just under the last row."""
-    _goto(page, demo_server)
-    gap = page.evaluate(
+def _footer_gap(page):
+    """Pixels between the scroll container's bottom and the total row's bottom.
+    ~0 means the footer is pinned to the container bottom."""
+    return page.evaluate(
         """() => {
             const c = document.querySelector('#demo-flat-table').closest('[data-sheet-scroll]');
             const tr = document.querySelector('#demo-flat-table tr.total-row');
             return Math.round(c.getBoundingClientRect().bottom - tr.getBoundingClientRect().bottom);
         }"""
     )
-    assert abs(gap) <= 3
+
+
+def test_footer_pins_to_bottom_when_content_short(page, demo_server):
+    """With few rows, the total row is pushed to the container's bottom (the
+    grid filler + sticky bottom), rather than floating just under the last row."""
+    _goto(page, demo_server)
+    assert abs(_footer_gap(page)) <= 3
+
+
+def test_footer_pins_at_mobile_viewport(page, demo_server):
+    """The footer must pin at a small mobile-portrait viewport too — the case the
+    desktop-viewport test above never exercises. Runs on the WebKit CI leg, so a
+    Safari-engine footer regression at phone size is caught, not left to manual
+    on-device QA."""
+    page.set_viewport_size({"width": 390, "height": 780})
+    _goto(page, demo_server)
+    assert abs(_footer_gap(page)) <= 3
+
+
+def test_footer_stays_pinned_across_viewport_resize(page, demo_server):
+    """The footer must re-pin when the viewport height changes after load — the
+    grid filler is measured against the container height, so a height change (on
+    mobile, the browser chrome collapsing/expanding as you scroll) must trigger a
+    recompute or the footer goes stale and follows the content.
+
+    NOTE: a window resize is the closest CI-reproducible analog. Real iOS Safari
+    changes height via `visualViewport` (URL-bar collapse), which a headless
+    desktop engine has no equivalent for; sheet-scroll.js listens to both. This
+    guards the recompute-on-resize path in both engines."""
+    page.set_viewport_size({"width": 390, "height": 780})
+    _goto(page, demo_server)
+    assert abs(_footer_gap(page)) <= 3
+    page.set_viewport_size({"width": 390, "height": 560})
+    page.wait_for_timeout(300)
+    assert abs(_footer_gap(page)) <= 3, "footer un-pinned after viewport shrank"
+    page.set_viewport_size({"width": 390, "height": 780})
+    page.wait_for_timeout(300)
+    assert abs(_footer_gap(page)) <= 3, "footer un-pinned after viewport grew"
 
 
 def test_vertical_scroll_works(page, demo_server):

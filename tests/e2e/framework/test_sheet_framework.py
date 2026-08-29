@@ -147,18 +147,29 @@ def test_delete_after_edit_not_clobbered(page, demo_server):
     assert page.locator("#demo-flat-2").count() == 0
 
 
-def test_drag_reorder_persists(page, demo_server, browser_name):
-    # SortableJS uses native HTML5 drag-and-drop, which Playwright cannot
-    # synthesize in WebKit (drag_to dispatches mouse events; WebKit never turns
-    # those into dragstart/drop). The reorder feature itself works in Safari at
-    # the product level — this is a test-driver limitation, not a product gap —
-    # so exercise the drag behaviour on the engines Playwright can drive it in.
-    if browser_name == "webkit":
-        pytest.skip("Playwright cannot synthesize native HTML5 drag in WebKit")
+def _drag_row(page, handle, target):
+    """Drag by a row's handle onto a target row with a stepped pointer motion.
+
+    SortableJS runs in forceFallback (pointer) mode — see row-reorder.js — so a
+    plain drag_to (which can jump straight to the target) may skip the
+    intermediate dragover positions the fallback needs. Moving the mouse in
+    steps drives the fallback the same way in Chromium and WebKit, which is what
+    makes this coverage cross-engine (and reflects the real Safari code path)."""
+    hb = handle.bounding_box()
+    tb = target.bounding_box()
+    page.mouse.move(hb["x"] + hb["width"] / 2, hb["y"] + hb["height"] / 2)
+    page.mouse.down()
+    page.mouse.move(tb["x"] + tb["width"] / 2, tb["y"] + tb["height"] / 2, steps=12)
+    # a nudge past the target's midpoint so the swap commits before release
+    page.mouse.move(tb["x"] + tb["width"] / 2, tb["y"] + tb["height"], steps=4)
+    page.mouse.up()
+
+
+def test_drag_reorder_persists(page, demo_server):
     _goto(page, demo_server)
     rows = page.locator(ROWS)
     first_name = rows.first.locator("td").first.inner_text()
-    rows.first.locator(".drag-handle").drag_to(rows.nth(2))
+    _drag_row(page, rows.first.locator(".drag-handle"), rows.nth(2))
     page.wait_for_timeout(300)
     assert page.locator(ROWS).first.locator("td").first.inner_text() != first_name
 

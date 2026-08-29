@@ -320,21 +320,6 @@
         .drag-handle:active { cursor: grabbing; }
         .row-reorder-ghost { opacity: 0.4; }
         .row-reorder-chosen { background: rgba(59, 130, 246, 0.08); }
-        .row-reorder-fallback { opacity: 0.9; }
-        /* The drag handle must claim the touch gesture: without this iOS Safari
-           arbitrates a touch-drag on the handle between dragging the row and
-           scrolling the sheet, so reorder "works sometimes, then stops." The
-           more-specific `.table-scroll-container .drag-handle` (0,2,0) overrides
-           the container's `touch-action: auto` scroll reset (0,1,1) above; the
-           bare `.drag-handle` covers sheets outside a scroll container. Starting
-           a touch anywhere else in the sheet still scrolls normally. */
-        .drag-handle,
-        .table-scroll-container .drag-handle {
-            touch-action: none;
-            -webkit-user-select: none;
-            user-select: none;
-            -webkit-touch-callout: none;
-        }
 
         /* Action column: no wrap, no overflow, fixed width for icon row. Holds
            two 1.25rem icons (drag handle + delete, or the ✓/✗ delete-confirm

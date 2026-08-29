@@ -71,25 +71,6 @@
         tbody._rowReorder = Sortable.create(tbody, {
             handle: ".drag-handle",
             draggable: "[data-reorder-index]",
-            // Use SortableJS's own pointer-driven dragging instead of native
-            // HTML5 drag-and-drop. Native DnD is unreliable on iOS Safari — a
-            // touch on the handle is arbitrated between drag and scroll, so
-            // reorder "works sometimes, then stops." The fallback path owns the
-            // pointer from pointerdown on the handle (paired with
-            // `touch-action: none` on .drag-handle in base.html), which is
-            // deterministic across desktop and mobile Safari. It's also what
-            // lets Playwright drive the drag in WebKit for the e2e test.
-            forceFallback: true,
-            fallbackClass: "row-reorder-fallback",
-            // Drive the fallback with touch/mouse events, not Pointer Events. On
-            // iOS Safari the pointer path (SortableJS's default) fires onChoose
-            // on pointerdown but the drag never starts — the handle just
-            // highlights — because iOS's pointer-capture/cancel behaviour eats
-            // the follow-up pointermoves. Touch events reach document reliably,
-            // so the drag actually begins on iOS while desktop still uses mouse.
-            supportPointer: false,
-            // Ignore a tiny move so a tap on the handle isn't read as a drag.
-            fallbackTolerance: 4,
             // Keep dragged rows within the contiguous data block — don't cross a
             // non-draggable row (group header / add-row / subtotal). Matters for
             // the grouped Holdings sheet, where those share the group's tbody.

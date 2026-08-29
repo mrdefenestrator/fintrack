@@ -270,6 +270,18 @@ def test_sticky_group_chrome_uses_no_border_collapse_borders(render_body):
             assert not re.search(r"\bborder-[trbl]\b", classes), classes
 
 
+def test_static_js_is_cache_busted(client):
+    """Static JS/CSS must be versioned (?v=…) so a shipped fix to sheet-sort.js /
+    cell-nav.js / sheet-scroll.js actually reaches returning visitors instead of
+    being served stale from the browser cache (the recurring 'fix didn't work'
+    reports were stale cached JS)."""
+    html = client.get("/_sheet_demo/").data.decode()
+    for name in ("sheet-sort.js", "cell-nav.js", "sheet-scroll.js"):
+        assert re.search(re.escape(name) + r"\?v=\d+", html), name
+        # no unversioned reference to the same file
+        assert f'{name}"' not in html
+
+
 def test_scroll_shadow_and_cellnav_hooks_present_on_shell(client):
     html = client.get("/_sheet_demo/").data.decode()
     assert 'data-cell-nav="demo-flat-table"' in html

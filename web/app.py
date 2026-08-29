@@ -99,6 +99,31 @@ def create_app(db_path: str | None = None, *, enable_sheet_demo: bool = False) -
     _register_filters(app)
     register_blueprints(app)
 
+    # Cache-bust static assets: append the file's mtime as ?v=… to every
+    # url_for('static', …). Without this, browsers cache JS/CSS by filename
+    # forever, so a shipped fix to sheet-sort.js / cell-nav.js / sheet-scroll.js
+    # (or the sheet styles) silently doesn't reach a returning visitor until
+    # they hard-refresh — which looked like the fixes "not working". The version
+    # changes only when the file changes, so unchanged assets stay cached.
+    _static_version_cache: dict[str, int] = {}
+
+    @app.url_defaults
+    def _static_cache_bust(endpoint, values):
+        if endpoint != "static" or not values or "filename" not in values:
+            return
+        filename = values["filename"]
+        version = _static_version_cache.get(filename)
+        if version is None:
+            try:
+                version = int(
+                    os.stat(os.path.join(app.static_folder, filename)).st_mtime
+                )
+            except OSError:
+                version = 0
+            _static_version_cache[filename] = version
+        if version:
+            values["v"] = version
+
     if enable_sheet_demo:
         from web.routes.sheet_demo import sheet_demo_bp
 

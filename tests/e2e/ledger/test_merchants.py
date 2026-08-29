@@ -123,7 +123,11 @@ def _seed_merchant_via_transaction(page, base_url, category="Groceries"):
     # apply-to-merchant is checked by default; selecting a category saves and
     # (because it's merchant-wide) redirects/reloads the list.
     edit_row.locator("input[name='apply_to_merchant']").check()
-    with page.expect_response(lambda r: r.request.method == "POST"):
+    # A merchant-wide save returns HX-Refresh, which reloads the transactions
+    # page. Wait for that reload navigation to finish — otherwise it can still be
+    # in flight when the caller navigates away, interrupting the next goto (seen
+    # on WebKit: "Navigation ... is interrupted by another navigation").
+    with page.expect_navigation(wait_until="load"):
         edit_row.locator("select[name='value']").select_option(category)
     page.wait_for_load_state("networkidle")
 

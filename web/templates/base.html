@@ -523,14 +523,11 @@
             flex-direction: column;
             flex: 1 1 0;
             min-height: 0;
-            /* iOS Safari: a nested flex column doesn't reliably give a
-               scrolling child a bounded height unless its flex ancestors also
-               clip. Without this the frame collapses to its content on short
-               pages, so the scroll container never fills the viewport and the
-               pinned footer/scroll-shadows have no room to work (they do on
-               Chrome/Firefox). overflow:hidden here is harmless — the inner
-               .table-scroll-container owns the actual scroll. */
-            overflow: hidden;
+            /* NOTE: do NOT set overflow:hidden here — the scroll-shadow overlays
+               are absolutely-positioned children of this frame, and clipping the
+               frame hid them on iOS Safari in edit mode (where the sticky actions
+               column shifts the stacking). The bounded-height clip lives on
+               <main> instead, which sits above the shadows and doesn't clip them. */
         }
 
         /* ~1 data-row-tall gradients (QA item 19): larger/softer, not darker, so

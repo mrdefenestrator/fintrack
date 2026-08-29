@@ -523,6 +523,14 @@
             flex-direction: column;
             flex: 1 1 0;
             min-height: 0;
+            /* iOS Safari: a nested flex column doesn't reliably give a
+               scrolling child a bounded height unless its flex ancestors also
+               clip. Without this the frame collapses to its content on short
+               pages, so the scroll container never fills the viewport and the
+               pinned footer/scroll-shadows have no room to work (they do on
+               Chrome/Firefox). overflow:hidden here is harmless — the inner
+               .table-scroll-container owns the actual scroll. */
+            overflow: hidden;
         }
 
         /* ~1 data-row-tall gradients (QA item 19): larger/softer, not darker, so
@@ -970,7 +978,7 @@
         </nav>
         {% endif %}
 
-        <main class="flex-1 min-w-0 min-h-0 flex flex-col">
+        <main class="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden">
             {% block content %}{% endblock %}
         </main>
     </div>

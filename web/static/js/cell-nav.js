@@ -195,6 +195,36 @@
         true
     );
 
+    // Cancel an editor's delayed focusout-revert when focus leaves it for an
+    // action control (a delete/actions button or a sortable header) while the
+    // value is UNCHANGED. Without this, clicking the trash right after an edit
+    // (Enter opens the next cell's editor) blurs that editor, and its 150ms
+    // `hx-get` revert re-renders the whole table ~150ms later — wiping the
+    // just-shown delete confirm, so the delete appears to do nothing. Runs in
+    // the capture phase so it precedes htmx's own focusout handlers; a changed
+    // value is left alone so its save still fires.
+    document.addEventListener(
+        "focusout",
+        function (e) {
+            var el = e.target;
+            if (!isEditField(el) || !findContainer(el)) return;
+            var rt = e.relatedTarget;
+            if (!rt || !rt.closest) return;
+            if (!rt.closest(".table-actions-cell, .sortable-th")) return;
+            var changed =
+                el.tagName === "SELECT"
+                    ? Array.prototype.some.call(
+                          el.options,
+                          function (o) {
+                              return o.selected !== o.defaultSelected;
+                          }
+                      )
+                    : el.value !== el.defaultValue;
+            if (!changed) e.stopImmediatePropagation();
+        },
+        true
+    );
+
     document.addEventListener("htmx:afterSwap", function () {
         var nav = pending;
         pending = null;

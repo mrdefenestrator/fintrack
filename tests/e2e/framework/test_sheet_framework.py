@@ -100,6 +100,31 @@ def test_delete_confirm_flow(page, demo_server):
     assert page.locator("#demo-flat-1").count() == 0
 
 
+def test_delete_after_edit_not_clobbered(page, demo_server):
+    """Regression: editing a cell and pressing Enter opens the next cell's
+    editor; clicking a delete button then blurs that editor, whose delayed
+    focusout-revert used to re-render the table ~150ms later and wipe the
+    just-shown delete confirm ('delete does nothing after editing')."""
+    _goto(page, demo_server)
+    page.locator("#demo-flat-1 td", has_text="Alpha").first.click()
+    inp = page.locator("#demo-flat-1 input[name='value']")
+    inp.wait_for(state="visible")
+    inp.fill("Edited")
+    inp.press("Enter")
+    # cell-nav opens the next cell's editor
+    page.locator("#demo-flat-2 input[name='value']").wait_for(state="visible")
+    # delete that row; the open editor's blur must not wipe the confirm
+    row = page.locator("#demo-flat-2")
+    row.locator("button[title='Delete']").click()
+    conf = row.locator("button[title='Confirm delete']")
+    conf.wait_for(state="visible")
+    page.wait_for_timeout(400)  # past the 150ms revert delay
+    assert conf.is_visible()  # still there — not clobbered
+    conf.click()
+    page.locator("#demo-flat-2").wait_for(state="detached")
+    assert page.locator("#demo-flat-2").count() == 0
+
+
 def test_drag_reorder_persists(page, demo_server):
     _goto(page, demo_server)
     rows = page.locator(ROWS)

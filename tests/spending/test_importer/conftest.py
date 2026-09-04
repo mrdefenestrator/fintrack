@@ -165,6 +165,20 @@ def sample_venmo_csv(tmp_path):
 
 
 @pytest.fixture
+def sample_rocket_csv(tmp_path):
+    content = (
+        "Date,Date Due,Principal,Interest,Escrow,Other & Fees,Total,Transaction Type\n"
+        "08/10/2026,09/01/2026,$930.03,$1311.91,$781.47,$0.00,$3023.41,Monthly Payment\n"
+        "07/10/2026,08/01/2026,$927.13,$1314.81,$781.47,$0.00,$3023.41,Monthly Payment\n"
+        "12/02/2024,12/01/2024,$0.0,$0.0,$2613.09,$0.00,$2613.09,Escrow Adjustment\n"
+        "12/02/2024,12/01/2024,$0.0,$0.0,($2613.09),$0.00,($2613.09),Escrow Adjustment\n"
+    )
+    path = tmp_path / "rocket.csv"
+    path.write_text(content)
+    return path
+
+
+@pytest.fixture
 def sample_csv(tmp_path):
     content = """Transaction Date,Post Date,Description,Category,Type,Amount
 01/15/2024,01/16/2024,WHOLE FOODS MARKET #10234,Groceries,Sale,-42.50

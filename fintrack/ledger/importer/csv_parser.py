@@ -11,9 +11,12 @@ _MAX_HEADER_SCAN = 10
 
 
 def _parse_signed_dollar(value: str) -> Decimal:
-    """Parse amounts like '+ $46.74' or '- $208.85'."""
+    """Parse amounts like '+ $46.74', '- $208.85', or '($2,613.09)'."""
     value = value.strip()
     negative = value.startswith("-")
+    if value.startswith("(") and value.endswith(")"):
+        negative = True
+        value = value[1:-1]
     cleaned = value.lstrip("+-").replace("$", "").replace(",", "").strip()
     return -Decimal(cleaned) if negative else Decimal(cleaned)
 
@@ -28,6 +31,9 @@ def parse_csv(file_path: str | Path, config_path: str | Path) -> ImportResult:
     date_fmt = config["date_format"]
     header_row = config.get("header_row", 0)
     amount_format = config.get("amount_format", "standard")
+    negate = config.get("negate", False)
+    filter_column = config.get("filter_column")
+    filter_values = config.get("filter_values")
     beg_bal_col = config.get("beginning_balance_column")
     end_bal_col = config.get("ending_balance_column")
 
@@ -39,6 +45,10 @@ def parse_csv(file_path: str | Path, config_path: str | Path) -> ImportResult:
         all_rows = list(csv.DictReader(f))
 
     for row in all_rows:
+        if filter_column and filter_values is not None:
+            if row.get(filter_column, "").strip() not in filter_values:
+                continue
+
         raw_amount = row.get(amount_col, "").strip()
         if not raw_amount:
             continue
@@ -49,6 +59,9 @@ def parse_csv(file_path: str | Path, config_path: str | Path) -> ImportResult:
                 amount = Decimal(raw_amount.replace(",", ""))
         except (InvalidOperation, ValueError):
             continue
+
+        if negate:
+            amount = -amount
 
         raw_date = row.get(date_col, "").strip()
         if not raw_date:

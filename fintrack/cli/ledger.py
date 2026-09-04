@@ -26,8 +26,10 @@ from fintrack.ledger.repository.categories import (
 )
 from fintrack.ledger.repository.imports import (
     confirm_import,
+    find_duplicate_transactions,
     get_staging_imports,
     reject_import,
+    remove_duplicate_transactions,
 )
 from fintrack.ledger.repository.merchants import (
     list_merchants_with_stats,
@@ -148,6 +150,59 @@ def staging_reject(cli, import_id):
     with cli.connect() as conn:
         reject_import(conn, import_id)
     click.echo(f"Rejected import {import_id}")
+
+
+# ---------------------------------------------------------------------------
+# dedup
+# ---------------------------------------------------------------------------
+
+
+@click.command("dedup")
+@click.option(
+    "--apply", "apply_", is_flag=True, help="Remove duplicates (default: dry run)"
+)
+@pass_cli
+def dedup(cli, apply_):
+    """Report (or with --apply, remove) transactions that share a fingerprint.
+
+    Duplicate detection normally prevents these at import time; use this to
+    clean up copies left by an earlier bug. Removal keeps one row per
+    fingerprint (preferring one carrying a correction), mirroring import-time
+    dedup. Run `alembic upgrade head` first so fingerprints are current.
+    """
+    with cli.connect() as conn:
+        snapshot_id = cli.snapshot_id(conn)
+        groups = find_duplicate_transactions(conn, snapshot_id)
+        if not groups:
+            click.echo("No duplicate transactions found.")
+            return
+
+        removable = sum(g["copies"] - 1 for g in groups)
+        rows = [
+            [
+                g["date"],
+                g["merchant"],
+                fmt_money(g["amount"]),
+                g["copies"],
+                g["copies"] - 1,
+            ]
+            for g in groups
+        ]
+        echo_table(
+            rows,
+            ["Date", "Merchant", "Amount", "Copies", "Removable"],
+            ("left", "left", "right", "right", "right"),
+        )
+        click.echo(
+            f"\n{len(groups)} duplicated transaction(s); {removable} row(s) removable."
+        )
+
+        if not apply_:
+            click.echo("Dry run — re-run with --apply to remove.")
+            return
+
+        removed = remove_duplicate_transactions(conn, snapshot_id)
+        click.echo(f"Removed {removed} duplicate transaction(s).")
 
 
 # ---------------------------------------------------------------------------

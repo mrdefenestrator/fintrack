@@ -34,6 +34,7 @@ def cli(ctx, db_path, snapshot_name):
 from fintrack.cli.ledger import (  # noqa: E402
     balance,
     categories,
+    dedup,
     import_cmd,
     merchants,
     report,
@@ -61,6 +62,7 @@ for command in (
     balance,
     import_cmd,
     staging,
+    dedup,
     merchants,
     categories,
     report,

@@ -31,11 +31,12 @@ PY
 
 .venv/bin/alembic upgrade head
 
-# Preview/demo environments seed a throwaway example household so the app has
-# something to show on first load. Idempotent and opt-in via env var, so normal
-# deployments are unaffected. Runs after migrations so the schema is present.
+# Preview/demo environments seed throwaway demo households (dense/sparse/empty)
+# so the app has something to show on first load. Idempotent and opt-in via env
+# var, so normal deployments are unaffected. Runs after migrations so the schema
+# is present.
 if [ "${FINTRACK_PREVIEW_SEED:-0}" = "1" ]; then
-    echo "FINTRACK_PREVIEW_SEED=1; seeding example household"
+    echo "FINTRACK_PREVIEW_SEED=1; seeding demo households"
     .venv/bin/python scripts/seed_example.py
 fi
 

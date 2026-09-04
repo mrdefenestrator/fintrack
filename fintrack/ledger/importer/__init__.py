@@ -67,7 +67,7 @@ def run_import(
     # Fingerprint and dedup
     fingerprints = compute_fingerprints(result["transactions"], account_id)
     existing_fps = get_existing_fingerprints(conn, account_id)
-    new_txns, new_fps, flagged = deduplicate(
+    new_txns, new_fps, flagged, flagged_fps = deduplicate(
         result["transactions"], fingerprints, existing_fps, account_id
     )
 
@@ -99,8 +99,9 @@ def run_import(
             }
         )
 
-    # Insert flagged transactions too (they'll be reviewed in staging)
-    flagged_fps = compute_fingerprints(flagged, account_id)
+    # Insert flagged transactions too (they'll be reviewed in staging).
+    # Reuse the whole-file fingerprints from deduplicate() so a re-import
+    # compares against a consistent sequence basis.
     for txn, fp in zip(flagged, flagged_fps):
         txn_records.append(
             {

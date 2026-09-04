@@ -3,10 +3,16 @@ from datetime import date
 from decimal import Decimal
 from pathlib import Path
 
-from sqlalchemy import Connection, delete, func, insert, select, update
+from sqlalchemy import Connection, delete, func, insert, select, text, update
 from sqlalchemy.sql.functions import coalesce
 
-from fintrack.core.models import holdings, imports, merchant_cache, transactions
+from fintrack.core.models import (
+    holdings,
+    imports,
+    merchant_cache,
+    transaction_corrections,
+    transactions,
+)
 
 
 def compute_file_hash(file_path: str | Path) -> str:
@@ -169,6 +175,86 @@ def confirm_import(conn: Connection, import_id: int) -> None:
         import_id=import_id,
         note=note,
     )
+
+
+def _dup_account_filter(snapshot_id: int | None):
+    """Return (join, where) fragments scoping a transactions query to a snapshot."""
+    if snapshot_id is None:
+        return "", ""
+    return (
+        " JOIN holdings h ON h.id = t.account_id",
+        " WHERE h.snapshot_id = :snapshot_id",
+    )
+
+
+def find_duplicate_transactions(
+    conn: Connection, snapshot_id: int | None = None
+) -> list[dict]:
+    """Transactions that share a fingerprint (i.e. an import would have deduped
+    them). Each row describes one duplicated fingerprint: how many copies exist
+    and a sample of the underlying transaction. Requires fingerprints to be
+    current (see migration f1e2d3c4b5a6)."""
+    join, where = _dup_account_filter(snapshot_id)
+    stmt = text(
+        f"""
+        SELECT t.fingerprint AS fingerprint,
+               COUNT(*) AS copies,
+               MIN(t.id) AS sample_id,
+               t.account_id AS account_id,
+               t.date AS date,
+               t.amount AS amount,
+               t.normalized_merchant AS merchant
+        FROM transactions t{join}{where}
+        GROUP BY t.fingerprint
+        HAVING COUNT(*) > 1
+        ORDER BY t.date DESC, t.fingerprint
+        """
+    )
+    params = {} if snapshot_id is None else {"snapshot_id": snapshot_id}
+    rows = conn.execute(stmt, params).mappings().all()
+    return [dict(row) for row in rows]
+
+
+def remove_duplicate_transactions(
+    conn: Connection, snapshot_id: int | None = None
+) -> int:
+    """Collapse each duplicated fingerprint to one row, mirroring import-time
+    dedup. Keeps the row carrying a user correction (else the lowest id) and
+    deletes corrections on removed rows. Returns the number removed."""
+    join, where = _dup_account_filter(snapshot_id)
+    params = {} if snapshot_id is None else {"snapshot_id": snapshot_id}
+    dup_ids = [
+        r[0]
+        for r in conn.execute(
+            text(
+                f"""
+                SELECT id FROM (
+                    SELECT t.id AS id,
+                           ROW_NUMBER() OVER (
+                               PARTITION BY t.fingerprint
+                               ORDER BY
+                                   (SELECT COUNT(*) FROM transaction_corrections c
+                                    WHERE c.transaction_id = t.id) DESC,
+                                   t.id ASC
+                           ) AS rn
+                    FROM transactions t{join}{where}
+                )
+                WHERE rn > 1
+                """
+            ),
+            params,
+        ).all()
+    ]
+    if not dup_ids:
+        return 0
+    conn.execute(
+        delete(transaction_corrections).where(
+            transaction_corrections.c.transaction_id.in_(dup_ids)
+        )
+    )
+    conn.execute(delete(transactions).where(transactions.c.id.in_(dup_ids)))
+    conn.commit()
+    return len(dup_ids)
 
 
 def reject_import(conn: Connection, import_id: int) -> None:

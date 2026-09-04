@@ -12,6 +12,12 @@ change. Treat the "Invariants" section as a checklist before you open a PR that
 touches Holdings. If a change here contradicts DESIGN.md, one of them is wrong;
 reconcile them, don't leave both.
 
+**Not everything here is locked.** §16 (Invariants) and §17 (Deliberate
+tradeoffs) are the settled contract. §18 (Provisional / open questions) lists
+current behaviours that are described so they aren't *lost*, but that are **not
+yet ratified as spec** — don't enshrine or build hard dependencies on them
+without checking intent first.
+
 DESIGN.md's [Holdings sheet](../DESIGN.md) section is the short architectural
 summary; this is the long-form, feature-by-feature version.
 
@@ -421,3 +427,55 @@ then `mise run serve`.
 - **Loans is the widest band**, so most groups show a large padded right region.
   That raggedness is intentional (native auto-sizing beats blank padding columns
   that would misalign the shared leading four).
+
+---
+
+## 18. Provisional / open questions (NOT locked spec)
+
+These are current behaviours captured so they aren't lost, but flagged as
+**unsettled** — describe-don't-enshrine. Each is a question for the table's owner;
+until answered, don't treat these as contract or build hard dependencies on them.
+When one is confirmed, promote it into the relevant section above (and into
+§16/§17 if it becomes an invariant/tradeoff); when one is changed, this is the
+list that says it was fair game.
+
+1. **Four different interaction mechanisms in one table.** Cell **edits** do an
+   HTMX partial-tbody swap; **Add** and **Delete** do a full-page `HX-Refresh`;
+   **Filters** are a plain non-HTMX GET form submit; **Sort** is client-side JS
+   with state in the URL and never touches the server. Is this mix intended, or
+   should they converge on one model (e.g. HTMX throughout)? The full-refresh on
+   Add/Delete in particular is heavier than the edit path.
+2. **Sort is client-only and ephemeral; reorder is server-persisted.** A
+   column sort reorders rows in the DOM and survives only via URL query params,
+   while a drag-reorder writes a permutation to the DB. Sorting a group also
+   disables its drag. Is client-only sort the permanent design, or a stopgap
+   until sort persists like reorder does?
+3. **The Balance filter (Assets / Liabilities) overlaps the group bands.** Cash +
+   Assets are always the asset side; Credit Cards + Loans always the liability
+   side — so the filter is close to redundant with the four bands it sits above.
+   Is it earning its place, or a leftover from the pre-grouping Assets sheet?
+4. **Asset Amount editability rule.** Amount is inline-editable only for
+   single-unit USD assets and cash/credit balances; multi-unit or symbol-priced
+   assets compute Amount (you edit Qty, and the live price feed fills Unit Price).
+   This is subtle and easy to trip over — is the single-USD-unit gate the intended
+   long-term rule now that the price feed (`fintrack/networth/prices.py`, real
+   CoinGecko/Yahoo lookups) is live?
+5. **Equity / LTV live on the loan row only**, not mirrored on the secured
+   asset's row. Intended (report the pair once, on the debt side), or should the
+   asset row also surface its LTV?
+6. **Staleness thresholds are magic numbers** — As Of goes amber > 35 days, red
+   > 95 (`_STALE_AMBER_DAYS` / `_STALE_RED_DAYS` in `holdings.py`). Are those the
+   values we want, and should they be configurable rather than hard-coded?
+7. **`data-accent` on data rows is half-retired.** It no longer drives colour
+   (group `--accent` does) but is still the selector that lifts a data row's first
+   cell to z-5. Keep it as a "this is a data row" hook, or replace it with a
+   clearer class so nobody re-wires colour onto it by mistake?
+
+### Doc reconciliation (fix separately)
+
+- DESIGN.md's Holdings section still says *"a group whose rows span two tables is
+  left non-reorderable rather than permuting both at once."* After the
+  loans-into-their-own-band change, **no band spans two tables** and every band is
+  reorderable (`reorderable: True` for all four in `_groups_ctx`). That sentence
+  is now describing a case that can't occur; it should be updated when DESIGN.md
+  is next touched.

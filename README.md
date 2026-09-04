@@ -120,9 +120,12 @@ The container runs `alembic upgrade head` on startup and stores the database
 at `/app/data/fintrack.db` (override with `FINTRACK_DB`). CI publishes the
 image on pushes to `main`.
 
-Set `FINTRACK_PREVIEW_SEED=1` to seed a throwaway **Example Household**
-snapshot (a few accounts, budget entries, a home + mortgage) on boot, so the
-app has something to show on first load:
+Set `FINTRACK_PREVIEW_SEED=1` to seed three throwaway demo snapshots on boot,
+so the app has something to show on first load and every render density has a
+fixture: **Dense Household** (many accounts, cards, loans, assets, budget lines
+and several months of transactions — deliberately overflows every sheet),
+**Sparse Household** (a handful of records), and **Empty Household** (no data
+at all):
 
 ```bash
 docker run -p 5003:5003 -e FINTRACK_PREVIEW_SEED=1 fintrack
@@ -130,8 +133,8 @@ docker run -p 5003:5003 -e FINTRACK_PREVIEW_SEED=1 fintrack
 FINTRACK_DB=preview.db uv run python scripts/seed_example.py && mise run serve
 ```
 
-The seed is idempotent — it skips if the snapshot already exists — and only
-ever writes that one snapshot.
+The seed is idempotent per snapshot — it skips any that already exist — and
+only ever writes those three demo snapshots.
 
 ## PR preview environments (AWS Lambda)
 
@@ -149,7 +152,7 @@ previews.
 
 > **Heads-up:** Lambda Function URLs are **public and unauthenticated** —
 > anyone with the link can view the preview. The preview only ever contains the
-> fake **Example Household** seed data (never a real database), the database is
+> fake demo households seed data (never a real database), the database is
 > ephemeral (rebuilt on each cold start), and the function is deleted on PR
 > close. First load after idle may take a few seconds. Treat the URL as
 > shareable-but-guessable, not private.

@@ -2,7 +2,7 @@
 
 Translates Lambda Function URL events to WSGI and back, so the Flask app
 serves directly with no ASGI adapter layer. On cold start, runs migrations
-and seeds the example household into an ephemeral SQLite database in /tmp.
+and seeds the demo households into an ephemeral SQLite database in /tmp.
 """
 
 import io

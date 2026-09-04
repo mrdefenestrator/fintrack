@@ -699,14 +699,15 @@ def _seed_dense_transactions(conn, checking_id: int, today: date) -> None:
     for merchant, category in merchant_categories.items():
         set_merchant_category(conn, merchant, category, source="seed")
 
-    # Build several months of transactions. Start on the 1st of N months ago so
-    # every month is complete (the current partial month is excluded from the
-    # trailing-average in the Trends Avg/mo column).
+    # Build several months of transactions ending in the CURRENT month, so the
+    # data always includes recent activity no matter when the seed is run (the
+    # Transactions table opens on fresh rows, the Trends columns stay populated).
+    # The current month is partial: future-dated transactions are skipped below.
     first_of_current = today.replace(day=1)
     months_back = 6
     month_starts = []
-    for i in range(months_back, 0, -1):
-        # Walk backwards i months from the 1st of the current month
+    for i in range(months_back - 1, -1, -1):
+        # Walk backwards i months from the 1st of the current month (i=0 == now)
         m = first_of_current.month - i
         y = first_of_current.year
         while m < 1:
@@ -767,7 +768,9 @@ def _seed_dense_transactions(conn, checking_id: int, today: date) -> None:
             (6, "-63.80", "CVS Pharmacy", "CVS/PHARMACY #8842"),
             (21, "-18.25", "Starbucks", "STARBUCKS STORE #4821"),
         ],
-        # month 5 (most recent complete): warehouse haul + dining
+        # month 5 (current, partial): warehouse haul + dining. Late-day rows are
+        # skipped when they fall after today, so early in the month this band is
+        # naturally short.
         [
             (13, "-142.15", "Costco Wholesale", "COSTCO WHSE #0417"),
             (27, "-44.90", "Panera Bread", "PANERA BREAD #601"),
@@ -789,6 +792,9 @@ def _seed_dense_transactions(conn, checking_id: int, today: date) -> None:
             # Clamp day to valid range for this month.
             _, last_day = monthrange(month_start.year, month_start.month)
             txn_date = date(month_start.year, month_start.month, min(day, last_day))
+            # Skip future-dated rows in the current (partial) month.
+            if txn_date > today:
+                continue
             fp = _fingerprint(checking_id, txn_date, amount, raw_desc)
             all_txns.append(
                 {

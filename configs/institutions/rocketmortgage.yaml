@@ -1,0 +1,20 @@
+name: Rocket Mortgage
+institution: Rocket Mortgage
+date_column: "Date"
+date_format: "%m/%d/%Y"
+amount_column: "Total"
+amount_format: signed_dollar
+negate: true
+description_column: "Transaction Type"
+account_name: null
+filter_column: "Transaction Type"
+filter_values:
+  - "Monthly Payment"
+header_pattern:
+  - "Date"
+  - "Date Due"
+  - "Principal"
+  - "Interest"
+  - "Escrow"
+  - "Total"
+  - "Transaction Type"

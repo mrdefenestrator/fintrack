@@ -3,6 +3,7 @@ from decimal import Decimal
 
 import pytest
 
+from fintrack.core.config import INSTITUTIONS_DIR
 from fintrack.ledger.importer.csv_parser import (
     parse_csv,
     detect_institution_config,
@@ -90,6 +91,8 @@ header_pattern:
         ("- $208.85", Decimal("-208.85")),
         ("+ $1,234.56", Decimal("1234.56")),
         ("- $0.50", Decimal("-0.50")),
+        ("($2,613.09)", Decimal("-2613.09")),
+        ("($0.00)", Decimal("0.00")),
     ],
 )
 def test_parse_signed_dollar(value, expected):
@@ -240,3 +243,21 @@ header_pattern:
     )
     detected = detect_institution_config(sample_csv, str(config_dir))
     assert detected is None
+
+
+def test_parse_csv_rocket_mortgage(sample_rocket_csv):
+    config_path = INSTITUTIONS_DIR / "rocketmortgage.yaml"
+    result = parse_csv(sample_rocket_csv, str(config_path))
+    txns = result["transactions"]
+    # Escrow Adjustment rows are filtered out; only Monthly Payments remain.
+    assert len(txns) == 2
+    assert txns[0]["date"] == date(2026, 8, 10)
+    # Total is an outflow; negate makes it a ledger expense.
+    assert txns[0]["amount"] == Decimal("-3023.41")
+    assert txns[0]["raw_description"] == "Monthly Payment"
+
+
+def test_detect_institution_config_rocket_mortgage(sample_rocket_csv):
+    detected = detect_institution_config(sample_rocket_csv, str(INSTITUTIONS_DIR))
+    assert detected is not None
+    assert "Rocket Mortgage" in open(detected).read()

@@ -172,8 +172,11 @@
             }
             /* In landscape the Dynamic Island produces a safe-area inset on
                ONE side only — use the raw env() value (no min-0.5rem wrapper)
-               so the opposite side gets zero padding, not a forced 0.5rem. */
-            @media (orientation: landscape) {
+               so the opposite side gets zero padding, not a forced 0.5rem.
+               Scoped to standalone (PWA) so desktop browsers — which are also
+               landscape but have zero insets — keep the max(0.5rem, …) side
+               padding from the block above instead of collapsing it to 0. */
+            @media (orientation: landscape) and (display-mode: standalone) {
                 main {
                     padding-left: env(safe-area-inset-left);
                     padding-right: env(safe-area-inset-right);

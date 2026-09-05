@@ -1,0 +1,540 @@
+- generic [active] [ref=f1e1]:
+  - banner [ref=f1e2]:
+    - generic [ref=f1e3]:
+      - button "Toggle navigation" [expanded] [ref=f1e4] [cursor=pointer]
+      - generic [ref=f1e7]: Holdings
+      - generic [ref=f1e8]:
+        - button "Locked" [ref=f1e10] [cursor=pointer]
+        - link "Import" [ref=f1e15] [cursor=pointer]:
+          - /url: /s/Dense Household/import
+        - button "system" [ref=f1e20] [cursor=pointer]
+        - generic [ref=f1e24]:
+          - button "Dense Household" [ref=f1e25] [cursor=pointer]
+          - generic:
+            - generic:
+              - generic: Files
+              - generic:
+                - generic:
+                  - generic: Dense Household
+                  - generic:
+                    - button "Rename"
+                    - button "Duplicate"
+              - generic:
+                - link "Empty Household":
+                  - /url: /s/Empty%20Household/holdings
+                - generic:
+                  - button "Delete Empty Household.yaml"
+              - generic:
+                - link "Sparse Household":
+                  - /url: /s/Sparse%20Household/holdings
+                - generic:
+                  - button "Delete Sparse Household.yaml"
+              - button "New file"
+  - generic [ref=f1e31]:
+    - navigation "Sections" [ref=f1e32]:
+      - generic [ref=f1e33]:
+        - generic [ref=f1e34]: Finances
+        - link "Holdings" [ref=f1e35] [cursor=pointer]:
+          - /url: /s/Dense%20Household/holdings
+        - link "Budget" [ref=f1e36] [cursor=pointer]:
+          - /url: /s/Dense%20Household/budget
+        - link "Projections" [ref=f1e37] [cursor=pointer]:
+          - /url: /s/Dense%20Household/projections
+        - generic [ref=f1e38]: Spending
+        - link "Trends" [ref=f1e39] [cursor=pointer]:
+          - /url: /s/Dense Household/trends
+        - link "Transactions" [ref=f1e40] [cursor=pointer]:
+          - /url: /s/Dense Household/transactions
+        - link "Merchants" [ref=f1e41] [cursor=pointer]:
+          - /url: /s/Dense Household/merchants
+        - link "Categories" [ref=f1e42] [cursor=pointer]:
+          - /url: /s/Dense Household/categories
+    - main [ref=f1e43]:
+      - generic [ref=f1e47]:
+        - img "Filters" [ref=f1e48]
+        - button "Type" [ref=f1e51] [cursor=pointer]
+        - button "Balance" [ref=f1e55] [cursor=pointer]
+        - button "Institution" [ref=f1e59] [cursor=pointer]
+        - link "Reset" [ref=f1e62] [cursor=pointer]:
+          - /url: /s/Dense%20Household/holdings
+      - table [ref=f1e65]:
+        - rowgroup [ref=f1e71]:
+          - row [ref=f1e72]:
+            - cell "Cash" [ref=f1e73]
+            - cell "$48,329.29" [ref=f1e74]
+            - cell [ref=f1e75]
+          - row [ref=f1e76]:
+            - button "Institution" [ref=f1e77] [cursor=pointer]
+            - button "Type" [ref=f1e78] [cursor=pointer]
+            - button "Name" [ref=f1e79] [cursor=pointer]
+            - button "Amount" [ref=f1e80] [cursor=pointer]
+            - button "Reserve" [ref=f1e81] [cursor=pointer]
+            - button "Funding" [ref=f1e82] [cursor=pointer]
+            - button "As Of" [ref=f1e83] [cursor=pointer]
+            - columnheader [ref=f1e84]
+          - row [ref=f1e85]:
+            - cell "Anytown Bank" [ref=f1e86]
+            - cell "Checking" [ref=f1e87]
+            - cell "Everyday Checking" [ref=f1e88]
+            - cell "$4,210.55" [ref=f1e89]
+            - cell "-" [ref=f1e90]
+            - cell "-" [ref=f1e91]
+            - cell "2026-09-04" [ref=f1e92]
+            - cell [ref=f1e93]
+          - row [ref=f1e94]:
+            - cell "Anytown Bank" [ref=f1e95]
+            - cell "Checking" [ref=f1e96]
+            - cell "Joint Checking" [ref=f1e97]
+            - cell "$2,875.30" [ref=f1e98]
+            - cell "-" [ref=f1e99]
+            - cell "-" [ref=f1e100]
+            - cell "2026-09-04" [ref=f1e101]
+            - cell [ref=f1e102]
+          - row [ref=f1e103]:
+            - cell "Anytown Bank" [ref=f1e104]
+            - cell "Savings" [ref=f1e105]
+            - cell "Emergency Fund" [ref=f1e106]
+            - cell "$15,000.00" [ref=f1e107]
+            - cell "$10,000.00" [ref=f1e108]
+            - cell "-" [ref=f1e109]
+            - cell "2026-09-04" [ref=f1e110]
+            - cell [ref=f1e111]
+          - row [ref=f1e112]:
+            - cell "Anytown Bank" [ref=f1e113]
+            - cell "Savings" [ref=f1e114]
+            - cell "Vacation Savings" [ref=f1e115]
+            - cell "$3,200.00" [ref=f1e116]
+            - cell "-" [ref=f1e117]
+            - cell "-" [ref=f1e118]
+            - cell "2026-09-04" [ref=f1e119]
+            - cell [ref=f1e120]
+          - row [ref=f1e121]:
+            - cell "Marcus" [ref=f1e122]
+            - cell "Savings" [ref=f1e123]
+            - cell "Home Down Payment" [ref=f1e124]
+            - cell "$22,500.00" [ref=f1e125]
+            - cell "$20,000.00" [ref=f1e126]
+            - cell "-" [ref=f1e127]
+            - cell "2026-09-04" [ref=f1e128]
+            - cell [ref=f1e129]
+          - row [ref=f1e130]:
+            - cell "-" [ref=f1e131]
+            - cell "Wallet" [ref=f1e132]
+            - cell "Cash on Hand" [ref=f1e133]
+            - cell "$340.00" [ref=f1e134]
+            - cell "-" [ref=f1e135]
+            - cell "-" [ref=f1e136]
+            - cell "2026-09-04" [ref=f1e137]
+            - cell [ref=f1e138]
+          - row [ref=f1e139]:
+            - cell "PayPal" [ref=f1e140]
+            - cell "Digital Wallet" [ref=f1e141]
+            - cell "Venmo Balance" [ref=f1e142]
+            - cell "$128.44" [ref=f1e143]
+            - cell "-" [ref=f1e144]
+            - cell "-" [ref=f1e145]
+            - cell "2026-09-04" [ref=f1e146]
+            - cell [ref=f1e147]
+          - row [ref=f1e148]:
+            - cell "Amazon" [ref=f1e149]
+            - cell "Gift Card" [ref=f1e150]
+            - cell "Amazon Gift Card" [ref=f1e151]
+            - cell "$75.00" [ref=f1e152]
+            - cell "-" [ref=f1e153]
+            - cell "-" [ref=f1e154]
+            - cell "2026-09-04" [ref=f1e155]
+            - cell [ref=f1e156]
+        - rowgroup [ref=f1e157]:
+          - row [ref=f1e158]:
+            - cell "Credit Cards" [ref=f1e159]
+            - cell "($3,313.74)" [ref=f1e160]
+            - cell [ref=f1e161]
+          - row [ref=f1e162]:
+            - button "Institution" [ref=f1e163] [cursor=pointer]
+            - button "Type" [ref=f1e164] [cursor=pointer]
+            - button "Name" [ref=f1e165] [cursor=pointer]
+            - button "Amount" [ref=f1e166] [cursor=pointer]
+            - button "Limit" [ref=f1e167] [cursor=pointer]
+            - button "Available" [ref=f1e168] [cursor=pointer]
+            - button "Rewards" [ref=f1e169] [cursor=pointer]
+            - button "Statement" [ref=f1e170] [cursor=pointer]
+            - button "Due" [ref=f1e171] [cursor=pointer]
+            - button "Linked" [ref=f1e172] [cursor=pointer]
+            - button "As Of" [ref=f1e173] [cursor=pointer]
+            - columnheader [ref=f1e174]
+          - row [ref=f1e175]:
+            - cell "Big Card Co" [ref=f1e176]
+            - cell "Credit Card" [ref=f1e177]
+            - cell "Travel Rewards Card" [ref=f1e178]
+            - cell "($842.17)" [ref=f1e179]
+            - cell "$8,000.00" [ref=f1e180]
+            - cell "$7,157.83" [ref=f1e181]
+            - cell "-" [ref=f1e182]
+            - cell "-" [ref=f1e183]
+            - cell "15th" [ref=f1e184]
+            - cell "Anytown Bank Everyday Checking" [ref=f1e185]
+            - cell "2026-09-04" [ref=f1e186]
+            - cell [ref=f1e187]
+          - row [ref=f1e188]:
+            - cell "Big Card Co" [ref=f1e189]
+            - cell "Credit Card" [ref=f1e190]
+            - cell "Cashback Everyday" [ref=f1e191]
+            - cell "($312.90)" [ref=f1e192]
+            - cell "$12,000.00" [ref=f1e193]
+            - cell "$11,687.10" [ref=f1e194]
+            - cell "-" [ref=f1e195]
+            - cell "-" [ref=f1e196]
+            - cell "3rd" [ref=f1e197]
+            - cell "Anytown Bank Everyday Checking" [ref=f1e198]
+            - cell "2026-09-04" [ref=f1e199]
+            - cell [ref=f1e200]
+          - row [ref=f1e201]:
+            - cell "Anytown Bank" [ref=f1e202]
+            - cell "Credit Card" [ref=f1e203]
+            - cell "Grocery Rewards" [ref=f1e204]
+            - cell "($128.45)" [ref=f1e205]
+            - cell "$5,000.00" [ref=f1e206]
+            - cell "$4,871.55" [ref=f1e207]
+            - cell "-" [ref=f1e208]
+            - cell "-" [ref=f1e209]
+            - cell "20th" [ref=f1e210]
+            - cell "Anytown Bank Everyday Checking" [ref=f1e211]
+            - cell "2026-09-04" [ref=f1e212]
+            - cell [ref=f1e213]
+          - row [ref=f1e214]:
+            - cell "Warehouse Club" [ref=f1e215]
+            - cell "Credit Card" [ref=f1e216]
+            - cell "Warehouse Store Card" [ref=f1e217]
+            - cell "($450.00)" [ref=f1e218]
+            - cell "$3,500.00" [ref=f1e219]
+            - cell "$3,050.00" [ref=f1e220]
+            - cell "-" [ref=f1e221]
+            - cell "-" [ref=f1e222]
+            - cell "10th" [ref=f1e223]
+            - cell "Anytown Bank Everyday Checking" [ref=f1e224]
+            - cell "2026-09-04" [ref=f1e225]
+            - cell [ref=f1e226]
+          - row [ref=f1e227]:
+            - cell "Sky Bank" [ref=f1e228]
+            - cell "Credit Card" [ref=f1e229]
+            - cell "Airline Miles Card" [ref=f1e230]
+            - cell "($1,580.22)" [ref=f1e231]
+            - cell "$15,000.00" [ref=f1e232]
+            - cell "$13,419.78" [ref=f1e233]
+            - cell "-" [ref=f1e234]
+            - cell "-" [ref=f1e235]
+            - cell "25th" [ref=f1e236]
+            - cell "Anytown Bank Everyday Checking" [ref=f1e237]
+            - cell "2026-09-04" [ref=f1e238]
+            - cell [ref=f1e239]
+        - rowgroup [ref=f1e240]:
+          - row [ref=f1e241]:
+            - cell "Loans" [ref=f1e242]
+            - cell "($313,550.00)" [ref=f1e243]
+            - cell [ref=f1e244]
+          - row [ref=f1e245]:
+            - button "Institution" [ref=f1e246] [cursor=pointer]
+            - button "Type" [ref=f1e247] [cursor=pointer]
+            - button "Name" [ref=f1e248] [cursor=pointer]
+            - button "Amount" [ref=f1e249] [cursor=pointer]
+            - button "Interest" [ref=f1e250] [cursor=pointer]
+            - button "Equity" [ref=f1e251] [cursor=pointer]
+            - button "LTV" [ref=f1e252] [cursor=pointer]
+            - button "Original" [ref=f1e253] [cursor=pointer]
+            - button "Term" [ref=f1e254] [cursor=pointer]
+            - button "Originated" [ref=f1e255] [cursor=pointer]
+            - button "P&I" [ref=f1e256] [cursor=pointer]
+            - button "Paid" [ref=f1e257] [cursor=pointer]
+            - button "Due" [ref=f1e258] [cursor=pointer]
+            - button "Linked" [ref=f1e259] [cursor=pointer]
+            - button "As Of" [ref=f1e260] [cursor=pointer]
+          - row [ref=f1e261]:
+            - cell "Home Loan Bank" [ref=f1e262]
+            - cell "Loan" [ref=f1e263]
+            - cell "Mortgage" [ref=f1e264]
+            - cell "($268,000.00)" [ref=f1e265]
+            - cell "6.25%" [ref=f1e266]
+            - cell "$152,000.00" [ref=f1e267]
+            - cell "63.8%" [ref=f1e268]
+            - cell "$340,000.00" [ref=f1e269]
+            - cell "360 mo" [ref=f1e270]
+            - cell "2019-06-01" [ref=f1e271]
+            - cell "$2,093.44" [ref=f1e272]
+            - cell "21.2%" [ref=f1e273]
+            - cell "1st" [ref=f1e274]
+            - cell "Primary Residence" [ref=f1e275]
+            - cell "-" [ref=f1e276]
+          - row [ref=f1e277]:
+            - cell "Anytown Bank" [ref=f1e278]
+            - cell "Loan" [ref=f1e279]
+            - cell "Auto Loan" [ref=f1e280]
+            - cell "($18,450.00)" [ref=f1e281]
+            - cell "4.9%" [ref=f1e282]
+            - cell "$5,550.00" [ref=f1e283]
+            - cell "76.9%" [ref=f1e284]
+            - cell "$32,000.00" [ref=f1e285]
+            - cell "60 mo" [ref=f1e286]
+            - cell "2023-03-15" [ref=f1e287]
+            - cell "$602.41" [ref=f1e288]
+            - cell "42.3%" [ref=f1e289]
+            - cell "5th" [ref=f1e290]
+            - cell "2022 Sedan" [ref=f1e291]
+            - cell "-" [ref=f1e292]
+          - row [ref=f1e293]:
+            - cell "Federal Servicer" [ref=f1e294]
+            - cell "Loan" [ref=f1e295]
+            - cell "Student Loan" [ref=f1e296]
+            - cell "($22,300.00)" [ref=f1e297]
+            - cell "5.5%" [ref=f1e298]
+            - cell "-" [ref=f1e299]
+            - cell "-" [ref=f1e300]
+            - cell "$45,000.00" [ref=f1e301]
+            - cell "120 mo" [ref=f1e302]
+            - cell "2016-09-01" [ref=f1e303]
+            - cell "$488.37" [ref=f1e304]
+            - cell "50.4%" [ref=f1e305]
+            - cell "21st" [ref=f1e306]
+            - cell "-" [ref=f1e307]
+            - cell "-" [ref=f1e308]
+          - row [ref=f1e309]:
+            - cell "Lending Co" [ref=f1e310]
+            - cell "Loan" [ref=f1e311]
+            - cell "Personal Loan" [ref=f1e312]
+            - cell "($4,800.00)" [ref=f1e313]
+            - cell "9.9%" [ref=f1e314]
+            - cell "-" [ref=f1e315]
+            - cell "-" [ref=f1e316]
+            - cell "$10,000.00" [ref=f1e317]
+            - cell "36 mo" [ref=f1e318]
+            - cell "2024-11-01" [ref=f1e319]
+            - cell "$322.20" [ref=f1e320]
+            - cell "52.0%" [ref=f1e321]
+            - cell "12th" [ref=f1e322]
+            - cell "-" [ref=f1e323]
+            - cell "-" [ref=f1e324]
+        - rowgroup [ref=f1e325]:
+          - row [ref=f1e326]:
+            - cell "Assets" [ref=f1e327]
+            - cell "$993,322.85" [ref=f1e328]
+            - cell [ref=f1e329]:
+              - button "↻ Refresh prices" [ref=f1e330] [cursor=pointer]
+            - cell [ref=f1e331]
+          - row [ref=f1e332]:
+            - button "Institution" [ref=f1e333] [cursor=pointer]
+            - button "Type" [ref=f1e334] [cursor=pointer]
+            - button "Name" [ref=f1e335] [cursor=pointer]
+            - button "Amount" [ref=f1e336] [cursor=pointer]
+            - button "Unit Price" [ref=f1e337] [cursor=pointer]
+            - button "Qty" [ref=f1e338] [cursor=pointer]
+            - button "Source" [ref=f1e339] [cursor=pointer]
+            - button "Est. Return" [ref=f1e340] [cursor=pointer]
+            - button "Mo. Contrib." [ref=f1e341] [cursor=pointer]
+            - columnheader [ref=f1e342]
+          - row [ref=f1e343]:
+            - cell "Fidelity" [ref=f1e344]
+            - cell "Retirement" [ref=f1e345]
+            - cell "401(k)" [ref=f1e346]
+            - cell "$82,000.00" [ref=f1e347]
+            - cell "-" [ref=f1e348]
+            - cell "-" [ref=f1e349]
+            - cell "-" [ref=f1e350]
+            - cell "7%" [ref=f1e351]
+            - cell "$500.00" [ref=f1e352]
+            - cell [ref=f1e353]
+          - row [ref=f1e354]:
+            - cell "Vanguard" [ref=f1e355]
+            - cell "Retirement" [ref=f1e356]
+            - cell "Roth IRA" [ref=f1e357]
+            - cell "$34,500.00" [ref=f1e358]
+            - cell "-" [ref=f1e359]
+            - cell "-" [ref=f1e360]
+            - cell "-" [ref=f1e361]
+            - cell "7%" [ref=f1e362]
+            - cell "$500.00" [ref=f1e363]
+            - cell [ref=f1e364]
+          - row [ref=f1e365]:
+            - cell "Optum Bank" [ref=f1e366]
+            - cell "HSA" [ref=f1e367]
+            - cell "Health Savings Account" [ref=f1e368]
+            - cell "$6,800.00" [ref=f1e369]
+            - cell "-" [ref=f1e370]
+            - cell "-" [ref=f1e371]
+            - cell "-" [ref=f1e372]
+            - cell "5%" [ref=f1e373]
+            - cell "$200.00" [ref=f1e374]
+            - cell [ref=f1e375]
+          - row [ref=f1e376]:
+            - cell "-" [ref=f1e377]
+            - cell "Real Estate" [ref=f1e378]
+            - cell "Primary Residence" [ref=f1e379]
+            - cell "$420,000.00" [ref=f1e380]
+            - cell "-" [ref=f1e381]
+            - cell "-" [ref=f1e382]
+            - cell "-" [ref=f1e383]
+            - cell "3%" [ref=f1e384]
+            - cell "-" [ref=f1e385]
+            - cell [ref=f1e386]
+          - row [ref=f1e387]:
+            - cell "Anytown" [ref=f1e388]
+            - cell "Real Estate" [ref=f1e389]
+            - cell "Rental Property" [ref=f1e390]
+            - cell "$285,000.00" [ref=f1e391]
+            - cell "-" [ref=f1e392]
+            - cell "-" [ref=f1e393]
+            - cell "-" [ref=f1e394]
+            - cell "3%" [ref=f1e395]
+            - cell "-" [ref=f1e396]
+            - cell [ref=f1e397]
+          - row [ref=f1e398]:
+            - cell "-" [ref=f1e399]
+            - cell "Vehicle" [ref=f1e400]
+            - cell "2022 Sedan" [ref=f1e401]
+            - cell "$24,000.00" [ref=f1e402]
+            - cell "-" [ref=f1e403]
+            - cell "-" [ref=f1e404]
+            - cell "-" [ref=f1e405]
+            - cell "(10%)" [ref=f1e406]
+            - cell "-" [ref=f1e407]
+            - cell [ref=f1e408]
+          - row [ref=f1e409]:
+            - cell "-" [ref=f1e410]
+            - cell "Vehicle" [ref=f1e411]
+            - cell "Family SUV" [ref=f1e412]
+            - cell "$38,000.00" [ref=f1e413]
+            - cell "-" [ref=f1e414]
+            - cell "-" [ref=f1e415]
+            - cell "-" [ref=f1e416]
+            - cell "(10%)" [ref=f1e417]
+            - cell "-" [ref=f1e418]
+            - cell [ref=f1e419]
+          - row [ref=f1e420]:
+            - cell "Coinbase" [ref=f1e421]
+            - cell "Brokerage" [ref=f1e422]
+            - cell "Bitcoin" [ref=f1e423]
+            - cell "$35,829.45" [ref=f1e424]
+            - cell "BTC $79,621.00 ✓ BTC price updated 9m ago — click to refresh" [ref=f1e425]:
+              - generic [ref=f1e426]:
+                - generic [ref=f1e427]: BTC $79,621.00 ✓
+                - button "BTC price updated 9m ago — click to refresh" [ref=f1e428] [cursor=pointer]: ↻
+            - cell "0.45" [ref=f1e429]
+            - cell "-" [ref=f1e430]
+            - cell "-" [ref=f1e431]
+            - cell "-" [ref=f1e432]
+            - cell [ref=f1e433]
+          - row [ref=f1e434]:
+            - cell "Coinbase" [ref=f1e435]
+            - cell "Brokerage" [ref=f1e436]
+            - cell "Ethereum" [ref=f1e437]
+            - cell "$7,853.25" [ref=f1e438]
+            - cell "ETH $2,454.14 ✓ ETH price updated 9m ago — click to refresh" [ref=f1e439]:
+              - generic [ref=f1e440]:
+                - generic [ref=f1e441]: ETH $2,454.14 ✓
+                - button "ETH price updated 9m ago — click to refresh" [ref=f1e442] [cursor=pointer]: ↻
+            - cell "3.2" [ref=f1e443]
+            - cell "-" [ref=f1e444]
+            - cell "-" [ref=f1e445]
+            - cell "-" [ref=f1e446]
+            - cell [ref=f1e447]
+          - row [ref=f1e448]:
+            - cell "Schwab" [ref=f1e449]
+            - cell "Brokerage" [ref=f1e450]
+            - cell "Apple Inc" [ref=f1e451]
+            - cell "$15,998.50" [ref=f1e452]
+            - cell "AAPL $319.97 ✓ AAPL price updated 9m ago — click to refresh" [ref=f1e453]:
+              - generic [ref=f1e454]:
+                - generic [ref=f1e455]: AAPL $319.97 ✓
+                - button "AAPL price updated 9m ago — click to refresh" [ref=f1e456] [cursor=pointer]: ↻
+            - cell "50" [ref=f1e457]
+            - cell "-" [ref=f1e458]
+            - cell "-" [ref=f1e459]
+            - cell "-" [ref=f1e460]
+            - cell [ref=f1e461]
+          - row [ref=f1e462]:
+            - cell "Schwab" [ref=f1e463]
+            - cell "Brokerage" [ref=f1e464]
+            - cell "Microsoft" [ref=f1e465]
+            - cell "$14,991.00" [ref=f1e466]
+            - cell "MSFT $499.70 ✓ MSFT price updated 9m ago — click to refresh" [ref=f1e467]:
+              - generic [ref=f1e468]:
+                - generic [ref=f1e469]: MSFT $499.70 ✓
+                - button "MSFT price updated 9m ago — click to refresh" [ref=f1e470] [cursor=pointer]: ↻
+            - cell "30" [ref=f1e471]
+            - cell "-" [ref=f1e472]
+            - cell "-" [ref=f1e473]
+            - cell "-" [ref=f1e474]
+            - cell [ref=f1e475]
+          - row [ref=f1e476]:
+            - cell "Schwab" [ref=f1e477]
+            - cell "Brokerage" [ref=f1e478]
+            - cell "NVIDIA" [ref=f1e479]
+            - cell "$3,455.40" [ref=f1e480]
+            - cell "NVDA $230.36 ✓ NVDA price updated 9m ago — click to refresh" [ref=f1e481]:
+              - generic [ref=f1e482]:
+                - generic [ref=f1e483]: NVDA $230.36 ✓
+                - button "NVDA price updated 9m ago — click to refresh" [ref=f1e484] [cursor=pointer]: ↻
+            - cell "15" [ref=f1e485]
+            - cell "-" [ref=f1e486]
+            - cell "-" [ref=f1e487]
+            - cell "-" [ref=f1e488]
+            - cell [ref=f1e489]
+          - row [ref=f1e490]:
+            - cell "Schwab" [ref=f1e491]
+            - cell "Brokerage" [ref=f1e492]
+            - cell "Vanguard S&P 500 ETF" [ref=f1e493]
+            - cell "$17,700.25" [ref=f1e494]
+            - cell "VOO $708.01 ✓ VOO price updated 9m ago — click to refresh" [ref=f1e495]:
+              - generic [ref=f1e496]:
+                - generic [ref=f1e497]: VOO $708.01 ✓
+                - button "VOO price updated 9m ago — click to refresh" [ref=f1e498] [cursor=pointer]: ↻
+            - cell "25" [ref=f1e499]
+            - cell "-" [ref=f1e500]
+            - cell "-" [ref=f1e501]
+            - cell "-" [ref=f1e502]
+            - cell [ref=f1e503]
+          - row [ref=f1e504]:
+            - cell "Schwab" [ref=f1e505]
+            - cell "Brokerage" [ref=f1e506]
+            - cell "Vanguard Total Bond ETF" [ref=f1e507]
+            - cell "$7,195.00" [ref=f1e508]
+            - cell "BND $71.95 ✓ BND price updated 9m ago — click to refresh" [ref=f1e509]:
+              - generic [ref=f1e510]:
+                - generic [ref=f1e511]: BND $71.95 ✓
+                - button "BND price updated 9m ago — click to refresh" [ref=f1e512] [cursor=pointer]: ↻
+            - cell "100" [ref=f1e513]
+            - cell "-" [ref=f1e514]
+            - cell "-" [ref=f1e515]
+            - cell "-" [ref=f1e516]
+            - cell [ref=f1e517]
+        - rowgroup [ref=f1e518]:
+          - row [ref=f1e519]:
+            - cell [ref=f1e520]
+            - cell [ref=f1e521]
+            - cell "Liquid" [ref=f1e522]
+            - cell "$45,015.55" [ref=f1e523]
+            - cell [ref=f1e524]
+            - cell [ref=f1e525]
+            - cell [ref=f1e526]
+            - cell [ref=f1e527]
+            - cell [ref=f1e528]
+            - cell [ref=f1e529]
+            - cell [ref=f1e530]
+            - cell [ref=f1e531]
+            - cell [ref=f1e532]
+            - cell [ref=f1e533]
+            - cell [ref=f1e534]
+          - row [ref=f1e535]:
+            - cell [ref=f1e536]
+            - cell [ref=f1e537]
+            - cell "Net worth" [ref=f1e538]
+            - cell "$724,788.40" [ref=f1e539]
+            - cell [ref=f1e540]
+            - cell [ref=f1e541]
+            - cell [ref=f1e542]
+            - cell [ref=f1e543]
+            - cell [ref=f1e544]
+            - cell [ref=f1e545]
+            - cell [ref=f1e546]
+            - cell [ref=f1e547]
+            - cell [ref=f1e548]
+            - cell [ref=f1e549]
+            - cell [ref=f1e550]

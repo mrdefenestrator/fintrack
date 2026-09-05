@@ -13,6 +13,15 @@
 {# The actions column (drag + delete) exists only in edit mode — in view mode it
    is dropped entirely so it stops eating horizontal space (esp. on mobile). #}
 {% set span = max_cols + 1 if edit_mode else max_cols %}
+{# Fixed widths for the shared leading columns. Rendered here (not in the page
+   shell) so an innerHTML swap of #holdings-table re-inserts it and the table
+   never reflows on edit/refresh. #}
+<colgroup>
+    <col style="width: 10rem">
+    <col style="width: 9rem">
+    <col style="width: 14rem">
+    <col style="width: 9rem">
+</colgroup>
 {% if error %}
 <tbody>
     <tr id="holdings-error-row">
@@ -25,22 +34,24 @@
     <tr class="holdings-group-heading">
         <td colspan="3" class="px-2 py-1.5 text-xs font-semibold uppercase tracking-wide">{{ group.label }}</td>
         <td class="px-1.5 py-1.5 text-right tabular-nums text-sm font-semibold text-gray-900 dark:text-gray-100 {% if group.total | display_is_negative %}!text-red-600 dark:!text-red-400{% endif %}">{{ group.total }}</td>
-        {# The trailing heading cell spans from the Unit Price column rightward,
-           so left-aligning the control parks it over Unit Price — the column it
-           refreshes. #}
-        <td colspan="{{ span - 4 }}" class="px-2 py-1.5 text-left">
-            {% if group.refreshable_units %}
-            {# On-demand: force-refresh every live-priced symbol in this band. #}
+        {% if group.refreshable_units %}
+        {# Park the control in the Unit Price column (the first trailing slot),
+           right-aligned so it sits over the prices it refreshes; the rest of the
+           row pads out to full width. #}
+        <td class="px-2 py-1.5 text-right">
             <button type="button"
                 title="Refresh all {{ group.refreshable_units | length }} live price{{ 's' if group.refreshable_units | length != 1 else '' }} now"
                 hx-post="{{ url_for('holdings.refresh_all_prices', filename=filename) }}"
                 hx-vals='{"edit": "{{ 1 if edit_mode else 0 }}"}'
                 hx-target="#holdings-table" hx-swap="innerHTML"
-                class="holdings-refresh-btn holdings-refresh-all text-xs font-medium text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400">
+                class="holdings-refresh-btn holdings-refresh-all whitespace-nowrap text-xs font-medium text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400">
                 <span class="holdings-refresh-glyph">↻</span> Refresh prices
             </button>
-            {% endif %}
         </td>
+        <td colspan="{{ span - 5 }}"></td>
+        {% else %}
+        <td colspan="{{ span - 4 }}"></td>
+        {% endif %}
     </tr>
     <tr class="holdings-group-header bg-gray-100 dark:bg-gray-700">
         {% for h in group.headers %}

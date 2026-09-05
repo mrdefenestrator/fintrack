@@ -195,12 +195,9 @@
    are per-group rows inside the tbody, so there is no global thead. The sticky
    actions column (drag + delete) renders only in edit mode. #}
 <table id="holdings-table" class="editable-table w-full text-sm border-collapse bg-white dark:bg-gray-800" data-cell-nav="holdings-table" style="white-space:nowrap">
-    <colgroup>
-        <col style="width: 10rem">
-        <col style="width: 9rem">
-        <col style="width: 14rem">
-        <col style="width: 9rem">
-    </colgroup>
+    {# The colgroup lives inside the swapped partial so an innerHTML swap of the
+       table (edits, price refresh) re-renders it instead of dropping it — without
+       it the fixed leading-column widths vanish and the whole table reflows. #}
     {% include "partials/holdings_tbody.html" %}
 </table>
 </div>

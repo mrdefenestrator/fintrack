@@ -12,11 +12,12 @@ understated and the annual total is slightly conservative.
 """
 
 import calendar
+from collections.abc import Iterator
 from datetime import date
 from decimal import Decimal
-from typing import Any, Dict, Iterator
+from typing import Any
 
-_ZERO = Decimal("0")
+_ZERO = Decimal(0)
 
 
 def money(x: Any) -> Decimal:
@@ -63,7 +64,7 @@ def semiannual_other_month(month: int) -> int:
 
 
 def budget_entry_in_month(
-    entry: Dict[str, Any], year: int, month: int, day: int | None = None
+    entry: dict[str, Any], year: int, month: int, day: int | None = None
 ) -> Decimal:
     """Amount of this income/expense entry that falls in the given month (0 or full amount).
     For continuous monthly entries, day is used to prorate by proportion of month remaining.
@@ -106,7 +107,7 @@ def budget_entry_in_month(
     return _ZERO
 
 
-def amount_annual(entry: Dict[str, Any]) -> Decimal:
+def amount_annual(entry: dict[str, Any]) -> Decimal:
     """Annualized amount for this entry (for budget --annual). One-time returns amount as-is."""
     rec = entry.get("recurrence", "")
     amount = money(entry.get("amount"))
@@ -126,7 +127,7 @@ def amount_annual(entry: Dict[str, Any]) -> Decimal:
 
 
 def subtotal_remainder_of_month(
-    entry: Dict[str, Any], year: int, month: int, day: int
+    entry: dict[str, Any], year: int, month: int, day: int
 ) -> Decimal:
     """Expected amount for the remainder of the month for this entry (non-negative).
     Used for the income/expenses table Subtotal column. See DESIGN.md for rules.
@@ -195,7 +196,7 @@ def subtotal_remainder_of_month(
 
 
 def iter_month_amounts(
-    entry: Dict[str, Any],
+    entry: dict[str, Any],
     start: date,
     months: int,
 ) -> Iterator[Decimal]:

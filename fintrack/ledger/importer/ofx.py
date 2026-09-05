@@ -104,5 +104,5 @@ def extract_ofx_metadata(file_path: str | Path) -> AccountMeta | None:
             suggested_name=suggested_name,
             last4=last4,
         )
-    except Exception:
+    except Exception:  # noqa: BLE001 — best-effort metadata parse; any failure degrades to None
         return None

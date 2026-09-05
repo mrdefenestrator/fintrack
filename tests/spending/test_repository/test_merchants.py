@@ -4,7 +4,6 @@ from sqlalchemy import insert
 
 from fintrack.core.models import imports, transactions
 from fintrack.ledger.repository.accounts import add_account
-from fintrack.snapshots.repository import ensure_default_snapshot
 from fintrack.ledger.repository.merchants import (
     get_cached_category,
     get_uncached_merchants,
@@ -12,6 +11,7 @@ from fintrack.ledger.repository.merchants import (
     list_merchants_with_stats,
     set_merchant_category,
 )
+from fintrack.snapshots.repository import ensure_default_snapshot
 
 
 def test_set_and_get_cached_category(conn):

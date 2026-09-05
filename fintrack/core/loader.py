@@ -1,16 +1,16 @@
 """Load finances data from SQLite database."""
 
 import logging
-from typing import Any, Dict
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 
-def load_finances_from_db(conn, snapshot_id: int) -> Dict[str, Any]:
+def load_finances_from_db(conn, snapshot_id: int) -> dict[str, Any]:
     """Load finances data from DB into a plain dict (same shape as the old YAML structure)."""
     from fintrack.accounts.repository import get_accounts
-    from fintrack.networth.repository import get_asset_entries
     from fintrack.budget.repository import get_budget_entries
+    from fintrack.networth.repository import get_asset_entries
 
     raw_accounts = get_accounts(conn, snapshot_id)
     raw_budget = get_budget_entries(conn, snapshot_id)
@@ -23,8 +23,8 @@ def load_finances_from_db(conn, snapshot_id: int) -> Dict[str, Any]:
     # Fetch cached (and possibly refresh) external prices for non-USD units.
     # rate_meta carries each cached price's fetched_at so the UI can show how
     # fresh it is (and flag stale ones next to the on-demand refresh control).
-    rates: Dict[str, Any] = {}
-    rate_meta: Dict[str, Any] = {}
+    rates: dict[str, Any] = {}
+    rate_meta: dict[str, Any] = {}
     units = {e["unit"] for e in assets if e.get("unit") and e["unit"] != "USD"}
     if units:
         try:

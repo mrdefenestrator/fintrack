@@ -1,22 +1,9 @@
 """Table builders for status and subcommands (CLI and web)."""
 
-from datetime import date
+from datetime import datetime
 from decimal import Decimal
-from typing import Any, Dict, List
+from typing import Any
 
-from fintrack.networth.calculations import (
-    _ACCOUNT_TYPE_TO_CALCULATION,
-    _amount_annual,
-    _budget_entry_in_month,
-    _entry_subtotal,
-    _semiannual_other_month,
-    _subtotal_remainder_of_month,
-)
-from fintrack.networth.amortization import (
-    payoff_progress,
-    projected_payoff_date,
-    scheduled_payment,
-)
 from fintrack.core.formatting import (
     fmt_day_ordinal,
     fmt_money,
@@ -25,9 +12,22 @@ from fintrack.core.formatting import (
     fmt_recurrence_display,
     fmt_type_display,
 )
+from fintrack.networth.amortization import (
+    payoff_progress,
+    projected_payoff_date,
+    scheduled_payment,
+)
+from fintrack.networth.calculations import (
+    _ACCOUNT_TYPE_TO_CALCULATION,
+    _amount_annual,
+    _budget_entry_in_month,
+    _entry_subtotal,
+    _semiannual_other_month,
+    _subtotal_remainder_of_month,
+)
 
 
-def _expected_day_or_date(entry: Dict[str, Any]) -> str:
+def _expected_day_or_date(entry: dict[str, Any]) -> str:
     """Return expected day (dayOfMonth), month/day, or date for display in table."""
     rec = entry.get("recurrence", "")
     if rec == "monthly":
@@ -62,7 +62,7 @@ def _expected_day_or_date(entry: Dict[str, Any]) -> str:
     return "-"  # biweekly or unknown
 
 
-def _expected_display(entry: Dict[str, Any]) -> str:
+def _expected_display(entry: dict[str, Any]) -> str:
     """Combined Expected + Continuous for table display: 'continuous' when monthly+continuous, else day/date."""
     if entry.get("continuous") and entry.get("recurrence") == "monthly":
         return "continuous"
@@ -70,9 +70,9 @@ def _expected_display(entry: Dict[str, Any]) -> str:
 
 
 def _append_table_separator_and_total(
-    rows: List[List[Any]],
-    headers: List[str],
-    total_row: List[Any],
+    rows: list[list[Any]],
+    headers: list[str],
+    total_row: list[Any],
 ) -> None:
     """Append a separator row and total row to rows. Mutates rows in place."""
     all_cells = [headers] + rows + [total_row]
@@ -85,7 +85,7 @@ def _append_table_separator_and_total(
     rows.append(total_row)
 
 
-def _account_display_by_id(accounts: List[Dict[str, Any]]) -> Dict[int, str]:
+def _account_display_by_id(accounts: list[dict[str, Any]]) -> dict[int, str]:
     """Build map account id -> display name (institution + name + partial)."""
     result = {}
     for a in accounts:
@@ -99,10 +99,10 @@ def _account_display_by_id(accounts: List[Dict[str, Any]]) -> Dict[int, str]:
 
 
 def _build_accounts_table(
-    accounts: List[Dict[str, Any]],
+    accounts: list[dict[str, Any]],
     n2: float,
     show_id: bool = False,
-    account_display_by_id: Dict[int, str] | None = None,
+    account_display_by_id: dict[int, str] | None = None,
 ) -> tuple:
     """Build (headers, rows) for the liquid/accounts table. Rows include separator and total."""
     account_display_by_id = account_display_by_id or {}
@@ -208,11 +208,11 @@ def _build_accounts_table(
 
 
 def _build_budget_table(
-    budget: List[Dict[str, Any]],
+    budget: list[dict[str, Any]],
     year: int,
     month: int,
     day: int,
-    account_display_by_id: Dict[int, str] | None = None,
+    account_display_by_id: dict[int, str] | None = None,
     show_index: bool = False,
 ) -> tuple:
     """Build (headers, rows) for budget table (unified income+expenses). Rows include separator and total.
@@ -235,14 +235,14 @@ def _build_budget_table(
     if show_index:
         headers = ["Index"] + headers
 
-    def _auto_account(entry: Dict[str, Any]) -> str:
+    def _auto_account(entry: dict[str, Any]) -> str:
         ref = entry.get("autoAccountRef")
         return account_display_by_id.get(ref, "-") if ref is not None else "-"
 
     rows = []
-    total_subtotal = Decimal("0")
-    total_monthly = Decimal("0")
-    total_annual = Decimal("0")
+    total_subtotal = Decimal(0)
+    total_monthly = Decimal(0)
+    total_annual = Decimal(0)
     for idx, e in enumerate(budget):
         kind = e.get("kind", "income")
         sign = 1 if kind == "income" else -1
@@ -278,7 +278,7 @@ def _build_budget_table(
     return (headers, rows)
 
 
-def _build_funding_table(funding_results: List[Dict[str, Any]]) -> tuple:
+def _build_funding_table(funding_results: list[dict[str, Any]]) -> tuple:
     """Build (headers, rows) for the account funding needed table.
 
     Columns: Account | Balance | CC Statements | Direct Expenses | Reserve |
@@ -313,7 +313,7 @@ def _build_funding_table(funding_results: List[Dict[str, Any]]) -> tuple:
 
 
 def _build_net_worth_table(
-    assets: List[Dict[str, Any]], show_index: bool = False
+    assets: list[dict[str, Any]], show_index: bool = False
 ) -> tuple:
     """Build (headers, rows) for unified assets/debts table. Rows include separator and total."""
     headers = [
@@ -346,7 +346,7 @@ def _build_net_worth_table(
         if e.get("kind") == "asset" and e.get("id") is not None
     }
     rows = []
-    total_subtotal = Decimal("0")
+    total_subtotal = Decimal(0)
     for idx, entry in enumerate(assets):
         kind = entry.get("kind", "asset")
         qty = entry.get("quantity")
@@ -397,7 +397,7 @@ def _build_net_worth_table(
                     entry.get("balance"),
                     entry.get("interestRate"),
                     payment,
-                    date.today(),
+                    datetime.now().astimezone().date(),
                     due_day,
                 )
                 if payment is not None

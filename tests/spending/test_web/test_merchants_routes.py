@@ -121,8 +121,9 @@ def test_update_category_sets_source_manual(client, merchant_id, db_engine):
         f"/s/ledger/merchants/{merchant_id}/category",
         data={"field": "category", "value": "Dining"},
     )
-    from fintrack.core.models import merchant_cache
     from sqlalchemy import select
+
+    from fintrack.core.models import merchant_cache
 
     with db_engine.connect() as conn:
         source = conn.execute(

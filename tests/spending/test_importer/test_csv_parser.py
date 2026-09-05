@@ -1,13 +1,14 @@
 from datetime import date
 from decimal import Decimal
+from pathlib import Path
 
 import pytest
 
 from fintrack.core.config import INSTITUTIONS_DIR
 from fintrack.ledger.importer.csv_parser import (
-    parse_csv,
-    detect_institution_config,
     _parse_signed_dollar,
+    detect_institution_config,
+    parse_csv,
 )
 
 
@@ -81,7 +82,7 @@ header_pattern:
     )
     detected = detect_institution_config(sample_csv, str(config_dir))
     assert detected is not None
-    assert "Test Bank" in open(detected).read()
+    assert "Test Bank" in Path(detected).read_text()
 
 
 @pytest.mark.parametrize(
@@ -163,7 +164,7 @@ header_pattern:
     )
     detected = detect_institution_config(sample_venmo_csv, str(config_dir))
     assert detected is not None
-    assert "Venmo" in open(detected).read()
+    assert "Venmo" in Path(detected).read_text()
 
 
 _VENMO_CONFIG_WITH_BALANCES = """
@@ -260,4 +261,4 @@ def test_parse_csv_rocket_mortgage(sample_rocket_csv):
 def test_detect_institution_config_rocket_mortgage(sample_rocket_csv):
     detected = detect_institution_config(sample_rocket_csv, str(INSTITUTIONS_DIR))
     assert detected is not None
-    assert "Rocket Mortgage" in open(detected).read()
+    assert "Rocket Mortgage" in Path(detected).read_text()

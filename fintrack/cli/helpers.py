@@ -3,7 +3,7 @@
 import sys
 from contextlib import contextmanager
 from decimal import Decimal
-from typing import Any, Dict, List
+from typing import Any
 
 import click
 from tabulate import tabulate
@@ -62,8 +62,8 @@ pass_cli = click.make_pass_decorator(CliContext)
 
 
 def sort_items(
-    items: List[Dict[str, Any]], sort_key: str, reverse: bool = False
-) -> List[Dict[str, Any]]:
+    items: list[dict[str, Any]], sort_key: str, reverse: bool = False
+) -> list[dict[str, Any]]:
     """Sort dicts by key; None values last, numbers and strings each coherent."""
 
     def get_sort_value(item):
@@ -84,7 +84,7 @@ def sort_items(
         return items
 
 
-def drop_separator_rows(rows: List[List[Any]]) -> List[List[Any]]:
+def drop_separator_rows(rows: list[list[Any]]) -> list[list[Any]]:
     return [
         r
         for r in rows

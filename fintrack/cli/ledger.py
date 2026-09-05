@@ -2,7 +2,7 @@
 balance, serve (ported from the spending CLI plus new balance/staging/report
 commands)."""
 
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 import click
@@ -372,7 +372,7 @@ def report():
 @pass_cli
 def report_monthly(cli, year, month):
     """Category totals for one month (default: current)."""
-    today = date.today()
+    today = datetime.now().astimezone().date()
     year, month = year or today.year, month or today.month
     with cli.connect() as conn:
         snapshot_id = cli.snapshot_id(conn)
@@ -397,7 +397,7 @@ def report_monthly(cli, year, month):
 @pass_cli
 def report_trends(cli, months):
     """Per-category totals and monthly average over the trailing N months."""
-    today = date.today()
+    today = datetime.now().astimezone().date()
     start_month = today.month - (months - 1)
     start_year = today.year
     while start_month <= 0:

@@ -1,9 +1,9 @@
 import re
-
-from fintrack.core.config import NORMALIZATION_CONFIG
 from functools import lru_cache
 
 import yaml
+
+from fintrack.core.config import NORMALIZATION_CONFIG
 
 DEFAULT_CONFIG = str(NORMALIZATION_CONFIG)
 

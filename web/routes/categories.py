@@ -17,14 +17,13 @@ htmx:beforeSwap hook swaps non-empty 422 bodies in).
 
 from flask import Blueprint, current_app, g, render_template, request, url_for
 
-from web.routes.common import snapshot_scoped
-
 from fintrack.ledger.repository.categories import (
     add_category,
     delete_category,
     list_categories,
     rename_category,
 )
+from web.routes.common import snapshot_scoped
 
 bp = snapshot_scoped(Blueprint("categories", __name__, url_prefix="/s/<filename>"))
 

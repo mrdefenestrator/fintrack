@@ -7,9 +7,9 @@ budgeted expense isn't counted twice. Opt-in: projections only apply it when
 asked.
 """
 
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
-from typing import Any, Dict, List
+from typing import Any
 
 from sqlalchemy import Connection
 
@@ -23,15 +23,15 @@ EXCLUDED_CATEGORIES = {"Transfer"}
 def unscheduled_spend_by_category(
     conn: Connection,
     snapshot_id: int,
-    budget: List[Dict[str, Any]],
+    budget: list[dict[str, Any]],
     *,
     today: date | None = None,
     months_back: int = 3,
-) -> Dict[str, Decimal]:
+) -> dict[str, Decimal]:
     """Category → average monthly ledger flow (negative = spend) over the
     trailing `months_back` full months, keeping only net-spend categories
     that no budget entry claims."""
-    today = today or date.today()
+    today = today or datetime.now().astimezone().date()
     claimed = {e.get("category") for e in budget if e.get("category")}
     averages = get_rolling_average(
         conn,
@@ -47,6 +47,6 @@ def unscheduled_spend_by_category(
     }
 
 
-def unscheduled_monthly_total(spend_by_category: Dict[str, Decimal]) -> Decimal:
+def unscheduled_monthly_total(spend_by_category: dict[str, Decimal]) -> Decimal:
     """Total estimated unscheduled monthly flow (negative = spend)."""
-    return sum(spend_by_category.values(), Decimal("0"))
+    return sum(spend_by_category.values(), Decimal(0))

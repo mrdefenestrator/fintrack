@@ -3,8 +3,12 @@ from pathlib import Path
 import yaml
 from sqlalchemy import Connection, delete, func, insert, select, update
 
-from fintrack.core.models import budget_entries, categories, merchant_cache
-from fintrack.core.models import transaction_corrections
+from fintrack.core.models import (
+    budget_entries,
+    categories,
+    merchant_cache,
+    transaction_corrections,
+)
 
 
 def seed_categories(conn: Connection, config_path: str | Path) -> None:

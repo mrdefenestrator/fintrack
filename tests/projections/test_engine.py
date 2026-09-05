@@ -226,9 +226,9 @@ def test_asset_growth_compounds_monthly(conn, snapshot_id):
     assert len(asset_rows) == 1
     b = asset_rows[0]["balances"]
     r = Decimal("1.01")  # 0.12 / 12
-    assert b[0] == Decimal("10000") * r
-    assert b[1] == Decimal("10000") * r * r
-    assert b[2] == Decimal("10000") * r * r * r
+    assert b[0] == Decimal(10000) * r
+    assert b[1] == Decimal(10000) * r * r
+    assert b[2] == Decimal(10000) * r * r * r
     assert result["net_worth"][2] == b[2]
 
 
@@ -242,14 +242,14 @@ def test_asset_contribution_with_growth(conn, snapshot_id):
             "name": "Retirement",
             "value": 10000,
             "annualReturnRate": Decimal("0.12"),
-            "monthlyContribution": Decimal("500"),
+            "monthlyContribution": Decimal(500),
         },
     )
     result = project(conn, snapshot_id, months=2, today=TODAY)
     asset_rows = [r for r in result["rows"] if r.get("_source") == "asset"]
     b = asset_rows[0]["balances"]
-    expected_0 = Decimal("10000") * Decimal("1.01") + Decimal("500")
-    expected_1 = expected_0 * Decimal("1.01") + Decimal("500")
+    expected_0 = Decimal(10000) * Decimal("1.01") + Decimal(500)
+    expected_1 = expected_0 * Decimal("1.01") + Decimal(500)
     assert b[0] == expected_0
     assert b[1] == expected_1
 
@@ -269,9 +269,9 @@ def test_asset_depreciation(conn, snapshot_id):
     result = project(conn, snapshot_id, months=2, today=TODAY)
     asset_rows = [r for r in result["rows"] if r.get("_source") == "asset"]
     b = asset_rows[0]["balances"]
-    monthly_rate = Decimal("-0.15") / Decimal("12")
-    expected_0 = Decimal("30000") * (Decimal("1") + monthly_rate)
-    expected_1 = expected_0 * (Decimal("1") + monthly_rate)
+    monthly_rate = Decimal("-0.15") / Decimal(12)
+    expected_0 = Decimal(30000) * (Decimal(1) + monthly_rate)
+    expected_1 = expected_0 * (Decimal(1) + monthly_rate)
     assert b[0] == expected_0
     assert b[1] == expected_1
 
@@ -285,7 +285,7 @@ def test_asset_contribution_only(conn, snapshot_id):
             "kind": "asset",
             "name": "Savings Bond",
             "value": 5000,
-            "monthlyContribution": Decimal("100"),
+            "monthlyContribution": Decimal(100),
         },
     )
     result = project(conn, snapshot_id, months=3, today=TODAY)

@@ -8,7 +8,7 @@ write. (`account_id` names the holding; the column keeps its historical
 name.)
 """
 
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 
@@ -43,7 +43,7 @@ def record_balance(
     Two writes for the same (account, day, source) collapse to the newer
     values; a manual edit and a statement on the same day coexist.
     """
-    as_of = as_of or date.today()
+    as_of = as_of or datetime.now().astimezone().date()
     conn.execute(
         sqlite_insert(balance_history)
         .values(

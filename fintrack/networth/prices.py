@@ -15,10 +15,11 @@ dates, account numbers, or personal data.
 
 import json
 import logging
-import urllib.request
 import urllib.error
-from datetime import datetime, timedelta, timezone
+import urllib.request
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
+
 from sqlalchemy import select, text
 
 from fintrack.core.models import price_cache
@@ -82,7 +83,7 @@ def get_rates(conn, units: set[str]) -> dict[str, Decimal]:
         return {}
 
     cached = _read_cache(conn, units)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     fresh: dict[str, Decimal] = {}
     stale_units: set[str] = set()
@@ -161,14 +162,14 @@ def _read_cache(conn, units: set[str]) -> dict[str, tuple[Decimal, datetime]]:
         fetched_at = row.fetched_at
         # Ensure fetched_at is timezone-aware for comparison.
         if fetched_at.tzinfo is None:
-            fetched_at = fetched_at.replace(tzinfo=timezone.utc)
+            fetched_at = fetched_at.replace(tzinfo=UTC)
         result[row.unit] = (Decimal(str(row.price_usd)), fetched_at)
     return result
 
 
 def _write_cache(conn, prices: dict[str, Decimal]) -> None:
     """Upsert cached prices (INSERT OR REPLACE for SQLite)."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     for unit, price in prices.items():
         conn.execute(
             text(

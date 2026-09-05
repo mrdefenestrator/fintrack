@@ -1,8 +1,8 @@
 from datetime import date
 from decimal import Decimal
 
-from fintrack.ledger.importer.dedup import compute_fingerprints, deduplicate
 from fintrack.core.types import ParsedTransaction
+from fintrack.ledger.importer.dedup import compute_fingerprints, deduplicate
 
 
 def test_compute_fingerprints_unique():
@@ -114,7 +114,7 @@ def test_deduplicate_removes_exact_matches():
     fingerprints = compute_fingerprints(txns, account_id=1)
     existing_fps = {fingerprints[0]}
 
-    new_txns, new_fps, flagged, flagged_fps = deduplicate(
+    new_txns, _new_fps, flagged, flagged_fps = deduplicate(
         txns, fingerprints, existing_fps, account_id=1
     )
     assert len(new_txns) == 1
@@ -141,7 +141,7 @@ def test_deduplicate_flags_ambiguous():
     # Existing DB has sequence 0 but not sequence 1
     existing_fps = {fingerprints[0]}
 
-    new_txns, new_fps, flagged, flagged_fps = deduplicate(
+    new_txns, _new_fps, flagged, flagged_fps = deduplicate(
         txns, fingerprints, existing_fps, account_id=1
     )
     assert len(new_txns) == 0

@@ -45,9 +45,12 @@ def parse_csv(file_path: str | Path, config_path: str | Path) -> ImportResult:
         all_rows = list(csv.DictReader(f))
 
     for row in all_rows:
-        if filter_column and filter_values is not None:
-            if row.get(filter_column, "").strip() not in filter_values:
-                continue
+        if (
+            filter_column
+            and filter_values is not None
+            and row.get(filter_column, "").strip() not in filter_values
+        ):
+            continue
 
         raw_amount = row.get(amount_col, "").strip()
         if not raw_amount:
@@ -67,7 +70,8 @@ def parse_csv(file_path: str | Path, config_path: str | Path) -> ImportResult:
         if not raw_date:
             continue
         try:
-            txn_date = datetime.strptime(raw_date, date_fmt).date()
+            # Statement dates are calendar dates with no tz; .date() discards time.
+            txn_date = datetime.strptime(raw_date, date_fmt).date()  # noqa: DTZ007
         except ValueError:
             continue
 

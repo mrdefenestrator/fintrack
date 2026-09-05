@@ -6,8 +6,8 @@ from sqlalchemy import select
 from fintrack.accounts.balance_history import (
     get_balance_history,
     latest_point,
-    record_balance,
     reconciliation_note,
+    record_balance,
 )
 from fintrack.accounts.repository import add_account as fin_add_account
 from fintrack.accounts.repository import update_account
@@ -50,14 +50,14 @@ def test_record_balance_inserts_and_resyncs_account(conn):
 def test_record_balance_upserts_same_day_same_source(conn):
     _, account_id = _account(conn)
     record_balance(
-        conn, account_id=account_id, balance=Decimal("10"), as_of=date(2026, 6, 1)
+        conn, account_id=account_id, balance=Decimal(10), as_of=date(2026, 6, 1)
     )
     record_balance(
-        conn, account_id=account_id, balance=Decimal("20"), as_of=date(2026, 6, 1)
+        conn, account_id=account_id, balance=Decimal(20), as_of=date(2026, 6, 1)
     )
     rows = get_balance_history(conn, account_id)
     assert len(rows) == 1
-    assert rows[0]["balance"] == Decimal("20")
+    assert rows[0]["balance"] == Decimal(20)
 
 
 def test_manual_and_statement_same_day_coexist(conn):
@@ -65,21 +65,21 @@ def test_manual_and_statement_same_day_coexist(conn):
     record_balance(
         conn,
         account_id=account_id,
-        balance=Decimal("10"),
+        balance=Decimal(10),
         as_of=date(2026, 6, 1),
         source="statement",
     )
     record_balance(
         conn,
         account_id=account_id,
-        balance=Decimal("15"),
+        balance=Decimal(15),
         as_of=date(2026, 6, 1),
         source="manual",
     )
     rows = get_balance_history(conn, account_id)
     assert len(rows) == 2
     # newest write wins the account re-sync (id tiebreak on equal as_of)
-    assert get_account_by_id(conn, account_id)["balance"] == Decimal("15")
+    assert get_account_by_id(conn, account_id)["balance"] == Decimal(15)
 
 
 def test_history_ordering_and_limit(conn):
@@ -94,27 +94,27 @@ def test_history_ordering_and_limit(conn):
     rows = get_balance_history(conn, account_id)
     assert [r["balance"] for r in rows] == [Decimal(b) for b in ("10", "20", "30")]
     assert [r["balance"] for r in get_balance_history(conn, account_id, limit=2)] == [
-        Decimal("20"),
-        Decimal("30"),
+        Decimal(20),
+        Decimal(30),
     ]
-    assert latest_point(conn, account_id)["balance"] == Decimal("30")
+    assert latest_point(conn, account_id)["balance"] == Decimal(30)
     # account synced to the newest as_of, not the last write
-    assert get_account_by_id(conn, account_id)["balance"] == Decimal("30")
+    assert get_account_by_id(conn, account_id)["balance"] == Decimal(30)
 
 
 def test_manual_balance_edit_writes_history(conn):
     snapshot_id = create_snapshot(conn, "manual-edit")
     account_id = fin_add_account(
-        conn, snapshot_id, {"name": "Cash", "type": "wallet", "balance": Decimal("50")}
+        conn, snapshot_id, {"name": "Cash", "type": "wallet", "balance": Decimal(50)}
     )
     # creation with a balance seeds the first point
     assert len(get_balance_history(conn, account_id)) == 1
 
-    update_account(conn, snapshot_id, account_id, {"balance": Decimal("75")})
+    update_account(conn, snapshot_id, account_id, {"balance": Decimal(75)})
     rows = get_balance_history(conn, account_id)
-    assert rows[-1]["balance"] == Decimal("75")
+    assert rows[-1]["balance"] == Decimal(75)
     assert rows[-1]["source"] == "manual"
-    assert get_account_by_id(conn, account_id)["balance"] == Decimal("75")
+    assert get_account_by_id(conn, account_id)["balance"] == Decimal(75)
 
     # a non-balance edit adds no point
     update_account(conn, snapshot_id, account_id, {"name": "Cash 2"})
@@ -131,7 +131,7 @@ def test_manual_balance_edit_stamps_client_today(conn):
         {
             "name": "Cash",
             "type": "wallet",
-            "balance": Decimal("50"),
+            "balance": Decimal(50),
             "asOfDate": date(2026, 1, 1),
         },
     )
@@ -139,12 +139,12 @@ def test_manual_balance_edit_stamps_client_today(conn):
         conn,
         snapshot_id,
         account_id,
-        {"balance": Decimal("75")},
+        {"balance": Decimal(75)},
         today=date(2026, 6, 5),
     )
     point = latest_point(conn, account_id)
     assert point["as_of"] == date(2026, 6, 5)
-    assert point["balance"] == Decimal("75")
+    assert point["balance"] == Decimal(75)
     assert get_account_by_id(conn, account_id)["as_of_date"] == date(2026, 6, 5)
 
 
@@ -156,13 +156,13 @@ def test_cc_available_edit_derives_balance_and_writes_history(conn):
         {
             "name": "Visa",
             "type": "credit_card",
-            "limit": Decimal("5000"),
-            "available": Decimal("5000"),
+            "limit": Decimal(5000),
+            "available": Decimal(5000),
         },
     )
-    update_account(conn, snapshot_id, account_id, {"available": Decimal("4400")})
+    update_account(conn, snapshot_id, account_id, {"available": Decimal(4400)})
     point = latest_point(conn, account_id)
-    assert point["balance"] == Decimal("-600")
+    assert point["balance"] == Decimal(-600)
     assert point["source"] == "manual"
 
 
@@ -267,7 +267,7 @@ def _cc_account(conn, name="Visa", credit_limit=None):
 
 
 def test_cc_import_confirm_updates_available(conn):
-    _, account_id = _cc_account(conn, name="CCImport", credit_limit=Decimal("5000"))
+    _, account_id = _cc_account(conn, name="CCImport", credit_limit=Decimal(5000))
     import_id = create_import(
         conn,
         account_id=account_id,
@@ -281,13 +281,13 @@ def test_cc_import_confirm_updates_available(conn):
     acct = get_account_by_id(conn, account_id)
     assert acct["balance"] == Decimal("-600.00")
     assert acct["available"] == Decimal("4400.00")
-    assert acct["credit_limit"] == Decimal("5000")
+    assert acct["credit_limit"] == Decimal(5000)
     # invariant restored: balance == available - credit_limit
     assert acct["balance"] == acct["available"] - acct["credit_limit"]
 
 
 def test_cc_sync_derives_available_when_point_lacks_it(conn):
-    _, account_id = _cc_account(conn, name="CCDerive", credit_limit=Decimal("5000"))
+    _, account_id = _cc_account(conn, name="CCDerive", credit_limit=Decimal(5000))
     record_balance(
         conn,
         account_id=account_id,
@@ -298,7 +298,7 @@ def test_cc_sync_derives_available_when_point_lacks_it(conn):
     acct = get_account_by_id(conn, account_id)
     assert acct["balance"] == Decimal("-600.00")
     assert acct["available"] == Decimal("4400.00")  # credit_limit + balance
-    assert acct["credit_limit"] == Decimal("5000")
+    assert acct["credit_limit"] == Decimal(5000)
 
 
 def test_cc_sync_fills_null_credit_limit_from_available(conn):
@@ -317,7 +317,7 @@ def test_cc_sync_fills_null_credit_limit_from_available(conn):
 
 
 def test_cc_sync_never_overwrites_user_credit_limit(conn):
-    _, account_id = _cc_account(conn, name="CCKeep", credit_limit=Decimal("5000"))
+    _, account_id = _cc_account(conn, name="CCKeep", credit_limit=Decimal(5000))
     # The user-set credit_limit must survive a statement import. available is
     # no longer stored (schema split D4): it is computed as credit_limit +
     # balance, so the statement's reported available (4000, which would embed
@@ -331,7 +331,7 @@ def test_cc_sync_never_overwrites_user_credit_limit(conn):
         available=Decimal("4000.00"),
     )
     acct = get_account_by_id(conn, account_id)
-    assert acct["credit_limit"] == Decimal("5000")
+    assert acct["credit_limit"] == Decimal(5000)
     assert acct["available"] == Decimal("4400.00")  # computed: limit + balance
 
 

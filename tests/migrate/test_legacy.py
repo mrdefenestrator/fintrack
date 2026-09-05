@@ -6,7 +6,7 @@ working no matter how the current models evolve.
 """
 
 import sqlite3
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 
 import pytest
@@ -301,7 +301,9 @@ def test_apply_full_migration(
         assert venmo["sort_order"] == 2
 
         # Bad as_of_date stored as null, balance still migrated
-        assert by_name["D Savings"]["as_of_date"] == date.today()  # from history resync
+        assert (
+            by_name["D Savings"]["as_of_date"] == datetime.now().astimezone().date()
+        )  # from history resync
         assert by_name["D Savings"]["balance"] == Decimal("2500.00")
 
         # Transactions: fingerprints recomputed with the NEW account id

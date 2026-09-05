@@ -9,7 +9,6 @@ from fintrack.core.tables import (
     _expected_display,
 )
 
-
 # ---------------------------------------------------------------------------
 # _expected_day_or_date
 # ---------------------------------------------------------------------------
@@ -155,7 +154,7 @@ class TestBuildAccountsTable:
                 "available": 8000,
             }
         ]
-        headers, rows = _build_accounts_table(accounts, n2=-2000)
+        _headers, rows = _build_accounts_table(accounts, n2=-2000)
         # Balance should show -(limit - available) = -(10000-8000) = -2000
         assert "($2,000.00)" in rows[0][3]
         assert "$10,000.00" in rows[0][4]  # Limit
@@ -344,7 +343,7 @@ class TestBuildBudgetTable:
         assert rows[0][9] == "-"
 
     def test_empty_budget(self):
-        headers, rows = _build_budget_table([], 2025, 2, 0)
+        _headers, rows = _build_budget_table([], 2025, 2, 0)
         # Should still have separator and total
         assert len(rows) == 2  # separator + total
         assert rows[-1][0] == "Total"

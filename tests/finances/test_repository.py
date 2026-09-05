@@ -6,7 +6,6 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.exc import IntegrityError
 
-from fintrack.core.db import init_db
 from fintrack.accounts.repository import (
     add_account,
     delete_account,
@@ -14,13 +13,6 @@ from fintrack.accounts.repository import (
     move_account,
     reorder_accounts,
     update_account,
-)
-from fintrack.networth.repository import (
-    add_asset_entry,
-    delete_asset_entry,
-    get_asset_entries,
-    move_asset_entry,
-    update_asset_entry,
 )
 from fintrack.budget.repository import (
     add_budget_entry,
@@ -30,6 +22,15 @@ from fintrack.budget.repository import (
     reorder_budget_entries,
     update_budget_entry,
 )
+from fintrack.core.db import init_db
+from fintrack.core.loader import load_finances_from_db
+from fintrack.networth.repository import (
+    add_asset_entry,
+    delete_asset_entry,
+    get_asset_entries,
+    move_asset_entry,
+    update_asset_entry,
+)
 from fintrack.snapshots.repository import (
     copy_snapshot,
     create_snapshot,
@@ -38,7 +39,6 @@ from fintrack.snapshots.repository import (
     list_snapshots,
     rename_snapshot,
 )
-from fintrack.core.loader import load_finances_from_db
 
 
 @pytest.fixture()
@@ -596,7 +596,7 @@ def test_loan_origination_fields_round_trip():
                 "name": "Mortgage",
                 "balance": 280000,
                 "interestRate": Decimal("0.0625"),
-                "originalPrincipal": Decimal("300000"),
+                "originalPrincipal": Decimal(300000),
                 "termMonths": 360,
                 "originationDate": "2025-06-12",
                 "statement_due_day_of_month": 1,
@@ -613,7 +613,7 @@ def test_loan_origination_fields_round_trip():
             snap_id,
             loan["id"],
             {
-                "originalPrincipal": Decimal("310000"),
+                "originalPrincipal": Decimal(310000),
                 "termMonths": 180,
                 "originationDate": "2025-07-01",
                 "statement_due_day_of_month": 15,

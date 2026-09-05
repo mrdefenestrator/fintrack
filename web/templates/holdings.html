@@ -139,19 +139,32 @@
     /* Two-line master footer (Liquid `total-upper` pinned above Net worth) is
        shared in base.html: `.table-scroll-container tr.total-row.total-upper`. */
 
-    /* On-demand price refresh. The per-symbol ↻ hides until you hover its cell
-       (or focus it), so the sheet stays clean; a stale price keeps it visible
-       to nudge a refresh. The band-level "Refresh prices" button shows on the
-       group heading. Both spin while their HTMX request is in flight. */
+    /* On-demand price refresh. On a hover pointer the per-symbol ↻ hides until
+       you hover its cell (or focus it), so the sheet stays clean; on touch it
+       stays visibly dimmed since there is no hover to reveal it. A stale price
+       keeps it fully visible to nudge a refresh either way. The band-level
+       "Refresh prices" button shows on the group heading. Both spin while their
+       HTMX request is in flight. */
     #holdings-table .holdings-symbol-cell .holdings-refresh-btn {
-        opacity: 0;
-        transition: opacity .12s ease;
         cursor: pointer;
     }
-    #holdings-table .holdings-symbol-cell:hover .holdings-refresh-btn,
-    #holdings-table .holdings-refresh-btn:focus-visible,
-    #holdings-table .holdings-symbol-cell .holdings-refresh-btn.is-stale {
-        opacity: 1;
+    /* Hover-reveal only where a hover pointer exists; on touch/coarse pointers
+       (no hover) the button can never be revealed, so keep it always visible
+       (dimmed) instead. */
+    @media (hover: hover) {
+        #holdings-table .holdings-symbol-cell .holdings-refresh-btn {
+            opacity: 0;
+            transition: opacity .12s ease;
+        }
+        #holdings-table .holdings-symbol-cell:hover .holdings-refresh-btn,
+        #holdings-table .holdings-refresh-btn:focus-visible,
+        #holdings-table .holdings-symbol-cell .holdings-refresh-btn.is-stale {
+            opacity: 1;
+        }
+    }
+    @media (hover: none) {
+        #holdings-table .holdings-symbol-cell .holdings-refresh-btn { opacity: .55; }
+        #holdings-table .holdings-symbol-cell .holdings-refresh-btn.is-stale { opacity: 1; }
     }
     #holdings-table .holdings-refresh-btn.htmx-request { opacity: 1; }
     #holdings-table .holdings-refresh-btn.htmx-request .holdings-refresh-glyph {

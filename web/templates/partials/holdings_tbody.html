@@ -25,7 +25,10 @@
     <tr class="holdings-group-heading">
         <td colspan="3" class="px-2 py-1.5 text-xs font-semibold uppercase tracking-wide">{{ group.label }}</td>
         <td class="px-1.5 py-1.5 text-right tabular-nums text-sm font-semibold text-gray-900 dark:text-gray-100 {% if group.total | display_is_negative %}!text-red-600 dark:!text-red-400{% endif %}">{{ group.total }}</td>
-        <td colspan="{{ span - 4 }}" class="px-2 py-1.5 text-right">
+        {# The trailing heading cell spans from the Unit Price column rightward,
+           so left-aligning the control parks it over Unit Price — the column it
+           refreshes. #}
+        <td colspan="{{ span - 4 }}" class="px-2 py-1.5 text-left">
             {% if group.refreshable_units %}
             {# On-demand: force-refresh every live-priced symbol in this band. #}
             <button type="button"

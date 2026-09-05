@@ -2,11 +2,11 @@
 
 from flask import Blueprint, abort, current_app, render_template, request
 
-from fintrack.core import filters, tables
-from fintrack.networth import calculations
-from fintrack.core.loader import load_finances_from_db
 from fintrack.budget import repository as repo_budget
+from fintrack.core import filters, tables
+from fintrack.core.loader import load_finances_from_db
 from fintrack.ledger.repository.categories import get_category_names
+from fintrack.networth import calculations
 
 from .common import drop_separator_rows, get_common_context, validate_snapshot
 from .crud import (
@@ -39,7 +39,7 @@ def _render_tbody(
 ):
     ctx = get_common_context(snapshot_id, filename, edit_mode)
     budget = ctx["budget"]
-    headers, rows = tables._build_budget_table(
+    _headers, rows = tables._build_budget_table(
         budget,
         ctx["year"],
         ctx["month"],
@@ -103,7 +103,7 @@ def budget_view(filename: str):
         include_categories=include_categories or None,
         include_recurrence=include_recurrence or None,
     )
-    include_kinds_set = set(k.lower() for k in include_kinds)
+    include_kinds_set = {k.lower() for k in include_kinds}
     ctx["headers"], ctx["rows"] = tables._build_budget_table(
         budget,
         ctx["year"],

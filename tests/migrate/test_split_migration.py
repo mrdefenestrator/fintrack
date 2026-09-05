@@ -252,5 +252,5 @@ def test_no_available_value_lost_silently(migrated_db):
     # is recomputed as credit_limit + balance = 1000 + (-300) = 700 downstream.
     cc = _rows(migrated_db, "SELECT balance, credit_limit FROM credit_card_details")[0]
     assert Decimal(str(cc["credit_limit"])) + Decimal(str(cc["balance"])) == Decimal(
-        "700"
+        700
     )

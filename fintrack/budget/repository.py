@@ -11,7 +11,7 @@ from fintrack.core.models import budget_entries
 from fintrack.core.ordering import reorder_by_positions
 from fintrack.core.types import BudgetEntry
 
-_ZERO = Decimal("0")
+_ZERO = Decimal(0)
 
 
 def _row_to_budget_entry(row) -> BudgetEntry:

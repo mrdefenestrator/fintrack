@@ -1,5 +1,5 @@
 import hashlib
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
 
@@ -157,7 +157,9 @@ def confirm_import(conn: Connection, import_id: int) -> None:
         conn.commit()
         return
     as_of = row["ledger_balance_date"] or (
-        row["imported_at"].date() if row["imported_at"] else date.today()
+        row["imported_at"].date()
+        if row["imported_at"]
+        else datetime.now().astimezone().date()
     )
     note = reconciliation_note(
         conn,

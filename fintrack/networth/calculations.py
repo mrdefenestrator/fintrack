@@ -5,16 +5,26 @@ proration) live in fintrack.budget.recurrence; the private names below are
 kept as aliases for existing callers.
 """
 
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
-from typing import Any, Dict, List
+from typing import Any
 
 from fintrack.budget.recurrence import (
     amount_annual as _amount_annual,  # noqa: F401  (re-exported alias)
+)
+from fintrack.budget.recurrence import (
     budget_entry_in_month as _budget_entry_in_month,
+)
+from fintrack.budget.recurrence import (
     money as _money,
+)
+from fintrack.budget.recurrence import (
     quarter_months as _quarter_months,  # noqa: F401  (re-exported alias)
+)
+from fintrack.budget.recurrence import (
     semiannual_other_month as _semiannual_other_month,  # noqa: F401
+)
+from fintrack.budget.recurrence import (
     subtotal_remainder_of_month as _subtotal_remainder_of_month,
 )
 from fintrack.core.types import (
@@ -25,7 +35,7 @@ from fintrack.core.types import (
     LiquidityTier,
 )
 
-_ZERO = Decimal("0")
+_ZERO = Decimal(0)
 
 
 # Map specific account type to calculation bucket: liquid (in (1) and (2)),
@@ -63,7 +73,7 @@ RECURRENCE_OPTIONS = RECURRENCE_OPTIONS_CLI
 ASSETS_KINDS = ASSETS_KINDS_CLI
 
 
-def _credit_card_balance_owed(account: Dict[str, Any]) -> Decimal:
+def _credit_card_balance_owed(account: dict[str, Any]) -> Decimal:
     """Credit card signed balance (negative = amount owed).
 
     Prefers the canonical balance (kept in sync by statement imports and
@@ -80,7 +90,7 @@ def _credit_card_balance_owed(account: Dict[str, Any]) -> Decimal:
     return _ZERO
 
 
-def liquid_total(accounts: List[Dict[str, Any]]) -> Decimal:
+def liquid_total(accounts: list[dict[str, Any]]) -> Decimal:
     """(1) Liquid asset/account total (types mapped to liquid: checking, savings, etc.)."""
     return sum(
         (
@@ -92,7 +102,7 @@ def liquid_total(accounts: List[Dict[str, Any]]) -> Decimal:
     )
 
 
-def credit_card_total(accounts: List[Dict[str, Any]]) -> Decimal:
+def credit_card_total(accounts: list[dict[str, Any]]) -> Decimal:
     """Sum of credit card balances (amount owed). Computed as available - limit per card."""
     return sum(
         (
@@ -104,7 +114,7 @@ def credit_card_total(accounts: List[Dict[str, Any]]) -> Decimal:
     )
 
 
-def liquid_minus_cc(accounts: List[Dict[str, Any]]) -> Decimal:
+def liquid_minus_cc(accounts: list[dict[str, Any]]) -> Decimal:
     """(2) Liquid total minus credit-card debts.
 
     Rewards balances are intentionally excluded from calculations for now
@@ -115,7 +125,7 @@ def liquid_minus_cc(accounts: List[Dict[str, Any]]) -> Decimal:
 
 
 def projected_change_to_eom(
-    budget: List[Dict[str, Any]],
+    budget: list[dict[str, Any]],
     year: int,
     month: int,
     day: int | None = None,
@@ -125,7 +135,7 @@ def projected_change_to_eom(
     budget is a unified list of entries with kind: income|expense.
     """
     if day is None:
-        today = date.today()
+        today = datetime.now().astimezone().date()
         if (year, month) == (today.year, today.month):
             day = today.day
         else:
@@ -138,8 +148,8 @@ def projected_change_to_eom(
 
 
 def _entry_subtotal(
-    entry: Dict[str, Any],
-    rates: Dict[str, Decimal] | None = None,
+    entry: dict[str, Any],
+    rates: dict[str, Decimal] | None = None,
 ) -> Decimal:
     """Subtotal for an asset or debt entry.
 
@@ -160,8 +170,8 @@ def _entry_subtotal(
 
 
 def net_nonliquid_paired(
-    assets: List[Dict[str, Any]],
-    rates: Dict[str, Decimal] | None = None,
+    assets: list[dict[str, Any]],
+    rates: dict[str, Decimal] | None = None,
 ) -> Decimal:
     """(5) Sum of (asset subtotal - debt subtotal) for each debt with assetRef = asset id."""
     asset_by_id = {
@@ -184,8 +194,8 @@ def net_nonliquid_paired(
 
 
 def net_nonliquid_total(
-    assets: List[Dict[str, Any]],
-    rates: Dict[str, Decimal] | None = None,
+    assets: list[dict[str, Any]],
+    rates: dict[str, Decimal] | None = None,
 ) -> Decimal:
     """(6) Sum of all asset subtotals minus sum of all debt subtotals."""
     total = _ZERO
@@ -221,17 +231,17 @@ def _tier_for(type_value: Any, unit: Any) -> LiquidityTier:
     return tier
 
 
-def account_tier(account: Dict[str, Any]) -> LiquidityTier:
+def account_tier(account: dict[str, Any]) -> LiquidityTier:
     """Liquidity tier of an account (accounts are USD, so no symbol cap)."""
     return _tier_for(account.get("type"), account.get("unit"))
 
 
-def asset_tier(entry: Dict[str, Any]) -> LiquidityTier:
+def asset_tier(entry: dict[str, Any]) -> LiquidityTier:
     """Liquidity tier of an asset/debt entry (symbol-capped by its unit)."""
     return _tier_for(entry.get("type"), entry.get("unit"))
 
 
-def account_contribution(account: Dict[str, Any]) -> Decimal:
+def account_contribution(account: dict[str, Any]) -> Decimal:
     """Signed net-worth contribution of an account.
 
     `balance` is already signed (negative = owed on credit cards), so every
@@ -244,8 +254,8 @@ def account_contribution(account: Dict[str, Any]) -> Decimal:
 
 
 def asset_contribution(
-    entry: Dict[str, Any],
-    rates: Dict[str, Decimal] | None = None,
+    entry: dict[str, Any],
+    rates: dict[str, Decimal] | None = None,
 ) -> Decimal:
     """Signed net-worth contribution of an asset/debt entry (assets +, debts -)."""
     subtotal = _entry_subtotal(entry, rates)
@@ -253,12 +263,12 @@ def asset_contribution(
 
 
 def contributions_by_tier(
-    accounts: List[Dict[str, Any]],
-    assets: List[Dict[str, Any]],
-    rates: Dict[str, Decimal] | None = None,
-) -> Dict[LiquidityTier, Decimal]:
+    accounts: list[dict[str, Any]],
+    assets: list[dict[str, Any]],
+    rates: dict[str, Decimal] | None = None,
+) -> dict[LiquidityTier, Decimal]:
     """Sum of signed contributions grouped by liquidity tier."""
-    totals: Dict[LiquidityTier, Decimal] = {tier: _ZERO for tier in LIQUIDITY_TIERS}
+    totals: dict[LiquidityTier, Decimal] = {tier: _ZERO for tier in LIQUIDITY_TIERS}
     for account in accounts:
         totals[account_tier(account)] += account_contribution(account)
     for entry in assets:
@@ -267,10 +277,10 @@ def contributions_by_tier(
 
 
 def tiered_totals(
-    accounts: List[Dict[str, Any]],
-    assets: List[Dict[str, Any]],
-    rates: Dict[str, Decimal] | None = None,
-) -> Dict[str, Decimal]:
+    accounts: list[dict[str, Any]],
+    assets: list[dict[str, Any]],
+    rates: dict[str, Decimal] | None = None,
+) -> dict[str, Decimal]:
     """Cumulative liquidity totals: liquid ⊂ investable ⊂ net_worth.
 
     - liquid     = spendable now (cash minus credit-card balances).
@@ -289,9 +299,9 @@ def tiered_totals(
 
 
 def net_worth_total(
-    accounts: List[Dict[str, Any]],
-    assets: List[Dict[str, Any]],
-    rates: Dict[str, Decimal] | None = None,
+    accounts: list[dict[str, Any]],
+    assets: list[dict[str, Any]],
+    rates: dict[str, Decimal] | None = None,
 ) -> Decimal:
     """Total net worth: signed sum across every account and asset/debt."""
     by_tier = contributions_by_tier(accounts, assets, rates)
@@ -299,9 +309,9 @@ def net_worth_total(
 
 
 def equity_pairs(
-    assets: List[Dict[str, Any]],
-    rates: Dict[str, Decimal] | None = None,
-) -> List[Dict[str, Any]]:
+    assets: list[dict[str, Any]],
+    rates: dict[str, Decimal] | None = None,
+) -> list[dict[str, Any]]:
     """Equity for each secured debt linked to an asset via assetRef.
 
     Returns one dict per linked debt: asset entry, debt entry, the asset and
@@ -313,7 +323,7 @@ def equity_pairs(
         for e in assets
         if e.get("kind") == "asset" and e.get("id") is not None
     }
-    pairs: List[Dict[str, Any]] = []
+    pairs: list[dict[str, Any]] = []
     for entry in assets:
         if entry.get("kind") != "debt":
             continue
@@ -340,12 +350,12 @@ def equity_pairs(
 
 
 def account_funding_needed(
-    account: Dict[str, Any],
-    accounts: List[Dict[str, Any]],
-    budget: List[Dict[str, Any]],
+    account: dict[str, Any],
+    accounts: list[dict[str, Any]],
+    budget: list[dict[str, Any]],
     today: date,
-    default_reserve: Any = Decimal("300"),
-) -> Dict[str, Any]:
+    default_reserve: Any = Decimal(300),
+) -> dict[str, Any]:
     """Calculate funding needed for a liquid account to cover obligations plus reserve.
 
     Obligations:
@@ -363,7 +373,7 @@ def account_funding_needed(
     account_id = account.get("id")
 
     # CC items: credit cards where paymentAccountRef == this account's id
-    cc_items: List[tuple] = []
+    cc_items: list[tuple] = []
     for acc in accounts:
         if _ACCOUNT_TYPE_TO_CALCULATION.get(acc.get("type")) != "credit_card":
             continue
@@ -380,7 +390,7 @@ def account_funding_needed(
 
     # Direct expense items: budget expenses where autoAccountRef == this account's id
     # Use _budget_entry_in_month without day so monthly items are not prorated
-    expense_items: List[tuple] = []
+    expense_items: list[tuple] = []
     for entry in budget:
         if entry.get("kind") != "expense":
             continue

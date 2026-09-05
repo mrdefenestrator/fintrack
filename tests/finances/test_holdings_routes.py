@@ -4,15 +4,15 @@ unified view of accounts + asset_entries, reusing the shared sheet chrome
 secured-pair equity folded onto the loan row, and multi-select filters.
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from unittest.mock import patch
 
 import pytest
 from sqlalchemy import create_engine
 
-from fintrack.core.db import init_db
 from fintrack.accounts.repository import add_account
+from fintrack.core.db import init_db
 from fintrack.networth.repository import add_asset_entry
 from fintrack.snapshots.repository import create_snapshot
 
@@ -608,12 +608,12 @@ def test_holdings_delete_asset_dispatches(client, db_engine):
 
 
 def _seed_crypto(
-    db_engine, *, unit="BTC", qty=2, fetched_at=None, price=Decimal("60000")
+    db_engine, *, unit="BTC", qty=2, fetched_at=None, price=Decimal(60000)
 ):
     """Add a non-USD asset holding, optionally seeding a cached price row so the
     Unit-Price cell has a live rate (and a known fetch age)."""
-    from fintrack.networth.repository import add_asset_entry
     from fintrack.core.models import price_cache
+    from fintrack.networth.repository import add_asset_entry
 
     with db_engine.connect() as conn:
         aid = add_asset_entry(
@@ -636,7 +636,7 @@ _NO_FETCH = "fintrack.networth.prices._fetch_prices"
 
 
 def test_holdings_symbol_shows_refresh_button(client, db_engine):
-    _seed_crypto(db_engine, fetched_at=datetime.now(timezone.utc))
+    _seed_crypto(db_engine, fetched_at=datetime.now(UTC))
     with patch(_NO_FETCH, return_value={}):
         body = _rows_region(client.get("/s/finances/holdings").get_data(as_text=True))
     # Per-symbol refresh button posts to the single-symbol refresh route.
@@ -655,7 +655,7 @@ def test_holdings_no_refresh_control_without_symbols(client):
 
 def test_holdings_stale_price_is_flagged(client, db_engine):
     """A price the load-time auto-refresh couldn't renew stays stale + amber."""
-    old = datetime.now(timezone.utc) - timedelta(days=3)
+    old = datetime.now(UTC) - timedelta(days=3)
     _seed_crypto(db_engine, fetched_at=old)
     with patch(_NO_FETCH, return_value={}):  # feed down → cache stays stale
         body = _rows_region(client.get("/s/finances/holdings").get_data(as_text=True))
@@ -664,7 +664,7 @@ def test_holdings_stale_price_is_flagged(client, db_engine):
 
 
 def test_holdings_fresh_price_not_flagged(client, db_engine):
-    _seed_crypto(db_engine, fetched_at=datetime.now(timezone.utc))
+    _seed_crypto(db_engine, fetched_at=datetime.now(UTC))
     with patch(_NO_FETCH, return_value={}) as mock_fetch:
         body = _rows_region(client.get("/s/finances/holdings").get_data(as_text=True))
     mock_fetch.assert_not_called()  # a fresh cache is never refetched on load
@@ -674,25 +674,23 @@ def test_holdings_fresh_price_not_flagged(client, db_engine):
 def test_refresh_price_force_fetches_and_updates(client, db_engine):
     from fintrack.networth.prices import _read_cache
 
-    _seed_crypto(
-        db_engine, fetched_at=datetime.now(timezone.utc), price=Decimal("60000")
-    )
+    _seed_crypto(db_engine, fetched_at=datetime.now(UTC), price=Decimal(60000))
     with patch(
         "fintrack.networth.prices._fetch_prices",
-        return_value={"BTC": Decimal("70000")},
+        return_value={"BTC": Decimal(70000)},
     ) as mock_fetch:
         resp = client.post("/s/finances/holdings/refresh/BTC", data={"edit": "0"})
     assert resp.status_code == 200
     mock_fetch.assert_called_once()  # refetched despite a fresh cache
     with db_engine.connect() as conn:
-        assert _read_cache(conn, {"BTC"})["BTC"][0] == Decimal("70000")
+        assert _read_cache(conn, {"BTC"})["BTC"][0] == Decimal(70000)
 
 
 def test_refresh_price_preserves_edit_mode(client, db_engine):
-    _seed_crypto(db_engine, fetched_at=datetime.now(timezone.utc))
+    _seed_crypto(db_engine, fetched_at=datetime.now(UTC))
     with patch(
         "fintrack.networth.prices._fetch_prices",
-        return_value={"BTC": Decimal("70000")},
+        return_value={"BTC": Decimal(70000)},
     ):
         resp = client.post("/s/finances/holdings/refresh/BTC", data={"edit": "1"})
     body = resp.get_data(as_text=True)
@@ -701,7 +699,7 @@ def test_refresh_price_preserves_edit_mode(client, db_engine):
 
 
 def test_refresh_price_rejects_symbol_not_held(client, db_engine):
-    _seed_crypto(db_engine, fetched_at=datetime.now(timezone.utc))
+    _seed_crypto(db_engine, fetched_at=datetime.now(UTC))
     with patch("fintrack.networth.prices._fetch_prices") as mock_fetch:
         resp = client.post("/s/finances/holdings/refresh/DOGE", data={"edit": "0"})
     assert resp.status_code == 404
@@ -714,11 +712,11 @@ def test_refresh_price_rejects_bad_symbol(client):
 
 
 def test_refresh_all_prices_refetches_every_symbol(client, db_engine):
-    _seed_crypto(db_engine, unit="BTC", fetched_at=datetime.now(timezone.utc))
-    _seed_crypto(db_engine, unit="ETH", fetched_at=datetime.now(timezone.utc))
+    _seed_crypto(db_engine, unit="BTC", fetched_at=datetime.now(UTC))
+    _seed_crypto(db_engine, unit="ETH", fetched_at=datetime.now(UTC))
     with patch(
         "fintrack.networth.prices._fetch_prices",
-        return_value={"BTC": Decimal("70000"), "ETH": Decimal("4000")},
+        return_value={"BTC": Decimal(70000), "ETH": Decimal(4000)},
     ) as mock_fetch:
         resp = client.post("/s/finances/holdings/refresh-all", data={"edit": "0"})
     assert resp.status_code == 200

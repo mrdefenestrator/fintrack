@@ -56,7 +56,7 @@ def _group_rows(result) -> list[dict]:
             continue
         n = len(result["months"])
         raw_subtotals = [
-            sum((r["balances"][mi] for r in rows), Decimal("0")) for mi in range(n)
+            sum((r["balances"][mi] for r in rows), Decimal(0)) for mi in range(n)
         ]
         subtotals = [fmt_money(v) for v in raw_subtotals]
         groups.append(

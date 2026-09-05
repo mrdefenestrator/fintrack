@@ -34,8 +34,8 @@ def test_trailing_average_of_net_spend_categories(conn, snapshot_id):
 
     result = unscheduled_spend_by_category(conn, snapshot_id, [], today=TODAY)
     # Net-spend categories only: income (positive average) is not "spend".
-    assert result == {"Groceries": Decimal("-300")}
-    assert unscheduled_monthly_total(result) == Decimal("-300")
+    assert result == {"Groceries": Decimal(-300)}
+    assert unscheduled_monthly_total(result) == Decimal(-300)
 
 
 def test_budget_claimed_categories_are_excluded(conn, snapshot_id):
@@ -56,7 +56,7 @@ def test_budget_claimed_categories_are_excluded(conn, snapshot_id):
     budget = get_budget_entries(conn, snapshot_id)
 
     result = unscheduled_spend_by_category(conn, snapshot_id, budget, today=TODAY)
-    assert result == {"Subscriptions": Decimal("-20")}
+    assert result == {"Subscriptions": Decimal(-20)}
 
 
 def test_transfers_are_excluded(conn, snapshot_id):
@@ -78,7 +78,7 @@ def test_only_transactions_in_window_count(conn, snapshot_id):
         ],
     )
     result = unscheduled_spend_by_category(conn, snapshot_id, [], today=TODAY)
-    assert result == {"Shopping": Decimal("-30")}  # -90 over 3 months
+    assert result == {"Shopping": Decimal(-30)}  # -90 over 3 months
 
 
 def test_engine_applies_estimate_to_unassigned_prorated(conn, snapshot_id):
@@ -88,11 +88,11 @@ def test_engine_applies_estimate_to_unassigned_prorated(conn, snapshot_id):
     _seed_three_months(conn, account_id, "WHOLE FOODS", "Groceries", "-310.00")
 
     result = project(conn, snapshot_id, months=2, include_estimate=True, today=TODAY)
-    assert result["estimate"]["monthly"] == Decimal("-310")
-    assert result["estimate"]["by_category"] == {"Groceries": Decimal("-310")}
+    assert result["estimate"]["monthly"] == Decimal(-310)
+    assert result["estimate"]["by_category"] == {"Groceries": Decimal(-310)}
     # July has 31 days and 15 remain after the 16th: month 0 is prorated.
-    month0 = Decimal("-310") * 15 / 31
-    assert result["unassigned"] == [month0, month0 + Decimal("-310")]
+    month0 = Decimal(-310) * 15 / 31
+    assert result["unassigned"] == [month0, month0 + Decimal(-310)]
     assert result["liquid"] == [1000 + month0, 1000 + month0 - 310]
 
 

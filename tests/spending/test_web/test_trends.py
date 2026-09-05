@@ -6,7 +6,7 @@ handling of the `end=YYYY-MM` query param: default-to-latest, malformed
 input, past windows, and forward-paging back to "latest".
 """
 
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 
 import pytest
@@ -25,7 +25,6 @@ from web.routes.trends import (
     _resolve_window_end,
     _shift_month,
 )
-
 
 # ---------------------------------------------------------------------------
 # _parse_end_param
@@ -140,7 +139,7 @@ def test_resolve_window_end_past_month_prior_year():
 
 def test_resolve_window_end_handles_february_leap_year():
     today = date(2026, 7, 17)
-    end, year, month, is_latest = _resolve_window_end("2024-02", today)
+    end, _year, _month, is_latest = _resolve_window_end("2024-02", today)
     assert end == date(2024, 2, 29)
     assert is_latest is False
 
@@ -240,7 +239,7 @@ def test_trends_malformed_end_falls_back_to_latest(client):
 
 
 def test_trends_future_end_falls_back_to_latest(client):
-    today = date.today()
+    today = datetime.now().astimezone().date()
     future_year = today.year + 1
     response = client.get(f"/s/ledger/trends?end={future_year}-01")
     assert response.status_code == 200
@@ -250,7 +249,7 @@ def test_trends_future_end_falls_back_to_latest(client):
 
 
 def test_trends_past_end_shows_latest_button_and_window_label(client):
-    today = date.today()
+    today = datetime.now().astimezone().date()
     past_year, past_month = today.year, today.month
     # Go back 2 months, wrapping year if needed.
     past_month -= 2
@@ -269,7 +268,7 @@ def test_trends_past_end_shows_latest_button_and_window_label(client):
 def test_trends_paging_forward_to_current_month_reaches_latest(client):
     """Requesting end= for exactly the current year-month collapses to the
     same 'latest' state as no end= at all (no Latest button shown)."""
-    today = date.today()
+    today = datetime.now().astimezone().date()
     response = client.get(f"/s/ledger/trends?end={today.year:04d}-{today.month:02d}")
     assert response.status_code == 200
     html = response.data.decode()
@@ -279,7 +278,7 @@ def test_trends_paging_forward_to_current_month_reaches_latest(client):
 
 def test_trends_quarterly_pages_back_by_a_quarter(client):
     """The 'earlier' link steps the quarterly window back one quarter (3 mo)."""
-    today = date.today()
+    today = datetime.now().astimezone().date()
     response = client.get("/s/ledger/trends?period=quarterly")
     html = response.data.decode()
     py, pm = today.year, today.month - 3
@@ -291,7 +290,7 @@ def test_trends_quarterly_pages_back_by_a_quarter(client):
 
 def test_trends_ytd_pages_back_by_a_calendar_year(client):
     """The 'earlier' link steps the YTD window back one calendar year."""
-    today = date.today()
+    today = datetime.now().astimezone().date()
     response = client.get("/s/ledger/trends?period=ytd")
     html = response.data.decode()
     assert f"end={today.year - 1:04d}-{today.month:02d}" in html
@@ -299,14 +298,14 @@ def test_trends_ytd_pages_back_by_a_calendar_year(client):
 
 def test_trends_trailing12_pages_back_by_a_year(client):
     """The 'earlier' link slides the trailing-12 window back a full year."""
-    today = date.today()
+    today = datetime.now().astimezone().date()
     response = client.get("/s/ledger/trends?period=trailing12")
     html = response.data.decode()
     assert f"end={today.year - 1:04d}-{today.month:02d}" in html
 
 
 def test_trends_preserves_period_param_while_paging(client):
-    today = date.today()
+    today = datetime.now().astimezone().date()
     past_year, past_month = today.year, today.month - 1
     if past_month <= 0:
         past_month += 12
@@ -345,7 +344,7 @@ def seeded_ledger_account(conn):
     )
     confirm_import(conn, imp_id)
 
-    today = date.today()
+    today = datetime.now().astimezone().date()
     old_year, old_month = today.year, today.month - 3
     if old_month <= 0:
         old_month += 12

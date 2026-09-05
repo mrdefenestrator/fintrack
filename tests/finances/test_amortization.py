@@ -1,6 +1,6 @@
 """Tests for pure loan amortization helpers."""
 
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 
 import pytest
@@ -15,7 +15,7 @@ from fintrack.networth.amortization import (
 
 
 def test_scheduled_payment_zero_rate():
-    assert scheduled_payment(1200, 0, 12) == Decimal("100")
+    assert scheduled_payment(1200, 0, 12) == Decimal(100)
 
 
 def test_scheduled_payment_standard_loan():
@@ -43,8 +43,8 @@ def test_expected_balance_counts_only_due_payments():
         1200, 0, 12, date(2026, 1, 5), date(2026, 1, 14), 15
     )
     after_first = expected_balance(1200, 0, 12, date(2026, 1, 5), date(2026, 1, 15), 15)
-    assert before_first == Decimal("1200")
-    assert after_first == Decimal("1100")
+    assert before_first == Decimal(1200)
+    assert after_first == Decimal(1100)
 
 
 def test_expected_balance_mid_schedule():
@@ -56,8 +56,8 @@ def test_expected_balance_mid_schedule():
 
 def test_payoff_progress_clamps_and_guards():
     assert payoff_progress(10000, 7500) == Decimal("0.25")
-    assert payoff_progress(10000, 12000) == Decimal("0")
-    assert payoff_progress(10000, -1) == Decimal("1")
+    assert payoff_progress(10000, 12000) == Decimal(0)
+    assert payoff_progress(10000, -1) == Decimal(1)
     assert payoff_progress(None, 100) is None
 
 
@@ -68,7 +68,12 @@ def test_projected_payoff_date_zero_rate():
 
 
 def test_projected_payoff_rejects_negative_amortization():
-    assert projected_payoff_date(10000, Decimal("0.12"), 100, date.today()) is None
+    assert (
+        projected_payoff_date(
+            10000, Decimal("0.12"), 100, datetime.now().astimezone().date()
+        )
+        is None
+    )
 
 
 @pytest.mark.parametrize(

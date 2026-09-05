@@ -20,7 +20,7 @@ Key mechanics:
   rows); accounts then re-sync to their latest history row.
 """
 
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -98,7 +98,10 @@ def _reflect(engine: Engine, names: tuple[str, ...]) -> dict[str, Table]:
     try:
         return {n: Table(n, md, autoload_with=engine) for n in names}
     except Exception as e:
-        raise MigrationError(f"Could not read legacy database ({engine.url}): {e}")
+        # Wrap any reflection failure as a domain error.
+        raise MigrationError(
+            f"Could not read legacy database ({engine.url}): {e}"
+        ) from e
 
 
 def _rows(conn: Connection, table: Table, order_by=None) -> list[dict[str, Any]]:
@@ -747,7 +750,9 @@ def apply_migration(
             if i["status"] != "confirmed" or i.get("ledger_balance") is None:
                 continue
             as_of = i.get("ledger_balance_date") or (
-                i["imported_at"].date() if i.get("imported_at") else date.today()
+                i["imported_at"].date()
+                if i.get("imported_at")
+                else datetime.now().astimezone().date()
             )
             stmt = (
                 sqlite_insert(models.balance_history)
@@ -785,7 +790,7 @@ def apply_migration(
             )
             as_of = _lenient_date(a.get("as_of_date"), f"account '{a['name']}'", [])
             if as_of is None:
-                as_of = date.today()
+                as_of = datetime.now().astimezone().date()
             conn.execute(
                 insert(models.balance_history).values(
                     account_id=fin_map[a["id"]],

@@ -11,13 +11,13 @@ trends, merchants) group tabs plus a sub-tab row; import is a header icon.
 """
 
 import os
+
+# Add project root for direct-execution mode (python web/app.py)
+import sys
 from decimal import Decimal
 from pathlib import Path
 
 from flask import Flask, g, render_template, request
-
-# Add project root for direct-execution mode (python web/app.py)
-import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -147,6 +147,6 @@ def create_app(db_path: str | None = None) -> Flask:
 
 if __name__ == "__main__":
     app = create_app()
-    port = int(os.environ.get("FINTRACK_PORT", 5003))
+    port = int(os.environ.get("FINTRACK_PORT", "5003"))
     debug = os.environ.get("FLASK_DEBUG", "1") != "0"
     app.run(debug=debug, host="0.0.0.0", port=port)

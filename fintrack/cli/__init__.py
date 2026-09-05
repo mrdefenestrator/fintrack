@@ -31,7 +31,7 @@ def cli(ctx, db_path, snapshot_name):
     ctx.obj = CliContext(db_path=db_path, snapshot_name=snapshot_name)
 
 
-from fintrack.cli.ledger import (  # noqa: E402
+from fintrack.cli.ledger import (
     balance,
     categories,
     dedup,
@@ -41,9 +41,8 @@ from fintrack.cli.ledger import (  # noqa: E402
     serve,
     staging,
 )
-from fintrack.cli.migrate_legacy import migrate_legacy  # noqa: E402
-from fintrack.cli.projections import project  # noqa: E402
-from fintrack.cli.networth import (  # noqa: E402
+from fintrack.cli.migrate_legacy import migrate_legacy
+from fintrack.cli.networth import (
     accounts,
     assets,
     budget,
@@ -54,6 +53,7 @@ from fintrack.cli.networth import (  # noqa: E402
     snapshots,
     status,
 )
+from fintrack.cli.projections import project
 
 for command in (
     status,

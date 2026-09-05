@@ -1,13 +1,13 @@
 """Shared utilities for web routes."""
 
 import re
-from datetime import date
+from datetime import date, datetime
 
 from flask import abort, current_app, g
 
 from fintrack.core import tables
-from fintrack.networth import calculations
 from fintrack.core.loader import load_finances_from_db
+from fintrack.networth import calculations
 from fintrack.snapshots.repository import get_snapshot_id, list_snapshots
 
 
@@ -61,7 +61,7 @@ def get_default_filename() -> str:
 
 def quick_totals(data: dict, today: date | None = None) -> dict:
     """The header quick totals shown on the Accounts/Budget/Assets nav tabs."""
-    today = today or date.today()
+    today = today or datetime.now().astimezone().date()
     return {
         "n2": calculations.liquid_minus_cc(data.get("accounts") or []),
         "n3": calculations.projected_change_to_eom(
@@ -86,7 +86,7 @@ def get_common_context(snapshot_id: int, filename: str, edit_mode: bool):
     rates = data.get("rates") or {}
     rate_meta = data.get("rate_meta") or {}
 
-    today = date.today()
+    today = datetime.now().astimezone().date()
     year, month, day = today.year, today.month, today.day
 
     totals = quick_totals(data, today)
@@ -175,16 +175,14 @@ def account_field_editable(acc, field: str) -> bool:
         return acc.get("type") in RESERVE_EDITABLE_TYPES
     if is_cc and field == "balance":
         return False
-    if not is_cc and field in (
+    return is_cc or field not in (
         "limit",
         "available",
         "rewards_balance",
         "statement_balance",
         "statement_due_day_of_month",
         "paymentAccountRef",
-    ):
-        return False
-    return True
+    )
 
 
 def account_field_right_align(field: str) -> bool:

@@ -100,11 +100,11 @@ def test_transactions_latest_button_jumps_to_current_month(page, flask_server):
     a bare Latest URL used to bounce right back to the month you were on. Latest
     must carry the current month explicitly so it actually lands there.
     """
-    from datetime import date
+    from datetime import datetime
 
     page.goto(f"{flask_server}/s/ledger/transactions?year=2020&month=1")
     page.click("a:has-text('Latest')")
-    today = date.today()
+    today = datetime.now().astimezone().date()
     page.wait_for_url(f"**/transactions?year={today.year}&month={today.month}**")
 
 

@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import Connection, func, insert, select, update
 
@@ -36,7 +36,7 @@ def set_merchant_category(
             .values(
                 category=category,
                 source=source,
-                updated_at=datetime.now(timezone.utc),
+                updated_at=datetime.now(UTC),
             )
         )
     else:

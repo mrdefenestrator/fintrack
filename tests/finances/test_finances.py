@@ -403,9 +403,11 @@ def test_projected_change_to_eom_day_none_uses_today():
             "continuous": True,
         }
     ]
-    # Patch date.today() to 2025-02-14 so day=14 is used for Feb 2025
-    with patch("fintrack.networth.calculations.date") as mock_date:
-        mock_date.today.return_value = date(2025, 2, 14)
+    # Patch today() to 2025-02-14 so day=14 is used for Feb 2025
+    with patch("fintrack.networth.calculations.datetime") as mock_dt:
+        mock_dt.now.return_value.astimezone.return_value.date.return_value = date(
+            2025, 2, 14
+        )
         # Feb 2025 has 28 days; from day 14, 14 days remaining -> 900 * 14/28 = 450
         result = projected_change_to_eom(budget, 2025, 2)
     assert result == 450
@@ -422,9 +424,11 @@ def test_projected_change_to_eom_day_none_other_month_uses_zero():
             "dayOfMonth": 1,
         }
     ]
-    # Patch date.today() to 2025-05-10; ask for March 2025 -> not current month -> day=0
-    with patch("fintrack.networth.calculations.date") as mock_date:
-        mock_date.today.return_value = date(2025, 5, 10)
+    # Patch today() to 2025-05-10; ask for March 2025 -> not current month -> day=0
+    with patch("fintrack.networth.calculations.datetime") as mock_dt:
+        mock_dt.now.return_value.astimezone.return_value.date.return_value = date(
+            2025, 5, 10
+        )
         result = projected_change_to_eom(budget, 2025, 3)
     # Full month in March
     assert result == 600

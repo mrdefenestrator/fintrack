@@ -1,9 +1,9 @@
 from unittest.mock import MagicMock, patch
 
 from fintrack.ledger.classifier import (
+    _build_prompt,
     classify_and_cache,
     classify_merchants,
-    _build_prompt,
 )
 from fintrack.ledger.repository.categories import add_category
 from fintrack.ledger.repository.merchants import list_merchants

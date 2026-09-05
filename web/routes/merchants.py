@@ -1,13 +1,12 @@
 from flask import Blueprint, current_app, g, render_template, request
 
-from web.routes.common import snapshot_scoped
-
 from fintrack.ledger.repository.categories import get_category_names
 from fintrack.ledger.repository.merchants import (
     get_merchant_with_stats_by_id,
     list_merchants_with_stats,
     set_merchant_category,
 )
+from web.routes.common import snapshot_scoped
 
 bp = snapshot_scoped(Blueprint("merchants", __name__, url_prefix="/s/<filename>"))
 

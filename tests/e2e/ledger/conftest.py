@@ -9,7 +9,7 @@ import time
 import urllib.parse
 import urllib.request
 import uuid
-from datetime import date
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -379,7 +379,9 @@ def current_quarter_server(tmp_path_factory):
     assert m, f"Account creation failed. Response snippet:\n{html[:500]}"
     account_id = m.group(1)
 
-    ofx = _CURRENT_DATE_OFX_TEMPLATE.format(dtposted=date.today().strftime("%Y%m%d"))
+    ofx = _CURRENT_DATE_OFX_TEMPLATE.format(
+        dtposted=datetime.now().astimezone().date().strftime("%Y%m%d")
+    )
     html = _multipart_post(
         f"{base_url}/s/ledger/import/upload",
         {"account_id": account_id},

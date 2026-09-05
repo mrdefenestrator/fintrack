@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 
 from flask import Blueprint, current_app, g, render_template, request
@@ -31,7 +31,7 @@ def _load_txn(conn, txn_id):
 @bp.route("/transactions")
 def index():
     edit_mode = request.args.get("edit") == "1"
-    today = date.today()
+    today = datetime.now().astimezone().date()
     year = request.args.get("year", today.year, type=int)
     month = request.args.get("month", today.month, type=int)
     # Account and Category are multi-select: repeated ?account_id=/?category=
@@ -78,7 +78,7 @@ def index():
         categories = get_category_names(conn)
 
     txn_count = len(txns)
-    txn_total = sum((t["amount"] for t in txns), Decimal("0"))
+    txn_total = sum((t["amount"] for t in txns), Decimal(0))
 
     prev_month = month - 1 if month > 1 else 12
     prev_year = year if month > 1 else year - 1

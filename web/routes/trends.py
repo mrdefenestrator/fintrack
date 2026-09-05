@@ -1,7 +1,7 @@
 import re
 from calendar import monthrange
-from datetime import date
 from collections import defaultdict
+from datetime import date, datetime
 
 from flask import Blueprint, current_app, g, render_template, request
 
@@ -105,7 +105,7 @@ def _resolve_window_end(
 
 @bp.route("/trends")
 def index():
-    today = date.today()
+    today = datetime.now().astimezone().date()
     period = request.args.get("period", "trailing12")
     anchor_end, anchor_year, anchor_month, is_latest = _resolve_window_end(
         request.args.get("end"), today
@@ -242,7 +242,7 @@ def index():
 
 @bp.route("/trends/detail")
 def detail():
-    today = date.today()
+    today = datetime.now().astimezone().date()
     period = request.args.get("period", "ytd")
     category = request.args.get("category", "")
     anchor_end, _, _, is_latest = _resolve_window_end(request.args.get("end"), today)

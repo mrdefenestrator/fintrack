@@ -2,13 +2,11 @@
 ledger seeding helper for estimator tests."""
 
 import uuid
+from collections.abc import Iterable
 from datetime import date
-from typing import Iterable
 
 import pytest
-from sqlalchemy import create_engine, insert
-
-from sqlalchemy import select
+from sqlalchemy import create_engine, insert, select
 
 from fintrack.core.models import (
     holdings,

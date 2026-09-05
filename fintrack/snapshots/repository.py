@@ -5,7 +5,6 @@ from sqlalchemy import Connection, delete, insert, select, update
 from fintrack.core.holdings import DETAIL_TABLES
 from fintrack.core.models import budget_entries, holdings, snapshots
 
-
 # Snapshot used by ledger flows that predate snapshot awareness (the spending
 # CLI and web UI). migrate-legacy reassigns accounts to real snapshots.
 DEFAULT_SNAPSHOT_NAME = "default"

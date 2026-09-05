@@ -20,9 +20,9 @@ net worth = liquid_minus_cc + projected asset total - debt total + unassigned.
 """
 
 import calendar
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
-from typing import Any, Dict, List
+from typing import Any
 
 from sqlalchemy import Connection
 
@@ -46,7 +46,7 @@ from fintrack.projections.estimators import (
     unscheduled_spend_by_category,
 )
 
-_ZERO = Decimal("0")
+_ZERO = Decimal(0)
 
 MIN_MONTHS = 1
 MAX_MONTHS = 60
@@ -62,8 +62,8 @@ def _month_label(year: int, month: int) -> str:
 
 
 def _autopay_transfers(
-    accounts: List[Dict[str, Any]],
-    balances: Dict[int, Decimal],
+    accounts: list[dict[str, Any]],
+    balances: dict[int, Decimal],
     *,
     is_current_month: bool,
     day: int,
@@ -85,7 +85,7 @@ def _autopay_transfers(
         balances[payer_id] -= owed
 
 
-def _asset_monthly_params(asset: Dict[str, Any]) -> tuple[Decimal, Decimal]:
+def _asset_monthly_params(asset: dict[str, Any]) -> tuple[Decimal, Decimal]:
     """Return (monthly_rate, monthly_contribution) for a non-debt asset."""
     annual_rate = asset.get("annualReturnRate")
     contribution = asset.get("monthlyContribution")
@@ -94,7 +94,7 @@ def _asset_monthly_params(asset: Dict[str, Any]) -> tuple[Decimal, Decimal]:
     return monthly_rate, monthly_contrib
 
 
-def _debt_monthly_payment(debt: Dict[str, Any]) -> tuple[Decimal, Decimal]:
+def _debt_monthly_payment(debt: dict[str, Any]) -> tuple[Decimal, Decimal]:
     """Return (monthly_rate, payment) for a debt with amortization data.
 
     Falls back to (0, 0) when the debt lacks full amortization fields,
@@ -119,12 +119,12 @@ def project(
     months: int = DEFAULT_MONTHS,
     include_estimate: bool = False,
     today: date | None = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Project ending balances for `months` months starting with the current
     (partial) month. Returns the grid plus totals, warnings, and the applied
     estimate (None unless include_estimate)."""
     months = clamp_months(months)
-    today = today or date.today()
+    today = today or datetime.now().astimezone().date()
 
     accounts = get_accounts(conn, snapshot_id)
     budget = get_budget_entries(conn, snapshot_id)
@@ -136,18 +136,18 @@ def project(
     # Fetch current rates for non-USD units so the initial asset valuation
     # uses live prices.  The rate is treated as a fixed constant for future
     # months (no forecasting); annualReturnRate still applies on top.
-    rates: Dict[str, Decimal] | None = None
+    rates: dict[str, Decimal] | None = None
     units = {e["unit"] for e in assets if e.get("unit") and e["unit"] != "USD"}
     if units:
         try:
             from fintrack.networth.prices import get_rates
 
             rates = get_rates(conn, units)
-        except Exception:
-            pass  # fall back to per-row value
+        except Exception:  # noqa: BLE001, S110 — best-effort rates; fall back to per-row value
+            pass
 
-    asset_values: Dict[int, Decimal] = {}
-    asset_params: Dict[int, tuple[Decimal, Decimal]] = {}
+    asset_values: dict[int, Decimal] = {}
+    asset_params: dict[int, tuple[Decimal, Decimal]] = {}
     for idx, a in enumerate(non_debt_assets):
         asset_values[idx] = asset_contribution(a, rates=rates)
         asset_params[idx] = _asset_monthly_params(a)
@@ -161,12 +161,12 @@ def project(
         estimate_monthly = unscheduled_monthly_total(by_category)
         estimate = {"monthly": estimate_monthly, "by_category": by_category}
 
-    balances: Dict[int, Decimal] = {a["id"]: money(a.get("balance")) for a in accounts}
+    balances: dict[int, Decimal] = {a["id"]: money(a.get("balance")) for a in accounts}
     unassigned = _ZERO
 
-    debt_balances: Dict[int, Decimal] = {}
-    debt_amort: Dict[int, tuple[Decimal, Decimal]] = {}
-    debt_due_days: Dict[int, int | None] = {}
+    debt_balances: dict[int, Decimal] = {}
+    debt_amort: dict[int, tuple[Decimal, Decimal]] = {}
+    debt_due_days: dict[int, int | None] = {}
     for idx, d in enumerate(debts):
         debt_balances[idx] = money(d.get("balance"))
         debt_amort[idx] = _debt_monthly_payment(d)
@@ -176,14 +176,14 @@ def project(
     month_infos = [
         {"year": y, "month": m, "label": _month_label(y, m)} for y, m in grid
     ]
-    per_account: Dict[int, List[Decimal]] = {a["id"]: [] for a in accounts}
-    per_debt: Dict[int, List[Decimal]] = {idx: [] for idx in range(len(debts))}
-    per_asset: Dict[int, List[Decimal]] = {
+    per_account: dict[int, list[Decimal]] = {a["id"]: [] for a in accounts}
+    per_debt: dict[int, list[Decimal]] = {idx: [] for idx in range(len(debts))}
+    per_asset: dict[int, list[Decimal]] = {
         idx: [] for idx in range(len(non_debt_assets))
     }
-    unassigned_series: List[Decimal] = []
-    liquid_series: List[Decimal] = []
-    net_worth_series: List[Decimal] = []
+    unassigned_series: list[Decimal] = []
+    liquid_series: list[Decimal] = []
+    net_worth_series: list[Decimal] = []
 
     for i, (year, month) in enumerate(grid):
         _autopay_transfers(accounts, balances, is_current_month=(i == 0), day=today.day)

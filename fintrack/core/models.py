@@ -35,7 +35,7 @@ Conventions:
   cascade still cleans up.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import (
     Boolean,
@@ -65,7 +65,7 @@ metadata = MetaData()
 
 
 def _utcnow():
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def _sql_list(values: tuple[str, ...]) -> str:

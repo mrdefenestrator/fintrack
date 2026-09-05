@@ -10,13 +10,13 @@ from fintrack.ledger.classifier import classify_and_cache
 from fintrack.ledger.importer import run_import
 from fintrack.ledger.importer.ofx import extract_ofx_metadata
 from fintrack.ledger.repository.accounts import add_account, list_accounts
-from web.routes.common import snapshot_scoped
 from fintrack.ledger.repository.imports import (
     confirm_import,
     get_staging_imports,
     get_staging_transactions,
     reject_import,
 )
+from web.routes.common import snapshot_scoped
 
 bp = snapshot_scoped(Blueprint("imports", __name__, url_prefix="/s/<filename>"))
 

@@ -116,7 +116,7 @@ def test_iter_month_amounts_prorates_first_month_only():
         "dayOfMonth": 10,
     }
     amounts = list(iter_month_amounts(entry, date(2026, 7, 16), 3))
-    assert amounts == [Decimal("0"), Decimal("80"), Decimal("80")]
+    assert amounts == [Decimal(0), Decimal(80), Decimal(80)]
 
 
 def test_iter_month_amounts_continuous_proration():
@@ -128,8 +128,8 @@ def test_iter_month_amounts_continuous_proration():
         "continuous": True,
     }
     amounts = list(iter_month_amounts(entry, date(2026, 7, 16), 2))
-    assert amounts[0] == Decimal("310") * 15 / 31
-    assert amounts[1] == Decimal("310")
+    assert amounts[0] == Decimal(310) * 15 / 31
+    assert amounts[1] == Decimal(310)
 
 
 def test_subtotal_remainder_upcoming_day_of_month_counts():
@@ -139,8 +139,8 @@ def test_subtotal_remainder_upcoming_day_of_month_counts():
         "amount": 60,
         "dayOfMonth": 20,
     }
-    assert subtotal_remainder_of_month(entry, 2026, 7, 16) == Decimal("60")
-    assert subtotal_remainder_of_month(entry, 2026, 7, 20) == Decimal("0")
+    assert subtotal_remainder_of_month(entry, 2026, 7, 16) == Decimal(60)
+    assert subtotal_remainder_of_month(entry, 2026, 7, 20) == Decimal(0)
 
 
 def test_calculations_aliases_still_exported():

@@ -1,12 +1,19 @@
 """Net-worth command groups: status, accounts, budget, income/expenses,
 assets/debts, funding (ported from the finances argparse CLI)."""
 
-from datetime import date
+from datetime import datetime
 
 import click
 
 from fintrack.accounts import repository as repo_accounts
 from fintrack.budget import repository as repo_budget
+from fintrack.cli.helpers import (
+    drop_separator_rows,
+    echo_table,
+    pass_cli,
+    sort_items,
+    sort_options,
+)
 from fintrack.core.filters import (
     apply_budget_filters,
     filter_accounts_by_type,
@@ -21,13 +28,6 @@ from fintrack.core.tables import (
     _build_budget_table,
     _build_funding_table,
     _build_net_worth_table,
-)
-from fintrack.cli.helpers import (
-    drop_separator_rows,
-    echo_table,
-    pass_cli,
-    sort_items,
-    sort_options,
 )
 from fintrack.core.types import ASSET_TYPE_VALUES
 from fintrack.networth import repository as repo_assets
@@ -93,7 +93,7 @@ def status(cli):
     budget = data.get("budget") or []
     assets = data.get("assets") or []
     rates = data.get("rates")
-    today = date.today()
+    today = datetime.now().astimezone().date()
     n2 = liquid_minus_cc(accounts)
     n3 = projected_change_to_eom(budget, today.year, today.month, today.day)
     n6 = net_nonliquid_total(assets, rates=rates)
@@ -363,7 +363,7 @@ def budget(
         return
     if sort_key:
         entries = sort_items(entries, sort_key, sort_dir == "desc")
-    today = date.today()
+    today = datetime.now().astimezone().date()
     headers, rows = _build_budget_table(
         entries,
         today.year,
@@ -456,7 +456,7 @@ def make_budget_kind_group(kind: str, label: str) -> click.Group:
         entries = _kind_entries(data.get("budget") or [], kind)
         if sort_key:
             entries = sort_items(entries, sort_key, sort_dir == "desc")
-        today = date.today()
+        today = datetime.now().astimezone().date()
         headers, rows = _build_budget_table(
             entries,
             today.year,
@@ -807,7 +807,7 @@ def funding(cli, reserve, account_id):
         _, data = _load(cli, conn)
     accounts_data = data.get("accounts") or []
     budget_data = data.get("budget") or []
-    today = date.today()
+    today = datetime.now().astimezone().date()
     results = [
         account_funding_needed(acc, accounts_data, budget_data, today, reserve)
         for acc in accounts_data

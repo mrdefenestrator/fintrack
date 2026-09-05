@@ -26,7 +26,7 @@ right edge.
 """
 
 import re
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from decimal import Decimal
 
 from flask import Blueprint, abort, current_app, render_template, request
@@ -380,7 +380,7 @@ def _price_freshness(unit: str, fetched_at, now: datetime) -> tuple[str, bool]:
     if fetched_at is None:
         return f"{unit} price not cached yet — click to fetch", True
     if fetched_at.tzinfo is None:
-        fetched_at = fetched_at.replace(tzinfo=timezone.utc)
+        fetched_at = fetched_at.replace(tzinfo=UTC)
     age = now - fetched_at
     stale = age > STALENESS_THRESHOLD
     return f"{unit} price updated {_fmt_age(age)} — click to refresh", stale
@@ -398,7 +398,7 @@ def _cc_available(a: dict) -> str:
 
 
 def _money_dec(x) -> Decimal:
-    return Decimal(str(x)) if x is not None else Decimal("0")
+    return Decimal(str(x)) if x is not None else Decimal(0)
 
 
 def _staleness_class(as_of_iso: str | None, today: date) -> str:
@@ -620,9 +620,7 @@ def _asset_row(
     # and a stale flag driven by the cached fetch time (rate_meta).
     if unit != "USD":
         fetched_at = (rate_meta or {}).get(unit)
-        title, stale = _price_freshness(
-            unit, fetched_at, now or datetime.now(timezone.utc)
-        )
+        title, stale = _price_freshness(unit, fetched_at, now or datetime.now(UTC))
         row["refresh_unit"] = unit
         row["price_title"] = title
         row["price_stale"] = stale
@@ -636,7 +634,7 @@ def _all_rows(ctx: dict, today: date) -> dict[str, list[dict]]:
     budget = ctx["budget"]
     rates = ctx.get("rates")
     rate_meta = ctx.get("rate_meta")
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     account_display = ctx["account_display_by_id"]
 
     # Funding needed for cash (liquid) accounts only, matching the Accounts page.
@@ -712,7 +710,7 @@ def _groups_ctx(rows_by_group: dict[str, list[dict]], accounts, assets, rates=No
     groups = []
     for key, label, source, add_noun, cols in _GROUPS:
         grp_rows = rows_by_group.get(key, [])
-        total = sum((r["amount"] for r in grp_rows), Decimal("0"))
+        total = sum((r["amount"] for r in grp_rows), Decimal(0))
         # Distinct non-USD symbols in this group, for the band-level "refresh
         # all prices" control (only the Assets band carries priced symbols).
         refreshable_units = sorted(
@@ -795,7 +793,7 @@ def _render_tbody(snapshot_id, filename, error=None, edit_mode=True, **editing):
     (or omits) its edit affordances to match.
     """
     ctx = get_common_context(snapshot_id, filename, edit_mode=edit_mode)
-    rows_by_group = _all_rows(ctx, date.today())
+    rows_by_group = _all_rows(ctx, datetime.now().astimezone().date())
     tbody = _tbody_ctx(
         rows_by_group,
         ctx,
@@ -820,7 +818,7 @@ def holdings_view(filename):
     ctx = get_common_context(snapshot_id, filename, edit_mode)
     ctx["active_tab"] = "holdings"
 
-    rows_by_group = _all_rows(ctx, date.today())
+    rows_by_group = _all_rows(ctx, datetime.now().astimezone().date())
     all_rows = [r for rows in rows_by_group.values() for r in rows]
     institutions = sorted({r["institution"] for r in all_rows if r["institution"]})
     present_types = {r["type_value"] for r in all_rows if r["type_value"]}
@@ -933,9 +931,12 @@ def _coerce(source: str, field: str, value_raw: str) -> tuple:
     value, error = coerce_value(field, value_raw, cmap)
     if error:
         return value, error
-    if field == "statement_due_day_of_month" and value is not None:
-        if not 1 <= value <= 31:
-            return None, "Due day must be between 1 and 31"
+    if (
+        field == "statement_due_day_of_month"
+        and value is not None
+        and not 1 <= value <= 31
+    ):
+        return None, "Due day must be between 1 and 31"
     if field == "termMonths" and value is not None and value <= 0:
         return None, "Term must be greater than zero"
     if field == "originalPrincipal" and value is not None and value <= 0:

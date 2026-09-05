@@ -3,8 +3,8 @@ from decimal import Decimal
 import pytest
 from sqlalchemy import select
 
-from fintrack.ledger.importer import run_import
 from fintrack.core.models import imports
+from fintrack.ledger.importer import run_import
 from fintrack.ledger.repository.accounts import add_account
 
 

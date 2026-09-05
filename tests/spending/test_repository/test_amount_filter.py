@@ -34,22 +34,22 @@ def test_positive_number_is_sign_sensitive_positive():
 def test_integer_input_works_too():
     spec = parse_amount_filter("50")
     assert spec.kind == "tolerance"
-    assert spec.value == Decimal("50")
+    assert spec.value == Decimal(50)
     assert spec.sign is None
 
 
 def test_dash_range():
     spec = parse_amount_filter("10-20")
     assert spec.kind == "range"
-    assert spec.low == Decimal("10")
-    assert spec.high == Decimal("20")
+    assert spec.low == Decimal(10)
+    assert spec.high == Decimal(20)
 
 
 def test_dotdot_range():
     spec = parse_amount_filter("10..20")
     assert spec.kind == "range"
-    assert spec.low == Decimal("10")
-    assert spec.high == Decimal("20")
+    assert spec.low == Decimal(10)
+    assert spec.high == Decimal(20)
 
 
 def test_range_with_decimals():
@@ -62,45 +62,45 @@ def test_range_with_decimals():
 def test_range_normalizes_reversed_bounds():
     spec = parse_amount_filter("20-10")
     assert spec.kind == "range"
-    assert spec.low == Decimal("10")
-    assert spec.high == Decimal("20")
+    assert spec.low == Decimal(10)
+    assert spec.high == Decimal(20)
 
 
 def test_range_tolerates_whitespace():
     spec = parse_amount_filter(" 10 - 20 ")
     assert spec.kind == "range"
-    assert spec.low == Decimal("10")
-    assert spec.high == Decimal("20")
+    assert spec.low == Decimal(10)
+    assert spec.high == Decimal(20)
 
 
 def test_greater_than():
     spec = parse_amount_filter(">50")
     assert spec.kind == "gt"
-    assert spec.value == Decimal("50")
+    assert spec.value == Decimal(50)
 
 
 def test_greater_than_or_equal():
     spec = parse_amount_filter(">=50")
     assert spec.kind == "gte"
-    assert spec.value == Decimal("50")
+    assert spec.value == Decimal(50)
 
 
 def test_less_than():
     spec = parse_amount_filter("<25")
     assert spec.kind == "lt"
-    assert spec.value == Decimal("25")
+    assert spec.value == Decimal(25)
 
 
 def test_less_than_or_equal():
     spec = parse_amount_filter("<=25")
     assert spec.kind == "lte"
-    assert spec.value == Decimal("25")
+    assert spec.value == Decimal(25)
 
 
 def test_comparison_tolerates_whitespace():
     spec = parse_amount_filter(" >= 25 ")
     assert spec.kind == "gte"
-    assert spec.value == Decimal("25")
+    assert spec.value == Decimal(25)
 
 
 def test_none_input_is_ignored():

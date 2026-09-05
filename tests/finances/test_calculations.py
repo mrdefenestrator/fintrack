@@ -1,7 +1,6 @@
 """Tests for finances/calculations.py — uncovered helpers and edge cases."""
 
 from datetime import date
-
 from decimal import Decimal
 
 from fintrack.networth.calculations import (
@@ -24,7 +23,6 @@ from fintrack.networth.calculations import (
     net_worth_total,
     tiered_totals,
 )
-
 
 # ---------------------------------------------------------------------------
 # _credit_card_balance_owed
@@ -63,28 +61,28 @@ def test_entry_subtotal_debt_with_qty():
 def test_entry_subtotal_with_rates():
     """When a cached rate exists for a non-USD unit, it overrides the per-row value."""
     entry = {"kind": "asset", "value": 100, "quantity": 2, "unit": "BTC"}
-    rates = {"BTC": Decimal("60000")}
-    assert _entry_subtotal(entry, rates) == Decimal("120000")
+    rates = {"BTC": Decimal(60000)}
+    assert _entry_subtotal(entry, rates) == Decimal(120000)
 
 
 def test_entry_subtotal_no_rate_fallback():
     """Without a rate for the unit, the per-row value is used as fallback."""
     entry = {"kind": "asset", "value": 100, "quantity": 2, "unit": "XYZ"}
-    rates = {"BTC": Decimal("60000")}
-    assert _entry_subtotal(entry, rates) == Decimal("200")
+    rates = {"BTC": Decimal(60000)}
+    assert _entry_subtotal(entry, rates) == Decimal(200)
 
 
 def test_entry_subtotal_usd_ignores_rates():
     """USD entries always use the per-row value, even if rates has a USD key."""
     entry = {"kind": "asset", "value": 100, "quantity": 2, "unit": "USD"}
-    rates = {"USD": Decimal("1")}
-    assert _entry_subtotal(entry, rates) == Decimal("200")
+    rates = {"USD": Decimal(1)}
+    assert _entry_subtotal(entry, rates) == Decimal(200)
 
 
 def test_entry_subtotal_rates_none_fallback():
     """When rates is None, per-row value is used."""
     entry = {"kind": "asset", "value": 50, "quantity": 3, "unit": "ETH"}
-    assert _entry_subtotal(entry, None) == Decimal("150")
+    assert _entry_subtotal(entry, None) == Decimal(150)
 
 
 def test_tiered_totals_with_rates():
@@ -101,22 +99,22 @@ def test_tiered_totals_with_rates():
     ]
     # Without rates: 10 * 5 = 50
     totals_no_rates = tiered_totals(accounts, assets)
-    assert totals_no_rates["investable"] == Decimal("1050")
+    assert totals_no_rates["investable"] == Decimal(1050)
 
     # With rates: 200 * 5 = 1000
-    rates = {"AAPL": Decimal("200")}
+    rates = {"AAPL": Decimal(200)}
     totals_with_rates = tiered_totals(accounts, assets, rates=rates)
-    assert totals_with_rates["investable"] == Decimal("2000")
+    assert totals_with_rates["investable"] == Decimal(2000)
 
 
 def test_asset_contribution_with_rates():
     """asset_contribution forwards rates to _entry_subtotal."""
     entry = {"kind": "asset", "value": 10, "quantity": 2, "unit": "ETH"}
-    rates = {"ETH": Decimal("3000")}
-    assert asset_contribution(entry, rates=rates) == Decimal("6000")
+    rates = {"ETH": Decimal(3000)}
+    assert asset_contribution(entry, rates=rates) == Decimal(6000)
 
     debt = {"kind": "debt", "balance": 100, "quantity": 1, "unit": "ETH"}
-    assert asset_contribution(debt, rates=rates) == Decimal("-3000")
+    assert asset_contribution(debt, rates=rates) == Decimal(-3000)
 
 
 # ---------------------------------------------------------------------------
@@ -268,9 +266,9 @@ def test_net_worth_total_matches_tiered():
 def test_tiered_totals_empty():
     totals = tiered_totals([], [])
     assert totals == {
-        "liquid": Decimal("0"),
-        "investable": Decimal("0"),
-        "net_worth": Decimal("0"),
+        "liquid": Decimal(0),
+        "investable": Decimal(0),
+        "net_worth": Decimal(0),
     }
 
 
@@ -299,7 +297,7 @@ def test_equity_pairs_computes_equity_and_ltv():
     pairs = equity_pairs(assets)
     assert len(pairs) == 1
     assert pairs[0]["equity"] == 100000
-    assert pairs[0]["ltv"] == Decimal("300000") / Decimal("400000")
+    assert pairs[0]["ltv"] == Decimal(300000) / Decimal(400000)
 
 
 def test_equity_pairs_ignores_unlinked_debt():

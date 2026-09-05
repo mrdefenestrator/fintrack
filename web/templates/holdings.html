@@ -138,6 +138,43 @@
     }
     /* Two-line master footer (Liquid `total-upper` pinned above Net worth) is
        shared in base.html: `.table-scroll-container tr.total-row.total-upper`. */
+
+    /* On-demand price refresh. On a hover pointer the per-symbol ↻ hides until
+       you hover its cell (or focus it), so the sheet stays clean; on touch it
+       stays visibly dimmed since there is no hover to reveal it. A stale price
+       keeps it fully visible to nudge a refresh either way. The band-level
+       "Refresh prices" button shows on the group heading. Both spin while their
+       HTMX request is in flight. */
+    #holdings-table .holdings-symbol-cell .holdings-refresh-btn {
+        cursor: pointer;
+    }
+    /* Hover-reveal only where a hover pointer exists; on touch/coarse pointers
+       (no hover) the button can never be revealed, so keep it always visible
+       (dimmed) instead. */
+    @media (hover: hover) {
+        #holdings-table .holdings-symbol-cell .holdings-refresh-btn {
+            opacity: 0;
+            transition: opacity .12s ease;
+        }
+        #holdings-table .holdings-symbol-cell:hover .holdings-refresh-btn,
+        #holdings-table .holdings-refresh-btn:focus-visible,
+        #holdings-table .holdings-symbol-cell .holdings-refresh-btn.is-stale {
+            opacity: 1;
+        }
+    }
+    @media (hover: none) {
+        #holdings-table .holdings-symbol-cell .holdings-refresh-btn { opacity: .55; }
+        #holdings-table .holdings-symbol-cell .holdings-refresh-btn.is-stale { opacity: 1; }
+    }
+    #holdings-table .holdings-refresh-btn.htmx-request { opacity: 1; }
+    #holdings-table .holdings-refresh-btn.htmx-request .holdings-refresh-glyph {
+        display: inline-block;
+        animation: holdings-refresh-spin .7s linear infinite;
+    }
+    @keyframes holdings-refresh-spin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) {
+        #holdings-table .holdings-refresh-btn.htmx-request .holdings-refresh-glyph { animation: none; }
+    }
 </style>
 
 <form id="holdings-filter-form" method="get" action="{{ url_for('holdings.holdings_view', filename=filename) }}" class="shrink-0">
@@ -158,12 +195,9 @@
    are per-group rows inside the tbody, so there is no global thead. The sticky
    actions column (drag + delete) renders only in edit mode. #}
 <table id="holdings-table" class="editable-table w-full text-sm border-collapse bg-white dark:bg-gray-800" data-cell-nav="holdings-table" style="white-space:nowrap">
-    <colgroup>
-        <col style="width: 10rem">
-        <col style="width: 9rem">
-        <col style="width: 14rem">
-        <col style="width: 9rem">
-    </colgroup>
+    {# The colgroup lives inside the swapped partial so an innerHTML swap of the
+       table (edits, price refresh) re-renders it instead of dropping it — without
+       it the fixed leading-column widths vanish and the whole table reflows. #}
     {% include "partials/holdings_tbody.html" %}
 </table>
 </div>

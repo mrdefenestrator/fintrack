@@ -105,6 +105,45 @@ def get_rates(conn, units: set[str]) -> dict[str, Decimal]:
     return fresh
 
 
+def get_price_meta(conn, units: set[str]) -> dict[str, datetime]:
+    """Return ``{unit: fetched_at}`` (tz-aware) for the cached *units*.
+
+    Companion to :func:`get_rates` for callers that also want to show how
+    fresh each cached price is (the web Holdings sheet). Units with no cache
+    entry are simply omitted. Never triggers an external fetch.
+    """
+    if not units:
+        return {}
+    return {
+        unit: fetched_at for unit, (_, fetched_at) in _read_cache(conn, units).items()
+    }
+
+
+def refresh_units(conn, units: set[str]) -> dict[str, Decimal]:
+    """Force-fetch prices for *units*, bypassing the staleness gate, and upsert
+    the cache. Returns the freshly fetched ``{unit: price}`` (units whose fetch
+    failed are omitted; the cache is left untouched for those).
+
+    Unlike :func:`get_rates`, this always hits the external API — it backs the
+    on-demand "refresh this symbol" control. ``USD`` and blank units are ignored.
+    """
+    units = {u for u in units if u and u != "USD"}
+    if not units:
+        return {}
+    fetched = _fetch_prices(units)
+    if fetched:
+        _write_cache(conn, fetched)
+    return fetched
+
+
+def refresh_unit(conn, unit: str) -> Decimal | None:
+    """Force-refresh a single symbol (see :func:`refresh_units`).
+
+    Returns the new price, or ``None`` if the fetch failed.
+    """
+    return refresh_units(conn, {unit}).get(unit)
+
+
 # ---------------------------------------------------------------------------
 # Cache I/O
 # ---------------------------------------------------------------------------

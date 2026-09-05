@@ -84,6 +84,7 @@ def get_common_context(snapshot_id: int, filename: str, edit_mode: bool):
     budget = data.get("budget") or []
     assets = data.get("assets") or []
     rates = data.get("rates") or {}
+    rate_meta = data.get("rate_meta") or {}
 
     today = date.today()
     year, month, day = today.year, today.month, today.day
@@ -103,6 +104,7 @@ def get_common_context(snapshot_id: int, filename: str, edit_mode: bool):
         "budget": budget,
         "assets": assets,
         "rates": rates,
+        "rate_meta": rate_meta,
         "year": year,
         "month": month,
         "day": day,

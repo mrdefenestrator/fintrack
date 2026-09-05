@@ -21,13 +21,17 @@ def load_finances_from_db(conn, snapshot_id: int) -> Dict[str, Any]:
     assets = [{k: v for k, v in e.items() if k != "_db_id"} for e in raw_assets]
 
     # Fetch cached (and possibly refresh) external prices for non-USD units.
+    # rate_meta carries each cached price's fetched_at so the UI can show how
+    # fresh it is (and flag stale ones next to the on-demand refresh control).
     rates: Dict[str, Any] = {}
+    rate_meta: Dict[str, Any] = {}
     units = {e["unit"] for e in assets if e.get("unit") and e["unit"] != "USD"}
     if units:
         try:
-            from fintrack.networth.prices import get_rates
+            from fintrack.networth.prices import get_price_meta, get_rates
 
             rates = get_rates(conn, units)
+            rate_meta = get_price_meta(conn, units)
         except Exception:
             logger.warning(
                 "Price lookup failed; using cached/fallback values", exc_info=True
@@ -38,4 +42,5 @@ def load_finances_from_db(conn, snapshot_id: int) -> Dict[str, Any]:
         "budget": budget,
         "assets": assets,
         "rates": rates,
+        "rate_meta": rate_meta,
     }

@@ -25,7 +25,8 @@ drifts from the imported balance. The actions column (delete) sticks to the
 right edge.
 """
 
-from datetime import date
+import re
+from datetime import date, datetime, timezone
 from decimal import Decimal
 
 from flask import Blueprint, abort, current_app, render_template, request
@@ -47,6 +48,7 @@ from fintrack.core.types import (
 )
 from fintrack.networth import calculations
 from fintrack.networth.amortization import payoff_progress, scheduled_payment
+from fintrack.networth.prices import STALENESS_THRESHOLD, refresh_units
 from fintrack.networth.repository import (
     add_asset_entry,
     delete_asset_entry,
@@ -354,6 +356,36 @@ def _unit_price(unit: str, price, *, live: bool = False) -> str:
     return f"{unit} {tag}" if not live else f"{unit} {tag} ✓"
 
 
+def _fmt_age(delta) -> str:
+    """A compact 'how long ago' phrase for a cached price's fetch time."""
+    secs = int(delta.total_seconds())
+    if secs < 90:
+        return "just now"
+    mins = secs // 60
+    if mins < 90:
+        return f"{mins}m ago"
+    hours = mins // 60
+    if hours < 36:
+        return f"{hours}h ago"
+    return f"{hours // 24}d ago"
+
+
+def _price_freshness(unit: str, fetched_at, now: datetime) -> tuple[str, bool]:
+    """(tooltip, is_stale) for a symbol's cached price.
+
+    Stale means older than the shared 24h staleness gate, or never fetched.
+    The tooltip narrates the age and always invites a refresh, so the hover
+    button reads the same whether the price is fresh, stale, or missing.
+    """
+    if fetched_at is None:
+        return f"{unit} price not cached yet — click to fetch", True
+    if fetched_at.tzinfo is None:
+        fetched_at = fetched_at.replace(tzinfo=timezone.utc)
+    age = now - fetched_at
+    stale = age > STALENESS_THRESHOLD
+    return f"{unit} price updated {_fmt_age(age)} — click to refresh", stale
+
+
 def _cc_available(a: dict) -> str:
     """Computed, read-only credit available = credit limit + owed balance (QA
     #10). Blank when no limit is set. Rewards don't affect the credit line, so
@@ -494,6 +526,8 @@ def _asset_row(
     linked: str,
     today: date,
     rates: dict | None = None,
+    rate_meta: dict | None = None,
+    now: datetime | None = None,
 ):
     is_debt = e.get("kind") == "debt"
     per_row_price = e.get("balance") if is_debt else e.get("value")
@@ -568,7 +602,7 @@ def _asset_row(
         "annualReturnRate": _raw(e.get("annualReturnRate")),
         "monthlyContribution": _raw(e.get("monthlyContribution")),
     }
-    return group_key, _make_row(
+    row = _make_row(
         values,
         amount,
         e.get("type"),
@@ -581,6 +615,18 @@ def _asset_row(
         edit_raw,
         liability=group_key == "loan",
     )
+    # On-demand price refresh: any non-USD symbol gets a hover button (even one
+    # whose last fetch failed, so it can be retried), plus a freshness tooltip
+    # and a stale flag driven by the cached fetch time (rate_meta).
+    if unit != "USD":
+        fetched_at = (rate_meta or {}).get(unit)
+        title, stale = _price_freshness(
+            unit, fetched_at, now or datetime.now(timezone.utc)
+        )
+        row["refresh_unit"] = unit
+        row["price_title"] = title
+        row["price_stale"] = stale
+    return group_key, row
 
 
 def _all_rows(ctx: dict, today: date) -> dict[str, list[dict]]:
@@ -589,6 +635,8 @@ def _all_rows(ctx: dict, today: date) -> dict[str, list[dict]]:
     assets = ctx["assets"]
     budget = ctx["budget"]
     rates = ctx.get("rates")
+    rate_meta = ctx.get("rate_meta")
+    now = datetime.now(timezone.utc)
     account_display = ctx["account_display_by_id"]
 
     # Funding needed for cash (liquid) accounts only, matching the Accounts page.
@@ -631,7 +679,13 @@ def _all_rows(ctx: dict, today: date) -> dict[str, list[dict]]:
         rows[key].append(row)
     for e in assets:
         key, row = _asset_row(
-            e, equity_by_debt.get(id(e)), _linked(e), today, rates=rates
+            e,
+            equity_by_debt.get(id(e)),
+            _linked(e),
+            today,
+            rates=rates,
+            rate_meta=rate_meta,
+            now=now,
         )
         rows[key].append(row)
     return rows
@@ -659,12 +713,18 @@ def _groups_ctx(rows_by_group: dict[str, list[dict]], accounts, assets, rates=No
     for key, label, source, add_noun, cols in _GROUPS:
         grp_rows = rows_by_group.get(key, [])
         total = sum((r["amount"] for r in grp_rows), Decimal("0"))
+        # Distinct non-USD symbols in this group, for the band-level "refresh
+        # all prices" control (only the Assets band carries priced symbols).
+        refreshable_units = sorted(
+            {r["refresh_unit"] for r in grp_rows if r.get("refresh_unit")}
+        )
         groups.append(
             {
                 "key": key,
                 "label": label,
                 "source": source,
                 "add_noun": add_noun,
+                "col_keys": _col_keys(cols),
                 "headers": _col_headers(cols),
                 "tooltips": _col_tooltips(cols),
                 "right_align": _col_right_align(cols),
@@ -673,6 +733,7 @@ def _groups_ctx(rows_by_group: dict[str, list[dict]], accounts, assets, rates=No
                 "rows": grp_rows,
                 "total": fmt_money(total),
                 "reorderable": True,
+                "refreshable_units": refreshable_units,
             }
         )
 
@@ -726,19 +787,30 @@ def _tbody_ctx(rows_by_group, ctx: dict, filters_active=False, **editing) -> dic
     }
 
 
-def _render_tbody(snapshot_id, filename, error=None, **editing):
-    """Render just the tbody (for cell_edit / update HTMX swaps), edit mode on."""
-    ctx = get_common_context(snapshot_id, filename, edit_mode=True)
+def _render_tbody(snapshot_id, filename, error=None, edit_mode=True, **editing):
+    """Render just the tbody (for cell_edit / update / price-refresh HTMX swaps).
+
+    Defaults to edit mode (the cell-edit callers are always mid-edit); the
+    refresh routes pass the page's real edit state so the swapped-in tbody keeps
+    (or omits) its edit affordances to match.
+    """
+    ctx = get_common_context(snapshot_id, filename, edit_mode=edit_mode)
     rows_by_group = _all_rows(ctx, date.today())
     tbody = _tbody_ctx(
         rows_by_group,
         ctx,
-        edit_mode=True,
+        edit_mode=edit_mode,
         filename=filename,
         error=error,
         **editing,
     )
     return render_template("partials/holdings_tbody.html", **tbody)
+
+
+def _edit_mode_flag() -> bool:
+    """Whether the page is currently in edit mode, per the request (the refresh
+    buttons post `edit=1`/`0`), so the re-rendered tbody matches the page."""
+    return request.values.get("edit") == "1"
 
 
 @holdings_bp.route("/<filename>/holdings")
@@ -1033,3 +1105,52 @@ def add(filename: str, group: str):
     resp = current_app.make_response("")
     resp.headers["HX-Refresh"] = "true"
     return resp
+
+
+# Symbols are short alphanumerics (BTC, AAPL, BRK-B); reject anything else
+# before it reaches the price fetchers.
+_SYMBOL_RE = re.compile(r"^[A-Za-z0-9.\-]{1,12}$")
+
+
+def _snapshot_units(snapshot_id: int) -> set[str]:
+    """Every non-USD symbol held in this snapshot's assets."""
+    engine = current_app.config["engine"]
+    with engine.connect() as conn:
+        assets = get_asset_entries(conn, snapshot_id)
+    return {e["unit"] for e in assets if e.get("unit") and e["unit"] != "USD"}
+
+
+def _refresh_and_render(snapshot_id: int, filename: str, units: set[str]):
+    """Force-refresh *units*, then re-render the tbody in the page's edit mode.
+
+    The whole tbody is swapped (target `#holdings-table`) because a symbol can
+    back several rows and every refresh moves the Liquid / Net-worth footer, so
+    re-rendering is both the correct scope and the same path edits already use.
+    External fetch failures are swallowed by refresh_units — the swap then just
+    shows the last-known cached values (and the stale flag stays on).
+    """
+    if units:
+        engine = current_app.config["engine"]
+        with engine.connect() as conn:
+            refresh_units(conn, units)
+    return _render_tbody(snapshot_id, filename, edit_mode=_edit_mode_flag())
+
+
+@holdings_bp.route("/<filename>/holdings/refresh/<unit>", methods=["POST"])
+def refresh_price(filename: str, unit: str):
+    """Force-refresh a single symbol's price on demand, then re-render the tbody."""
+    snapshot_id = validate_snapshot(filename)
+    unit = unit.upper()
+    if not _SYMBOL_RE.match(unit) or unit == "USD":
+        abort(404)
+    # Only refresh a symbol actually held here (avoids arbitrary API lookups).
+    if unit not in _snapshot_units(snapshot_id):
+        abort(404)
+    return _refresh_and_render(snapshot_id, filename, {unit})
+
+
+@holdings_bp.route("/<filename>/holdings/refresh-all", methods=["POST"])
+def refresh_all_prices(filename: str):
+    """Force-refresh every non-USD symbol held in the snapshot, then re-render."""
+    snapshot_id = validate_snapshot(filename)
+    return _refresh_and_render(snapshot_id, filename, _snapshot_units(snapshot_id))

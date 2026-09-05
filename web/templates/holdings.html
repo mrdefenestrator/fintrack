@@ -138,6 +138,30 @@
     }
     /* Two-line master footer (Liquid `total-upper` pinned above Net worth) is
        shared in base.html: `.table-scroll-container tr.total-row.total-upper`. */
+
+    /* On-demand price refresh. The per-symbol ↻ hides until you hover its cell
+       (or focus it), so the sheet stays clean; a stale price keeps it visible
+       to nudge a refresh. The band-level "Refresh prices" button shows on the
+       group heading. Both spin while their HTMX request is in flight. */
+    #holdings-table .holdings-symbol-cell .holdings-refresh-btn {
+        opacity: 0;
+        transition: opacity .12s ease;
+        cursor: pointer;
+    }
+    #holdings-table .holdings-symbol-cell:hover .holdings-refresh-btn,
+    #holdings-table .holdings-refresh-btn:focus-visible,
+    #holdings-table .holdings-symbol-cell .holdings-refresh-btn.is-stale {
+        opacity: 1;
+    }
+    #holdings-table .holdings-refresh-btn.htmx-request { opacity: 1; }
+    #holdings-table .holdings-refresh-btn.htmx-request .holdings-refresh-glyph {
+        display: inline-block;
+        animation: holdings-refresh-spin .7s linear infinite;
+    }
+    @keyframes holdings-refresh-spin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) {
+        #holdings-table .holdings-refresh-btn.htmx-request .holdings-refresh-glyph { animation: none; }
+    }
 </style>
 
 <form id="holdings-filter-form" method="get" action="{{ url_for('holdings.holdings_view', filename=filename) }}" class="shrink-0">

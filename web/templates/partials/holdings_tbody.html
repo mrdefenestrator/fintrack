@@ -25,7 +25,19 @@
     <tr class="holdings-group-heading">
         <td colspan="3" class="px-2 py-1.5 text-xs font-semibold uppercase tracking-wide">{{ group.label }}</td>
         <td class="px-1.5 py-1.5 text-right tabular-nums text-sm font-semibold text-gray-900 dark:text-gray-100 {% if group.total | display_is_negative %}!text-red-600 dark:!text-red-400{% endif %}">{{ group.total }}</td>
-        <td colspan="{{ span - 4 }}"></td>
+        <td colspan="{{ span - 4 }}" class="px-2 py-1.5 text-right">
+            {% if group.refreshable_units %}
+            {# On-demand: force-refresh every live-priced symbol in this band. #}
+            <button type="button"
+                title="Refresh all {{ group.refreshable_units | length }} live price{{ 's' if group.refreshable_units | length != 1 else '' }} now"
+                hx-post="{{ url_for('holdings.refresh_all_prices', filename=filename) }}"
+                hx-vals='{"edit": "{{ 1 if edit_mode else 0 }}"}'
+                hx-target="#holdings-table" hx-swap="innerHTML"
+                class="holdings-refresh-btn holdings-refresh-all text-xs font-medium text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400">
+                <span class="holdings-refresh-glyph">↻</span> Refresh prices
+            </button>
+            {% endif %}
+        </td>
     </tr>
     <tr class="holdings-group-header bg-gray-100 dark:bg-gray-700">
         {% for h in group.headers %}
@@ -49,7 +61,35 @@
         {% set field = row.fields[i] %}
         {% set right = i in group.right_align %}
         {% set colspan = group.spans[i] %}
-        {% if edit_mode and field and es == row.source and er == row.ref and ef == field %}
+        {% set colkey = group.col_keys[i] if group.col_keys else none %}
+        {% set is_editing_this = edit_mode and field and es == row.source and er == row.ref and ef == field %}
+        {% if colkey == 'unit_price' and row.refresh_unit and not is_editing_this %}
+            {# Symbol + per-unit price, with a hover ↻ that force-refreshes just
+               this symbol. Stale prices (>24h) are amber and keep the button
+               visible; the tooltip narrates the cached age. The value stays
+               click-to-edit (the `unit` field) in edit mode; the button is a
+               sibling with stopPropagation so it never opens the editor. #}
+            {% set refresh_url = url_for('holdings.refresh_price', filename=filename, unit=row.refresh_unit) %}
+            {% set edit_url = url_for('holdings.cell_edit', filename=filename, source=row.source, ref=row.ref, field=field) if (edit_mode and field) else none %}
+            <td class="{{ sheet.cell_class('text-right tabular-nums', row.cell_classes[i]) }} holdings-symbol-cell"{% if colspan > 1 %} colspan="{{ colspan }}"{% endif %}>
+                <span class="inline-flex items-center justify-end gap-1 w-full">
+                    {% set stale_cls = 'text-amber-600 dark:text-amber-400' if row.price_stale else '' %}
+                    {% if edit_url %}
+                    <span class="cursor-pointer rounded px-0.5 hover:bg-blue-50 dark:hover:bg-blue-900/20 {{ stale_cls }}"
+                          hx-get="{{ edit_url }}" hx-trigger="click" hx-swap="innerHTML" hx-target="#holdings-table"
+                          role="button" tabindex="0">{{ cell }}</span>
+                    {% else %}
+                    <span class="{{ stale_cls }}">{{ cell }}</span>
+                    {% endif %}
+                    <button type="button" title="{{ row.price_title }}" aria-label="{{ row.price_title }}"
+                            onclick="event.stopPropagation()"
+                            hx-post="{{ refresh_url }}" hx-vals='{"edit": "{{ 1 if edit_mode else 0 }}"}'
+                            hx-target="#holdings-table" hx-swap="innerHTML"
+                            class="holdings-refresh-btn shrink-0 leading-none text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 {% if row.price_stale %}is-stale text-amber-500 dark:text-amber-400{% endif %}">
+                        <span class="holdings-refresh-glyph">↻</span></button>
+                </span>
+            </td>
+        {% elif is_editing_this %}
             {% set update_url = url_for('holdings.update', filename=filename, source=row.source, ref=row.ref) %}
             {% set display_url = url_for('holdings.cell_edit', filename=filename, source=row.source, ref=row.ref, field=field, display=1) %}
             {% if field == 'type' %}

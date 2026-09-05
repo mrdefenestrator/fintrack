@@ -12,7 +12,10 @@ from fintrack.networth.prices import (
     STALENESS_THRESHOLD,
     _read_cache,
     _write_cache,
+    get_price_meta,
     get_rates,
+    refresh_unit,
+    refresh_units,
 )
 
 
@@ -175,3 +178,68 @@ def test_fetch_prices_api_failure_logged():
         result = _fetch_prices({"BTC", "AAPL"})
     # CoinGecko returns None → empty crypto result; Yahoo returns None → empty stock
     assert result == {}
+
+
+# ---------------------------------------------------------------------------
+# get_price_meta — freshness for the UI
+# ---------------------------------------------------------------------------
+
+
+def test_get_price_meta_returns_fetched_at(conn):
+    _write_cache(conn, {"BTC": Decimal("60000")})
+    meta = get_price_meta(conn, {"BTC"})
+    assert "BTC" in meta
+    assert abs((datetime.now(timezone.utc) - meta["BTC"]).total_seconds()) < 5
+
+
+def test_get_price_meta_omits_uncached_and_never_fetches(conn):
+    with patch("fintrack.networth.prices._fetch_prices") as mock_fetch:
+        meta = get_price_meta(conn, {"MISSING"})
+    mock_fetch.assert_not_called()
+    assert meta == {}
+
+
+def test_get_price_meta_empty_units(conn):
+    assert get_price_meta(conn, set()) == {}
+
+
+# ---------------------------------------------------------------------------
+# refresh_units / refresh_unit — force-refresh bypassing the staleness gate
+# ---------------------------------------------------------------------------
+
+
+def test_refresh_units_force_fetches_even_when_fresh(conn):
+    """A just-cached price is still refetched — refresh is on-demand, not staleness-gated."""
+    _write_cache(conn, {"BTC": Decimal("60000")})
+    with patch(
+        "fintrack.networth.prices._fetch_prices",
+        return_value={"BTC": Decimal("61234.56")},
+    ) as mock_fetch:
+        result = refresh_units(conn, {"BTC"})
+    mock_fetch.assert_called_once()
+    assert result == {"BTC": Decimal("61234.56")}
+    # Cache reflects the new price.
+    assert _read_cache(conn, {"BTC"})["BTC"][0] == Decimal("61234.56")
+
+
+def test_refresh_unit_returns_new_price(conn):
+    with patch(
+        "fintrack.networth.prices._fetch_prices",
+        return_value={"ETH": Decimal("3456.78")},
+    ):
+        assert refresh_unit(conn, "ETH") == Decimal("3456.78")
+
+
+def test_refresh_units_ignores_usd_and_blank(conn):
+    with patch("fintrack.networth.prices._fetch_prices") as mock_fetch:
+        result = refresh_units(conn, {"USD", ""})
+    mock_fetch.assert_not_called()
+    assert result == {}
+
+
+def test_refresh_unit_failure_leaves_cache_untouched(conn):
+    _write_cache(conn, {"BTC": Decimal("60000")})
+    with patch("fintrack.networth.prices._fetch_prices", return_value={}):
+        assert refresh_unit(conn, "BTC") is None
+    # The stale cache value survives a failed refresh.
+    assert _read_cache(conn, {"BTC"})["BTC"][0] == Decimal("60000")

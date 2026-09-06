@@ -76,8 +76,12 @@
                 hx-post="{{ base }}/link" hx-target="#{{ row_id }}" hx-swap="outerHTML"
                 class="bg-white dark:bg-gray-700 px-1 py-0.5 rounded border border-gray-200 dark:border-gray-600 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 max-w-[10rem]">
             <option value="">—</option>
-            {% for opt in (budget_options | default([])) %}
-            <option value="{{ opt.value }}" {{ 'selected' if txn.budget_entry_ref == opt.value }}>{{ opt.label }}</option>
+            {% for group in (budget_groups | default([])) %}
+            <optgroup label="{{ group.label }}">
+                {% for opt in group.options %}
+                <option value="{{ opt.value }}" {{ 'selected' if txn.budget_entry_ref == opt.value }}>{{ opt.label }}</option>
+                {% endfor %}
+            </optgroup>
             {% endfor %}
         </select>
     </td>

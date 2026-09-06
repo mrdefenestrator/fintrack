@@ -1,8 +1,11 @@
 """Budget blueprint - unified income/expenses table and CRUD operations."""
 
+from datetime import date
+
 from flask import Blueprint, abort, current_app, render_template, request
 
 from fintrack.budget import repository as repo_budget
+from fintrack.budget.reconcile import budget_actuals
 from fintrack.core import filters, tables
 from fintrack.core.loader import load_finances_from_db
 from fintrack.ledger.repository.categories import get_category_names
@@ -122,6 +125,13 @@ def budget_view(filename: str):
     engine = current_app.config["engine"]
     with engine.connect() as conn:
         categories = get_category_names(conn)
+        # Per-entry budget-vs-actual for the viewed month (issue #53): expected
+        # vs realized from linked transactions, with missed/upcoming/drift flags.
+        actuals = budget_actuals(
+            conn, snapshot_id, year=ctx["year"], month=ctx["month"]
+        )
+    ctx["budget_actuals"] = [a for a in actuals if a.status != "inactive"]
+    ctx["actuals_month_label"] = f"{date(ctx['year'], ctx['month'], 1):%b %Y}"
     ctx["include_kinds"] = [k for k in BUDGET_KINDS if k in include_kinds_set]
     ctx["include_categories"] = [c for c in categories if c in set(include_categories)]
     ctx["include_recurrence"] = [

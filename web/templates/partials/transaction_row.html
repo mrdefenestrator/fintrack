@@ -66,4 +66,26 @@
     {% else %}
         <td class="{{ sheet.cell_class() }}">{{ txn.notes or '—' }}</td>
     {% endif %}
+
+    {# Budget — corrections overlay (budget_entry_ref, issue #53). A picker in
+       edit mode links the transaction to a budget entry; display mode shows the
+       linked entry's description. #}
+    {% if edit_mode %}
+    <td class="{{ sheet.cell_class() }}">
+        <select name="budget_entry_ref"
+                hx-post="{{ base }}/link" hx-target="#{{ row_id }}" hx-swap="outerHTML"
+                class="bg-white dark:bg-gray-700 px-1 py-0.5 rounded border border-gray-200 dark:border-gray-600 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 max-w-[10rem]">
+            <option value="">—</option>
+            {% for group in (budget_groups | default([])) %}
+            <optgroup label="{{ group.label }}">
+                {% for opt in group.options %}
+                <option value="{{ opt.value }}" {{ 'selected' if txn.budget_entry_ref == opt.value }}>{{ opt.label }}</option>
+                {% endfor %}
+            </optgroup>
+            {% endfor %}
+        </select>
+    </td>
+    {% else %}
+    <td class="{{ sheet.cell_class() }}">{{ (budget_labels | default({})).get(txn.budget_entry_ref) or '—' }}</td>
+    {% endif %}
 </tr>

@@ -25,6 +25,7 @@ from fintrack.ledger.repository.categories import (
 from fintrack.ledger.repository.corrections import (
     apply_transaction_correction,
     get_correction,
+    set_budget_link,
 )
 from fintrack.ledger.repository.imports import (
     check_file_hash,
@@ -87,5 +88,6 @@ __all__ = [
     "remove_duplicate_transactions",
     "rename_category",
     "seed_categories",
+    "set_budget_link",
     "set_merchant_category",
 ]

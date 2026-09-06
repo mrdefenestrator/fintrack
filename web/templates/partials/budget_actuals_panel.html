@@ -1,0 +1,61 @@
+{# Budget-vs-actual panel (issue #53): per-entry expected vs realized for the
+   viewed month, from transactions linked to each entry. Read-only insight that
+   complements the editable budget sheet above it. #}
+{% set _badge = {
+    'matched': 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300',
+    'over':    'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300',
+    'under':   'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300',
+    'missing': 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300',
+    'upcoming':'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300',
+} %}
+{% set _label = {'matched': 'Matched', 'over': 'Over', 'under': 'Under',
+    'missing': 'Missing', 'upcoming': 'Upcoming'} %}
+{% if budget_actuals %}
+{% set _missing = budget_actuals | selectattr('status', 'equalto', 'missing') | list | length %}
+{% set _drift = budget_actuals | selectattr('drift_amount') | list | length %}
+<section class="shrink-0 mt-3" x-data="{ open: false }">
+    <button type="button" @click="open = !open"
+            class="flex items-center gap-2 text-xs font-semibold text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">
+        <span x-text="open ? '▾' : '▸'"></span>
+        Budget vs actual — {{ actuals_month_label }}
+        {% if _missing %}<span class="px-1.5 py-0.5 rounded {{ _badge['missing'] }}">{{ _missing }} missing</span>{% endif %}
+        {% if _drift %}<span class="px-1.5 py-0.5 rounded {{ _badge['under'] }}">{{ _drift }} drift</span>{% endif %}
+    </button>
+    <div x-show="open" x-cloak class="mt-2 overflow-x-auto rounded-lg border border-gray-300 dark:border-gray-600">
+        <table class="w-full text-xs border-collapse bg-white dark:bg-gray-800" style="white-space:nowrap">
+            <thead>
+                <tr class="bg-gray-100 dark:bg-gray-700 text-left text-gray-600 dark:text-gray-300">
+                    <th class="px-2 py-1">Entry</th>
+                    <th class="px-2 py-1">Category</th>
+                    <th class="px-2 py-1 text-right">Expected</th>
+                    <th class="px-2 py-1 text-right">Actual</th>
+                    <th class="px-2 py-1 text-right">Delta</th>
+                    <th class="px-2 py-1 text-right">N</th>
+                    <th class="px-2 py-1">Status</th>
+                    <th class="px-2 py-1 text-right">Drift</th>
+                    <th class="px-2 py-1">Last seen</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for a in budget_actuals %}
+                <tr class="border-t border-gray-200 dark:border-gray-700">
+                    <td class="px-2 py-1">{{ a.entry.description }}</td>
+                    <td class="px-2 py-1 text-gray-500 dark:text-gray-400">{{ a.entry.category or '—' }}</td>
+                    <td class="px-2 py-1 text-right tabular-nums">${{ a.expected|money }}</td>
+                    <td class="px-2 py-1 text-right tabular-nums">${{ a.actual|money }}</td>
+                    <td class="px-2 py-1 text-right tabular-nums {{ 'text-red-600 dark:text-red-400' if a.delta > 0 else ('text-green-600 dark:text-green-400' if a.delta < 0 else '') }}">
+                        {{ '+' if a.delta > 0 else ('-' if a.delta < 0 else '') }}${{ a.delta|abs|money }}
+                    </td>
+                    <td class="px-2 py-1 text-right tabular-nums">{{ a.count }}</td>
+                    <td class="px-2 py-1"><span class="px-1.5 py-0.5 rounded {{ _badge.get(a.status, '') }}">{{ _label.get(a.status, a.status) }}</span></td>
+                    <td class="px-2 py-1 text-right tabular-nums">
+                        {% if a.drift_amount and (a.drift_amount > 0 or a.drift_amount < 0) %}{{ '+' if a.drift_amount > 0 else '-' }}${{ a.drift_amount|abs|money }}{% else %}—{% endif %}
+                    </td>
+                    <td class="px-2 py-1 text-gray-500 dark:text-gray-400">{{ a.last_linked or '—' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endif %}

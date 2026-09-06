@@ -4,6 +4,8 @@ from decimal import Decimal
 from flask import Blueprint, current_app, g, render_template, request
 from sqlalchemy import select
 
+from fintrack.budget import reconcile
+from fintrack.budget.repository import get_budget_entries
 from fintrack.core.coerce import parse_amount_filter
 from fintrack.core.models import transactions as txn_table
 from fintrack.ledger.repository.accounts import list_accounts
@@ -26,6 +28,29 @@ def _load_txn(conn, txn_id):
     subq = base_transaction_query().where(txn_table.c.id == txn_id).subquery()
     row = conn.execute(select(subq)).fetchone()
     return dict(row._mapping) if row else None
+
+
+def _budget_choices(conn, snapshot_id):
+    """Budget-entry link options grouped by kind + a ref->label map.
+
+    The picker groups entries under Income / Expenses <optgroup>s so the two
+    kinds are distinguishable without a per-option prefix; the label map backs
+    the read-only Budget cell (issue #53)."""
+    entries = get_budget_entries(conn, snapshot_id)
+    groups = [
+        {
+            "label": heading,
+            "options": [
+                {"value": e["_db_id"], "label": e.get("description", "")}
+                for e in entries
+                if e.get("kind") == kind
+            ],
+        }
+        for kind, heading in (("income", "Income"), ("expense", "Expenses"))
+    ]
+    groups = [g for g in groups if g["options"]]
+    labels = {e["_db_id"]: e.get("description", "") for e in entries}
+    return groups, labels
 
 
 @bp.route("/transactions")
@@ -76,6 +101,7 @@ def index():
         )
         accounts = list_accounts(conn, g.snapshot_id)
         categories = get_category_names(conn)
+        budget_groups, budget_labels = _budget_choices(conn, g.snapshot_id)
 
     txn_count = len(txns)
     txn_total = sum((t["amount"] for t in txns), Decimal(0))
@@ -124,6 +150,8 @@ def index():
         txn_count=txn_count,
         txn_total=txn_total,
         edit_mode=edit_mode,
+        budget_groups=budget_groups,
+        budget_labels=budget_labels,
     )
 
 
@@ -135,9 +163,16 @@ def cell_edit(txn_id):
     with engine.connect() as conn:
         categories = get_category_names(conn)
         txn = _load_txn(conn, txn_id)
+        budget_groups, budget_labels = _budget_choices(conn, g.snapshot_id)
     if not txn:
         return "", 404
-    kwargs = {"txn": txn, "categories": categories, "edit_mode": True}
+    kwargs = {
+        "txn": txn,
+        "categories": categories,
+        "edit_mode": True,
+        "budget_groups": budget_groups,
+        "budget_labels": budget_labels,
+    }
     if field in _TXN_EDITABLE_FIELDS:
         kwargs["editing_field"] = field
     return render_template("partials/transaction_row.html", **kwargs)
@@ -149,9 +184,16 @@ def row(txn_id):
     engine = current_app.config["engine"]
     with engine.connect() as conn:
         txn = _load_txn(conn, txn_id)
+        budget_groups, budget_labels = _budget_choices(conn, g.snapshot_id)
     if not txn:
         return "", 404
-    return render_template("partials/transaction_row.html", txn=txn, edit_mode=True)
+    return render_template(
+        "partials/transaction_row.html",
+        txn=txn,
+        edit_mode=True,
+        budget_groups=budget_groups,
+        budget_labels=budget_labels,
+    )
 
 
 @bp.route("/transactions/<int:txn_id>/update", methods=["POST"])
@@ -187,7 +229,43 @@ def update(txn_id):
 
         apply_transaction_correction(conn, txn_id, **{field: value})
         txn = _load_txn(conn, txn_id)
+        budget_groups, budget_labels = _budget_choices(conn, g.snapshot_id)
 
     if not txn:
         return "", 404
-    return render_template("partials/transaction_row.html", txn=txn, edit_mode=True)
+    return render_template(
+        "partials/transaction_row.html",
+        txn=txn,
+        edit_mode=True,
+        budget_groups=budget_groups,
+        budget_labels=budget_labels,
+    )
+
+
+@bp.route("/transactions/<int:txn_id>/link", methods=["POST"])
+def link(txn_id):
+    """Link (or, with an empty value, unlink) a transaction to a budget entry.
+
+    The link is a corrections-overlay field (budget_entry_ref); raw imported
+    columns are untouched. See fintrack.budget.reconcile."""
+    ref_raw = request.form.get("budget_entry_ref", "").strip()
+    engine = current_app.config["engine"]
+    with engine.connect() as conn:
+        if ref_raw:
+            try:
+                reconcile.link_transaction(conn, g.snapshot_id, txn_id, int(ref_raw))
+            except (ValueError, reconcile.SnapshotMismatch):
+                return "", 422
+        else:
+            reconcile.unlink_transaction(conn, txn_id)
+        txn = _load_txn(conn, txn_id)
+        budget_groups, budget_labels = _budget_choices(conn, g.snapshot_id)
+    if not txn:
+        return "", 404
+    return render_template(
+        "partials/transaction_row.html",
+        txn=txn,
+        edit_mode=True,
+        budget_groups=budget_groups,
+        budget_labels=budget_labels,
+    )

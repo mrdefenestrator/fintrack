@@ -28,7 +28,8 @@ from datetime import date
 from decimal import Decimal
 
 from fintrack.accounts.repository import add_account
-from fintrack.budget.repository import add_budget_entry
+from fintrack.budget.reconcile import link_transaction
+from fintrack.budget.repository import add_budget_entry, get_budget_entries
 from fintrack.core.db import get_engine, init_db
 from fintrack.ledger.repository.imports import (
     confirm_import,
@@ -36,8 +37,28 @@ from fintrack.ledger.repository.imports import (
     insert_transactions,
 )
 from fintrack.ledger.repository.merchants import set_merchant_category
+from fintrack.ledger.repository.transactions import get_transactions
 from fintrack.networth.repository import add_asset_entry
 from fintrack.snapshots.repository import create_snapshot, get_snapshot_id
+
+# Merchants whose recurring transactions are linked to a budget entry in the
+# dense demo (issue #53), so the Budget column, the budget-vs-actual panel, and
+# projection true-up all have data. Several grocery merchants map to the one
+# "Groceries" line (one entry ↔ many transactions); "Spotify" is deliberately
+# left out so `transactions suggest` has a clean high-confidence proposal to
+# demonstrate, and the many unlinked entries (Gym, Internet, Cell Phone, …)
+# show up as missing/upcoming.
+_DENSE_MERCHANT_TO_ENTRY = {
+    "Employer Direct Deposit": "Salary",
+    "Landlord Properties LLC": "Rent",
+    "Electric Utility Co": "Electric",
+    "City Water Dept": "Water & Sewer",
+    "Netflix": "Netflix",
+    "Costco Wholesale": "Groceries",
+    "Whole Foods Market": "Groceries",
+    "Safeway": "Groceries",
+    "Trader Joes": "Groceries",
+}
 
 DENSE_SNAPSHOT = "Dense Household"
 SPARSE_SNAPSHOT = "Sparse Household"
@@ -540,6 +561,9 @@ def seed_dense(conn) -> bool:
     # --- Transactions (several months of realistic spending) ----------------
     _seed_dense_transactions(conn, checking, today)
 
+    # --- Transaction ↔ budget links (issue #53) -----------------------------
+    _link_dense_budget(conn, sid)
+
     print(f"Seeded example snapshot {DENSE_SNAPSHOT!r} (id={sid}).")
     return True
 
@@ -789,6 +813,11 @@ def _seed_dense_transactions(conn, checking_id: int, today: date) -> None:
     for month_idx, month_start in enumerate(month_starts):
         txns_for_month = monthly_txns + extras_by_month[month_idx]
         for day, amount, merchant, raw_desc in txns_for_month:
+            # Netflix raised its price mid-year: the two most recent months post
+            # $17.99 against the $15.99 budget line, so the linked entry shows
+            # price drift in budget-vs-actual (issue #53).
+            if merchant == "Netflix" and month_idx >= months_back - 2:
+                amount = "-17.99"
             # Clamp day to valid range for this month.
             _, last_day = monthrange(month_start.year, month_start.month)
             txn_date = date(month_start.year, month_start.month, min(day, last_day))
@@ -810,6 +839,17 @@ def _seed_dense_transactions(conn, checking_id: int, today: date) -> None:
         conn, import_id=import_id, account_id=checking_id, transactions_data=all_txns
     )
     confirm_import(conn, import_id)
+
+
+def _link_dense_budget(conn, sid) -> None:
+    """Link the dense snapshot's recurring transactions to their budget entries
+    so the association feature (issue #53) has data to show."""
+    by_desc = {e["description"]: e["_db_id"] for e in get_budget_entries(conn, sid)}
+    for txn in get_transactions(conn, snapshot_id=sid):
+        entry_desc = _DENSE_MERCHANT_TO_ENTRY.get(txn["merchant"])
+        entry_ref = by_desc.get(entry_desc) if entry_desc else None
+        if entry_ref is not None:
+            link_transaction(conn, sid, txn["id"], entry_ref)
 
 
 def main() -> None:

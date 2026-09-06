@@ -84,6 +84,16 @@ degrades to a warning without it).
   numbers, or raw statement text. Do not widen the classifier prompt.
 - Raw imported data is immutable; user fixes live in the
   transaction_corrections overlay.
+- A transaction can be linked to the budget entry it realizes via
+  `budget_entry_ref` on the corrections overlay (one transaction → at most one
+  entry; one entry → many transactions; the occurrence is derived from the
+  transaction date). The link powers per-entry budget-vs-actual, missed-charge
+  and price-drift detection, and current-month projection true-up
+  (`fintrack/budget/reconcile.py`, DESIGN.md "Transaction–budget association").
+  Suggestions are a local heuristic only — **do not send transaction data to the
+  Claude API** for matching; the classifier privacy constraint still holds.
+  Cross-snapshot links are blocked in the repository, not the schema
+  (corrections carry no snapshot_id).
 - Imports stage until confirmed; new merchants are classified at import time,
   and confirming records statement balances into balance_history.
 - Holdings are a supertype/subtype split: one slim `holdings` spine

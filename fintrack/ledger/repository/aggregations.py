@@ -47,6 +47,7 @@ def base_transaction_query(snapshot_id: int | None = None):
             _resolved_category(),
             transaction_corrections.c.id.label("correction_id"),
             transaction_corrections.c.notes.label("notes"),
+            transaction_corrections.c.budget_entry_ref.label("budget_entry_ref"),
             holdings.c.name.label("account_name"),
         )
         .select_from(

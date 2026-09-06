@@ -186,3 +186,64 @@ def test_row_endpoint_returns_display_row(client, seeded):
     body = resp.get_data(as_text=True)
     assert f'id="txn-row-{txn_id}"' in body
     assert "table-cell-input" not in body
+
+
+# ---- budget-entry linking (issue #53) ----------------------------------------
+
+
+def _add_budget_entry(conn, sid, **fields):
+    from fintrack.budget.repository import add_budget_entry, get_budget_entries
+
+    add_budget_entry(conn, sid, {"kind": "expense", "recurrence": "monthly", **fields})
+    return get_budget_entries(conn, sid)[-1]["_db_id"]
+
+
+def test_link_sets_budget_ref(client, seeded, db_engine):
+    sid, txn_id = seeded
+    with db_engine.connect() as conn:
+        ref = _add_budget_entry(conn, sid, description="Groceries", amount=42.50)
+    resp = client.post(
+        f"/s/ledger/transactions/{txn_id}/link",
+        data={"budget_entry_ref": str(ref)},
+    )
+    assert resp.status_code == 200
+    with db_engine.connect() as conn:
+        assert get_correction(conn, txn_id)["budget_entry_ref"] == ref
+    # The re-rendered row shows the picker with that entry selected.
+    assert 'name="budget_entry_ref"' in resp.get_data(as_text=True)
+
+
+def test_link_empty_value_unlinks(client, seeded, db_engine):
+    sid, txn_id = seeded
+    with db_engine.connect() as conn:
+        ref = _add_budget_entry(conn, sid, description="Groceries", amount=42.50)
+    client.post(
+        f"/s/ledger/transactions/{txn_id}/link", data={"budget_entry_ref": str(ref)}
+    )
+    resp = client.post(
+        f"/s/ledger/transactions/{txn_id}/link", data={"budget_entry_ref": ""}
+    )
+    assert resp.status_code == 200
+    with db_engine.connect() as conn:
+        # An overlay row that existed only for the link is pruned.
+        assert get_correction(conn, txn_id) is None
+
+
+def test_link_rejects_cross_snapshot_entry(client, seeded, db_engine):
+    _, txn_id = seeded
+    with db_engine.connect() as conn:
+        from fintrack.snapshots.repository import create_snapshot
+
+        other = create_snapshot(conn, "other")
+        other_ref = _add_budget_entry(conn, other, description="Rent", amount=100)
+    resp = client.post(
+        f"/s/ledger/transactions/{txn_id}/link",
+        data={"budget_entry_ref": str(other_ref)},
+    )
+    assert resp.status_code == 422
+
+
+def test_transactions_index_has_budget_column(client, seeded):
+    resp = client.get("/s/ledger/transactions?year=2024&month=1")
+    assert resp.status_code == 200
+    assert "Budget" in resp.get_data(as_text=True)

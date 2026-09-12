@@ -348,7 +348,11 @@ Three things build on the link:
   the day-based remainder and the category-exclusion estimator).
 
 Manual linking is available on the Transactions sheet (a Budget-entry picker per
-row) and via `fintrack transactions link/unlink`.
+row) and via `fintrack transactions link/unlink`. The picker is filtered to the
+row's own kind (an expense links only to expense entries) and lists the row's
+category first, with other same-kind entries below as an escape hatch (linking
+to one re-pins the category), so it offers the few relevant lines rather than
+every budget entry.
 
 **A linked entry pins the transaction's category.** Category and the budget link
 are two axes — classification vs. which planned line a transaction realizes —

@@ -31,26 +31,25 @@ def _load_txn(conn, txn_id):
 
 
 def _budget_choices(conn, snapshot_id):
-    """Budget-entry link options grouped by kind + a ref->label map.
+    """Budget-entry link options (with kind + category) + a ref->label map.
 
-    The picker groups entries under Income / Expenses <optgroup>s so the two
-    kinds are distinguishable without a per-option prefix; the label map backs
-    the read-only Budget cell (issue #53)."""
+    Returned as a flat pool; the Transactions row filters it to the row's own
+    kind (an expense links only to expense entries) and surfaces the row's
+    category first, so the picker shows the handful of relevant lines rather
+    than every budget entry (issue #53). The label map backs the read-only
+    Budget cell."""
     entries = get_budget_entries(conn, snapshot_id)
-    groups = [
+    options = [
         {
-            "label": heading,
-            "options": [
-                {"value": e["_db_id"], "label": e.get("description", "")}
-                for e in entries
-                if e.get("kind") == kind
-            ],
+            "value": e["_db_id"],
+            "label": e.get("description", ""),
+            "kind": e.get("kind", "expense"),
+            "category": e.get("category"),
         }
-        for kind, heading in (("income", "Income"), ("expense", "Expenses"))
+        for e in entries
     ]
-    groups = [g for g in groups if g["options"]]
     labels = {e["_db_id"]: e.get("description", "") for e in entries}
-    return groups, labels
+    return options, labels
 
 
 @bp.route("/transactions")
@@ -101,7 +100,7 @@ def index():
         )
         accounts = list_accounts(conn, g.snapshot_id)
         categories = get_category_names(conn)
-        budget_groups, budget_labels = _budget_choices(conn, g.snapshot_id)
+        budget_options, budget_labels = _budget_choices(conn, g.snapshot_id)
 
     txn_count = len(txns)
     txn_total = sum((t["amount"] for t in txns), Decimal(0))
@@ -150,7 +149,7 @@ def index():
         txn_count=txn_count,
         txn_total=txn_total,
         edit_mode=edit_mode,
-        budget_groups=budget_groups,
+        budget_options=budget_options,
         budget_labels=budget_labels,
     )
 
@@ -163,14 +162,14 @@ def cell_edit(txn_id):
     with engine.connect() as conn:
         categories = get_category_names(conn)
         txn = _load_txn(conn, txn_id)
-        budget_groups, budget_labels = _budget_choices(conn, g.snapshot_id)
+        budget_options, budget_labels = _budget_choices(conn, g.snapshot_id)
     if not txn:
         return "", 404
     kwargs = {
         "txn": txn,
         "categories": categories,
         "edit_mode": True,
-        "budget_groups": budget_groups,
+        "budget_options": budget_options,
         "budget_labels": budget_labels,
     }
     if field in _TXN_EDITABLE_FIELDS:
@@ -184,14 +183,14 @@ def row(txn_id):
     engine = current_app.config["engine"]
     with engine.connect() as conn:
         txn = _load_txn(conn, txn_id)
-        budget_groups, budget_labels = _budget_choices(conn, g.snapshot_id)
+        budget_options, budget_labels = _budget_choices(conn, g.snapshot_id)
     if not txn:
         return "", 404
     return render_template(
         "partials/transaction_row.html",
         txn=txn,
         edit_mode=True,
-        budget_groups=budget_groups,
+        budget_options=budget_options,
         budget_labels=budget_labels,
     )
 
@@ -229,7 +228,7 @@ def update(txn_id):
 
         apply_transaction_correction(conn, txn_id, **{field: value})
         txn = _load_txn(conn, txn_id)
-        budget_groups, budget_labels = _budget_choices(conn, g.snapshot_id)
+        budget_options, budget_labels = _budget_choices(conn, g.snapshot_id)
 
     if not txn:
         return "", 404
@@ -237,7 +236,7 @@ def update(txn_id):
         "partials/transaction_row.html",
         txn=txn,
         edit_mode=True,
-        budget_groups=budget_groups,
+        budget_options=budget_options,
         budget_labels=budget_labels,
     )
 
@@ -259,13 +258,13 @@ def link(txn_id):
         else:
             reconcile.unlink_transaction(conn, txn_id)
         txn = _load_txn(conn, txn_id)
-        budget_groups, budget_labels = _budget_choices(conn, g.snapshot_id)
+        budget_options, budget_labels = _budget_choices(conn, g.snapshot_id)
     if not txn:
         return "", 404
     return render_template(
         "partials/transaction_row.html",
         txn=txn,
         edit_mode=True,
-        budget_groups=budget_groups,
+        budget_options=budget_options,
         budget_labels=budget_labels,
     )

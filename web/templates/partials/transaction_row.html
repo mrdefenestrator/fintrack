@@ -78,22 +78,36 @@
         <td class="{{ sheet.cell_class() }}">{{ txn.notes or '—' }}</td>
     {% endif %}
 
-    {# Budget — corrections overlay (budget_entry_ref, issue #53). A picker in
-       edit mode links the transaction to a budget entry; display mode shows the
-       linked entry's description. #}
+    {# Budget — corrections overlay (budget_entry_ref, issue #53). The picker is
+       filtered to the row's own kind (an expense links only to expense entries)
+       and surfaces the row's category first, so it offers the handful of
+       relevant lines instead of every budget entry. Other same-kind entries
+       stay reachable below (linking to one re-pins the category). #}
     {% if edit_mode %}
+    {% set txn_kind = 'income' if txn.amount > 0 else 'expense' %}
+    {% set pool = (budget_options | default([])) | selectattr('kind', 'equalto', txn_kind) | list %}
+    {% set matching = pool | selectattr('category', 'equalto', txn.category) | list %}
+    {% set others = pool | rejectattr('category', 'equalto', txn.category) | list %}
+    {% set other_heading = 'Other income' if txn_kind == 'income' else 'Other expenses' %}
     <td class="{{ sheet.cell_class() }}">
         <select name="budget_entry_ref"
                 hx-post="{{ base }}/link" hx-target="#{{ row_id }}" hx-swap="outerHTML"
                 class="bg-white dark:bg-gray-700 px-1 py-0.5 rounded border border-gray-200 dark:border-gray-600 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 max-w-[10rem]">
             <option value="">—</option>
-            {% for group in (budget_groups | default([])) %}
-            <optgroup label="{{ group.label }}">
-                {% for opt in group.options %}
+            {% if matching %}
+            <optgroup label="{{ txn.category }}">
+                {% for opt in matching %}
                 <option value="{{ opt.value }}" {{ 'selected' if txn.budget_entry_ref == opt.value }}>{{ opt.label }}</option>
                 {% endfor %}
             </optgroup>
-            {% endfor %}
+            {% endif %}
+            {% if others %}
+            <optgroup label="{{ other_heading }}">
+                {% for opt in others %}
+                <option value="{{ opt.value }}" {{ 'selected' if txn.budget_entry_ref == opt.value }}>{{ opt.label }}</option>
+                {% endfor %}
+            </optgroup>
+            {% endif %}
         </select>
     </td>
     {% else %}

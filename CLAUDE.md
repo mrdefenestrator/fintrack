@@ -93,7 +93,11 @@ degrades to a warning without it).
   Suggestions are a local heuristic only — **do not send transaction data to the
   Claude API** for matching; the classifier privacy constraint still holds.
   Cross-snapshot links are blocked in the repository, not the schema
-  (corrections carry no snapshot_id).
+  (corrections carry no snapshot_id). A linked entry's category **pins** the
+  transaction's resolved category (`coalesce(budget_entry.category,
+  correction.category, merchant_cache.category, 'Uncategorized')`), so the
+  Category and Budget columns can't contradict; the Transactions sheet shows
+  that category read-only while linked.
 - Imports stage until confirmed; new merchants are classified at import time,
   and confirming records statement balances into balance_history.
 - Holdings are a supertype/subtype split: one slim `holdings` spine

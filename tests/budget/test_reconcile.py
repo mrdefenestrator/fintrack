@@ -71,6 +71,42 @@ def test_link_flows_through_transaction_query(conn, snapshot_id, seeder):
     assert txn["budget_entry_ref"] == entry
 
 
+def _txn(conn, snapshot_id, txn_id):
+    return next(
+        t for t in get_transactions(conn, snapshot_id=snapshot_id) if t["id"] == txn_id
+    )
+
+
+def test_linked_entry_pins_category(conn, snapshot_id, seeder):
+    # The merchant is classified "Housing", but linking to a Subscriptions
+    # entry pins the transaction's category to the entry's (issue #53, option A).
+    entry = make_expense_entry(
+        conn, snapshot_id, amount=15.99, category="Subscriptions"
+    )
+    txn_id = seeder.add(date(2026, 5, 12), "-15.99", "Streamco", "Housing")
+    assert _txn(conn, snapshot_id, txn_id)["category"] == "Housing"
+
+    link_transaction(conn, snapshot_id, txn_id, entry)
+    linked = _txn(conn, snapshot_id, txn_id)
+    assert linked["category"] == "Subscriptions"
+    assert linked["linked_category"] == "Subscriptions"
+
+    unlink_transaction(conn, txn_id)
+    assert _txn(conn, snapshot_id, txn_id)["category"] == "Housing"
+
+
+def test_linked_entry_without_category_keeps_merchant_category(
+    conn, snapshot_id, seeder
+):
+    # An entry with no category doesn't clobber the merchant classification.
+    entry = make_expense_entry(conn, snapshot_id, amount=15.99)
+    txn_id = seeder.add(date(2026, 5, 12), "-15.99", "Streamco", "Housing")
+    link_transaction(conn, snapshot_id, txn_id, entry)
+    linked = _txn(conn, snapshot_id, txn_id)
+    assert linked["category"] == "Housing"
+    assert linked["linked_category"] is None
+
+
 # --------------------------------------------------------------------------
 # Suggestions
 # --------------------------------------------------------------------------

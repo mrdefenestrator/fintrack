@@ -34,8 +34,17 @@
     <td class="{{ sheet.cell_class() }}">{{ txn.account_name or '—' }}</td>
     {% endif %}
 
-    {# Category — corrections overlay, with optional apply-to-merchant #}
-    {% if edit_mode and editing_field is defined and editing_field == 'category' %}
+    {# Category — corrections overlay, with optional apply-to-merchant. When the
+       row is linked to a budget entry that has a category, the category is
+       inherited from that entry (issue #53) and shown read-only: the budget
+       link is the source of truth, so editing it here would just be overwritten.
+       Unlink (Budget column) to edit the category directly. #}
+    {% set cat_inherited = txn.budget_entry_ref is not none and txn.linked_category %}
+    {% if edit_mode and cat_inherited %}
+        <td class="{{ sheet.cell_class() }}" title="Category inherited from the linked budget entry — unlink to edit">
+            <span class="italic text-gray-500 dark:text-gray-400">{{ txn.category }}</span>
+        </td>
+    {% elif edit_mode and editing_field is defined and editing_field == 'category' %}
         {% call select_edit('category', txn.category, categories, base ~ "/update", row_id) %}
             <label class="ml-2 inline-flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 cursor-pointer align-middle"
                    title="Also set this category on every transaction from this merchant">
@@ -46,7 +55,9 @@
     {% elif edit_mode %}
         {{ cell_display(txn.category, base ~ "/cell?field=category", row_id) }}
     {% else %}
-        <td class="{{ sheet.cell_class() }}">{{ txn.category }}</td>
+        <td class="{{ sheet.cell_class() }}">
+            {% if cat_inherited %}<span class="italic text-gray-500 dark:text-gray-400" title="Category from the linked budget entry">{{ txn.category }}</span>{% else %}{{ txn.category }}{% endif %}
+        </td>
     {% endif %}
 
     {# Amount — raw imported data, immutable #}

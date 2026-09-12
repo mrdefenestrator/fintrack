@@ -247,3 +247,23 @@ def test_transactions_index_has_budget_column(client, seeded):
     resp = client.get("/s/ledger/transactions?year=2024&month=1")
     assert resp.status_code == 200
     assert "Budget" in resp.get_data(as_text=True)
+
+
+def test_linked_row_shows_category_inherited_and_readonly(client, seeded, db_engine):
+    """When a transaction is linked, its category is inherited from the entry
+    and rendered read-only (no inline-edit affordance) — issue #53 option A."""
+    sid, txn_id = seeded
+    with db_engine.connect() as conn:
+        # Entry category ("Housing") differs from the merchant's ("Groceries").
+        ref = _add_budget_entry(
+            conn, sid, description="Rent", amount=42.50, category="Housing"
+        )
+    client.post(
+        f"/s/ledger/transactions/{txn_id}/link", data={"budget_entry_ref": str(ref)}
+    )
+    resp = client.get("/s/ledger/transactions?year=2024&month=1&edit=1")
+    body = resp.get_data(as_text=True)
+    assert "Housing" in body  # inherited from the entry, not "Groceries"
+    assert "inherited from the linked budget entry" in body
+    # The read-only inherited cell must not offer the category inline editor.
+    assert "/cell?field=category" not in body

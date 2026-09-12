@@ -350,6 +350,19 @@ Three things build on the link:
 Manual linking is available on the Transactions sheet (a Budget-entry picker per
 row) and via `fintrack transactions link/unlink`.
 
+**A linked entry pins the transaction's category.** Category and the budget link
+are two axes — classification vs. which planned line a transaction realizes —
+but they nest, because every budget entry carries a category. So when a
+transaction is linked to an entry that has a category, that category becomes the
+transaction's resolved category, ahead of the per-transaction correction and the
+merchant cache: `coalesce(budget_entry.category, correction.category,
+merchant_cache.category, 'Uncategorized')` (`aggregations._resolved_category`).
+This makes linking the more specific statement of intent — it can't contradict
+the category, and Trends/estimator counts a linked transaction under the line it
+funds. The Transactions sheet renders the Category cell read-only (inherited)
+while a categorized link is in place; unlink to edit it directly. An entry with
+no category doesn't clobber the merchant classification.
+
 ## Web UI
 
 Single Flask app (`web/app.py`), port 5003 (`FINTRACK_PORT`), database from

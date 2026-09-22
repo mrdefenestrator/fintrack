@@ -1,4 +1,4 @@
-{% from "partials/ledger_cells.html" import cell_display, text_edit, select_edit %}
+{% from "partials/ledger_cells.html" import cell_display, text_edit, select_edit, grouped_select_edit %}
 {% from "macros/table.html" import cell_non_editable %}
 {% import "partials/sheet.html" as sheet %}
 {% set row_id = "txn-row-" ~ txn.id %}
@@ -78,45 +78,32 @@
         <td class="{{ sheet.cell_class() }}">{{ txn.notes or '—' }}</td>
     {% endif %}
 
-    {# Budget — corrections overlay (budget_entry_ref, issue #53). The picker is
-       filtered to the row's own kind (an expense links only to expense entries)
-       and surfaces the row's category first, so it offers the handful of
-       relevant lines instead of every budget entry. Other same-kind entries
-       stay reachable below (linking to one re-pins the category). #}
-    {% if edit_mode %}
-    {% set txn_kind = 'income' if txn.amount > 0 else 'expense' %}
-    {% set pool = (budget_options | default([])) | selectattr('kind', 'equalto', txn_kind) | list %}
-    {% set matching = pool | selectattr('category', 'equalto', txn.category) | list %}
-    {% set others = pool | rejectattr('category', 'equalto', txn.category) | list %}
-    {% set other_heading = 'Other income' if txn_kind == 'income' else 'Other expenses' %}
-    <td class="{{ sheet.cell_class() }}">
-        <select name="budget_entry_ref"
-                hx-post="{{ base }}/link" hx-target="#{{ row_id }}" hx-swap="outerHTML"
-                class="bg-white dark:bg-gray-700 px-1 py-0.5 rounded border border-gray-200 dark:border-gray-600 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 max-w-[10rem]">
-            <option value="">—</option>
-            {# The current link always renders, even if it falls outside the
-               filter (e.g. a link made before kind validation existed), so the
-               picker never shows "—" for a row that is actually linked. #}
-            {% if txn.budget_entry_ref is not none and txn.budget_entry_ref not in (pool | map(attribute='value') | list) %}
-            <option value="{{ txn.budget_entry_ref }}" selected>{{ (budget_labels | default({})).get(txn.budget_entry_ref, 'Linked entry') }}</option>
-            {% endif %}
-            {% if matching %}
-            <optgroup label="{{ txn.category }}">
-                {% for opt in matching %}
-                <option value="{{ opt.value }}" {{ 'selected' if txn.budget_entry_ref == opt.value }}>{{ opt.label }}</option>
-                {% endfor %}
-            </optgroup>
-            {% endif %}
-            {% if others %}
-            <optgroup label="{{ other_heading }}">
-                {% for opt in others %}
-                <option value="{{ opt.value }}" {{ 'selected' if txn.budget_entry_ref == opt.value }}>{{ opt.label }}</option>
-                {% endfor %}
-            </optgroup>
-            {% endif %}
-        </select>
-    </td>
+    {# Budget — corrections overlay (budget_entry_ref, issue #53). Same
+       click-to-edit interaction and styling as Category: in edit mode a display
+       cell opens a table-cell-select editor that saves on change (via /link)
+       and reverts on blur. The editor is filtered to the row's own kind (an
+       expense links only to expense entries) and lists the row's category
+       first; other same-kind entries stay reachable below (linking to one
+       re-pins the category). #}
+    {% set budget_label = (budget_labels | default({})).get(txn.budget_entry_ref) if txn.budget_entry_ref is not none else none %}
+    {% if edit_mode and editing_field is defined and editing_field == 'budget' %}
+        {% set txn_kind = 'income' if txn.amount > 0 else 'expense' %}
+        {% set pool = (budget_options | default([])) | selectattr('kind', 'equalto', txn_kind) | list %}
+        {% set matching = pool | selectattr('category', 'equalto', txn.category) | list %}
+        {% set others = pool | rejectattr('category', 'equalto', txn.category) | list %}
+        {% set budget_groups = [] %}
+        {# The current link always renders, even if it falls outside the filter
+           (e.g. a link made before kind validation existed), so the editor never
+           shows "—" for a row that is actually linked. #}
+        {% if txn.budget_entry_ref is not none and txn.budget_entry_ref not in (pool | map(attribute='value') | list) %}
+            {% set _ = budget_groups.append({'label': 'Linked', 'options': [{'value': txn.budget_entry_ref, 'label': budget_label or 'Linked entry'}]}) %}
+        {% endif %}
+        {% if matching %}{% set _ = budget_groups.append({'label': txn.category, 'options': matching}) %}{% endif %}
+        {% if others %}{% set _ = budget_groups.append({'label': 'Other income' if txn_kind == 'income' else 'Other expenses', 'options': others}) %}{% endif %}
+        {{ grouped_select_edit('budget_entry_ref', txn.budget_entry_ref, budget_groups, base ~ "/link", row_id, display_url=base ~ "/row") }}
+    {% elif edit_mode %}
+        {{ cell_display(budget_label or '—', base ~ "/cell?field=budget", row_id) }}
     {% else %}
-    <td class="{{ sheet.cell_class() }}">{{ (budget_labels | default({})).get(txn.budget_entry_ref) or '—' }}</td>
+        <td class="{{ sheet.cell_class() }}">{{ budget_label or '—' }}</td>
     {% endif %}
 </tr>

@@ -22,6 +22,9 @@ bp = snapshot_scoped(Blueprint("transactions", __name__, url_prefix="/s/<filenam
 # User-editable overlay fields (transaction_corrections). Raw imported columns
 # (date, amount, raw_description, account) are immutable per DESIGN.md.
 _TXN_EDITABLE_FIELDS = {"category", "merchant_name", "notes"}
+# Cells that open an inline editor: the overlay fields above plus the budget
+# link, which saves through /link rather than /update.
+_TXN_CELL_EDITORS = _TXN_EDITABLE_FIELDS | {"budget"}
 
 
 def _load_txn(conn, txn_id):
@@ -172,7 +175,7 @@ def cell_edit(txn_id):
         "budget_options": budget_options,
         "budget_labels": budget_labels,
     }
-    if field in _TXN_EDITABLE_FIELDS:
+    if field in _TXN_CELL_EDITORS:
         kwargs["editing_field"] = field
     return render_template("partials/transaction_row.html", **kwargs)
 

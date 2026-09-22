@@ -209,8 +209,12 @@ def test_link_sets_budget_ref(client, seeded, db_engine):
     assert resp.status_code == 200
     with db_engine.connect() as conn:
         assert get_correction(conn, txn_id)["budget_entry_ref"] == ref
-    # The re-rendered row shows the picker with that entry selected.
-    assert 'name="budget_entry_ref"' in resp.get_data(as_text=True)
+    # Like a saved category, the row returns to display: a clickable cell
+    # showing the linked entry that reopens the editor.
+    body = resp.get_data(as_text=True)
+    assert "Groceries" in body
+    assert "/cell?field=budget" in body
+    assert 'name="budget_entry_ref"' not in body
 
 
 def test_link_empty_value_unlinks(client, seeded, db_engine):
@@ -282,3 +286,25 @@ def test_link_rejects_kind_mismatch(client, seeded, db_engine):
     assert resp.status_code == 422
     with db_engine.connect() as conn:
         assert get_correction(conn, txn_id) is None
+
+
+def test_budget_cell_uses_category_style_editor(client, seeded, db_engine):
+    """The Budget cell edits like Category: a role=button display cell that
+    opens the shared table-cell-select editor, filtered to the row's kind."""
+    sid, txn_id = seeded
+    with db_engine.connect() as conn:
+        _add_budget_entry(conn, sid, description="Groceries", amount=42.50)
+        _add_budget_entry(conn, sid, kind="income", description="Salary", amount=100)
+    page = client.get("/s/ledger/transactions?year=2024&month=1&edit=1")
+    display = page.get_data(as_text=True)
+    assert f'hx-get="/s/ledger/transactions/{txn_id}/cell?field=budget"' in display
+    assert 'name="budget_entry_ref"' not in display  # no always-on dropdown
+
+    editor = client.get(f"/s/ledger/transactions/{txn_id}/cell?field=budget").get_data(
+        as_text=True
+    )
+    assert 'class="cell-editing' in editor
+    assert '<select name="budget_entry_ref" class="table-cell-select' in editor
+    assert f'hx-get="/s/ledger/transactions/{txn_id}/row"' in editor  # blur reverts
+    assert "Groceries" in editor
+    assert "Salary" not in editor  # a charge can't realize an income entry

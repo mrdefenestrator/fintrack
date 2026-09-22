@@ -60,3 +60,29 @@
     </form>
 </td>
 {% endmacro %}
+
+{# Like select_edit, for options whose value differs from their label, grouped
+   under <optgroup>s: `groups` is a list of {label, options: [{value, label}]}.
+   `name` is the posted field (the endpoint reads it directly, not field/value),
+   and a leading blank option carries `blank_label` (e.g. "—" to clear). #}
+{% macro grouped_select_edit(name, current, groups, update_url, row_id, display_url=none, blank_label='—', align_class='') %}
+<td class="cell-editing {{ sheet.cell_class(align_class) }}">
+    <form class="inline" method="post" action="{{ update_url }}"
+          {% if display_url %}hx-get="{{ display_url }}"
+          hx-trigger="focusout from:select delay:150ms"
+          hx-target="#{{ row_id }}" hx-swap="outerHTML"{% endif %}>
+        <select name="{{ name }}" class="table-cell-select {{ align_class }}" autofocus
+                hx-post="{{ update_url }}" hx-trigger="change" hx-include="closest form"
+                hx-target="#{{ row_id }}" hx-swap="outerHTML">
+            <option value="">{{ blank_label }}</option>
+            {% for g in groups %}
+            <optgroup label="{{ g.label }}">
+                {% for o in g.options %}
+                <option value="{{ o.value }}" {{ 'selected' if current == o.value }}>{{ o.label }}</option>
+                {% endfor %}
+            </optgroup>
+            {% endfor %}
+        </select>
+    </form>
+</td>
+{% endmacro %}

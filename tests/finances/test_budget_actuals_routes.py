@@ -51,6 +51,9 @@ def test_panel_lists_active_entries(client, db_engine):
     assert resp.status_code == 200
     assert "Budget vs actual" in body
     assert "Rent" in body
+    # Never linked: reported as not linked, not as a missed charge.
+    assert "Not linked" in body
+    assert "missing</span>" not in body
 
 
 def test_panel_reflects_linked_transaction_as_matched(client, db_engine):

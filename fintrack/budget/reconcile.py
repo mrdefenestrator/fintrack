@@ -21,6 +21,7 @@ not stored.
 """
 
 from calendar import monthrange
+from collections import Counter
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from decimal import Decimal
@@ -31,6 +32,7 @@ from sqlalchemy import Connection, select
 from fintrack.budget.recurrence import budget_entry_in_month, money
 from fintrack.budget.repository import get_budget_entries
 from fintrack.core.models import holdings, transactions
+from fintrack.ledger.repository.aggregations import get_monthly_category_totals
 from fintrack.ledger.repository.corrections import set_budget_link
 from fintrack.ledger.repository.transactions import get_transactions
 
@@ -45,24 +47,28 @@ class SnapshotMismatch(ValueError):
     """A transaction and budget entry that don't share a snapshot."""
 
 
+class KindMismatch(ValueError):
+    """A transaction whose sign doesn't match the entry's kind (e.g. a deposit
+    linked to an expense entry)."""
+
+
 # ---------------------------------------------------------------------------
 # Linking
 # ---------------------------------------------------------------------------
 
 
-def _txn_snapshot_id(conn: Connection, transaction_id: int) -> int | None:
-    """Snapshot a transaction belongs to (via its account/holding)."""
-    return conn.execute(
-        select(holdings.c.snapshot_id)
+def _txn_snapshot_and_amount(
+    conn: Connection, transaction_id: int
+) -> tuple[int, Decimal] | None:
+    """(snapshot id, amount) for a transaction, via its account/holding."""
+    row = conn.execute(
+        select(holdings.c.snapshot_id, transactions.c.amount)
         .select_from(
             transactions.join(holdings, transactions.c.account_id == holdings.c.id)
         )
         .where(transactions.c.id == transaction_id)
-    ).scalar()
-
-
-def _entry_db_ids(conn: Connection, snapshot_id: int) -> set[int]:
-    return {e["_db_id"] for e in get_budget_entries(conn, snapshot_id)}
+    ).first()
+    return (row[0], money(row[1])) if row else None
 
 
 def link_transaction(
@@ -75,18 +81,36 @@ def link_transaction(
 
     Raises SnapshotMismatch if the transaction's account or the budget entry is
     not in ``snapshot_id`` — the schema can't make a cross-snapshot link
-    unrepresentable here, so the repository is the guard.
+    unrepresentable here, so the repository is the guard. Raises KindMismatch
+    when the transaction's sign doesn't match the entry's kind (income entries
+    take deposits, expense entries take charges), the same rule the picker and
+    suggester apply; a mismatched link would also pin the wrong category.
     """
-    txn_snap = _txn_snapshot_id(conn, transaction_id)
-    if txn_snap is None:
+    found = _txn_snapshot_and_amount(conn, transaction_id)
+    if found is None:
         raise ValueError(f"Transaction {transaction_id} not found")
+    txn_snap, amount = found
     if txn_snap != snapshot_id:
         raise SnapshotMismatch(
             f"Transaction {transaction_id} is in snapshot {txn_snap}, not {snapshot_id}"
         )
-    if budget_entry_ref not in _entry_db_ids(conn, snapshot_id):
+    entry = next(
+        (
+            e
+            for e in get_budget_entries(conn, snapshot_id)
+            if e["_db_id"] == budget_entry_ref
+        ),
+        None,
+    )
+    if entry is None:
         raise SnapshotMismatch(
             f"Budget entry {budget_entry_ref} is not in snapshot {snapshot_id}"
+        )
+    kind = entry.get("kind", "expense")
+    if not _kind_matches_sign(kind, amount):
+        raise KindMismatch(
+            f"Transaction {transaction_id} ({amount}) can't realize {kind} entry "
+            f"{entry.get('description', '')!r}"
         )
     set_budget_link(conn, transaction_id, budget_entry_ref)
 
@@ -290,27 +314,65 @@ class EntryActual:
     entry: dict[str, Any]
     entry_ref: int
     expected: Decimal  # scheduled monthly amount (0 if inactive this month)
-    actual: Decimal  # realized magnitude from linked transactions this month
-    delta: Decimal  # actual - expected (positive = over-budget spend/income)
-    count: int  # linked transactions this month
-    status: str  # matched | over | under | missing | upcoming | inactive
+    actual: Decimal  # realized magnitude this month (see ``source``)
+    delta: Decimal  # actual - expected
+    count: int  # transactions behind ``actual``
+    # matched | over | under | missing | upcoming | unlinked | inactive
+    status: str
     last_linked: date | None  # most recent linked transaction date, any month
     drift_amount: Decimal  # per-occurrence charge vs budgeted, when comparable
+    # "links": actual is the sum of transactions linked to this entry.
+    # "category": a variable (continuous) line that is the only entry claiming
+    # its category — actual is that category's total for the month, since
+    # nobody links every coffee to "Dining Out".
+    source: str = "links"
+
+    @property
+    def tone(self) -> str:
+        """good | bad | neutral — whether the status is favorable. Over/under
+        flip with kind: spending over budget is bad, earning over it is good."""
+        if self.status == "matched":
+            return "good"
+        if self.status == "missing":
+            return "bad"
+        if self.status in ("over", "under"):
+            income = self.entry.get("kind") == "income"
+            return "good" if (self.status == "over") == income else "bad"
+        return "neutral"
 
 
-def _classify(
+def _classify_delta(delta: Decimal) -> str:
+    if delta > _MATCH_TOLERANCE:
+        return "over"
+    if delta < -_MATCH_TOLERANCE:
+        return "under"
+    return "matched"
+
+
+def _classify_linked(
     entry: dict[str, Any],
     expected: Decimal,
     actual: Decimal,
     count: int,
     *,
+    tracked: bool,
     year: int,
     month: int,
     today: date,
 ) -> str:
+    """Status for an entry measured by its linked transactions.
+
+    With nothing linked this month, the entry is only "missing" (or
+    "upcoming") if it has been linked in an earlier month — i.e. it is a
+    recurring charge you track that didn't show up. An entry that has never
+    been linked is "unlinked": absent links say nothing about whether the money
+    moved, so flagging it missing would just be noise.
+    """
     if expected == _ZERO:
         return "inactive"
     if count == 0:
+        if not tracked:
+            return "unlinked"
         day = expected_day(entry, year, month)
         month_past = (year, month) < (today.year, today.month)
         is_current = (year, month) == (today.year, today.month)
@@ -318,12 +380,7 @@ def _classify(
         if month_past or due_passed:
             return "missing"
         return "upcoming"
-    delta = actual - expected
-    if delta > _MATCH_TOLERANCE:
-        return "over"
-    if delta < -_MATCH_TOLERANCE:
-        return "under"
-    return "matched"
+    return _classify_delta(actual - expected)
 
 
 def budget_actuals(
@@ -336,58 +393,86 @@ def budget_actuals(
 ) -> list[EntryActual]:
     """Per-entry budget-vs-actual for ``(year, month)``.
 
-    Sums the transactions linked to each entry within the month, compares
-    against the entry's scheduled amount, and classifies the result (matched /
-    over / under / missing / upcoming / inactive) so the caller can flag missed
-    recurring charges and price drift.
+    Discrete entries (bills, paychecks) are measured by the transactions linked
+    to them. A variable, continuous entry that alone claims its category is
+    measured by that category's month total instead (``source="category"``).
+    Each result is classified so the caller can flag missed recurring charges
+    and price drift.
     """
     today = today or datetime.now().astimezone().date()
     entries = get_budget_entries(conn, snapshot_id)
     month_txns = get_transactions(conn, year=year, month=month, snapshot_id=snapshot_id)
     all_txns = get_transactions(conn, snapshot_id=snapshot_id)
+    category_totals = {
+        row["category"]: row
+        for row in get_monthly_category_totals(
+            conn, year=year, month=month, snapshot_id=snapshot_id
+        )
+    }
+    claims = Counter(e["category"] for e in entries if e.get("category"))
 
     by_entry_month: dict[int, list[dict]] = {}
     for t in month_txns:
         ref = t.get("budget_entry_ref")
         if ref is not None:
             by_entry_month.setdefault(ref, []).append(t)
+    first_linked: dict[int, date] = {}
     last_linked: dict[int, date] = {}
     for t in all_txns:
         ref = t.get("budget_entry_ref")
         if ref is not None:
             d = t["date"]
-            if ref not in last_linked or d > last_linked[ref]:
-                last_linked[ref] = d
+            first_linked[ref] = min(d, first_linked.get(ref, d))
+            last_linked[ref] = max(d, last_linked.get(ref, d))
+    month_start = date(year, month, 1)
 
     results: list[EntryActual] = []
     for entry in entries:
         ref = entry["_db_id"]
         expected = budget_entry_in_month(entry, year, month)
-        linked = by_entry_month.get(ref, [])
-        count = len(linked)
-        net = sum((money(t["amount"]) for t in linked), _ZERO)
-        actual = abs(net)
-        delta = actual - expected
-        status = _classify(
-            entry, expected, actual, count, year=year, month=month, today=today
-        )
-        # Drift is only meaningful when the realized occurrence count matches
-        # what was scheduled (else "delta" is just partial/extra activity).
+        category = entry.get("category")
         drift = _ZERO
-        if count and count == expected_occurrences(entry, year, month):
-            per_occurrence = actual / Decimal(count)
-            drift = per_occurrence - money(entry.get("amount"))
+        if entry.get("continuous") and category and claims[category] == 1:
+            source = "category"
+            row = category_totals.get(category)
+            count = row["count"] if row else 0
+            actual = abs(money(row["total"])) if row else _ZERO
+            status = (
+                "inactive" if expected == _ZERO else _classify_delta(actual - expected)
+            )
+        else:
+            source = "links"
+            linked = by_entry_month.get(ref, [])
+            count = len(linked)
+            actual = abs(sum((money(t["amount"]) for t in linked), _ZERO))
+            tracked = ref in first_linked and first_linked[ref] < month_start
+            status = _classify_linked(
+                entry,
+                expected,
+                actual,
+                count,
+                tracked=tracked,
+                year=year,
+                month=month,
+                today=today,
+            )
+            # Drift is only meaningful when the realized occurrence count
+            # matches what was scheduled (else the delta is partial/extra
+            # activity, not a price change).
+            if count and count == expected_occurrences(entry, year, month):
+                drift = actual / Decimal(count) - money(entry.get("amount"))
         results.append(
             EntryActual(
                 entry=entry,
                 entry_ref=ref,
                 expected=expected,
                 actual=actual,
-                delta=delta,
+                delta=actual - expected,
                 count=count,
                 status=status,
                 last_linked=last_linked.get(ref),
                 drift_amount=drift,
+                source=source,
             )
         )
     return results

@@ -166,7 +166,10 @@ Single `MetaData` in `fintrack/core/models.py`.
   optional `budget_entry_ref` linking the transaction to the budget entry it
   realizes (see "Transaction–budget association"). The FK is `ON DELETE SET
   NULL`, so deleting a budget entry unlinks its transactions rather than
-  deleting them; a correction row with every overlay column NULL is pruned.
+  deleting them; correction rows that held only that link are purged first, and
+  unlinking prunes a row left with every overlay column NULL. A row that exists
+  only for a link is not a "correction": the Transactions Status filter keys on
+  category/merchant/notes being set, not on the row existing.
 - **categories** — the shared taxonomy, seeded from `configs/categories.yaml`.
 - **budget_entries** — scheduled income/expenses: `kind`, `amount`,
   `recurrence` plus its parameters (`date`, `day_of_month`, `month`,
@@ -323,7 +326,8 @@ transactions stay immutable and the one-row-per-transaction shape enforces the
 cardinality: a transaction realizes **at most one** budget entry; an entry is
 realized by **many** transactions over time. The occurrence a transaction
 belongs to is derived from its date, not stored. Snapshot consistency (the
-transaction and entry share a snapshot) is validated in the repository, since
+transaction and entry share a snapshot) and kind (a deposit realizes an income
+entry, a charge an expense entry) are validated in the repository, since
 corrections carry no `snapshot_id` and the composite-FK guard used elsewhere is
 unavailable here.
 
@@ -336,11 +340,18 @@ Three things build on the link:
   occurrence. Suggestions are always presented for confirmation, never applied
   silently.
 - **Budget-vs-actual per entry** (`budget_actuals`) — for a month, each entry's
-  scheduled amount is compared to the sum of its linked transactions and
-  classified matched / over / under / missing / upcoming / inactive, exposing
-  price drift (a linked charge that differs from the budgeted amount) and
-  missed recurring charges (a due entry with no linked transaction). Surfaced as
-  a panel on the Budget page and `fintrack transactions budget-actual`.
+  scheduled amount is compared to its actual and classified matched / over /
+  under / missing / upcoming / unlinked / inactive. Discrete entries (bills,
+  paychecks) are measured by their linked transactions, exposing price drift (a
+  linked charge that differs from the budgeted amount). A variable, continuous
+  entry that alone claims its category is measured by that category's month
+  total instead (nobody links every coffee to "Dining Out"). **Missing** means a
+  *tracked* entry — one linked in an earlier month — whose charge didn't show
+  up; an entry that has never been linked is **unlinked**, because absent links
+  say nothing about whether the money moved. Each result carries a tone
+  (good / bad / neutral) so over/under read correctly for both kinds: earning
+  over budget is good, spending over it is bad. Surfaced as a panel on the
+  Budget page and `fintrack transactions budget-actual`.
 - **Projection true-up** — in the current (partial) month, a budget flow already
   realized as a linked transaction is reflected in the starting balance, so the
   projection engine caps that month's remaining scheduled amount by what is

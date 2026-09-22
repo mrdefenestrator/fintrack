@@ -2,7 +2,7 @@ from calendar import monthrange
 from datetime import date
 from decimal import Decimal
 
-from sqlalchemy import Connection, extract, func, select
+from sqlalchemy import Connection, case, extract, func, or_, select
 from sqlalchemy.sql.functions import coalesce
 
 from fintrack.core.models import (
@@ -52,6 +52,20 @@ def base_transaction_query(snapshot_id: int | None = None):
             _resolved_merchant(),
             _resolved_category(),
             transaction_corrections.c.id.label("correction_id"),
+            # True when the user fixed the category, merchant name, or notes. A
+            # correction row can exist only to hold a budget link, so the row's
+            # existence (correction_id) no longer means "corrected".
+            case(
+                (
+                    or_(
+                        transaction_corrections.c.category.isnot(None),
+                        transaction_corrections.c.merchant_name.isnot(None),
+                        transaction_corrections.c.notes.isnot(None),
+                    ),
+                    True,
+                ),
+                else_=False,
+            ).label("has_correction"),
             transaction_corrections.c.notes.label("notes"),
             transaction_corrections.c.budget_entry_ref.label("budget_entry_ref"),
             # The linked entry's own category, exposed separately so callers can

@@ -10,6 +10,7 @@ from sqlalchemy import create_engine, insert, select
 
 from fintrack.accounts.repository import add_account
 from fintrack.budget.repository import add_budget_entry, get_budget_entries
+from fintrack.core import db as _db  # noqa: F401 — registers the FK pragma listener
 from fintrack.core.models import (
     holdings,
     imports,
@@ -24,8 +25,8 @@ from fintrack.snapshots.repository import create_snapshot
 def engine():
     engine = create_engine("sqlite:///:memory:")
     metadata.create_all(engine)
-    # FK pragma isn't attached to this bare test engine; ON DELETE SET NULL is
-    # exercised in the migration/route tests, not here.
+    # fintrack.core.db registers PRAGMA foreign_keys=ON on the base Engine, so
+    # this engine enforces FKs too (ON DELETE SET NULL on budget_entry_ref).
     yield engine
     engine.dispose()
 

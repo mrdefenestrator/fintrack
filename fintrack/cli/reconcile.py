@@ -24,6 +24,7 @@ _STATUS_LABEL = {
     "under": "▼ under",
     "missing": "✗ missing",
     "upcoming": "· upcoming",
+    "unlinked": "· not linked",
     "inactive": "  —",
 }
 
@@ -166,6 +167,7 @@ def budget_actual(cli, year, month):
                 fmt_money(a.actual),
                 fmt_money(a.delta),
                 a.count,
+                "category" if a.source == "category" else "links",
                 _STATUS_LABEL.get(a.status, a.status),
                 drift,
             ]
@@ -173,6 +175,16 @@ def budget_actual(cli, year, month):
     click.echo(f"Budget vs actual — {year}-{month:02d}")
     echo_table(
         rows,
-        ["Entry", "Kind", "Expected", "Actual", "Delta", "N", "Status", "Drift"],
-        ("left", "left", "right", "right", "right", "right", "left", "right"),
+        [
+            "Entry",
+            "Kind",
+            "Expected",
+            "Actual",
+            "Delta",
+            "N",
+            "Basis",
+            "Status",
+            "Drift",
+        ],
+        ("left", "left", "right", "right", "right", "right", "left", "left", "right"),
     )

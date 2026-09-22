@@ -94,6 +94,12 @@
                 hx-post="{{ base }}/link" hx-target="#{{ row_id }}" hx-swap="outerHTML"
                 class="bg-white dark:bg-gray-700 px-1 py-0.5 rounded border border-gray-200 dark:border-gray-600 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 max-w-[10rem]">
             <option value="">—</option>
+            {# The current link always renders, even if it falls outside the
+               filter (e.g. a link made before kind validation existed), so the
+               picker never shows "—" for a row that is actually linked. #}
+            {% if txn.budget_entry_ref is not none and txn.budget_entry_ref not in (pool | map(attribute='value') | list) %}
+            <option value="{{ txn.budget_entry_ref }}" selected>{{ (budget_labels | default({})).get(txn.budget_entry_ref, 'Linked entry') }}</option>
+            {% endif %}
             {% if matching %}
             <optgroup label="{{ txn.category }}">
                 {% for opt in matching %}

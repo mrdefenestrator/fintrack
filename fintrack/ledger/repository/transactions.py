@@ -104,13 +104,13 @@ def get_transactions(
         stmt = _apply_amount_filter(stmt, subq.c.amount, amount_spec)
 
     if status == "corrected":
-        stmt = stmt.where(subq.c.correction_id.isnot(None))
+        stmt = stmt.where(subq.c.has_correction)
     elif status == "uncategorized":
         stmt = stmt.where(subq.c.category == "Uncategorized")
     elif status == "categorized":
         stmt = stmt.where(
             subq.c.category != "Uncategorized",
-            subq.c.correction_id.is_(None),
+            subq.c.has_correction.is_(False),
         )
 
     # Default (newest-first) order; column sorting is done client-side in the

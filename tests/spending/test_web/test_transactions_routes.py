@@ -267,3 +267,18 @@ def test_linked_row_shows_category_inherited_and_readonly(client, seeded, db_eng
     assert "inherited from the linked budget entry" in body
     # The read-only inherited cell must not offer the category inline editor.
     assert "/cell?field=category" not in body
+
+
+def test_link_rejects_kind_mismatch(client, seeded, db_engine):
+    # The seeded transaction is a -$42.50 charge; an income entry can't take it.
+    sid, txn_id = seeded
+    with db_engine.connect() as conn:
+        ref = _add_budget_entry(
+            conn, sid, kind="income", description="Salary", amount=42.50
+        )
+    resp = client.post(
+        f"/s/ledger/transactions/{txn_id}/link", data={"budget_entry_ref": str(ref)}
+    )
+    assert resp.status_code == 422
+    with db_engine.connect() as conn:
+        assert get_correction(conn, txn_id) is None

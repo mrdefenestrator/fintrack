@@ -87,6 +87,27 @@ def set_budget_link(
     conn.commit()
 
 
+def purge_link_only_corrections(conn: Connection, budget_entry_ref: int) -> None:
+    """Delete correction rows that exist only to link to ``budget_entry_ref``.
+
+    Called before a budget entry is deleted: its FK is ON DELETE SET NULL, which
+    would otherwise leave those rows with every overlay column NULL. Rows that
+    also carry a real fix (category, merchant name, notes) are kept and simply
+    unlinked by the FK. Does not commit — it runs inside the caller's write.
+    """
+    other_fixes = [
+        getattr(transaction_corrections.c, col)
+        for col in _OVERLAY_COLUMNS
+        if col != "budget_entry_ref"
+    ]
+    conn.execute(
+        delete(transaction_corrections).where(
+            transaction_corrections.c.budget_entry_ref == budget_entry_ref,
+            *(c.is_(None) for c in other_fixes),
+        )
+    )
+
+
 def _prune_if_empty(conn: Connection, transaction_id: int) -> None:
     """Delete the correction row when every overlay column is NULL."""
     row = conn.execute(

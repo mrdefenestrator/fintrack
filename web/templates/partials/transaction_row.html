@@ -1,4 +1,4 @@
-{% from "partials/ledger_cells.html" import cell_display, text_edit, select_edit %}
+{% from "partials/ledger_cells.html" import cell_display, text_edit, select_edit, grouped_select_edit %}
 {% from "macros/table.html" import cell_non_editable %}
 {% import "partials/sheet.html" as sheet %}
 {% set row_id = "txn-row-" ~ txn.id %}
@@ -34,8 +34,17 @@
     <td class="{{ sheet.cell_class() }}">{{ txn.account_name or '—' }}</td>
     {% endif %}
 
-    {# Category — corrections overlay, with optional apply-to-merchant #}
-    {% if edit_mode and editing_field is defined and editing_field == 'category' %}
+    {# Category — corrections overlay, with optional apply-to-merchant. When the
+       row is linked to a budget entry that has a category, the category is
+       inherited from that entry (issue #53) and shown read-only: the budget
+       link is the source of truth, so editing it here would just be overwritten.
+       Unlink (Budget column) to edit the category directly. #}
+    {% set cat_inherited = txn.budget_entry_ref is not none and txn.linked_category %}
+    {% if edit_mode and cat_inherited %}
+        <td class="{{ sheet.cell_class() }}" title="Category inherited from the linked budget entry — unlink to edit">
+            <span class="italic text-gray-500 dark:text-gray-400">{{ txn.category }}</span>
+        </td>
+    {% elif edit_mode and editing_field is defined and editing_field == 'category' %}
         {% call select_edit('category', txn.category, categories, base ~ "/update", row_id) %}
             <label class="ml-2 inline-flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 cursor-pointer align-middle"
                    title="Also set this category on every transaction from this merchant">
@@ -46,7 +55,9 @@
     {% elif edit_mode %}
         {{ cell_display(txn.category, base ~ "/cell?field=category", row_id) }}
     {% else %}
-        <td class="{{ sheet.cell_class() }}">{{ txn.category }}</td>
+        <td class="{{ sheet.cell_class() }}">
+            {% if cat_inherited %}<span class="italic text-gray-500 dark:text-gray-400" title="Category from the linked budget entry">{{ txn.category }}</span>{% else %}{{ txn.category }}{% endif %}
+        </td>
     {% endif %}
 
     {# Amount — raw imported data, immutable #}
@@ -65,5 +76,34 @@
         {{ cell_display(txn.notes or '—', base ~ "/cell?field=notes", row_id) }}
     {% else %}
         <td class="{{ sheet.cell_class() }}">{{ txn.notes or '—' }}</td>
+    {% endif %}
+
+    {# Budget — corrections overlay (budget_entry_ref, issue #53). Same
+       click-to-edit interaction and styling as Category: in edit mode a display
+       cell opens a table-cell-select editor that saves on change (via /link)
+       and reverts on blur. The editor is filtered to the row's own kind (an
+       expense links only to expense entries) and lists the row's category
+       first; other same-kind entries stay reachable below (linking to one
+       re-pins the category). #}
+    {% set budget_label = (budget_labels | default({})).get(txn.budget_entry_ref) if txn.budget_entry_ref is not none else none %}
+    {% if edit_mode and editing_field is defined and editing_field == 'budget' %}
+        {% set txn_kind = 'income' if txn.amount > 0 else 'expense' %}
+        {% set pool = (budget_options | default([])) | selectattr('kind', 'equalto', txn_kind) | list %}
+        {% set matching = pool | selectattr('category', 'equalto', txn.category) | list %}
+        {% set others = pool | rejectattr('category', 'equalto', txn.category) | list %}
+        {% set budget_groups = [] %}
+        {# The current link always renders, even if it falls outside the filter
+           (e.g. a link made before kind validation existed), so the editor never
+           shows "—" for a row that is actually linked. #}
+        {% if txn.budget_entry_ref is not none and txn.budget_entry_ref not in (pool | map(attribute='value') | list) %}
+            {% set _ = budget_groups.append({'label': 'Linked', 'options': [{'value': txn.budget_entry_ref, 'label': budget_label or 'Linked entry'}]}) %}
+        {% endif %}
+        {% if matching %}{% set _ = budget_groups.append({'label': txn.category, 'options': matching}) %}{% endif %}
+        {% if others %}{% set _ = budget_groups.append({'label': 'Other income' if txn_kind == 'income' else 'Other expenses', 'options': others}) %}{% endif %}
+        {{ grouped_select_edit('budget_entry_ref', txn.budget_entry_ref, budget_groups, base ~ "/link", row_id, display_url=base ~ "/row") }}
+    {% elif edit_mode %}
+        {{ cell_display(budget_label or '—', base ~ "/cell?field=budget", row_id) }}
+    {% else %}
+        <td class="{{ sheet.cell_class() }}">{{ budget_label or '—' }}</td>
     {% endif %}
 </tr>

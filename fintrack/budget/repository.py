@@ -10,6 +10,7 @@ from fintrack.core.coerce import to_date
 from fintrack.core.models import budget_entries
 from fintrack.core.ordering import reorder_by_positions
 from fintrack.core.types import BudgetEntry
+from fintrack.ledger.repository.corrections import purge_link_only_corrections
 
 _ZERO = Decimal(0)
 
@@ -126,6 +127,9 @@ def update_budget_entry(
 
 def delete_budget_entry(conn: Connection, snapshot_id: int, index: int) -> None:
     db_id = _index_to_db_id(conn, snapshot_id, index)
+    # Linked transactions are unlinked by the FK (ON DELETE SET NULL); drop the
+    # correction rows that held nothing but that link so none are left empty.
+    purge_link_only_corrections(conn, db_id)
     conn.execute(delete(budget_entries).where(budget_entries.c.id == db_id))
     conn.commit()
 

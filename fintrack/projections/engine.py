@@ -27,6 +27,7 @@ from typing import Any
 from sqlalchemy import Connection
 
 from fintrack.accounts.repository import get_accounts
+from fintrack.budget.reconcile import expected_occurrences
 from fintrack.budget.recurrence import (
     budget_entry_in_month,
     money,
@@ -34,6 +35,7 @@ from fintrack.budget.recurrence import (
     subtotal_remainder_of_month,
 )
 from fintrack.budget.repository import get_budget_entries
+from fintrack.ledger.repository.transactions import get_transactions
 from fintrack.networth.amortization import scheduled_payment
 from fintrack.networth.calculations import (
     asset_contribution,
@@ -85,6 +87,45 @@ def _autopay_transfers(
         balances[payer_id] -= owed
 
 
+def _realized_occurrences(
+    conn: Connection, snapshot_id: int, year: int, month: int
+) -> dict[int, int]:
+    """Count transactions linked to each budget entry in the given month,
+    keyed by budget-entry db id. Used for current-month projection true-up."""
+    counts: dict[int, int] = {}
+    for t in get_transactions(conn, year=year, month=month, snapshot_id=snapshot_id):
+        ref = t.get("budget_entry_ref")
+        if ref is not None:
+            counts[ref] = counts.get(ref, 0) + 1
+    return counts
+
+
+def _month0_budget_amount(
+    entry: dict[str, Any],
+    year: int,
+    month: int,
+    day: int,
+    realized_count: int,
+) -> Decimal:
+    """Remaining scheduled amount for the current (partial) month, capped by
+    what's still unrealized given linked transactions.
+
+    The day-based remainder (subtotal_remainder_of_month) already drops
+    occurrences whose scheduled day has passed; the linked-transaction signal is
+    more precise, so we take the smaller of the two for discrete entries. A
+    continuous entry represents ongoing daily spend rather than a single charge,
+    so it keeps pure day-based proration."""
+    day_based = subtotal_remainder_of_month(entry, year, month, day)
+    if entry.get("continuous"):
+        return day_based
+    expected = expected_occurrences(entry, year, month)
+    if expected <= 0 or realized_count <= 0:
+        return day_based
+    unrealized = max(0, expected - realized_count)
+    realized_based = money(entry.get("amount")) * Decimal(unrealized)
+    return min(day_based, realized_based)
+
+
 def _asset_monthly_params(asset: dict[str, Any]) -> tuple[Decimal, Decimal]:
     """Return (monthly_rate, monthly_contribution) for a non-debt asset."""
     annual_rate = asset.get("annualReturnRate")
@@ -129,6 +170,15 @@ def project(
     accounts = get_accounts(conn, snapshot_id)
     budget = get_budget_entries(conn, snapshot_id)
     assets = get_asset_entries(conn, snapshot_id)
+
+    # Current-month true-up (issue #53): budget flows already realized as linked
+    # transactions this month are reflected in the starting balance, so the
+    # current month must not project them again. Count linked occurrences per
+    # entry for the current month; the budget loop caps month 0's remaining
+    # scheduled amount by what is still unrealized.
+    realized_this_month = _realized_occurrences(
+        conn, snapshot_id, today.year, today.month
+    )
 
     debts = [e for e in assets if e.get("kind") == "debt"]
     non_debt_assets = [e for e in assets if e.get("kind") != "debt"]
@@ -190,7 +240,13 @@ def project(
 
         for entry in budget:
             if i == 0:
-                amount = subtotal_remainder_of_month(entry, year, month, today.day)
+                amount = _month0_budget_amount(
+                    entry,
+                    year,
+                    month,
+                    today.day,
+                    realized_this_month.get(entry.get("_db_id"), 0),
+                )
             else:
                 amount = budget_entry_in_month(entry, year, month)
             if amount == _ZERO:

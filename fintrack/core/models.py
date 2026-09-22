@@ -334,6 +334,23 @@ transaction_corrections = Table(
     Column("category", String, nullable=True),
     Column("merchant_name", String, nullable=True),
     Column("notes", String, nullable=True),
+    # Link this transaction to a budget entry it realizes (issue #53). Lives on
+    # the corrections overlay so raw transactions stay immutable and the "at
+    # most one per transaction" shape gives txn -> <=1 entry for free. Snapshot
+    # consistency (txn's snapshot == entry's snapshot) is enforced in the
+    # repository, not the schema: corrections carry no snapshot_id/account_id,
+    # so the composite-FK trick used elsewhere is unavailable here. SET NULL so
+    # deleting an entry unlinks its transactions rather than deleting them.
+    Column(
+        "budget_entry_ref",
+        Integer,
+        ForeignKey(
+            "budget_entries.id",
+            ondelete="SET NULL",
+            name="fk_correction_budget_entry",
+        ),
+        nullable=True,
+    ),
     Column("created_at", DateTime, default=_utcnow),
 )
 

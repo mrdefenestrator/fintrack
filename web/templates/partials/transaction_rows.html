@@ -5,8 +5,8 @@
    partials/transaction_row.html and partials/ledger_cells.html. #}
 {% import "partials/sheet.html" as sheet %}
 <table class="sortable w-full text-sm border-collapse bg-white dark:bg-gray-800" data-cell-nav="txn-tbody" style="white-space:nowrap">
-    {{ sheet.thead(["Date", "Merchant", "Description", "Account", "Category", "Amount", "Notes"], right_align_cols=[5],
-        tooltips=["Transaction date from statement", "Normalized merchant name", "Original description from statement", "Account this transaction belongs to", "Spending category", "Transaction amount (negative = expense)", "Optional notes"]) }}
+    {{ sheet.thead(["Date", "Merchant", "Description", "Account", "Category", "Amount", "Notes", "Budget"], right_align_cols=[5],
+        tooltips=["Transaction date from statement", "Normalized merchant name", "Original description from statement", "Account this transaction belongs to", "Spending category", "Transaction amount (negative = expense)", "Optional notes", "Budget entry this transaction realizes"]) }}
     <tbody id="txn-tbody">
         {% for txn in transactions %}
         {% include "partials/transaction_row.html" %}
@@ -20,6 +20,7 @@
         <tr class="total-row bg-gray-100 dark:bg-gray-700 border-t-2 border-gray-300 dark:border-gray-600 font-medium">
             <td class="{{ sheet.cell_class('', 'whitespace-nowrap') }}" colspan="5">{{ txn_count }} transaction{{ 's' if txn_count != 1 else '' }}</td>
             <td class="{{ sheet.cell_class('text-right tabular-nums', 'text-red-600 dark:text-red-400' if txn_total < 0 else 'text-green-600 dark:text-green-400') }}">{{ '-$' if txn_total < 0 else '+$' }}{{ txn_total|abs|money }}</td>
+            <td class="{{ sheet.cell_class() }}"></td>
             <td class="{{ sheet.cell_class() }}"></td>
         </tr>
         {% endif %}

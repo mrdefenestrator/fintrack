@@ -2,10 +2,11 @@ from calendar import monthrange
 from datetime import date
 from decimal import Decimal
 
-from sqlalchemy import Connection, extract, func, select
+from sqlalchemy import Connection, case, extract, func, or_, select
 from sqlalchemy.sql.functions import coalesce
 
 from fintrack.core.models import (
+    budget_entries,
     holdings,
     imports,
     merchant_cache,
@@ -15,7 +16,12 @@ from fintrack.core.models import (
 
 
 def _resolved_category():
+    # A linked budget entry pins the transaction's classification (issue #53):
+    # its category wins over the per-transaction correction and the merchant
+    # cache, so a transaction reads as the category of the planned line it
+    # realizes. An entry with no category (nullable) falls through.
     return coalesce(
+        budget_entries.c.category,
         transaction_corrections.c.category,
         merchant_cache.c.category,
         "Uncategorized",
@@ -46,7 +52,26 @@ def base_transaction_query(snapshot_id: int | None = None):
             _resolved_merchant(),
             _resolved_category(),
             transaction_corrections.c.id.label("correction_id"),
+            # True when the user fixed the category, merchant name, or notes. A
+            # correction row can exist only to hold a budget link, so the row's
+            # existence (correction_id) no longer means "corrected".
+            case(
+                (
+                    or_(
+                        transaction_corrections.c.category.isnot(None),
+                        transaction_corrections.c.merchant_name.isnot(None),
+                        transaction_corrections.c.notes.isnot(None),
+                    ),
+                    True,
+                ),
+                else_=False,
+            ).label("has_correction"),
             transaction_corrections.c.notes.label("notes"),
+            transaction_corrections.c.budget_entry_ref.label("budget_entry_ref"),
+            # The linked entry's own category, exposed separately so callers can
+            # tell when a row's category is inherited from its budget link (the
+            # Transactions sheet renders that cell read-only).
+            budget_entries.c.category.label("linked_category"),
             holdings.c.name.label("account_name"),
         )
         .select_from(
@@ -55,6 +80,10 @@ def base_transaction_query(snapshot_id: int | None = None):
         .outerjoin(
             transaction_corrections,
             transactions.c.id == transaction_corrections.c.transaction_id,
+        )
+        .outerjoin(
+            budget_entries,
+            transaction_corrections.c.budget_entry_ref == budget_entries.c.id,
         )
         .outerjoin(
             merchant_cache,

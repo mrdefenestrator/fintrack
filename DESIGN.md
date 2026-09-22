@@ -162,7 +162,14 @@ Single `MetaData` in `fintrack/core/models.py`.
 - **merchant_cache** — normalized merchant name → `category`, with `source`
   (`api` or `manual`).
 - **transaction_corrections** — at most one per transaction; overrides
-  `category`, `merchant_name`, and/or `notes` at read time.
+  `category`, `merchant_name`, and/or `notes` at read time, and carries the
+  optional `budget_entry_ref` linking the transaction to the budget entry it
+  realizes (see "Transaction–budget association"). The FK is `ON DELETE SET
+  NULL`, so deleting a budget entry unlinks its transactions rather than
+  deleting them; correction rows that held only that link are purged first, and
+  unlinking prunes a row left with every overlay column NULL. A row that exists
+  only for a link is not a "correction": the Transactions Status filter keys on
+  category/merchant/notes being set, not on the row existing.
 - **categories** — the shared taxonomy, seeded from `configs/categories.yaml`.
 - **budget_entries** — scheduled income/expenses: `kind`, `amount`,
   `recurrence` plus its parameters (`date`, `day_of_month`, `month`,
@@ -310,6 +317,67 @@ into the Trends page as Budget/mo and Delta columns alongside the existing
 per-category spending averages; selected estimates can be included in the
 projection engine as unscheduled spend.
 
+## Transaction–budget association
+
+Beyond the category-level rollup, an individual transaction can be linked to
+the specific budget entry it realizes (`fintrack/budget/reconcile.py`). The
+link is a nullable `budget_entry_ref` on the corrections overlay, so raw
+transactions stay immutable and the one-row-per-transaction shape enforces the
+cardinality: a transaction realizes **at most one** budget entry; an entry is
+realized by **many** transactions over time. The occurrence a transaction
+belongs to is derived from its date, not stored. Snapshot consistency (the
+transaction and entry share a snapshot) and kind (a deposit realizes an income
+entry, a charge an expense entry) are validated in the repository, since
+corrections carry no `snapshot_id` and the composite-FK guard used elsewhere is
+unavailable here.
+
+Three things build on the link:
+
+- **Suggestions** (`suggest_links`) — a purely local heuristic (no Claude API,
+  so the classifier privacy constraint is untouched) scores each unlinked
+  transaction against candidate entries on amount closeness (gated to ±25%),
+  category match, flow-account match, and date proximity to the expected
+  occurrence. Suggestions are always presented for confirmation, never applied
+  silently.
+- **Budget-vs-actual per entry** (`budget_actuals`) — for a month, each entry's
+  scheduled amount is compared to its actual and classified matched / over /
+  under / missing / upcoming / unlinked / inactive. Discrete entries (bills,
+  paychecks) are measured by their linked transactions, exposing price drift (a
+  linked charge that differs from the budgeted amount). A variable, continuous
+  entry that alone claims its category is measured by that category's month
+  total instead (nobody links every coffee to "Dining Out"). **Missing** means a
+  *tracked* entry — one linked in an earlier month — whose charge didn't show
+  up; an entry that has never been linked is **unlinked**, because absent links
+  say nothing about whether the money moved. Each result carries a tone
+  (good / bad / neutral) so over/under read correctly for both kinds: earning
+  over budget is good, spending over it is bad. Surfaced as a panel on the
+  Budget page and `fintrack transactions budget-actual`.
+- **Projection true-up** — in the current (partial) month, a budget flow already
+  realized as a linked transaction is reflected in the starting balance, so the
+  projection engine caps that month's remaining scheduled amount by what is
+  still unrealized instead of double-counting it (a more precise complement to
+  the day-based remainder and the category-exclusion estimator).
+
+Manual linking is available on the Transactions sheet (a Budget-entry picker per
+row) and via `fintrack transactions link/unlink`. The picker is filtered to the
+row's own kind (an expense links only to expense entries) and lists the row's
+category first, with other same-kind entries below as an escape hatch (linking
+to one re-pins the category), so it offers the few relevant lines rather than
+every budget entry.
+
+**A linked entry pins the transaction's category.** Category and the budget link
+are two axes — classification vs. which planned line a transaction realizes —
+but they nest, because every budget entry carries a category. So when a
+transaction is linked to an entry that has a category, that category becomes the
+transaction's resolved category, ahead of the per-transaction correction and the
+merchant cache: `coalesce(budget_entry.category, correction.category,
+merchant_cache.category, 'Uncategorized')` (`aggregations._resolved_category`).
+This makes linking the more specific statement of intent — it can't contradict
+the category, and Trends/estimator counts a linked transaction under the line it
+funds. The Transactions sheet renders the Category cell read-only (inherited)
+while a categorized link is in place; unlink to edit it directly. An entry with
+no category doesn't clobber the merchant classification.
+
 ## Web UI
 
 Single Flask app (`web/app.py`), port 5003 (`FINTRACK_PORT`), database from
@@ -417,6 +485,7 @@ accounts   list|add|edit|delete
 balance    set <account> <amount> [--date] | history <account>
 import     <files…> --account NAME
 staging    list | confirm <id> | reject <id>
+transactions link <txn> <entry> | unlink <txn> | suggest | budget-actual
 merchants  list | set
 categories list|add|edit|delete
 report     monthly | trends

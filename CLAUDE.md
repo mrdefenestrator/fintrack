@@ -84,6 +84,20 @@ degrades to a warning without it).
   numbers, or raw statement text. Do not widen the classifier prompt.
 - Raw imported data is immutable; user fixes live in the
   transaction_corrections overlay.
+- A transaction can be linked to the budget entry it realizes via
+  `budget_entry_ref` on the corrections overlay (one transaction → at most one
+  entry; one entry → many transactions; the occurrence is derived from the
+  transaction date). The link powers per-entry budget-vs-actual, missed-charge
+  and price-drift detection, and current-month projection true-up
+  (`fintrack/budget/reconcile.py`, DESIGN.md "Transaction–budget association").
+  Suggestions are a local heuristic only — **do not send transaction data to the
+  Claude API** for matching; the classifier privacy constraint still holds.
+  Cross-snapshot links are blocked in the repository, not the schema
+  (corrections carry no snapshot_id). A linked entry's category **pins** the
+  transaction's resolved category (`coalesce(budget_entry.category,
+  correction.category, merchant_cache.category, 'Uncategorized')`), so the
+  Category and Budget columns can't contradict; the Transactions sheet shows
+  that category read-only while linked.
 - Imports stage until confirmed; new merchants are classified at import time,
   and confirming records statement balances into balance_history.
 - Holdings are a supertype/subtype split: one slim `holdings` spine
@@ -148,3 +162,10 @@ degrades to a warning without it).
   edit-mode toggle is a submit button.
 - Killing `uv run` can orphan its python child — check for stale servers on
   port 5003 if e2e behavior looks cached.
+- The web UI loads Tailwind (play CDN) and Alpine from CDNs. Where those hosts
+  are blocked (e.g. restricted-network sandboxes), pages render unstyled and
+  interactive e2e tests fail with "… intercepts pointer events" — an
+  environment artifact, not an app bug. Check with
+  `curl -sS -o /dev/null -w '%{http_code}' https://cdn.tailwindcss.com`. To run
+  e2e anyway, serve a locally compiled Tailwind (`npx tailwindcss@3`) and Alpine
+  from npm via `page.route`.

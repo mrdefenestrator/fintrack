@@ -186,3 +186,125 @@ def test_row_endpoint_returns_display_row(client, seeded):
     body = resp.get_data(as_text=True)
     assert f'id="txn-row-{txn_id}"' in body
     assert "table-cell-input" not in body
+
+
+# ---- budget-entry linking (issue #53) ----------------------------------------
+
+
+def _add_budget_entry(conn, sid, **fields):
+    from fintrack.budget.repository import add_budget_entry, get_budget_entries
+
+    add_budget_entry(conn, sid, {"kind": "expense", "recurrence": "monthly", **fields})
+    return get_budget_entries(conn, sid)[-1]["_db_id"]
+
+
+def test_link_sets_budget_ref(client, seeded, db_engine):
+    sid, txn_id = seeded
+    with db_engine.connect() as conn:
+        ref = _add_budget_entry(conn, sid, description="Groceries", amount=42.50)
+    resp = client.post(
+        f"/s/ledger/transactions/{txn_id}/link",
+        data={"budget_entry_ref": str(ref)},
+    )
+    assert resp.status_code == 200
+    with db_engine.connect() as conn:
+        assert get_correction(conn, txn_id)["budget_entry_ref"] == ref
+    # Like a saved category, the row returns to display: a clickable cell
+    # showing the linked entry that reopens the editor.
+    body = resp.get_data(as_text=True)
+    assert "Groceries" in body
+    assert "/cell?field=budget" in body
+    assert 'name="budget_entry_ref"' not in body
+
+
+def test_link_empty_value_unlinks(client, seeded, db_engine):
+    sid, txn_id = seeded
+    with db_engine.connect() as conn:
+        ref = _add_budget_entry(conn, sid, description="Groceries", amount=42.50)
+    client.post(
+        f"/s/ledger/transactions/{txn_id}/link", data={"budget_entry_ref": str(ref)}
+    )
+    resp = client.post(
+        f"/s/ledger/transactions/{txn_id}/link", data={"budget_entry_ref": ""}
+    )
+    assert resp.status_code == 200
+    with db_engine.connect() as conn:
+        # An overlay row that existed only for the link is pruned.
+        assert get_correction(conn, txn_id) is None
+
+
+def test_link_rejects_cross_snapshot_entry(client, seeded, db_engine):
+    _, txn_id = seeded
+    with db_engine.connect() as conn:
+        from fintrack.snapshots.repository import create_snapshot
+
+        other = create_snapshot(conn, "other")
+        other_ref = _add_budget_entry(conn, other, description="Rent", amount=100)
+    resp = client.post(
+        f"/s/ledger/transactions/{txn_id}/link",
+        data={"budget_entry_ref": str(other_ref)},
+    )
+    assert resp.status_code == 422
+
+
+def test_transactions_index_has_budget_column(client, seeded):
+    resp = client.get("/s/ledger/transactions?year=2024&month=1")
+    assert resp.status_code == 200
+    assert "Budget" in resp.get_data(as_text=True)
+
+
+def test_linked_row_shows_category_inherited_and_readonly(client, seeded, db_engine):
+    """When a transaction is linked, its category is inherited from the entry
+    and rendered read-only (no inline-edit affordance) — issue #53 option A."""
+    sid, txn_id = seeded
+    with db_engine.connect() as conn:
+        # Entry category ("Housing") differs from the merchant's ("Groceries").
+        ref = _add_budget_entry(
+            conn, sid, description="Rent", amount=42.50, category="Housing"
+        )
+    client.post(
+        f"/s/ledger/transactions/{txn_id}/link", data={"budget_entry_ref": str(ref)}
+    )
+    resp = client.get("/s/ledger/transactions?year=2024&month=1&edit=1")
+    body = resp.get_data(as_text=True)
+    assert "Housing" in body  # inherited from the entry, not "Groceries"
+    assert "inherited from the linked budget entry" in body
+    # The read-only inherited cell must not offer the category inline editor.
+    assert "/cell?field=category" not in body
+
+
+def test_link_rejects_kind_mismatch(client, seeded, db_engine):
+    # The seeded transaction is a -$42.50 charge; an income entry can't take it.
+    sid, txn_id = seeded
+    with db_engine.connect() as conn:
+        ref = _add_budget_entry(
+            conn, sid, kind="income", description="Salary", amount=42.50
+        )
+    resp = client.post(
+        f"/s/ledger/transactions/{txn_id}/link", data={"budget_entry_ref": str(ref)}
+    )
+    assert resp.status_code == 422
+    with db_engine.connect() as conn:
+        assert get_correction(conn, txn_id) is None
+
+
+def test_budget_cell_uses_category_style_editor(client, seeded, db_engine):
+    """The Budget cell edits like Category: a role=button display cell that
+    opens the shared table-cell-select editor, filtered to the row's kind."""
+    sid, txn_id = seeded
+    with db_engine.connect() as conn:
+        _add_budget_entry(conn, sid, description="Groceries", amount=42.50)
+        _add_budget_entry(conn, sid, kind="income", description="Salary", amount=100)
+    page = client.get("/s/ledger/transactions?year=2024&month=1&edit=1")
+    display = page.get_data(as_text=True)
+    assert f'hx-get="/s/ledger/transactions/{txn_id}/cell?field=budget"' in display
+    assert 'name="budget_entry_ref"' not in display  # no always-on dropdown
+
+    editor = client.get(f"/s/ledger/transactions/{txn_id}/cell?field=budget").get_data(
+        as_text=True
+    )
+    assert 'class="cell-editing' in editor
+    assert '<select name="budget_entry_ref" class="table-cell-select' in editor
+    assert f'hx-get="/s/ledger/transactions/{txn_id}/row"' in editor  # blur reverts
+    assert "Groceries" in editor
+    assert "Salary" not in editor  # a charge can't realize an income entry

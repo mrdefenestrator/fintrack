@@ -47,4 +47,7 @@
     </tbody>
 </table>
 </div>
+{# Read-only review panel: shown in view (lock) mode, hidden while editing the
+   budget definitions so the editing surface stays uncluttered. #}
+{% if not edit_mode %}{% include "partials/budget_actuals_panel.html" %}{% endif %}
 {% endblock %}

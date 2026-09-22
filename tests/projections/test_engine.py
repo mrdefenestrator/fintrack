@@ -301,3 +301,69 @@ def test_months_clamped(conn, snapshot_id):
     _add(conn, snapshot_id)
     assert len(project(conn, snapshot_id, months=0, today=TODAY)["months"]) == 1
     assert len(project(conn, snapshot_id, months=999, today=TODAY)["months"]) == 60
+
+
+def _link_txn(conn, snapshot_id, account_id, entry_ref, txn_date, amount):
+    import uuid
+
+    from sqlalchemy import insert, select
+
+    from fintrack.core.models import holdings, imports, transactions
+    from fintrack.ledger.repository.corrections import set_budget_link
+
+    group = conn.execute(
+        select(holdings.c.group_key).where(holdings.c.id == account_id)
+    ).scalar()
+    import_id = conn.execute(
+        insert(imports).values(
+            account_id=account_id,
+            holding_group=group,
+            filename="s.ofx",
+            file_hash=uuid.uuid4().hex,
+            status="confirmed",
+        )
+    ).inserted_primary_key[0]
+    txn_id = conn.execute(
+        insert(transactions).values(
+            import_id=import_id,
+            account_id=account_id,
+            date=txn_date,
+            amount=amount,
+            raw_description="x",
+            normalized_merchant="x",
+            fingerprint=uuid.uuid4().hex,
+        )
+    ).inserted_primary_key[0]
+    conn.commit()
+    set_budget_link(conn, txn_id, entry_ref)
+
+
+def test_linked_transaction_trues_up_current_month(conn, snapshot_id):
+    """A budget expense already realized (linked) this month is reflected in the
+    starting balance, so the current month must not project it again (issue
+    #53). A monthly entry with no dayOfMonth would otherwise subtract in full."""
+    from fintrack.budget.repository import get_budget_entries
+
+    checking = _add(conn, snapshot_id, balance=1000)
+    add_budget_entry(
+        conn,
+        snapshot_id,
+        {
+            "kind": "expense",
+            "description": "rent",
+            "amount": 100,
+            "recurrence": "monthly",
+            "autoAccountRef": checking,
+        },
+    )
+    entry_ref = get_budget_entries(conn, snapshot_id)[-1]["_db_id"]
+
+    # Baseline: no link -> month 0 subtracts the full 100.
+    baseline = project(conn, snapshot_id, months=3, today=TODAY)
+    assert _series(baseline, checking) == [Decimal(900), Decimal(800), Decimal(700)]
+
+    # Linked July transaction -> month 0 is not double-counted; later months
+    # still subtract the scheduled amount.
+    _link_txn(conn, snapshot_id, checking, entry_ref, date(2026, 7, 5), "-100.00")
+    result = project(conn, snapshot_id, months=3, today=TODAY)
+    assert _series(result, checking) == [Decimal(1000), Decimal(900), Decimal(800)]

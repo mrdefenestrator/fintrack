@@ -55,6 +55,31 @@ def _budget_choices(conn, snapshot_id):
     return options, labels
 
 
+def _render_row(conn, txn_id, *, editing_field=None):
+    """Render one edit-mode transaction row, or a 404 when it doesn't exist.
+
+    Shared by the cell/row/update/link routes, which all swap a single row back
+    into the Transactions sheet. ``editing_field`` opens that cell's editor."""
+    txn = _load_txn(conn, txn_id)
+    if not txn:
+        return "", 404
+    budget_options, budget_labels = _budget_choices(conn, g.snapshot_id)
+    kwargs = {}
+    if editing_field is not None:
+        kwargs = {
+            "categories": get_category_names(conn),
+            "editing_field": editing_field,
+        }
+    return render_template(
+        "partials/transaction_row.html",
+        txn=txn,
+        edit_mode=True,
+        budget_options=budget_options,
+        budget_labels=budget_labels,
+        **kwargs,
+    )
+
+
 @bp.route("/transactions")
 def index():
     edit_mode = request.args.get("edit") == "1"
@@ -163,21 +188,8 @@ def cell_edit(txn_id):
     field = request.args.get("field", "category")
     engine = current_app.config["engine"]
     with engine.connect() as conn:
-        categories = get_category_names(conn)
-        txn = _load_txn(conn, txn_id)
-        budget_options, budget_labels = _budget_choices(conn, g.snapshot_id)
-    if not txn:
-        return "", 404
-    kwargs = {
-        "txn": txn,
-        "categories": categories,
-        "edit_mode": True,
-        "budget_options": budget_options,
-        "budget_labels": budget_labels,
-    }
-    if field in _TXN_CELL_EDITORS:
-        kwargs["editing_field"] = field
-    return render_template("partials/transaction_row.html", **kwargs)
+        editing_field = field if field in _TXN_CELL_EDITORS else None
+        return _render_row(conn, txn_id, editing_field=editing_field)
 
 
 @bp.route("/transactions/<int:txn_id>/row")
@@ -185,17 +197,7 @@ def row(txn_id):
     """Display (non-editing) transaction row — used to revert an open editor."""
     engine = current_app.config["engine"]
     with engine.connect() as conn:
-        txn = _load_txn(conn, txn_id)
-        budget_options, budget_labels = _budget_choices(conn, g.snapshot_id)
-    if not txn:
-        return "", 404
-    return render_template(
-        "partials/transaction_row.html",
-        txn=txn,
-        edit_mode=True,
-        budget_options=budget_options,
-        budget_labels=budget_labels,
-    )
+        return _render_row(conn, txn_id)
 
 
 @bp.route("/transactions/<int:txn_id>/update", methods=["POST"])
@@ -230,18 +232,7 @@ def update(txn_id):
             return "", 204, {"HX-Redirect": current_url}
 
         apply_transaction_correction(conn, txn_id, **{field: value})
-        txn = _load_txn(conn, txn_id)
-        budget_options, budget_labels = _budget_choices(conn, g.snapshot_id)
-
-    if not txn:
-        return "", 404
-    return render_template(
-        "partials/transaction_row.html",
-        txn=txn,
-        edit_mode=True,
-        budget_options=budget_options,
-        budget_labels=budget_labels,
-    )
+        return _render_row(conn, txn_id)
 
 
 @bp.route("/transactions/<int:txn_id>/link", methods=["POST"])
@@ -260,14 +251,4 @@ def link(txn_id):
                 return "", 422
         else:
             reconcile.unlink_transaction(conn, txn_id)
-        txn = _load_txn(conn, txn_id)
-        budget_options, budget_labels = _budget_choices(conn, g.snapshot_id)
-    if not txn:
-        return "", 404
-    return render_template(
-        "partials/transaction_row.html",
-        txn=txn,
-        edit_mode=True,
-        budget_options=budget_options,
-        budget_labels=budget_labels,
-    )
+        return _render_row(conn, txn_id)

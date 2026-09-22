@@ -119,3 +119,39 @@ def get_transactions(
 
     rows = conn.execute(stmt).fetchall()
     return [dict(row._mapping) for row in rows]
+
+
+def get_budget_link_date_ranges(
+    conn: Connection, snapshot_id: int
+) -> dict[int, tuple[date, date]]:
+    """First and last linked-transaction date per budget entry in a snapshot.
+
+    Keyed by ``budget_entry_ref``; entries with no linked transactions are
+    absent. Counts confirmed imports only, like ``base_transaction_query``.
+    """
+    from fintrack.core.models import (
+        holdings,
+        imports,
+        transaction_corrections,
+        transactions,
+    )
+
+    ref = transaction_corrections.c.budget_entry_ref
+    stmt = (
+        select(ref, func.min(transactions.c.date), func.max(transactions.c.date))
+        .select_from(
+            transactions.join(
+                transaction_corrections,
+                transactions.c.id == transaction_corrections.c.transaction_id,
+            )
+            .join(imports, transactions.c.import_id == imports.c.id)
+            .join(holdings, transactions.c.account_id == holdings.c.id)
+        )
+        .where(
+            ref.isnot(None),
+            imports.c.status == "confirmed",
+            holdings.c.snapshot_id == snapshot_id,
+        )
+        .group_by(ref)
+    )
+    return {row[0]: (row[1], row[2]) for row in conn.execute(stmt)}

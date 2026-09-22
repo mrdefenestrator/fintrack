@@ -162,3 +162,10 @@ degrades to a warning without it).
   edit-mode toggle is a submit button.
 - Killing `uv run` can orphan its python child — check for stale servers on
   port 5003 if e2e behavior looks cached.
+- The web UI loads Tailwind (play CDN) and Alpine from CDNs. Where those hosts
+  are blocked (e.g. restricted-network sandboxes), pages render unstyled and
+  interactive e2e tests fail with "… intercepts pointer events" — an
+  environment artifact, not an app bug. Check with
+  `curl -sS -o /dev/null -w '%{http_code}' https://cdn.tailwindcss.com`. To run
+  e2e anyway, serve a locally compiled Tailwind (`npx tailwindcss@3`) and Alpine
+  from npm via `page.route`.

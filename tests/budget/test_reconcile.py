@@ -5,6 +5,7 @@ from datetime import date
 from decimal import Decimal
 
 import pytest
+from sqlalchemy import update
 
 from fintrack.budget.reconcile import (
     KindMismatch,
@@ -16,11 +17,15 @@ from fintrack.budget.reconcile import (
     unlink_transaction,
 )
 from fintrack.budget.repository import delete_budget_entry, get_budget_entries
+from fintrack.core.models import imports
 from fintrack.ledger.repository.corrections import (
     apply_transaction_correction,
     get_correction,
 )
-from fintrack.ledger.repository.transactions import get_transactions
+from fintrack.ledger.repository.transactions import (
+    get_budget_link_date_ranges,
+    get_transactions,
+)
 from fintrack.snapshots.repository import create_snapshot
 
 MAY = date(2026, 5, 15)
@@ -379,3 +384,62 @@ def make_entry_of_kind(
     if continuous:
         fields["continuous"] = True
     return make_entry(conn, snapshot_id, **fields)
+
+
+# --------------------------------------------------------------------------
+# Link date ranges + tolerance
+# --------------------------------------------------------------------------
+
+
+def test_link_date_ranges_min_max_per_entry(conn, snapshot_id, seeder):
+    rent = make_rent_entry(conn, snapshot_id)
+    unlinked = make_expense_entry(conn, snapshot_id, amount=10, category="Misc")
+    for d in (date(2026, 3, 1), date(2026, 5, 1), date(2026, 4, 1)):
+        txn_id = seeder.add(d, "-2000.00", "Landlord", "Housing")
+        link_transaction(conn, snapshot_id, txn_id, rent)
+
+    ranges = get_budget_link_date_ranges(conn, snapshot_id)
+    assert ranges == {rent: (date(2026, 3, 1), date(2026, 5, 1))}
+    assert unlinked not in ranges
+    a = _by_ref(budget_actuals(conn, snapshot_id, year=2026, month=5), rent)
+    assert a.last_linked == date(2026, 5, 1)
+
+
+def test_link_date_ranges_scoped_to_snapshot(conn, snapshot_id, seeder):
+    rent = make_rent_entry(conn, snapshot_id)
+    txn_id = seeder.add(MAY, "-2000.00", "Landlord", "Housing")
+    link_transaction(conn, snapshot_id, txn_id, rent)
+    other = create_snapshot(conn, "other")
+    assert get_budget_link_date_ranges(conn, other) == {}
+
+
+def test_link_date_ranges_ignore_unconfirmed_imports(conn, snapshot_id, seeder):
+    rent = make_rent_entry(conn, snapshot_id)
+    txn_id = seeder.add(MAY, "-2000.00", "Landlord", "Housing")
+    link_transaction(conn, snapshot_id, txn_id, rent)
+    conn.execute(
+        update(imports).where(imports.c.id == seeder.import_id).values(status="staging")
+    )
+    conn.commit()
+    assert get_budget_link_date_ranges(conn, snapshot_id) == {}
+
+
+@pytest.mark.parametrize(
+    ("amount", "status", "drift_flagged"),
+    [
+        ("-2000.01", "matched", False),  # within a cent: equal
+        ("-2000.02", "over", True),  # past a cent: over, and drift
+        ("-1999.98", "under", True),
+    ],
+)
+def test_one_tolerance_for_match_and_drift(
+    conn, snapshot_id, seeder, amount, status, drift_flagged
+):
+    rent = make_rent_entry(conn, snapshot_id)
+    txn_id = seeder.add(date(2026, 5, 1), amount, "Landlord", "Housing")
+    (s,) = suggest_links(conn, snapshot_id)
+    assert ("price drift" in s.reasons) is drift_flagged
+
+    link_transaction(conn, snapshot_id, txn_id, rent)
+    a = _by_ref(budget_actuals(conn, snapshot_id, year=2026, month=5), rent)
+    assert a.status == status

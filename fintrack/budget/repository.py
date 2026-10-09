@@ -56,6 +56,23 @@ def get_budget_entries(conn: Connection, snapshot_id: int) -> list[BudgetEntry]:
     return [_row_to_budget_entry(r) for r in rows]
 
 
+def get_budget_entry(
+    conn: Connection, snapshot_id: int, db_id: int
+) -> BudgetEntry | None:
+    """One budget entry by row id, or None when it isn't in ``snapshot_id``."""
+    row = (
+        conn.execute(
+            select(budget_entries).where(
+                budget_entries.c.id == db_id,
+                budget_entries.c.snapshot_id == snapshot_id,
+            )
+        )
+        .mappings()
+        .first()
+    )
+    return _row_to_budget_entry(row) if row else None
+
+
 def budgeted_monthly_by_category(
     budget: list[dict],
 ) -> tuple[dict[str, Decimal], dict[str, str]]:

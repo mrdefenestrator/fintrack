@@ -30,17 +30,22 @@ from typing import Any
 from sqlalchemy import Connection, select
 
 from fintrack.budget.recurrence import budget_entry_in_month, money
-from fintrack.budget.repository import get_budget_entries
+from fintrack.budget.repository import get_budget_entries, get_budget_entry
 from fintrack.core.models import holdings, transactions
 from fintrack.ledger.repository.aggregations import get_monthly_category_totals
 from fintrack.ledger.repository.corrections import set_budget_link
-from fintrack.ledger.repository.transactions import get_transactions
+from fintrack.ledger.repository.transactions import (
+    get_budget_link_date_ranges,
+    get_transactions,
+)
 
 _ZERO = Decimal(0)
-# Actual-vs-expected classification is deliberately tight: the whole point of a
-# per-entry (not per-category) link is to catch small drifts a category rollup
-# hides, so anything past a cent counts as over/under.
-_MATCH_TOLERANCE = Decimal("0.01")
+# How far an amount may differ from its budgeted value and still count as equal,
+# for both over/under classification and suggester price-drift flags. It is
+# deliberately tight: the whole point of a per-entry (not per-category) link is
+# to catch small drifts a category rollup hides, so anything past a cent counts.
+# A cent (not half a cent) also absorbs sub-cent noise in prorated expecteds.
+_TOLERANCE = Decimal("0.01")
 
 
 class SnapshotMismatch(ValueError):
@@ -94,14 +99,7 @@ def link_transaction(
         raise SnapshotMismatch(
             f"Transaction {transaction_id} is in snapshot {txn_snap}, not {snapshot_id}"
         )
-    entry = next(
-        (
-            e
-            for e in get_budget_entries(conn, snapshot_id)
-            if e["_db_id"] == budget_entry_ref
-        ),
-        None,
-    )
+    entry = get_budget_entry(conn, snapshot_id, budget_entry_ref)
     if entry is None:
         raise SnapshotMismatch(
             f"Budget entry {budget_entry_ref} is not in snapshot {snapshot_id}"
@@ -173,7 +171,6 @@ _W_DATE = Decimal("0.10")
 # category and account agree — this gates candidacy so a $5 coffee never
 # matches $2000 rent. Within 25% it still scores (and flags drift).
 _AMOUNT_GATE = Decimal("0.25")
-_DRIFT_THRESHOLD = Decimal("0.005")
 _SUGGESTION_FLOOR = 0.35
 
 
@@ -258,7 +255,7 @@ def _score_pair(txn: dict[str, Any], entry: dict[str, Any]) -> Suggestion | None
         + _W_DATE * date_c
     )
     drift = txn_abs - entry_amount
-    if abs(drift) > _DRIFT_THRESHOLD:
+    if abs(drift) > _TOLERANCE:
         reasons.append("price drift")
     return Suggestion(
         transaction=txn,
@@ -342,9 +339,9 @@ class EntryActual:
 
 
 def _classify_delta(delta: Decimal) -> str:
-    if delta > _MATCH_TOLERANCE:
+    if delta > _TOLERANCE:
         return "over"
-    if delta < -_MATCH_TOLERANCE:
+    if delta < -_TOLERANCE:
         return "under"
     return "matched"
 
@@ -402,7 +399,7 @@ def budget_actuals(
     today = today or datetime.now().astimezone().date()
     entries = get_budget_entries(conn, snapshot_id)
     month_txns = get_transactions(conn, year=year, month=month, snapshot_id=snapshot_id)
-    all_txns = get_transactions(conn, snapshot_id=snapshot_id)
+    link_ranges = get_budget_link_date_ranges(conn, snapshot_id)
     category_totals = {
         row["category"]: row
         for row in get_monthly_category_totals(
@@ -416,14 +413,6 @@ def budget_actuals(
         ref = t.get("budget_entry_ref")
         if ref is not None:
             by_entry_month.setdefault(ref, []).append(t)
-    first_linked: dict[int, date] = {}
-    last_linked: dict[int, date] = {}
-    for t in all_txns:
-        ref = t.get("budget_entry_ref")
-        if ref is not None:
-            d = t["date"]
-            first_linked[ref] = min(d, first_linked.get(ref, d))
-            last_linked[ref] = max(d, last_linked.get(ref, d))
     month_start = date(year, month, 1)
 
     results: list[EntryActual] = []
@@ -445,7 +434,7 @@ def budget_actuals(
             linked = by_entry_month.get(ref, [])
             count = len(linked)
             actual = abs(sum((money(t["amount"]) for t in linked), _ZERO))
-            tracked = ref in first_linked and first_linked[ref] < month_start
+            tracked = ref in link_ranges and link_ranges[ref][0] < month_start
             status = _classify_linked(
                 entry,
                 expected,
@@ -470,7 +459,7 @@ def budget_actuals(
                 delta=actual - expected,
                 count=count,
                 status=status,
-                last_linked=last_linked.get(ref),
+                last_linked=link_ranges[ref][1] if ref in link_ranges else None,
                 drift_amount=drift,
                 source=source,
             )

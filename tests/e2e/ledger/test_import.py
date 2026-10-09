@@ -5,7 +5,7 @@ They run in document order and progressively build state:
 
   1–3   Empty-DB / account-panel structure
   4     Inline account creation via HTMX form
-  5–6   Dropzone and "no pending" empty state
+  5–6   Dropzone (tap opens the picker) and "no pending" empty state
   7–9   File upload → staging review
   10    Confirm clears staging
   11–12 Second upload → reject removes from staging
@@ -79,6 +79,20 @@ def test_import_dropzone_is_visible(page, import_server):
     """Upload dropzone is visible after an account exists."""
     page.goto(f"{import_server}/s/ledger/import")
     assert page.locator("#dropzone").is_visible()
+
+
+def test_import_dropzone_tap_hits_file_input(page, import_server):
+    """A tap anywhere on the dropzone lands on the (transparent) file input
+    itself — not on a script that calls .click() on a hidden input, which iOS
+    WebKit hosts ignore — and opens the file chooser."""
+    page.goto(f"{import_server}/s/ledger/import")
+    box = page.locator("#dropzone").bounding_box()
+    center = (box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+    hit = page.evaluate("([x, y]) => document.elementFromPoint(x, y).id", list(center))
+    assert hit == "file-input"
+    with page.expect_file_chooser() as fc:
+        page.mouse.click(*center)
+    assert fc.value.is_multiple()
 
 
 def test_import_no_pending_imports_message(page, import_server):

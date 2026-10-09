@@ -125,10 +125,6 @@ function initDropzone() {
     if (dropzone.dataset.initialized) return;
     dropzone.dataset.initialized = 'true';
 
-    dropzone.addEventListener('click', (e) => {
-        if (e.target !== fileInput) fileInput.click();
-    });
-
     dropzone.addEventListener('dragover', (e) => {
         e.preventDefault();
         dropzone.classList.add('border-blue-400', 'bg-blue-50');

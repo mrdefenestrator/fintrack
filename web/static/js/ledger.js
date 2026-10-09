@@ -36,14 +36,55 @@ function clearRadio(name) {
     }
 }
 
+// In-memory copies of the files picked in the import dropzone. iPadOS Safari
+// hands the page File objects backed by the Files app / iCloud that can become
+// unreadable after their first read (detect-account) or after a short while,
+// so the later upload went out without its file body and the server answered
+// 400 (#74). Reading the bytes once, at pick time, and sending these copies
+// sidesteps that. `input` ties the copies to the current #file-input, since
+// htmx swaps replace it.
+let importFiles = { input: null, files: null, reading: false };
+
+function showImportError(message) {
+    const box = document.getElementById('import-error');
+    if (!box) return;
+    box.textContent = message || '';
+    box.classList.toggle('hidden', !message);
+}
+
 function updateImportButton() {
     const btn = document.getElementById('import-submit');
     if (!btn) return;
     const fileInput = document.getElementById('file-input');
     const accountSelect = document.querySelector('select[name="account_id"]');
-    const hasFile = fileInput && fileInput.files.length > 0;
+    const hasFile = !!fileInput && importFiles.input === fileInput &&
+        !importFiles.reading && !!importFiles.files && importFiles.files.length > 0;
     const hasAccount = accountSelect && accountSelect.value !== '';
     btn.disabled = !(hasFile && hasAccount);
+}
+
+function bufferImportFiles(fileInput, fileList) {
+    const picked = Array.from(fileList);
+    importFiles = { input: fileInput, files: null, reading: picked.length > 0 };
+    showImportError('');
+    updateImportButton();
+    if (picked.length === 0) return;
+    Promise.all(picked.map(f => f.arrayBuffer().then(buf =>
+        new File([buf], f.name, { type: f.type, lastModified: f.lastModified }))))
+        .then(copies => {
+            if (importFiles.input !== fileInput) return;  // superseded
+            importFiles = { input: fileInput, files: copies, reading: false };
+            updateImportButton();
+            detectAccount(copies[0]);
+        })
+        .catch(err => {
+            if (importFiles.input !== fileInput) return;
+            console.error('Could not read selected file(s):', err);
+            importFiles = { input: fileInput, files: null, reading: false };
+            updateImportButton();
+            showImportError("Couldn't read the selected file. Please select it again " +
+                '(if it lives in iCloud Drive, make sure it has finished downloading).');
+        });
 }
 
 function detectAccount(file) {
@@ -79,8 +120,14 @@ function initDropzone() {
     const fileList = document.getElementById('file-list');
 
     if (!dropzone || !fileInput) return;
+    // afterSettle fires for every htmx swap (e.g. each staging batch's review
+    // load), so only wire a given dropzone once.
+    if (dropzone.dataset.initialized) return;
+    dropzone.dataset.initialized = 'true';
 
-    dropzone.addEventListener('click', () => fileInput.click());
+    dropzone.addEventListener('click', (e) => {
+        if (e.target !== fileInput) fileInput.click();
+    });
 
     dropzone.addEventListener('dragover', (e) => {
         e.preventDefault();
@@ -96,17 +143,12 @@ function initDropzone() {
         dropzone.classList.remove('border-blue-400', 'bg-blue-50');
         fileInput.files = e.dataTransfer.files;
         updateFileList();
-        if (fileInput.files.length > 0) {
-            detectAccount(fileInput.files[0]);
-        }
+        bufferImportFiles(fileInput, fileInput.files);
     });
 
     fileInput.addEventListener('change', function () {
         updateFileList();
-        updateImportButton();
-        if (fileInput.files.length > 0) {
-            detectAccount(fileInput.files[0]);
-        }
+        bufferImportFiles(fileInput, fileInput.files);
     });
 
     updateImportButton();
@@ -131,6 +173,37 @@ document.addEventListener('htmx:afterSettle', updateImportButton);
 // Account select may be replaced by HTMX — use delegation
 document.addEventListener('change', function (e) {
     if (e.target.name === 'account_id') updateImportButton();
+});
+
+function isImportUpload(evt) {
+    return evt.detail.requestConfig
+        ? evt.detail.requestConfig.path.endsWith('/import/upload')
+        : (evt.detail.path || '').endsWith('/import/upload');
+}
+
+// Send the in-memory copies instead of the live input's File objects.
+document.addEventListener('htmx:configRequest', function (e) {
+    if (!isImportUpload(e)) return;
+    if (importFiles.input !== document.getElementById('file-input') || !importFiles.files) return;
+    e.detail.formData.delete('files');
+    importFiles.files.forEach(f => e.detail.formData.append('files', f));
+    showImportError('');
+});
+
+// htmx drops 4xx/5xx bodies and network failures silently; tell the user.
+// (422s carry a re-rendered page with its own message and are swapped in by
+// base.html, so they're skipped here.)
+document.addEventListener('htmx:responseError', function (e) {
+    if (!isImportUpload(e)) return;
+    const status = e.detail.xhr.status;
+    if (status === 422) return;
+    showImportError(status === 413
+        ? 'Import failed: the file is too large.'
+        : `Import failed (server error ${status}). Please try again.`);
+});
+document.addEventListener('htmx:sendError', function (e) {
+    if (!isImportUpload(e)) return;
+    showImportError('Import failed: could not reach the server. Check your connection and try again.');
 });
 
 function toggleTrendDetail(rowId, category, period, end) {

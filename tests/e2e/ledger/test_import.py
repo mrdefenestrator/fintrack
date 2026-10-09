@@ -11,6 +11,7 @@ They run in document order and progressively build state:
   11–12 Second upload → reject removes from staging
   13    Duplicate-file detection
   14    OFX detect-account pre-fills institution field
+  15–16 Upload failures are surfaced in the UI (#74)
 """
 
 import pytest
@@ -240,3 +241,45 @@ def test_import_ofx_detect_account_prefills_institution(
     page.wait_for_selector("#account-panel")
     panel_html = page.locator("#account-panel").inner_html()
     assert "Chase" in panel_html
+
+
+# ---------------------------------------------------------------------------
+# 15–16  Upload failures are surfaced (#74)
+# ---------------------------------------------------------------------------
+
+
+def _select_file_and_account(page, import_server, ofx_file):
+    page.goto(f"{import_server}/s/ledger/import")
+    with page.expect_response(lambda r: "detect-account" in r.url):
+        page.set_input_files("#file-input", str(ofx_file))
+    page.select_option("select[name='account_id']", label="Test Bank Test Checking")
+
+
+def test_import_upload_server_error_is_shown(page, import_server, ofx_file):
+    """A non-422 error response shows a message instead of failing silently,
+    and the request still carried the (in-memory copied) file body."""
+    bodies = []
+
+    def fail(route):
+        bodies.append(route.request.post_data_buffer or b"")
+        route.fulfill(status=500, body="boom")
+
+    page.route("**/import/upload", fail)
+    _select_file_and_account(page, import_server, ofx_file)
+    page.click("#import-submit")
+
+    error = page.locator("#import-error")
+    error.wait_for(state="visible")
+    assert "server error 500" in error.inner_text()
+    assert b'filename="' + ofx_file.name.encode() + b'"' in bodies[0]
+    assert b"<OFX>" in bodies[0]
+
+
+def test_import_upload_network_error_is_shown(page, import_server, ofx_file):
+    page.route("**/import/upload", lambda route: route.abort())
+    _select_file_and_account(page, import_server, ofx_file)
+    page.click("#import-submit")
+
+    error = page.locator("#import-error")
+    error.wait_for(state="visible")
+    assert "could not reach the server" in error.inner_text()

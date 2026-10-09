@@ -35,6 +35,9 @@
             </button>
         </form>
 
+        <div id="import-error" role="alert"
+             class="{{ '' if upload_error else 'hidden' }} mt-3 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 rounded-lg text-sm text-red-700 dark:text-red-300">{{ upload_error or '' }}</div>
+
         {% if results %}
         <div class="mt-4 space-y-2">
             {% for r in results %}

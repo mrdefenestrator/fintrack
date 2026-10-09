@@ -95,6 +95,26 @@ def test_import_dropzone_tap_hits_file_input(page, import_server):
     assert fc.value.is_multiple()
 
 
+def test_import_file_input_has_no_accept_filter(page, import_server):
+    """iOS greys out .ofx/.qfx files when the input has an `accept` list, so
+    the input must not restrict types (#74)."""
+    page.goto(f"{import_server}/s/ledger/import")
+    assert page.get_attribute("#file-input", "accept") is None
+
+
+def test_import_unsupported_file_type_is_rejected(page, import_server, tmp_path):
+    """Without an `accept` filter, a non-statement file is caught client-side:
+    an error is shown and Import stays disabled."""
+    bad = tmp_path / "notes.txt"
+    bad.write_text("hello")
+    page.goto(f"{import_server}/s/ledger/import")
+    page.set_input_files("#file-input", str(bad))
+    error = page.locator("#import-error")
+    error.wait_for(state="visible")
+    assert "Unsupported file type: notes.txt" in error.inner_text()
+    assert page.locator("#import-submit").is_disabled()
+
+
 def test_import_no_pending_imports_message(page, import_server):
     """Before any uploads the staging column shows 'No pending imports'."""
     page.goto(f"{import_server}/s/ledger/import")

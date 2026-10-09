@@ -63,8 +63,21 @@ function updateImportButton() {
     btn.disabled = !(hasFile && hasAccount);
 }
 
+// The file input has no `accept` filter (iOS greys out .ofx/.qfx with one),
+// so unsupported picks are caught here instead.
+const IMPORT_EXTENSIONS = ['.ofx', '.qfx', '.csv'];
+
 function bufferImportFiles(fileInput, fileList) {
     const picked = Array.from(fileList);
+    const unsupported = picked.filter(f =>
+        !IMPORT_EXTENSIONS.some(ext => f.name.toLowerCase().endsWith(ext)));
+    if (unsupported.length > 0) {
+        importFiles = { input: fileInput, files: null, reading: false };
+        updateImportButton();
+        showImportError('Unsupported file type: ' +
+            unsupported.map(f => f.name).join(', ') + '. Choose OFX, QFX, or CSV files.');
+        return;
+    }
     importFiles = { input: fileInput, files: null, reading: picked.length > 0 };
     showImportError('');
     updateImportButton();

@@ -14,7 +14,10 @@
                 <div id="dropzone"
                      class="relative border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-8 text-center
                             hover:border-blue-400 dark:hover:border-blue-500 transition-colors cursor-pointer bg-white dark:bg-gray-800">
-                    <input type="file" name="files" multiple accept=".ofx,.qfx,.csv"
+                    {# No `accept` filter: iOS maps accepted extensions to system
+                       file types and has none for .ofx/.qfx, so it greys those
+                       files out in the picker. ledger.js checks the extension. #}
+                    <input type="file" name="files" multiple
                            class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" id="file-input"
                            aria-label="Select statement files">
                     <p class="text-gray-500 dark:text-gray-400">Drag & drop files here, or tap to select</p>

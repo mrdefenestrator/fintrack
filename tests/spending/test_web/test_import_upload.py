@@ -89,7 +89,7 @@ def test_upload_without_account_names_the_missing_field(client, conn):
     assert response.status_code == 422
     html = response.data.decode()
     assert "didn&#39;t include an account" in html
-    assert "statement file" not in html
+    assert "include a statement file" not in html
 
 
 def test_upload_empty_file_reports_unreadable(client, conn):

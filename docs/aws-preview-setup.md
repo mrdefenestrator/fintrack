@@ -132,7 +132,10 @@ aws iam put-role-policy --role-name fintrack-pr-preview-deployer \
 ## 4. Create the ECR repository and lifecycle policy
 
 The lifecycle policy auto-expires untagged images after 1 day and keeps at
-most 10 tagged images, preventing unbounded storage growth:
+most 10 PR images, preventing unbounded storage growth. Rule 2 matches only
+`pr-*` tags so it never expires `buildcache`, the shared Docker layer cache
+the preview workflow reads and writes (superseded cache manifests become
+untagged and fall to rule 1):
 
 ```bash
 aws ecr create-repository --repository-name fintrack-preview --region <REGION>
@@ -144,8 +147,8 @@ aws ecr put-lifecycle-policy --repository-name fintrack-preview \
         "selection": { "tagStatus": "untagged", "countType": "sinceImagePushed",
           "countUnit": "days", "countNumber": 1 },
         "action": { "type": "expire" } },
-      { "rulePriority": 2, "description": "Keep only last 10 tagged images",
-        "selection": { "tagStatus": "tagged", "tagPatternList": ["*"],
+      { "rulePriority": 2, "description": "Keep only last 10 PR images",
+        "selection": { "tagStatus": "tagged", "tagPatternList": ["pr-*"],
           "countType": "imageCountMoreThan", "countNumber": 10 },
         "action": { "type": "expire" } }
     ]

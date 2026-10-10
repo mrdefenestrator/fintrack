@@ -23,10 +23,6 @@
     <meta name="apple-mobile-web-app-title" content="fintrack">
     <title>{% block title %}fintrack{% endblock %}</title>
 
-    <!-- Tailwind CSS via CDN -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>tailwind.config = { darkMode: 'class' }</script>
-
     <!-- Theme: apply dark class before first paint to prevent flash -->
     <script>
         (function() {
@@ -38,10 +34,10 @@
     </script>
 
     <!-- Alpine.js -->
-    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script defer src="{{ url_for('static', filename='dist/alpine.min.js') }}"></script>
 
     <!-- HTMX -->
-    <script src="{{ url_for('static', filename='htmx.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='dist/htmx.min.js') }}"></script>
     <script>
         htmx.config.historyCacheSize = 0;
         htmx.config.refreshOnHistoryMiss = false;
@@ -144,9 +140,9 @@
         /* Base positioning for the sidebar & scrim — element-qualified
            attribute selectors (specificity 0,1,1) so they beat any single
            Tailwind utility class (0,1,0) regardless of source order. The
-           Tailwind CDN injects its generated stylesheet after our inline
-           <style>, so bare [attr] selectors at (0,1,0) would lose to e.g.
-           .inset-0 at equal specificity. */
+           compiled Tailwind stylesheet is linked after this inline <style>,
+           so bare [attr] selectors at (0,1,0) would lose to e.g. .inset-0 at
+           equal specificity. */
         nav[data-nav-sidebar],
         div[data-nav-scrim] { top: 3rem; }
 
@@ -683,6 +679,11 @@
             }
         }
     </style>
+
+    {# Compiled Tailwind (npm run build → web/static/dist/). Linked AFTER the
+       inline <style> above on purpose: that block's cascade-order reasoning
+       assumes Tailwind's utilities come last. #}
+    <link rel="stylesheet" href="{{ url_for('static', filename='dist/tailwind.css') }}">
 </head>
 
 <body x-data="{ navOpen: window.matchMedia('(min-width: 1024px)').matches, init() { this._narrow = window.matchMedia('(max-width: 1023px)').matches; window.addEventListener('resize', () => { const n = window.matchMedia('(max-width: 1023px)').matches; if (n !== this._narrow) { this._narrow = n; this.navOpen = !n; } }); } }" class="h-full flex flex-col overflow-hidden bg-gray-50 dark:bg-gray-900 dark:text-gray-100">
@@ -953,7 +954,7 @@
         </main>
     </div>
 
-    <script src="{{ url_for('static', filename='js/vendor/Sortable.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='dist/Sortable.min.js') }}"></script>
     <script src="{{ url_for('static', filename='js/sortable.js') }}"></script>
     <script src="{{ url_for('static', filename='js/holdings-sort.js') }}"></script>
     <script src="{{ url_for('static', filename='js/cell-nav.js') }}"></script>

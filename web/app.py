@@ -35,6 +35,24 @@ except ImportError:
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
+# Built by `npm run build` (mise run assets); gitignored, never committed.
+COMPILED_CSS = Path(__file__).resolve().parent / "static" / "dist" / "tailwind.css"
+
+
+def _warn_if_assets_missing(app: Flask) -> None:
+    """Log loudly when the front-end build hasn't run.
+
+    Without it every page renders unstyled and Alpine/htmx controls are dead,
+    which looks like an app bug. A warning (not an error) so CLI-only and
+    test setups that never render pages aren't blocked.
+    """
+    if not COMPILED_CSS.exists():
+        app.logger.warning(
+            "Front-end assets not built: %s is missing. Pages will render "
+            "unstyled. Run `mise run assets` (or `npm ci && npm run build`).",
+            COMPILED_CSS.relative_to(PROJECT_ROOT),
+        )
+
 
 def _display_is_negative(value):
     """True if value is a number < 0 or a string that looks like a negative (e.g. ($1.00) or -1)."""
@@ -80,6 +98,7 @@ def create_app(db_path: str | None = None) -> Flask:
     """Application factory. Creates the engine, initialises the schema, and
     wires up filters, blueprints, and error handlers."""
     app = Flask(__name__)
+    _warn_if_assets_missing(app)
 
     if db_path is None:
         db_path = os.environ.get("FINTRACK_DB") or str(PROJECT_ROOT / "fintrack.db")

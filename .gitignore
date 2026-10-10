@@ -21,3 +21,7 @@ docker-compose.yml
 issues.md
 notes-category-design.md
 notes-holdings-design.md
+
+# Front-end build (npm run build); never committed
+node_modules/
+web/static/dist/

@@ -14,3 +14,5 @@ tests/
 docs/
 data/
 .coverage
+node_modules/
+web/static/dist/

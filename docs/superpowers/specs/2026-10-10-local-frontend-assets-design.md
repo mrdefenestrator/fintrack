@@ -68,12 +68,16 @@ read-only. Building on demand avoids that problem entirely.
 
 `package.json` (new, `"private": true`):
 
-| Package | Version range | Notes |
-|---------|---------------|-------|
-| `tailwindcss` | `~3.4.x` (latest 3.x when implemented) | v3 only. Dependabot ignores majors (see below) |
-| `alpinejs` | `^3.x` (latest 3.x when implemented) | Replaces the unpinned CDN `3.x.x` |
-| `htmx.org` | `2.0.4` | Same version as the committed file, so the switch changes no behavior |
-| `sortablejs` | `1.15.6` | Same version as the committed file |
+| Package | Pinned version | Notes |
+|---------|----------------|-------|
+| `tailwindcss` | `3.4.19` | Latest v3. Dependabot ignores majors (see below) |
+| `alpinejs` | `3.17.4` | Latest 3.x, which is what the unpinned CDN `3.x.x` resolved to |
+| `htmx.org` | `2.0.4` | Byte-identical to the file it replaces |
+| `sortablejs` | `1.15.6` | Byte-identical to the file it replaces |
+
+Versions are pinned exactly, not as ranges, so `package.json` always shows
+what's actually running. Dependabot updates both `package.json` and the
+lockfile in its PRs.
 
 `package-lock.json` is committed. Every automated install uses `npm ci`, which
 fails if the lockfile and `package.json` disagree.

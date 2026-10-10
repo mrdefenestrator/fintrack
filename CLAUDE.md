@@ -11,7 +11,10 @@ and a Flask web UI. See DESIGN.md for the full architecture and data model.
 ## Tech Stack
 
 - Python 3.12, managed via `uv` (pyproject.toml, `uv sync`), installed via `mise`
-- Flask + HTMX + Alpine.js web UI (port 5003)
+- Flask + HTMX + Alpine.js web UI (port 5003), styled with Tailwind CSS v3
+- Node 22 (via `mise`) at **build time only**: `package.json` pins Tailwind,
+  Alpine, htmx and Sortable; `npm run build` compiles the CSS and copies the JS
+  into `web/static/dist/` (gitignored). No CDNs — the app works offline.
 - SQLite via SQLAlchemy Core (not ORM); Alembic for migrations
 - Claude API (Haiku) for merchant classification
 - Click for the CLI; Playwright for e2e tests
@@ -20,8 +23,12 @@ and a Flask web UI. See DESIGN.md for the full architecture and data model.
 
 ```bash
 # Setup
-mise run setup             # uv sync into .venv
+mise run setup             # uv sync + npm ci + build front-end assets
 mise run playwright-install  # one-time, for e2e tests
+
+# Front-end assets (serve/test/test-e2e run `assets` automatically)
+mise run assets            # npm run build → web/static/dist/
+mise run assets-watch      # rebuild Tailwind CSS as templates change
 
 # Tests
 mise run test              # all CI checks: format check, lint, unit, e2e
@@ -58,7 +65,9 @@ degrades to a warning without it).
 - `fintrack/networth/` — assets/debts, key-number and funding calculations, liquidity-tier totals + equity pairs
 - `fintrack/projections/` — multi-month balance projection engine + estimators
 - `fintrack/snapshots/`, `fintrack/migrate/` (legacy one-time import), `fintrack/cli/` (one module per command group)
-- `web/` — Flask app, routes/, Jinja2/Tailwind/HTMX templates
+- `web/` — Flask app, routes/, Jinja2/Tailwind/HTMX templates; `web/static/src/`
+  is the Tailwind input, `web/static/dist/` the built (gitignored) assets
+- `package.json`, `tailwind.config.js`, `scripts/copy-vendor.mjs` — front-end build
 - `tests/` — unit tests by domain; `tests/e2e/` Playwright (marker `e2e`)
 - `configs/` — categories.yaml, normalization.yaml, institutions/
 - `migrations/` — Alembic (single chain)
@@ -71,6 +80,13 @@ degrades to a warning without it).
 - Repository pattern: all DB queries live in repository modules — routes and
   CLI never build SQL
 - SQLAlchemy Core query building, real `Date`/`Numeric` column types
+- Tailwind class names must be complete literal strings — in templates, JS, or
+  Python (routes return class strings, so `web/**/*.py` is scanned). The
+  compiled CSS only contains classes the scanner sees; never assemble one from
+  pieces (`'bg-' + color`, `f"text-{tone}-600"`).
+- Front-end library upgrades come through Dependabot (`npm` ecosystem); a
+  manual one is `npm install <pkg>@<ver>` then `mise run test`. Tailwind stays
+  on v3 (v4 is a separate migration).
 
 ## Key Architecture Decisions
 
@@ -162,10 +178,7 @@ degrades to a warning without it).
   edit-mode toggle is a submit button.
 - Killing `uv run` can orphan its python child — check for stale servers on
   port 5003 if e2e behavior looks cached.
-- The web UI loads Tailwind (play CDN) and Alpine from CDNs. Where those hosts
-  are blocked (e.g. restricted-network sandboxes), pages render unstyled and
-  interactive e2e tests fail with "… intercepts pointer events" — an
-  environment artifact, not an app bug. Check with
-  `curl -sS -o /dev/null -w '%{http_code}' https://cdn.tailwindcss.com`. To run
-  e2e anyway, serve a locally compiled Tailwind (`npx tailwindcss@3`) and Alpine
-  from npm via `page.route`.
+- E2e runs offline: `tests/e2e/conftest.py` aborts any request to a non-local
+  host and fails the test, so never add a CDN `<script>`/`<link>`. If pages
+  render unstyled, the assets weren't built — run `mise run assets` (the app
+  also logs a warning at startup when `web/static/dist/tailwind.css` is missing).

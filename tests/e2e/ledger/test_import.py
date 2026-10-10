@@ -12,6 +12,7 @@ They run in document order and progressively build state:
   13    Duplicate-file detection
   14    OFX detect-account pre-fills institution field
   15–16 Upload failures are surfaced in the UI (#74)
+  17    Upload survives the picked file becoming unreadable (#74)
 """
 
 import pytest
@@ -278,7 +279,7 @@ def test_import_ofx_detect_account_prefills_institution(
 
 
 # ---------------------------------------------------------------------------
-# 15–16  Upload failures are surfaced (#74)
+# 15–17  Upload failures are surfaced; picked bytes survive (#74)
 # ---------------------------------------------------------------------------
 
 
@@ -317,3 +318,28 @@ def test_import_upload_network_error_is_shown(page, import_server, ofx_file):
     error = page.locator("#import-error")
     error.wait_for(state="visible")
     assert "could not reach the server" in error.inner_text()
+
+
+def test_import_upload_survives_source_file_becoming_unreadable(
+    page, import_server, ofx_file, tmp_path
+):
+    """The upload sends the bytes read at pick time, not the live File. iPadOS
+    Safari can lose access to a Files-app/iCloud file after it is first read,
+    and the upload then went out without its body (#74). Deleting the picked
+    file from disk before Import reproduces that in Chromium: a live disk-backed
+    File can no longer be read, while the in-memory copy still uploads."""
+    # New FITIDs and dates so the real importer doesn't skip it as a duplicate.
+    src = tmp_path / "vanishing.ofx"
+    src.write_text(
+        ofx_file.read_text()
+        .replace("<FITID>E2E", "<FITID>VANISH")
+        .replace("<DTPOSTED>202604", "<DTPOSTED>202503")
+    )
+    _select_file_and_account(page, import_server, src)
+    src.unlink()
+
+    with page.expect_response(lambda r: "/import/upload" in r.url) as resp:
+        page.click("#import-submit")
+    assert resp.value.status == 200
+    # The server parsed all 4 transactions, so the file body arrived intact.
+    page.get_by_text("vanishing.ofx: 4 new").wait_for()

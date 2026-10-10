@@ -52,15 +52,33 @@ jobs:
           aws ecr describe-repositories --repository-names "$ECR_REPOSITORY" >/dev/null 2>&1 \
             || aws ecr create-repository --repository-name "$ECR_REPOSITORY" >/dev/null
 
-      - name: Build and push Lambda image
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Compute image URIs
         id: build
         env:
           REGISTRY: ${{ steps.ecr.outputs.registry }}
         run: |
-          IMAGE_URI="$REGISTRY/$ECR_REPOSITORY:pr-${{ github.event.number }}-${GITHUB_SHA::7}"
-          docker build -f Dockerfile.lambda -t "$IMAGE_URI" .
-          docker push "$IMAGE_URI"
-          echo "image_uri=$IMAGE_URI" >> "$GITHUB_OUTPUT"
+          echo "image_uri=$REGISTRY/$ECR_REPOSITORY:pr-${{ github.event.number }}-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          echo "cache_ref=$REGISTRY/$ECR_REPOSITORY:buildcache" >> "$GITHUB_OUTPUT"
+
+      # Layer cache lives in the preview ECR repo under the `buildcache` tag,
+      # shared by every PR (a type=gha cache would be per-branch, so each PR's
+      # first deploy would be cold). provenance/sbom must stay off: buildx's
+      # attestations turn the push into a manifest index, which Lambda rejects.
+      - name: Build and push Lambda image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: Dockerfile.lambda
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.build.outputs.image_uri }}
+          cache-from: type=registry,ref=${{ steps.build.outputs.cache_ref }}
+          cache-to: type=registry,ref=${{ steps.build.outputs.cache_ref }},mode=max,image-manifest=true,oci-mediatypes=true
+          provenance: false
+          sbom: false
 
       - name: Deploy Lambda function
         id: deploy

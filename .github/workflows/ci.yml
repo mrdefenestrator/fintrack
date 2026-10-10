@@ -21,6 +21,20 @@ jobs:
       - name: Install mise
         uses: jdx/mise-action@v4
 
+      - name: Cache npm downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: npm-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: npm-${{ runner.os }}-
+
+      # Front-end assets (web/static/dist/) are built, never committed. Built
+      # up front so a broken Tailwind config fails fast.
+      - name: Build front-end assets
+        run: |
+          npm ci --no-audit --no-fund
+          mise run assets
+
       - name: Format check
         run: mise run format-check
 

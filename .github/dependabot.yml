@@ -20,3 +20,25 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    ignore:
+      # The node build stage tracks the `node = "22"` pin in mise.toml; moving
+      # to the next Node LTS is a deliberate change to both files.
+      - dependency-name: "node"
+        update-types: ["version-update:semver-major"]
+
+  # Front-end build dependencies (package.json + package-lock.json): Tailwind,
+  # Alpine, htmx, Sortable. Assets are rebuilt from the lockfile in CI and the
+  # Docker builds, so merging a green bump PR is the whole upgrade.
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      frontend:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+    ignore:
+      # Tailwind v4 is a config-model migration (CSS-based config, changed
+      # defaults), not a bump.
+      - dependency-name: "tailwindcss"
+        update-types: ["version-update:semver-major"]

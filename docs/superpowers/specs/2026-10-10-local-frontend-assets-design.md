@@ -1,7 +1,7 @@
 # Local Front-End Assets — Design Spec
 
 **Date:** 2026-10-10
-**Status:** Draft
+**Status:** Approved
 **Issue:** #69
 
 ## Problem
@@ -246,11 +246,61 @@ Details:
 - Add `npm ci` and `mise run assets` steps before the unit tests. The unit
   tests don't need the assets, but building early gives a broken Tailwind
   config a fast failure.
-- `pr-preview.yml` runs plain `docker build -f Dockerfile.lambda` with no
-  layer cache, so each preview deploy pays a cold `npm ci` (estimated
-  10–20 s). That's acceptable for a preview deploy and out of scope here. If
-  it becomes a problem, switch that step to buildx with `type=gha` cache like
-  the publish job.
+
+## PR preview (`.github/workflows/pr-preview.yml`)
+
+Today the preview job runs a plain `docker build -f Dockerfile.lambda` on a
+fresh runner with no layer cache, so every layer is rebuilt on every push.
+Without a change, the new asset stage would add a cold `npm ci` (estimated
+10–20 s) to every preview deploy, on top of the cold `uv pip install` it
+already pays.
+
+Switch the "Build and push Lambda image" step to `docker/setup-buildx-action`
+plus `docker/build-push-action`, with a **registry cache stored in the
+preview ECR repository**:
+
+```yaml
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Compute image URI
+        id: image
+        run: echo "uri=${{ steps.ecr.outputs.registry }}/$ECR_REPOSITORY:pr-${{ github.event.number }}-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push Lambda image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: Dockerfile.lambda
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.image.outputs.uri }}
+          cache-from: type=registry,ref=<registry>/<repo>:buildcache
+          cache-to: type=registry,ref=<registry>/<repo>:buildcache,mode=max,image-manifest=true,oci-mediatypes=true
+          provenance: false
+          sbom: false
+```
+
+- **Why a registry cache instead of `type=gha`:** GitHub only lets a PR read
+  caches from its own branch and from `main`, and `main` never builds
+  `Dockerfile.lambda`. With `type=gha`, every PR's first deploy would be cold.
+  The ECR `buildcache` tag is shared by all PRs, so a first deploy is warm
+  whenever its lockfiles match what's cached. The OIDC role can already push
+  to this repository, so no new credentials are needed.
+- **`provenance: false` / `sbom: false` are required.** By default buildx
+  attaches attestations, which turns the pushed image into a multi-entry
+  manifest index. Lambda rejects that format.
+- **`image-manifest=true,oci-mediatypes=true`** are required for ECR to
+  accept a registry cache.
+- **Keep the image URI available to the deploy step.** The deploy step reads
+  the image URI from a step output. It now comes from the "Compute image URI"
+  step instead of the build step.
+- **ECR lifecycle:** keep the `buildcache` tag when configuring a lifecycle
+  policy for the preview repository. Note this in
+  `docs/aws-preview-setup.md`.
+
+The Python dependency layer is cached too, so preview deploys should end up
+faster than today, not just break even.
 
 ## Dependency upgrades (Dependabot)
 
@@ -354,7 +404,7 @@ One PR, built in this order so the visual check compares like with like:
 3. Run the content audit for built-up class names and the screenshot
    comparison; fix any differences.
 4. Add the e2e offline fixture.
-5. Update both Dockerfiles, CI and Dependabot. Measure build times.
+5. Update both Dockerfiles, CI, the PR-preview workflow and Dependabot. Measure build times.
 6. Update the docs.
 
 ## Decisions taken (flag if you disagree)

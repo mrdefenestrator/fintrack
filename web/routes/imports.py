@@ -43,11 +43,31 @@ def index():
 
 @bp.route("/import/upload", methods=["POST"])
 def upload():
-    files = request.files.getlist("files")
+    files = [f for f in request.files.getlist("files") if f.filename]
     account_id = request.form.get("account_id", type=int)
 
-    if not files or not account_id:
-        return "<p class='text-red-500'>Please select files and an account.</p>", 400
+    missing = [
+        label
+        for label, ok in (("a statement file", files), ("an account", account_id))
+        if not ok
+    ]
+    if missing:
+        # Log what actually arrived: a browser that silently drops the file
+        # body (e.g. iPadOS Safari losing access to a Files-app file) looks
+        # identical to a user who skipped a field.
+        current_app.logger.warning(
+            "Import upload rejected (missing %s): content_type=%r "
+            "content_length=%r form_keys=%r file_keys=%r",
+            " and ".join(missing),
+            request.content_type,
+            request.content_length,
+            sorted(request.form.keys()),
+            sorted(request.files.keys()),
+        )
+        return _render_upload_error(
+            f"The upload didn't include {' or '.join(missing)}. "
+            "Please re-select the file and account, then import again."
+        )
 
     engine = current_app.config["engine"]
     results = []
@@ -56,15 +76,19 @@ def upload():
         all_new_merchants = set()
 
         for f in files:
-            if not f.filename:
-                continue
             suffix = Path(f.filename).suffix
             tmp_path = None
             try:
                 with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
                     tmp_path = tmp.name
                     f.save(tmp_path)
-                result = run_import(conn, tmp_path, account_id)
+                if os.path.getsize(tmp_path) == 0:
+                    result = {
+                        "error": "file arrived empty — the browser couldn't "
+                        "read it. Re-select the file and try again."
+                    }
+                else:
+                    result = run_import(conn, tmp_path, account_id)
             finally:
                 if tmp_path:
                     os.unlink(tmp_path)
@@ -98,6 +122,33 @@ def upload():
         results=results,
         classified_count=classified_count,
         classify_warning=classify_warning,
+    )
+
+
+def _render_upload_error(message: str):
+    """Re-render the import page with an upload error, as a 422.
+
+    base.html swaps non-empty 422 bodies (htmx ignores 4xx bodies by default),
+    so the message actually reaches the user instead of failing silently.
+    """
+    engine = current_app.config["engine"]
+    with engine.connect() as conn:
+        staging = get_staging_imports(conn, g.snapshot_id)
+        accounts = list_accounts(conn, g.snapshot_id)
+    template = (
+        "partials/import_content.html"
+        if request.headers.get("HX-Request")
+        else "import.html"
+    )
+    return (
+        render_template(
+            template,
+            active_tab="import",
+            staging=staging,
+            accounts=accounts,
+            upload_error=message,
+        ),
+        422,
     )
 
 

@@ -5,12 +5,14 @@ They run in document order and progressively build state:
 
   1–3   Empty-DB / account-panel structure
   4     Inline account creation via HTMX form
-  5–6   Dropzone and "no pending" empty state
+  5–6   Dropzone (tap opens the picker) and "no pending" empty state
   7–9   File upload → staging review
   10    Confirm clears staging
   11–12 Second upload → reject removes from staging
   13    Duplicate-file detection
   14    OFX detect-account pre-fills institution field
+  15–16 Upload failures are surfaced in the UI (#74)
+  17    Upload survives the picked file becoming unreadable (#74)
 """
 
 import pytest
@@ -78,6 +80,40 @@ def test_import_dropzone_is_visible(page, import_server):
     """Upload dropzone is visible after an account exists."""
     page.goto(f"{import_server}/s/ledger/import")
     assert page.locator("#dropzone").is_visible()
+
+
+def test_import_dropzone_tap_hits_file_input(page, import_server):
+    """A tap anywhere on the dropzone lands on the (transparent) file input
+    itself — not on a script that calls .click() on a hidden input, which iOS
+    WebKit hosts ignore — and opens the file chooser."""
+    page.goto(f"{import_server}/s/ledger/import")
+    box = page.locator("#dropzone").bounding_box()
+    center = (box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+    hit = page.evaluate("([x, y]) => document.elementFromPoint(x, y).id", list(center))
+    assert hit == "file-input"
+    with page.expect_file_chooser() as fc:
+        page.mouse.click(*center)
+    assert fc.value.is_multiple()
+
+
+def test_import_file_input_has_no_accept_filter(page, import_server):
+    """iOS greys out .ofx/.qfx files when the input has an `accept` list, so
+    the input must not restrict types (#74)."""
+    page.goto(f"{import_server}/s/ledger/import")
+    assert page.get_attribute("#file-input", "accept") is None
+
+
+def test_import_unsupported_file_type_is_rejected(page, import_server, tmp_path):
+    """Without an `accept` filter, a non-statement file is caught client-side:
+    an error is shown and Import stays disabled."""
+    bad = tmp_path / "notes.txt"
+    bad.write_text("hello")
+    page.goto(f"{import_server}/s/ledger/import")
+    page.set_input_files("#file-input", str(bad))
+    error = page.locator("#import-error")
+    error.wait_for(state="visible")
+    assert "Unsupported file type: notes.txt" in error.inner_text()
+    assert page.locator("#import-submit").is_disabled()
 
 
 def test_import_no_pending_imports_message(page, import_server):
@@ -240,3 +276,70 @@ def test_import_ofx_detect_account_prefills_institution(
     page.wait_for_selector("#account-panel")
     panel_html = page.locator("#account-panel").inner_html()
     assert "Chase" in panel_html
+
+
+# ---------------------------------------------------------------------------
+# 15–17  Upload failures are surfaced; picked bytes survive (#74)
+# ---------------------------------------------------------------------------
+
+
+def _select_file_and_account(page, import_server, ofx_file):
+    page.goto(f"{import_server}/s/ledger/import")
+    with page.expect_response(lambda r: "detect-account" in r.url):
+        page.set_input_files("#file-input", str(ofx_file))
+    page.select_option("select[name='account_id']", label="Test Bank Test Checking")
+
+
+def test_import_upload_server_error_is_shown(page, import_server, ofx_file):
+    """A non-422 error response shows a message instead of failing silently,
+    and the request still carried the (in-memory copied) file body."""
+    bodies = []
+
+    def fail(route):
+        bodies.append(route.request.post_data_buffer or b"")
+        route.fulfill(status=500, body="boom")
+
+    page.route("**/import/upload", fail)
+    _select_file_and_account(page, import_server, ofx_file)
+    page.click("#import-submit")
+
+    error = page.locator("#import-error")
+    error.wait_for(state="visible")
+    assert "server error 500" in error.inner_text()
+    assert b'filename="' + ofx_file.name.encode() + b'"' in bodies[0]
+    assert b"<OFX>" in bodies[0]
+
+
+def test_import_upload_network_error_is_shown(page, import_server, ofx_file):
+    page.route("**/import/upload", lambda route: route.abort())
+    _select_file_and_account(page, import_server, ofx_file)
+    page.click("#import-submit")
+
+    error = page.locator("#import-error")
+    error.wait_for(state="visible")
+    assert "could not reach the server" in error.inner_text()
+
+
+def test_import_upload_survives_source_file_becoming_unreadable(
+    page, import_server, ofx_file, tmp_path
+):
+    """The upload sends the bytes read at pick time, not the live File. iPadOS
+    Safari can lose access to a Files-app/iCloud file after it is first read,
+    and the upload then went out without its body (#74). Deleting the picked
+    file from disk before Import reproduces that in Chromium: a live disk-backed
+    File can no longer be read, while the in-memory copy still uploads."""
+    # New FITIDs and dates so the real importer doesn't skip it as a duplicate.
+    src = tmp_path / "vanishing.ofx"
+    src.write_text(
+        ofx_file.read_text()
+        .replace("<FITID>E2E", "<FITID>VANISH")
+        .replace("<DTPOSTED>202604", "<DTPOSTED>202503")
+    )
+    _select_file_and_account(page, import_server, src)
+    src.unlink()
+
+    with page.expect_response(lambda r: "/import/upload" in r.url) as resp:
+        page.click("#import-submit")
+    assert resp.value.status == 200
+    # The server parsed all 4 transactions, so the file body arrived intact.
+    page.get_by_text("vanishing.ofx: 4 new").wait_for()

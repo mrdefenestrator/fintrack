@@ -25,7 +25,7 @@
     'missing': 'Missing', 'upcoming': 'Upcoming', 'unlinked': 'Not linked'} %}
 {% set _missing = budget_actuals | selectattr('status', 'equalto', 'missing') | list | length %}
 {% set _drift = budget_actuals | selectattr('drift_amount') | list | length %}
-{% call fb.filter_bar(label='Month', icon='M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z') %}
+{% call fb.filter_bar(label=actuals_month_label, icon='M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z') %}
     {{ nav.pager(
         url_for('budget.actual_view', filename=filename, month=prev_month),
         url_for('budget.actual_view', filename=filename, month=next_month),

@@ -350,8 +350,9 @@ Three things build on the link:
   up; an entry that has never been linked is **unlinked**, because absent links
   say nothing about whether the money moved. Each result carries a tone
   (good / bad / neutral) so over/under read correctly for both kinds: earning
-  over budget is good, spending over it is bad. Surfaced as a panel on the
-  Budget page and `fintrack transactions budget-actual`.
+  over budget is good, spending over it is bad. Surfaced on its own
+  Budget vs Actual page (`/s/<snapshot>/budget/actual`, read-only, with a
+  month pager via `?month=YYYY-MM`) and `fintrack transactions budget-actual`.
 - **Projection true-up** — in the current (partial) month, a budget flow already
   realized as a linked transaction is reflected in the starting balance, so the
   projection engine caps that month's remaining scheduled amount by what is
@@ -390,7 +391,7 @@ Navigation is a **single-row top bar plus a collapsible side navigation**. The
 top bar carries only a nav toggle (`☰`), the current page name, and the always-
 visible utility controls — the lock/edit toggle, Import, the theme cycle, and
 the snapshot picker. Primary navigation lives in a grouped outline
-(`Finances`: Holdings · Budget · Projections; `Spending`: Trends ·
+(`Finances`: Holdings · Budget · Budget vs Actual · Projections; `Spending`: Trends ·
 Transactions · Merchants · Categories — group headings are labels, only the
 destinations are links). On wide screens (≥`lg`, 1024px) that outline is a
 docked left sidebar;

@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Budget vs Actual — fintrack{% endblock %}
+{% block content %}
+{# Budget-vs-actual (issue #53), on its own page (issue #73): per-entry expected
+   vs realized for one month — from each entry's linked transactions, or from
+   its category total for a variable line that alone claims that category.
+   Read-only insight that complements the editable Budget sheet. Colors follow
+   the result's tone (EntryActual.tone), not the delta's sign: earning over
+   budget is good, spending over budget is bad. #}
+{% import "partials/sheet.html" as sheet %}
+{% import "partials/sheet_filter_bar.html" as fb %}
+{% import "partials/pager.html" as nav %}
+{% set _badge = {
+    'good':    'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300',
+    'bad':     'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300',
+    'neutral': 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300',
+    'drift':   'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300',
+} %}
+{% set _delta_text = {
+    'good': 'text-green-600 dark:text-green-400',
+    'bad': 'text-red-600 dark:text-red-400',
+    'neutral': '',
+} %}
+{% set _label = {'matched': 'Matched', 'over': 'Over', 'under': 'Under',
+    'missing': 'Missing', 'upcoming': 'Upcoming', 'unlinked': 'Not linked'} %}
+{% set _missing = budget_actuals | selectattr('status', 'equalto', 'missing') | list | length %}
+{% set _drift = budget_actuals | selectattr('drift_amount') | list | length %}
+{% call fb.filter_bar(label='Month', icon='M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z') %}
+    {{ nav.pager(
+        url_for('budget.actual_view', filename=filename, month=prev_month),
+        url_for('budget.actual_view', filename=filename, month=next_month),
+        actuals_month_label,
+        is_latest=is_current_month,
+        latest_url=url_for('budget.actual_view', filename=filename),
+        label_width='w-24',
+        use_htmx=false) }}
+    {% if _missing %}<span data-actuals-missing class="px-1.5 py-0.5 rounded text-xs {{ _badge['bad'] }}">{{ _missing }} missing</span>{% endif %}
+    {% if _drift %}<span data-actuals-drift class="px-1.5 py-0.5 rounded text-xs {{ _badge['drift'] }}">{{ _drift }} drift</span>{% endif %}
+{% endcall %}
+<div class="table-scroll-container rounded-b-lg border-l border-b border-r border-gray-300 dark:border-gray-600 shadow-sm" data-sheet-scroll>
+<table id="budget-actual-table" class="sortable w-full text-sm border-collapse bg-white dark:bg-gray-800" style="white-space:nowrap">
+    {{ sheet.thead(
+        ["Entry", "Category", "Expected", "Actual", "Delta", "N", "Status", "Drift", "Last seen"],
+        [2, 3, 4, 5, 7],
+        tooltips=["Budget entry", "Budget category", "Scheduled amount this month",
+                  "Realized from linked transactions (or the category total for a variable line)",
+                  "Actual minus expected", "Number of linked transactions",
+                  "Matched / over / under / missing / upcoming / not linked",
+                  "Linked charge vs budgeted amount (price drift)",
+                  "Date of the most recent linked transaction"]) }}
+    <tbody>
+        {% for a in budget_actuals %}
+        <tr class="{{ sheet.row_class() }}">
+            <td class="{{ sheet.cell_class() }}">
+                {{ a.entry.description }}
+                {% if a.source == 'category' %}<span class="ml-1 text-xs text-gray-400 dark:text-gray-500" title="Variable line: actual is this category's total for the month, not linked transactions">by category</span>{% endif %}
+            </td>
+            <td class="{{ sheet.cell_class(extra='text-gray-500 dark:text-gray-400') }}">{{ a.entry.category or '—' }}</td>
+            <td class="{{ sheet.cell_class('text-right tabular-nums') }}">${{ a.expected|money }}</td>
+            <td class="{{ sheet.cell_class('text-right tabular-nums') }}">${{ a.actual|money }}</td>
+            <td class="{{ sheet.cell_class('text-right tabular-nums', _delta_text[a.tone]) }}">
+                {{ '+' if a.delta > 0 else ('-' if a.delta < 0 else '') }}${{ a.delta|abs|money }}
+            </td>
+            <td class="{{ sheet.cell_class('text-right tabular-nums') }}">{{ a.count }}</td>
+            <td class="{{ sheet.cell_class() }}"><span class="px-1.5 py-0.5 rounded text-xs {{ _badge[a.tone] }}">{{ _label.get(a.status, a.status) }}</span></td>
+            <td class="{{ sheet.cell_class('text-right tabular-nums') }}">
+                {% if a.drift_amount and (a.drift_amount > 0 or a.drift_amount < 0) %}{{ '+' if a.drift_amount > 0 else '-' }}${{ a.drift_amount|abs|money }}{% else %}—{% endif %}
+            </td>
+            <td class="{{ sheet.cell_class(extra='text-gray-500 dark:text-gray-400') }}">{{ a.last_linked or '—' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="9" class="px-2 py-3 text-center text-gray-500 dark:text-gray-400">No active budget entries for {{ actuals_month_label }}.</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+{% endblock %}

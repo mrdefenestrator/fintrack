@@ -125,13 +125,6 @@ def budget_view(filename: str):
     engine = current_app.config["engine"]
     with engine.connect() as conn:
         categories = get_category_names(conn)
-        # Per-entry budget-vs-actual for the viewed month (issue #53): expected
-        # vs realized from linked transactions, with missed/upcoming/drift flags.
-        actuals = budget_actuals(
-            conn, snapshot_id, year=ctx["year"], month=ctx["month"]
-        )
-    ctx["budget_actuals"] = [a for a in actuals if a.status != "inactive"]
-    ctx["actuals_month_label"] = f"{date(ctx['year'], ctx['month'], 1):%b %Y}"
     ctx["include_kinds"] = [k for k in BUDGET_KINDS if k in include_kinds_set]
     ctx["include_categories"] = [c for c in categories if c in set(include_categories)]
     ctx["include_recurrence"] = [
@@ -141,6 +134,44 @@ def budget_view(filename: str):
     ctx["categories"] = categories
     ctx["recurrence_options"] = RECURRENCE_OPTIONS
     return render_template("budget.html", **ctx)
+
+
+def _parse_month(raw: str | None, default: date) -> date:
+    """First of the month named by a ``YYYY-MM`` query arg, else ``default``'s."""
+    try:
+        year, month = (int(p) for p in (raw or "").split("-"))
+        return date(year, month, 1)
+    except ValueError:
+        return default.replace(day=1)
+
+
+def _shift_month(d: date, delta: int) -> date:
+    idx = d.year * 12 + d.month - 1 + delta
+    return date(idx // 12, idx % 12 + 1, 1)
+
+
+@budget_bp.route("/<filename>/budget/actual")
+def actual_view(filename: str):
+    """Per-entry budget-vs-actual for one month (issue #53), on its own page
+    (issue #73): expected vs realized from linked transactions, with
+    missed/upcoming/drift flags. Read-only; ``?month=YYYY-MM`` (default: now)."""
+    snapshot_id = validate_snapshot(filename)
+    edit_mode = request.args.get("edit") == "1"
+    ctx = get_common_context(snapshot_id, filename, edit_mode)
+    ctx["active_tab"] = "budget_actual"
+    current = date(ctx["year"], ctx["month"], 1)
+    viewed = _parse_month(request.args.get("month"), current)
+    engine = current_app.config["engine"]
+    with engine.connect() as conn:
+        actuals = budget_actuals(
+            conn, snapshot_id, year=viewed.year, month=viewed.month
+        )
+    ctx["budget_actuals"] = [a for a in actuals if a.status != "inactive"]
+    ctx["actuals_month_label"] = f"{viewed:%b %Y}"
+    ctx["is_current_month"] = viewed == current
+    ctx["prev_month"] = f"{_shift_month(viewed, -1):%Y-%m}"
+    ctx["next_month"] = f"{_shift_month(viewed, 1):%Y-%m}"
+    return render_template("budget_actual.html", **ctx)
 
 
 @budget_bp.route("/<filename>/budget/delete-btn/<int:index>")

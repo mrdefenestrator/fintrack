@@ -694,7 +694,7 @@
            snapshot picker). #}
         {% set _cur_tab = active_tab if active_tab is defined else none %}
         {% set _edit_honoring = _cur_tab in ('holdings', 'budget', 'merchants', 'categories', 'transactions') %}
-        {% set _page_names = {'holdings':'Holdings','budget':'Budget','projections':'Projections','trends':'Trends','transactions':'Transactions','merchants':'Merchants','categories':'Categories','import':'Import'} %}
+        {% set _page_names = {'holdings':'Holdings','budget':'Budget','budget_actual':'Budget vs Actual','projections':'Projections','trends':'Trends','transactions':'Transactions','merchants':'Merchants','categories':'Categories','import':'Import'} %}
         {% set _page_name = _page_names.get(_cur_tab, '') %}
         <div class="flex items-center h-12 px-2 gap-1">
             {% if filename %}
@@ -851,7 +851,7 @@
                                     </div>
                                 </div>
                                 {% else %}
-                                <a href="{% if active_tab is defined and active_tab == 'budget' %}{{ url_for('budget.budget_view', filename=f, edit=1 if edit_mode else none) }}{% else %}{{ url_for('holdings.holdings_view', filename=f, edit=1 if edit_mode else none) }}{% endif %}"
+                                <a href="{% if active_tab is defined and active_tab == 'budget' %}{{ url_for('budget.budget_view', filename=f, edit=1 if edit_mode else none) }}{% elif active_tab is defined and active_tab == 'budget_actual' %}{{ url_for('budget.actual_view', filename=f) }}{% else %}{{ url_for('holdings.holdings_view', filename=f, edit=1 if edit_mode else none) }}{% endif %}"
                                     class="flex-1 px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 truncate text-gray-700 dark:text-gray-200">
                                     {{ f }}
                                 </a>
@@ -938,6 +938,7 @@
                 <div class="{{ _side_head }}">Finances</div>
                 <a href="{{ url_for('holdings.holdings_view', filename=filename, edit=1 if edit_mode else none) }}" class="{{ _side }} {% if _cur_tab == 'holdings' %}{{ _side_active }}{% else %}{{ _side_idle }}{% endif %}"{% if _cur_tab == 'holdings' %} aria-current="page"{% endif %}>Holdings</a>
                 <a href="{{ url_for('budget.budget_view', filename=filename, edit=1 if edit_mode else none) }}" class="{{ _side }} {% if _cur_tab == 'budget' %}{{ _side_active }}{% else %}{{ _side_idle }}{% endif %}"{% if _cur_tab == 'budget' %} aria-current="page"{% endif %}>Budget</a>
+                <a href="{{ url_for('budget.actual_view', filename=filename, edit=1 if edit_mode else none) }}" class="{{ _side }} {% if _cur_tab == 'budget_actual' %}{{ _side_active }}{% else %}{{ _side_idle }}{% endif %}"{% if _cur_tab == 'budget_actual' %} aria-current="page"{% endif %}>Budget vs Actual</a>
                 <a href="{{ url_for('projections.projections_view', filename=filename, edit=1 if edit_mode else none) }}" class="{{ _side }} {% if _cur_tab == 'projections' %}{{ _side_active }}{% else %}{{ _side_idle }}{% endif %}"{% if _cur_tab == 'projections' %} aria-current="page"{% endif %}>Projections</a>
                 <div class="{{ _side_head }}">Spending</div>
                 <a href="/s/{{ filename }}/trends" class="{{ _side }} {% if _cur_tab == 'trends' %}{{ _side_active }}{% else %}{{ _side_idle }}{% endif %}"{% if _cur_tab == 'trends' %} aria-current="page"{% endif %}>Trends</a>

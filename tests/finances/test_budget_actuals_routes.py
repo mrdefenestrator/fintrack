@@ -1,5 +1,5 @@
-"""Budget page budget-vs-actual panel (issue #53): the /budget view surfaces
-per-entry expected-vs-realized for the current month."""
+"""Budget vs Actual page (issues #53, #73): /budget/actual surfaces per-entry
+expected-vs-realized for a month, on its own page rather than the Budget sheet."""
 
 import uuid
 from datetime import datetime
@@ -33,7 +33,7 @@ def client(db_engine):
         yield c
 
 
-def test_panel_lists_active_entries(client, db_engine):
+def test_page_lists_active_entries(client, db_engine):
     with db_engine.connect() as conn:
         sid = create_snapshot(conn, "home")
         add_budget_entry(
@@ -46,17 +46,17 @@ def test_panel_lists_active_entries(client, db_engine):
                 "recurrence": "monthly",
             },
         )
-    resp = client.get("/s/home/budget")
+    resp = client.get("/s/home/budget/actual")
     body = resp.get_data(as_text=True)
     assert resp.status_code == 200
-    assert "Budget vs actual" in body
+    assert "Budget vs Actual" in body
     assert "Rent" in body
     # Never linked: reported as not linked, not as a missed charge.
     assert "Not linked" in body
     assert "missing</span>" not in body
 
 
-def test_panel_reflects_linked_transaction_as_matched(client, db_engine):
+def test_page_reflects_linked_transaction_as_matched(client, db_engine):
     today = datetime.now().astimezone().date()
     with db_engine.connect() as conn:
         sid = create_snapshot(conn, "home")
@@ -98,6 +98,59 @@ def test_panel_reflects_linked_transaction_as_matched(client, db_engine):
             select(transactions.c.id).where(transactions.c.id == txn_id)
         ).scalar()
 
-    resp = client.get("/s/home/budget")
+    resp = client.get("/s/home/budget/actual")
     assert resp.status_code == 200
     assert "Matched" in resp.get_data(as_text=True)
+
+
+def _add_rent(db_engine):
+    with db_engine.connect() as conn:
+        sid = create_snapshot(conn, "home")
+        add_budget_entry(
+            conn,
+            sid,
+            {
+                "kind": "expense",
+                "description": "Rent",
+                "amount": 2000,
+                "recurrence": "monthly",
+            },
+        )
+
+
+def test_budget_sheet_no_longer_embeds_actuals(client, db_engine):
+    _add_rent(db_engine)
+    body = client.get("/s/home/budget").get_data(as_text=True)
+    assert "budget-actual-table" not in body
+    assert "Not linked" not in body
+    # ...but the sidebar links to the dedicated page.
+    assert 'href="/s/home/budget/actual"' in body
+
+
+def test_page_marks_its_sidebar_entry_active(client, db_engine):
+    _add_rent(db_engine)
+    body = client.get("/s/home/budget/actual").get_data(as_text=True)
+    assert 'aria-current="page">Budget vs Actual</a>' in body
+
+
+def test_month_param_selects_month_and_pager(client, db_engine):
+    _add_rent(db_engine)
+    body = client.get("/s/home/budget/actual?month=2025-01").get_data(as_text=True)
+    assert "Jan 2025" in body
+    assert "month=2024-12" in body
+    assert "month=2025-02" in body
+
+
+def test_bad_month_param_falls_back_to_current(client, db_engine):
+    _add_rent(db_engine)
+    resp = client.get("/s/home/budget/actual?month=nope")
+    assert resp.status_code == 200
+    today = datetime.now().astimezone().date()
+    assert f"{today:%b %Y}" in resp.get_data(as_text=True)
+
+
+def test_page_empty_state(client, db_engine):
+    with db_engine.connect() as conn:
+        create_snapshot(conn, "home")
+    body = client.get("/s/home/budget/actual").get_data(as_text=True)
+    assert "No active budget entries" in body

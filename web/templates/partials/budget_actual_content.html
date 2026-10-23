@@ -1,0 +1,115 @@
+{# Budget-vs-actual (issue #53), on its own page (issue #73): per-entry expected
+   vs realized for one month — from each entry's linked transactions, or from
+   its category total for a variable line that alone claims that category.
+   Read-only insight that complements the editable Budget sheet. Layout mirrors
+   the Transactions sheet: a time-nav row (month pager) above a filter card
+   fused to the table, htmx partial swaps into #content, sticky total row.
+   Colors follow the result's tone (EntryActual.tone), not the delta's sign:
+   earning over budget is good, spending over budget is bad. #}
+{% import "partials/sheet.html" as sheet %}
+{% import "partials/pager.html" as nav %}
+{% import "partials/filter_controls.html" as fc %}
+{% import "partials/sheet_filter_bar.html" as fb %}
+{% set _url = url_for('budget.actual_view', filename=filename) %}
+{% set _badge = {
+    'good':    'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300',
+    'bad':     'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300',
+    'neutral': 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300',
+    'drift':   'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300',
+} %}
+{% set _delta_text = {
+    'good': 'text-green-600 dark:text-green-400',
+    'bad': 'text-red-600 dark:text-red-400',
+    'neutral': '',
+} %}
+{% set _label = actual_statuses %}
+{% macro _sign_color(v) %}{{ 'text-green-600 dark:text-green-400' if v > 0 else ('text-red-600 dark:text-red-400' if v < 0 else '') }}{% endmacro %}
+{% macro _signed(v) %}{{ '-' if v < 0 else ('+' if v > 0 else '') }}${{ v|abs|money }}{% endmacro %}
+
+{% set kind_opts = [] %}
+{% for k in budget_kinds %}{% set _ = kind_opts.append({'value': k, 'display': k | capitalize, 'checked': k in include_kinds}) %}{% endfor %}
+{% set cat_opts = [] %}
+{% for c in actual_categories %}{% set _ = cat_opts.append({'value': c, 'display': c, 'checked': c in include_categories}) %}{% endfor %}
+{% set status_opts = [] %}
+{% for s, label in actual_statuses.items() %}{% set _ = status_opts.append({'value': s, 'display': label, 'checked': s in include_statuses}) %}{% endfor %}
+
+{# filter_qs carries the filters (and edit mode) across the month-pager links. #}
+{% set filter_qs %}{% for k in include_kinds %}&kind={{ k }}{% endfor %}{% for c in include_categories %}&category={{ c | urlencode }}{% endfor %}{% for s in include_statuses %}&status={{ s }}{% endfor %}{% if edit_mode %}&edit=1{% endif %}{% endset %}
+{% set _active = (include_kinds | length) + (include_categories | length) + (include_statuses | length) %}
+{% set _reset = "%s?year=%s&month=%s%s" | format(_url, year, month, '&edit=1' if edit_mode else '') %}
+
+{# Time navigation row above the filter card, as on Transactions: the month's
+   missing/drift summary on the left (where Transactions has its range
+   selector), the month pager on the right. #}
+<div class="shrink-0 mb-2 flex flex-wrap items-center justify-between gap-2">
+    <div class="flex items-center gap-1.5 text-xs">
+        {% if missing_count %}<span data-actuals-missing class="px-1.5 py-0.5 rounded {{ _badge['bad'] }}">{{ missing_count }} missing</span>{% endif %}
+        {% if drift_count %}<span data-actuals-drift class="px-1.5 py-0.5 rounded {{ _badge['drift'] }}">{{ drift_count }} drift</span>{% endif %}
+    </div>
+    {{ nav.pager(
+        prev_url="%s?year=%s&month=%s%s" | format(_url, prev_year, prev_month, filter_qs),
+        next_url="%s?year=%s&month=%s%s" | format(_url, next_year, next_month, filter_qs),
+        label=month_label,
+        is_latest=is_latest,
+        latest_url="%s?year=%s&month=%s%s" | format(_url, latest_year, latest_month, filter_qs),
+        label_width='w-24') }}
+</div>
+
+{% call fb.filter_bar(active_count=_active, reset_url=_reset) %}
+    {% if edit_mode %}<input type="hidden" name="edit" value="1">{% endif %}
+    {{ fc.multi_select('kind', 'Kind', kind_opts, _url) }}
+    {{ fc.multi_select('category', 'Category', cat_opts, _url) }}
+    {{ fc.multi_select('status', 'Status', status_opts, _url) }}
+    <input type="hidden" name="year" value="{{ year }}">
+    <input type="hidden" name="month" value="{{ month }}">
+{% endcall %}
+
+<div class="table-scroll-container rounded-b-lg border-l border-b border-r border-gray-300 dark:border-gray-600 shadow-sm" data-sheet-scroll>
+<table id="budget-actual-table" class="sortable w-full text-sm border-collapse bg-white dark:bg-gray-800" style="white-space:nowrap">
+    {{ sheet.thead(
+        ["Entry", "Category", "Expected", "Actual", "Delta", "N", "Status", "Drift", "Last seen"],
+        [2, 3, 4, 5, 7],
+        tooltips=["Budget entry", "Budget category", "Scheduled amount this month",
+                  "Realized from linked transactions (or the category total for a variable line)",
+                  "Actual minus expected", "Number of linked transactions",
+                  "Matched / over / under / missing / upcoming / not linked",
+                  "Linked charge vs budgeted amount (price drift)",
+                  "Date of the most recent linked transaction (any month)"]) }}
+    <tbody>
+        {% for a in budget_actuals %}
+        <tr class="{{ sheet.row_class() }}">
+            <td class="{{ sheet.cell_class() }}">
+                {{ a.entry.description }}
+                {% if a.source == 'category' %}<span class="ml-1 text-xs text-gray-400 dark:text-gray-500" title="Variable line: actual is this category's total for the month, not linked transactions">by category</span>{% endif %}
+            </td>
+            <td class="{{ sheet.cell_class(extra='text-gray-500 dark:text-gray-400') }}">{{ a.entry.category or '—' }}</td>
+            <td class="{{ sheet.cell_class('text-right tabular-nums') }}">${{ a.expected|money }}</td>
+            <td class="{{ sheet.cell_class('text-right tabular-nums') }}">${{ a.actual|money }}</td>
+            <td class="{{ sheet.cell_class('text-right tabular-nums', _delta_text[a.tone]) }}">
+                {{ '+' if a.delta > 0 else ('-' if a.delta < 0 else '') }}${{ a.delta|abs|money }}
+            </td>
+            <td class="{{ sheet.cell_class('text-right tabular-nums') }}">{{ a.count }}</td>
+            <td class="{{ sheet.cell_class() }}"><span class="px-1.5 py-0.5 rounded text-xs {{ _badge[a.tone] }}">{{ _label.get(a.status, a.status) }}</span></td>
+            <td class="{{ sheet.cell_class('text-right tabular-nums') }}">
+                {% if a.drift_amount and (a.drift_amount > 0 or a.drift_amount < 0) %}{{ '+' if a.drift_amount > 0 else '-' }}${{ a.drift_amount|abs|money }}{% else %}—{% endif %}
+            </td>
+            <td class="{{ sheet.cell_class(extra='text-gray-500 dark:text-gray-400') }}">{{ a.last_linked or '—' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="9" class="px-2 py-3 text-center text-gray-500 dark:text-gray-400">No {{ 'matching' if _active else 'active' }} budget entries for {{ month_label }}.</td></tr>
+        {% endfor %}
+        {# Sticky net total (income − expenses), pinned like the Transactions
+           total row; sortable.js keeps `.total-row` at the bottom. #}
+        {% if budget_actuals %}
+        {% set _n = budget_actuals | length %}
+        <tr class="total-row bg-gray-100 dark:bg-gray-700 border-t-2 border-gray-300 dark:border-gray-600 font-medium">
+            <td class="{{ sheet.cell_class('', 'whitespace-nowrap') }}" colspan="2" title="Net: income minus expenses">{{ _n }} entr{{ 'ies' if _n != 1 else 'y' }} · net</td>
+            <td class="{{ sheet.cell_class('text-right tabular-nums', _sign_color(net_expected)) }}">{{ _signed(net_expected) }}</td>
+            <td class="{{ sheet.cell_class('text-right tabular-nums', _sign_color(net_actual)) }}">{{ _signed(net_actual) }}</td>
+            <td class="{{ sheet.cell_class('text-right tabular-nums', _sign_color(net_delta)) }}">{{ _signed(net_delta) }}</td>
+            <td class="{{ sheet.cell_class() }}" colspan="4"></td>
+        </tr>
+        {% endif %}
+    </tbody>
+</table>
+</div>

@@ -17,9 +17,13 @@ def test_nav_links(page, flask_server):
     groups, no domain toggle."""
     page.goto(f"{flask_server}/s/test_finances/holdings")
 
-    page.click("[data-nav-sidebar] >> text=Budget")
+    page.click("[data-nav-sidebar] >> text='Budget'")
     page.wait_for_url("**/budget**")
     assert "Budget" in page.title()
+
+    page.click("[data-nav-sidebar] >> text='Budget vs Actual'")
+    page.wait_for_url("**/budget/actual**")
+    assert "Budget vs Actual" in page.title()
 
     page.click("[data-nav-sidebar] >> text=Projections")
     page.wait_for_url("**/projections**")
@@ -44,6 +48,10 @@ def test_sidebar_marks_active_page(page, flask_server):
     page.goto(f"{flask_server}/s/test_finances/budget")
     active = page.locator("[data-nav-sidebar] a[aria-current='page']")
     assert active.inner_text().strip() == "Budget"
+
+    page.goto(f"{flask_server}/s/test_finances/budget/actual")
+    active = page.locator("[data-nav-sidebar] a[aria-current='page']")
+    assert active.inner_text().strip() == "Budget vs Actual"
 
 
 def test_tab_row_height_stable_across_tabs(page, flask_server):
@@ -126,7 +134,7 @@ def test_global_edit_mode_toggle(page, flask_server):
     assert page.locator("[data-add-row]").first.is_visible()
 
     # Navigate to Budget via the sidebar — still in edit mode
-    page.click("[data-nav-sidebar] >> text=Budget")
+    page.click("[data-nav-sidebar] >> text='Budget'")
     page.wait_for_url("**/budget**")
     assert page.locator("button[title^='Exit edit mode']").is_visible()
 

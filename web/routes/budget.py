@@ -1,6 +1,7 @@
 """Budget blueprint - unified income/expenses table and CRUD operations."""
 
 from datetime import date
+from decimal import Decimal
 
 from flask import Blueprint, abort, current_app, render_template, request
 
@@ -125,13 +126,6 @@ def budget_view(filename: str):
     engine = current_app.config["engine"]
     with engine.connect() as conn:
         categories = get_category_names(conn)
-        # Per-entry budget-vs-actual for the viewed month (issue #53): expected
-        # vs realized from linked transactions, with missed/upcoming/drift flags.
-        actuals = budget_actuals(
-            conn, snapshot_id, year=ctx["year"], month=ctx["month"]
-        )
-    ctx["budget_actuals"] = [a for a in actuals if a.status != "inactive"]
-    ctx["actuals_month_label"] = f"{date(ctx['year'], ctx['month'], 1):%b %Y}"
     ctx["include_kinds"] = [k for k in BUDGET_KINDS if k in include_kinds_set]
     ctx["include_categories"] = [c for c in categories if c in set(include_categories)]
     ctx["include_recurrence"] = [
@@ -141,6 +135,115 @@ def budget_view(filename: str):
     ctx["categories"] = categories
     ctx["recurrence_options"] = RECURRENCE_OPTIONS
     return render_template("budget.html", **ctx)
+
+
+# Status filter options for the Budget vs Actual page, in display order
+# ("inactive" entries are never shown, so it isn't offered).
+ACTUAL_STATUSES = {
+    "matched": "Matched",
+    "over": "Over",
+    "under": "Under",
+    "missing": "Missing",
+    "upcoming": "Upcoming",
+    "unlinked": "Not linked",
+}
+
+
+def _valid_month(year: int, month: int, default: date) -> date:
+    try:
+        return date(year, month, 1)
+    except ValueError:
+        return default
+
+
+@budget_bp.route("/<filename>/budget/actual")
+def actual_view(filename: str):
+    """Per-entry budget-vs-actual for one month (issue #53), on its own page
+    (issue #73): expected vs realized from linked transactions, with
+    missed/upcoming/drift flags. Read-only. Month paging (``?year=&month=``,
+    default: now) and htmx partial swaps mirror the Transactions sheet."""
+    snapshot_id = validate_snapshot(filename)
+    edit_mode = request.args.get("edit") == "1"
+    ctx = get_common_context(snapshot_id, filename, edit_mode)
+    ctx["active_tab"] = "budget_actual"
+    current = date(ctx["year"], ctx["month"], 1)
+    viewed = _valid_month(
+        request.args.get("year", current.year, type=int),
+        request.args.get("month", current.month, type=int),
+        current,
+    )
+    engine = current_app.config["engine"]
+    with engine.connect() as conn:
+        actuals = budget_actuals(
+            conn, snapshot_id, year=viewed.year, month=viewed.month
+        )
+    active = [a for a in actuals if a.status != "inactive"]
+
+    include_kinds = [k for k in BUDGET_KINDS if k in request.args.getlist("kind")]
+    categories = sorted(
+        {a.entry["category"] for a in active if a.entry.get("category")}
+    )
+    include_categories = [
+        c for c in categories if c in request.args.getlist("category")
+    ]
+    include_statuses = [
+        s for s in ACTUAL_STATUSES if s in request.args.getlist("status")
+    ]
+    shown = [
+        a
+        for a in active
+        if (not include_kinds or a.entry.get("kind", "income") in include_kinds)
+        and (not include_categories or a.entry.get("category") in include_categories)
+        and (not include_statuses or a.status in include_statuses)
+    ]
+
+    # Net totals, signed income - expenses: a positive delta is a surplus
+    # against budget, a negative one a shortfall.
+    def _net(attr: str) -> Decimal:
+        return sum(
+            (
+                getattr(a, attr)
+                if a.entry.get("kind") == "income"
+                else -getattr(a, attr)
+                for a in shown
+            ),
+            Decimal(0),
+        )
+
+    net_expected, net_actual = _net("expected"), _net("actual")
+
+    prev = date(viewed.year - (viewed.month == 1), (viewed.month - 2) % 12 + 1, 1)
+    nxt = date(viewed.year + (viewed.month == 12), viewed.month % 12 + 1, 1)
+    ctx.update(
+        budget_actuals=shown,
+        missing_count=sum(a.status == "missing" for a in active),
+        drift_count=sum(bool(a.drift_amount) for a in active),
+        net_expected=net_expected,
+        net_actual=net_actual,
+        net_delta=net_actual - net_expected,
+        year=viewed.year,
+        month=viewed.month,
+        month_label=f"{viewed:%b %Y}",
+        is_latest=viewed >= current,
+        prev_year=prev.year,
+        prev_month=prev.month,
+        next_year=nxt.year,
+        next_month=nxt.month,
+        latest_year=current.year,
+        latest_month=current.month,
+        budget_kinds=BUDGET_KINDS,
+        actual_categories=categories,
+        actual_statuses=ACTUAL_STATUSES,
+        include_kinds=include_kinds,
+        include_categories=include_categories,
+        include_statuses=include_statuses,
+    )
+    template = (
+        "partials/budget_actual_content.html"
+        if request.headers.get("HX-Request")
+        else "budget_actual.html"
+    )
+    return render_template(template, **ctx)
 
 
 @budget_bp.route("/<filename>/budget/delete-btn/<int:index>")

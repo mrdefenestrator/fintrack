@@ -17,6 +17,11 @@ balance_history point). For each projected month, in order:
 
 Totals reuse the key-number calculations: liquid = liquid_total + unassigned;
 net worth = liquid_minus_cc + projected asset total - debt total + unassigned.
+
+Every balance movement is also recorded as a flow (``result["flows"][i]``), so
+a month's change on any row is exactly the sum of that row's flows. The
+starting point ("now") is returned alongside the grid, and ``summarize`` /
+``changes`` derive the page's headline numbers and the month-over-month view.
 """
 
 import calendar
@@ -35,6 +40,7 @@ from fintrack.budget.recurrence import (
     subtotal_remainder_of_month,
 )
 from fintrack.budget.repository import get_budget_entries
+from fintrack.core.formatting import fmt_account_label
 from fintrack.ledger.repository.transactions import get_transactions
 from fintrack.networth.amortization import scheduled_payment
 from fintrack.networth.calculations import (
@@ -63,14 +69,22 @@ def _month_label(year: int, month: int) -> str:
     return f"{calendar.month_abbr[month]} {year}"
 
 
+def _flow(holding_id: int | None, kind: str, label: str, amount: Decimal) -> dict:
+    """One balance movement. holding_id None means the unassigned bucket."""
+    return {"holding_id": holding_id, "kind": kind, "label": label, "amount": amount}
+
+
 def _autopay_transfers(
     accounts: list[dict[str, Any]],
     balances: dict[int, Decimal],
     *,
     is_current_month: bool,
     day: int,
+    flows: list[dict],
 ) -> None:
-    """Apply CC autopay for one month, mutating balances in place."""
+    """Apply CC autopay for one month, mutating balances in place and
+    recording both sides of each transfer in flows."""
+    names = {a["id"]: a.get("name", "") for a in accounts}
     for acc in accounts:
         if acc.get("type") != "credit_card":
             continue
@@ -85,6 +99,10 @@ def _autopay_transfers(
             continue
         balances[acc["id"]] += owed
         balances[payer_id] -= owed
+        flows.append(
+            _flow(acc["id"], "autopay", f"Autopay from {names[payer_id]}", owed)
+        )
+        flows.append(_flow(payer_id, "autopay", f"Autopay to {acc['name']}", -owed))
 
 
 def _realized_occurrences(
@@ -215,6 +233,8 @@ def project(
 
     balances: dict[int, Decimal] = {a["id"]: money(a.get("balance")) for a in accounts}
     unassigned = _ZERO
+    start_balances = dict(balances)
+    start_asset_values = dict(asset_values)
 
     debt_balances: dict[int, Decimal] = {}
     debt_amort: dict[int, tuple[Decimal, Decimal]] = {}
@@ -223,6 +243,7 @@ def project(
         debt_balances[idx] = money(d.get("balance"))
         debt_amort[idx] = _debt_monthly_payment(d)
         debt_due_days[idx] = d.get("statement_due_day_of_month")
+    start_debt_balances = dict(debt_balances)
 
     grid = month_sequence(today.year, today.month, months)
     month_infos = [
@@ -236,9 +257,14 @@ def project(
     unassigned_series: list[Decimal] = []
     liquid_series: list[Decimal] = []
     net_worth_series: list[Decimal] = []
+    flows_by_month: list[list[dict]] = []
 
     for i, (year, month) in enumerate(grid):
-        _autopay_transfers(accounts, balances, is_current_month=(i == 0), day=today.day)
+        flows: list[dict] = []
+        flows_by_month.append(flows)
+        _autopay_transfers(
+            accounts, balances, is_current_month=(i == 0), day=today.day, flows=flows
+        )
 
         for entry in budget:
             if i == 0:
@@ -258,15 +284,29 @@ def project(
             if target in balances:
                 balances[target] += signed
             else:
+                target = None
                 unassigned += signed
+            flows.append(
+                _flow(
+                    target,
+                    "income" if entry.get("kind") == "income" else "expense",
+                    entry.get("description") or "(budget entry)",
+                    signed,
+                )
+            )
 
         if estimate_monthly != _ZERO:
             if i == 0:
                 days_in_month = calendar.monthrange(year, month)[1]
                 remaining = Decimal(max(0, days_in_month - today.day))
-                unassigned += estimate_monthly * remaining / Decimal(days_in_month)
+                spend = estimate_monthly * remaining / Decimal(days_in_month)
             else:
-                unassigned += estimate_monthly
+                spend = estimate_monthly
+            if spend != _ZERO:
+                unassigned += spend
+                flows.append(
+                    _flow(None, "estimate", "Unscheduled spend (estimate)", spend)
+                )
 
         for idx in range(len(debts)):
             monthly_rate, payment = debt_amort[idx]
@@ -276,17 +316,41 @@ def project(
                     pass
                 else:
                     bal = debt_balances[idx]
-                    debt_balances[idx] = max(
-                        _ZERO, bal * (Decimal(1) + monthly_rate) - payment
-                    )
+                    with_interest = bal * (Decimal(1) + monthly_rate)
+                    debt_balances[idx] = max(_ZERO, with_interest - payment)
+                    # Debt rows display as negative (owed), so interest is a
+                    # negative flow and the payment a positive one.
+                    debt_id = debts[idx].get("id")
+                    interest = with_interest - bal
+                    if interest != _ZERO:
+                        flows.append(_flow(debt_id, "interest", "Interest", -interest))
+                    paid = with_interest - debt_balances[idx]
+                    if paid != _ZERO:
+                        flows.append(
+                            _flow(debt_id, "payment", "Scheduled payment", paid)
+                        )
             per_debt[idx].append(debt_balances[idx])
 
         for idx in range(len(non_debt_assets)):
             monthly_rate, monthly_contrib = asset_params[idx]
             if monthly_rate != _ZERO or monthly_contrib != _ZERO:
-                asset_values[idx] = (
-                    asset_values[idx] * (Decimal(1) + monthly_rate) + monthly_contrib
-                )
+                old = asset_values[idx]
+                asset_values[idx] = old * (Decimal(1) + monthly_rate) + monthly_contrib
+                asset_id = non_debt_assets[idx].get("id")
+                growth = asset_values[idx] - old - monthly_contrib
+                if growth != _ZERO:
+                    flows.append(
+                        _flow(
+                            asset_id,
+                            "growth",
+                            "Growth" if growth > _ZERO else "Depreciation",
+                            growth,
+                        )
+                    )
+                if monthly_contrib != _ZERO:
+                    flows.append(
+                        _flow(asset_id, "contribution", "Contribution", monthly_contrib)
+                    )
             per_asset[idx].append(asset_values[idx])
 
         for acc in accounts:
@@ -306,7 +370,14 @@ def project(
         series = per_account[acc["id"]]
         minimum = acc.get("minimum_balance")
         below = [minimum is not None and bal < money(minimum) for bal in series]
-        rows.append({"account": acc, "balances": series, "below": below})
+        rows.append(
+            {
+                "account": acc,
+                "start": start_balances[acc["id"]],
+                "balances": series,
+                "below": below,
+            }
+        )
         for idx, flag in enumerate(below):
             if flag:
                 warnings.append(
@@ -324,6 +395,7 @@ def project(
         rows.append(
             {
                 "account": d,
+                "start": -start_debt_balances[idx],
                 "balances": series,
                 "below": [False] * len(series),
                 "_source": "debt",
@@ -334,14 +406,21 @@ def project(
         rows.append(
             {
                 "account": a,
+                "start": start_asset_values[idx],
                 "balances": per_asset[idx],
                 "below": [False] * len(per_asset[idx]),
                 "_source": "asset",
             }
         )
 
+    start_debt_total = sum(start_debt_balances.values(), _ZERO)
+    start_asset_total = sum(start_asset_values.values(), _ZERO)
     return {
         "start": today,
+        "start_liquid": liquid_total(accounts),
+        "start_net_worth": liquid_minus_cc(accounts)
+        + start_asset_total
+        - start_debt_total,
         "months": month_infos,
         "rows": rows,
         "unassigned": unassigned_series,
@@ -350,4 +429,116 @@ def project(
         "net_worth": net_worth_series,
         "warnings": warnings,
         "estimate": estimate,
+        "flows": flows_by_month,
+    }
+
+
+def changes(start: Decimal, series: list[Decimal]) -> list[Decimal]:
+    """Month-over-month change: month 0 against the starting value, then each
+    month against the one before."""
+    previous = [start, *series[:-1]]
+    return [cur - prev for cur, prev in zip(series, previous, strict=True)]
+
+
+def _trend(start: Decimal, series: list[Decimal]) -> dict[str, Decimal]:
+    end = series[-1]
+    change = end - start
+    return {
+        "start": start,
+        "end": end,
+        "change": change,
+        "per_month": change / Decimal(len(series)),
+    }
+
+
+def summarize(result: dict[str, Any]) -> dict[str, Any]:
+    """Headline numbers for a projection: liquid and net-worth trend, the
+    lowest liquid month, loan payoffs within the horizon, and minimum-balance
+    warnings collapsed to one line per account."""
+    months = result["months"]
+    liquid = result["liquid"]
+    low_idx = min(range(len(liquid)), key=lambda i: liquid[i])
+
+    payoffs = []
+    for row in result["rows"]:
+        if row.get("_source") != "debt" or row["start"] >= _ZERO:
+            continue
+        paid_idx = next((i for i, b in enumerate(row["balances"]) if b >= _ZERO), None)
+        if paid_idx is not None:
+            payoffs.append(
+                {
+                    "name": row["account"]["name"],
+                    "month_label": months[paid_idx]["label"],
+                }
+            )
+
+    by_account: dict[int, dict[str, Any]] = {}
+    for w in result["warnings"]:
+        acc_id = w["account"]["id"]
+        if acc_id not in by_account:
+            by_account[acc_id] = {
+                "account": w["account"],
+                "first_month_label": w["month_label"],
+                "lowest": w["balance"],
+                "minimum": w["minimum"],
+                "months_below": 0,
+            }
+        entry = by_account[acc_id]
+        entry["months_below"] += 1
+        entry["lowest"] = min(entry["lowest"], w["balance"])
+
+    return {
+        "liquid": _trend(result["start_liquid"], liquid),
+        "net_worth": _trend(result["start_net_worth"], result["net_worth"]),
+        "end_label": months[-1]["label"],
+        "lowest_liquid": {
+            "amount": liquid[low_idx],
+            "month_label": months[low_idx]["label"],
+        },
+        "payoffs": payoffs,
+        "warnings": list(by_account.values()),
+    }
+
+
+_MONEY_IN = {"income"}
+_MONEY_OUT = {"expense", "estimate"}
+_HOLDINGS = {"growth", "contribution", "interest", "payment"}
+
+
+def month_breakdown(result: dict[str, Any], month_index: int) -> dict[str, Any]:
+    """What happens in one month: its flows grouped by holding (rows order,
+    unassigned last; holdings with no flows left out), plus totals for money
+    in, money out, card autopay moved between accounts, and asset/loan
+    changes (growth, contributions, interest, scheduled payments)."""
+    flows = result["flows"][month_index]
+    keys: list[tuple[int | None, str]] = [
+        (row["account"]["id"], fmt_account_label(row["account"]))
+        for row in result["rows"]
+    ] + [(None, "(unassigned)")]
+    groups = []
+    for holding_id, name in keys:
+        mine = [f for f in flows if f["holding_id"] == holding_id]
+        if mine:
+            groups.append(
+                {
+                    "name": name,
+                    "flows": mine,
+                    "total": sum((f["amount"] for f in mine), _ZERO),
+                }
+            )
+
+    def total(kinds: set[str]) -> Decimal:
+        return sum((f["amount"] for f in flows if f["kind"] in kinds), _ZERO)
+
+    return {
+        "label": result["months"][month_index]["label"],
+        "groups": groups,
+        "money_in": total(_MONEY_IN),
+        "money_out": total(_MONEY_OUT),
+        # Autopay nets to zero across accounts; report the amount paid.
+        "autopay": sum(
+            (f["amount"] for f in flows if f["kind"] == "autopay" and f["amount"] > 0),
+            _ZERO,
+        ),
+        "holdings_change": total(_HOLDINGS),
     }

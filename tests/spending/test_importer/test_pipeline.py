@@ -3,7 +3,7 @@ from decimal import Decimal
 import pytest
 from sqlalchemy import select
 
-from fintrack.core.models import holdings, imports, loan_details
+from fintrack.core.models import holdings, imports, loan_details, transactions
 from fintrack.ledger.importer import run_import
 from fintrack.ledger.repository.accounts import add_account
 from fintrack.ledger.repository.imports import confirm_import
@@ -74,3 +74,49 @@ def test_run_import_loan_ofx_stores_balance_as_owed(conn, sample_loan_ofx):
     ).scalar()
     (entry,) = [e for e in get_asset_entries(conn, snapshot_id) if e["id"] == loan_id]
     assert entry["balance"] == Decimal("250000.00")
+
+
+def test_reimport_with_changed_descriptions_skips_by_bank_id(
+    conn, sample_account_id, write_ofx
+):
+    # Issue #82: a re-export renames merchants; the FITIDs still match, so the
+    # second import adds nothing even though no fingerprint matches.
+    first = write_ofx(
+        [
+            ("A1", "20261001", "-12.34", "APPLE.COM/BILL"),
+            ("A2", "20261002", "-56.78", "UBER *TRIP"),
+        ]
+    )
+    second = write_ofx(
+        [
+            ("A1", "20261001", "-12.34", "Apple Services"),
+            ("A2", "20261002", "-56.78", "Uber Trip Help.Uber.Com"),
+            ("A3", "20261003", "-9.99", "Netflix"),
+        ]
+    )
+    run_import(conn, first, account_id=sample_account_id)
+    result = run_import(conn, second, account_id=sample_account_id)
+
+    assert result["new_count"] == 1
+    assert result["skipped_count"] == 2
+    stored = conn.execute(
+        select(transactions.c.external_id).where(
+            transactions.c.import_id == result["import_id"]
+        )
+    ).scalars()
+    assert list(stored) == ["A3"]
+
+
+def test_bank_id_match_does_not_cross_accounts(conn, sample_account_id, write_ofx):
+    other = add_account(
+        conn, name="Other Account", institution="Test", account_type="checking"
+    )
+    run_import(
+        conn,
+        write_ofx([("A1", "20261001", "-12.34", "SHOP")]),
+        account_id=sample_account_id,
+    )
+    result = run_import(
+        conn, write_ofx([("A1", "20261001", "-1.00", "ELSE")]), account_id=other
+    )
+    assert result["new_count"] == 1

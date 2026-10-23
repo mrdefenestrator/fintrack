@@ -90,6 +90,7 @@ def insert_transactions(
                 raw_description=txn["raw_description"],
                 normalized_merchant=txn["normalized_merchant"],
                 fingerprint=txn["fingerprint"],
+                external_id=txn.get("external_id"),
             )
         )
     conn.commit()
@@ -99,6 +100,16 @@ def get_existing_fingerprints(conn: Connection, account_id: int) -> set[str]:
     rows = conn.execute(
         select(transactions.c.fingerprint).where(
             transactions.c.account_id == account_id
+        )
+    ).fetchall()
+    return {row[0] for row in rows}
+
+
+def get_existing_external_ids(conn: Connection, account_id: int) -> set[str]:
+    rows = conn.execute(
+        select(transactions.c.external_id).where(
+            transactions.c.account_id == account_id,
+            transactions.c.external_id.is_not(None),
         )
     ).fetchall()
     return {row[0] for row in rows}

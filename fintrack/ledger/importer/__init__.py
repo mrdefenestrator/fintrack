@@ -3,6 +3,7 @@ from pathlib import Path
 from sqlalchemy import Connection
 
 from fintrack.core.config import INSTITUTIONS_DIR
+from fintrack.core.types import ParsedTransaction
 from fintrack.ledger.importer.csv_parser import detect_institution_config, parse_csv
 from fintrack.ledger.importer.dedup import compute_fingerprints, deduplicate
 from fintrack.ledger.importer.normalize import normalize_merchant
@@ -11,6 +12,7 @@ from fintrack.ledger.repository.imports import (
     check_file_hash,
     compute_file_hash,
     create_import,
+    get_existing_external_ids,
     get_existing_fingerprints,
     insert_transactions,
 )
@@ -25,6 +27,13 @@ def _error(msg: str) -> dict:
         "new_merchants": [],
         "error": msg,
     }
+
+
+def _drop_known_ids(
+    txns: list[ParsedTransaction], fps: list[str], known: set[str]
+) -> tuple[list[ParsedTransaction], list[str]]:
+    kept = [(t, fp) for t, fp in zip(txns, fps) if t.get("external_id") not in known]
+    return [t for t, _ in kept], [fp for _, fp in kept]
 
 
 def run_import(
@@ -70,6 +79,13 @@ def run_import(
     new_txns, new_fps, flagged, flagged_fps = deduplicate(
         result["transactions"], fingerprints, existing_fps, account_id
     )
+    # A bank transaction id already on file is a definite duplicate however
+    # the description changed between exports (issue #82). Applied after the
+    # fingerprint pass so the whole-file sequence numbering stays intact.
+    existing_ids = get_existing_external_ids(conn, account_id)
+    if existing_ids:
+        new_txns, new_fps = _drop_known_ids(new_txns, new_fps, existing_ids)
+        flagged, flagged_fps = _drop_known_ids(flagged, flagged_fps, existing_ids)
 
     skipped_count = len(result["transactions"]) - len(new_txns) - len(flagged)
 
@@ -96,6 +112,7 @@ def run_import(
                 "raw_description": txn["raw_description"],
                 "normalized_merchant": txn["normalized_merchant"],
                 "fingerprint": fp,
+                "external_id": txn.get("external_id"),
             }
         )
 
@@ -110,6 +127,7 @@ def run_import(
                 "raw_description": txn["raw_description"],
                 "normalized_merchant": txn["normalized_merchant"],
                 "fingerprint": fp,
+                "external_id": txn.get("external_id"),
             }
         )
 

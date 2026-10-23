@@ -79,3 +79,11 @@ def test_extract_ofx_metadata_corrupt_file(tmp_path):
     bad.write_text("not valid ofx content at all")
     meta = extract_ofx_metadata(bad)
     assert meta is None
+
+
+def test_parse_ofx_keeps_fitid_as_external_id(sample_ofx):
+    result = parse_ofx(sample_ofx)
+    assert [t["external_id"] for t in result["transactions"]] == [
+        "20240115001",
+        "20240116001",
+    ]

@@ -46,3 +46,30 @@ def test_project_estimate_flag(tmp_path):
     result = _invoke(db, "project", "--months", "2", "--estimate")
     assert result.exit_code == 0
     assert "Estimated unscheduled spend" in result.output
+
+
+def test_project_changes_flag(tmp_path):
+    db = tmp_path / "t.db"
+    assert _invoke(db, "snapshots", "add", "main").exit_code == 0
+    assert (
+        _invoke(
+            db,
+            "accounts",
+            "add",
+            "--name",
+            "Checking",
+            "--type",
+            "checking",
+            "--balance",
+            "1000",
+        ).exit_code
+        == 0
+    )
+    result = _invoke(db, "project", "--months", "2", "--changes")
+    assert result.exit_code == 0
+    assert "Liquid change" in result.output
+    assert "Net worth change" in result.output
+    header = next(
+        line for line in result.output.splitlines() if line.startswith("Account")
+    )
+    assert "Now" not in header

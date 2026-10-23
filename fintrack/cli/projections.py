@@ -21,8 +21,13 @@ from fintrack.projections import engine
     help="Include estimated unscheduled spend (trailing 3-month category "
     "averages, minus budget-claimed categories)",
 )
+@click.option(
+    "--changes",
+    is_flag=True,
+    help="Show each month's change instead of month-end balances",
+)
 @pass_cli
-def project(cli, months, estimate):
+def project(cli, months, estimate, changes):
     """Project ending balances per account, month by month."""
     with cli.connect() as conn:
         snapshot_id = cli.snapshot_id(conn)
@@ -34,28 +39,41 @@ def project(cli, months, estimate):
     _echo_summary(summary)
 
     labels = [m["label"] for m in result["months"]]
-    headers = ["Account", "Now"] + labels
-    rows = []
-    for row in result["rows"]:
-        rows.append(
-            [row["account"]["name"], fmt_money(row["start"])]
-            + [fmt_money(b) for b in row["balances"]]
-        )
+    # Each table line: (label, starting value, monthly series).
+    lines = [
+        (row["account"]["name"], row["start"], row["balances"])
+        for row in result["rows"]
+    ]
     if result["has_unassigned"]:
-        rows.append(
-            ["(unassigned)", fmt_money(0)]
-            + [fmt_money(v) for v in result["unassigned"]]
-        )
-    rows.append(["-" for _ in headers])
-    rows.append(
-        ["Liquid total", fmt_money(result["start_liquid"])]
-        + [fmt_money(v) for v in result["liquid"]]
-    )
-    rows.append(
-        ["Net worth", fmt_money(result["start_net_worth"])]
-        + [fmt_money(v) for v in result["net_worth"]]
-    )
-    echo_table(rows, headers, ("left",) + ("right",) * (len(labels) + 1))
+        lines.append(("(unassigned)", 0, result["unassigned"]))
+    totals = [
+        ("Liquid", result["start_liquid"], result["liquid"]),
+        ("Net worth", result["start_net_worth"], result["net_worth"]),
+    ]
+    if changes:
+        # Changes view: no "Now" column — month 0 is measured against it.
+        headers = ["Account"] + labels
+        rows = [
+            [name] + [fmt_money(v) for v in engine.changes(start, series)]
+            for name, start, series in lines
+        ]
+        rows.append(["-" for _ in headers])
+        for name, start, series in totals:
+            rows.append(
+                [f"{name} change"]
+                + [fmt_money(v) for v in engine.changes(start, series)]
+            )
+    else:
+        headers = ["Account", "Now"] + labels
+        rows = [
+            [name, fmt_money(start)] + [fmt_money(v) for v in series]
+            for name, start, series in lines
+        ]
+        rows.append(["-" for _ in headers])
+        for name, start, series in totals:
+            label = "Liquid total" if name == "Liquid" else name
+            rows.append([label, fmt_money(start)] + [fmt_money(v) for v in series])
+    echo_table(rows, headers, ("left",) + ("right",) * (len(headers) - 1))
 
     if result["estimate"] is not None:
         monthly = result["estimate"]["monthly"]

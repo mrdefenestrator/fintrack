@@ -388,6 +388,10 @@ Surfaced at `/s/<snapshot>/projections` (horizon and estimator as query
 params) and `fintrack project --months N [--estimate]`. Both lead with the
 summary, then the grid with a "Now" column ahead of the months; the web page
 also lists the warnings and, with the estimate on, its per-category breakdown.
+A Balances / Changes toggle (`?view=change`, CLI `--changes`) swaps the grid's
+month-end balances for each month's change (`changes()`: month 0 against
+"now", then month against month), so lumpy months stand out; below-minimum
+cells stay marked by balance in either view.
 There is deliberately no chart: one shared axis made the small, meaningful
 movements (cash, cards) unreadable next to houses and mortgages (#54).
 

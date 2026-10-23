@@ -102,3 +102,24 @@ def test_projections_minimum_balance_warning(page, flask_server, _db_path):
     warnings = page.locator("[data-summary='warnings']")
     assert warnings.is_visible()
     assert "drops below its $6,000.00 minimum" in warnings.inner_text()
+
+
+def test_projections_changes_view(page, flask_server):
+    """The Changes toggle swaps balances for month-over-month changes and is
+    kept when the horizon changes."""
+    page.goto(f"{flask_server}/s/test_finances/projections")
+    page.click("[data-view-toggle] >> text=Changes")
+    page.wait_for_url("**view=change**")
+    tbl = page.locator("[data-projection-table]")
+    assert tbl.get_attribute("data-view") == "change"
+    assert tbl.locator("thead", has_text="Now").count() == 0
+    assert tbl.locator("tfoot tr.total-row", has_text="Liquid change").count() == 1
+    assert tbl.locator("tfoot tr.total-row", has_text="Net worth change").count() == 1
+
+    page.click("a[href*='months=6']")
+    page.wait_for_url("**months=6**")
+    assert "view=change" in page.url
+
+    page.click("[data-view-toggle] >> text=Balances")
+    page.wait_for_url(lambda url: "view=change" not in url)
+    assert tbl.locator("tfoot tr.total-row", has_text="Liquid total").count() == 1

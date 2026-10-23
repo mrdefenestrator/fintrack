@@ -101,37 +101,56 @@
 </div><!-- end top band -->
 
 {% call fb.filter_bar(active_count=0,
-    reset_url=url_for('projections.projections_view', filename=filename, edit=1 if edit_mode else none),
+    reset_url=proj_url(months=none, estimate=none, view=none),
     use_htmx=false, label='Options',
     icon='M10.5 6h9.75M10.5 6a1.5 1.5 0 1 1-3 0m3 0a1.5 1.5 0 1 0-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-9.75 0h9.75') %}
     <div class="flex items-center gap-2" data-proj-nav>
         <span class="text-gray-500 dark:text-gray-400">Months:</span>
         {% set _month_opts = [] %}
         {% for choice in month_choices %}
-        {% set _ = _month_opts.append({
-            'url': url_for('projections.projections_view', filename=filename, months=choice, estimate=1 if estimate else none, edit=1 if edit_mode else none),
-            'label': choice,
-            'active': months == choice}) %}
+        {% set _ = _month_opts.append({'url': proj_url(months=choice), 'label': choice, 'active': months == choice}) %}
         {% endfor %}
         {{ nav.segmented(_month_opts, use_htmx=false, size='sm') }}
     </div>
-    <a href="{{ url_for('projections.projections_view', filename=filename, months=months, estimate=none if estimate else 1, edit=1 if edit_mode else none) }}"
+    <div class="flex items-center gap-2" data-proj-nav data-view-toggle>
+        <span class="text-gray-500 dark:text-gray-400">Show:</span>
+        {{ nav.segmented([
+            {'url': proj_url(view=none), 'label': 'Balances', 'active': view == 'balances'},
+            {'url': proj_url(view='change'), 'label': 'Changes', 'active': view == 'change'},
+        ], use_htmx=false, size='sm') }}
+    </div>
+    <a href="{{ proj_url(estimate=none if estimate else 1) }}"
         data-estimate-toggle role="button" aria-pressed="{{ 'true' if estimate else 'false' }}"
         class="px-2.5 py-1 rounded text-sm transition-colors border border-gray-300 dark:border-gray-600 {% if estimate %}bg-blue-500 text-white border-blue-500{% else %}bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600{% endif %}">
         Estimate unscheduled spend
     </a>
 {% endcall %}
 
-<!-- Accounts × months ending balances (the sheet). The filter bar above supplies
+<!-- Accounts × months grid (the sheet): month-end balances after a "Now"
+     column, or (view=change) each month's change. The filter bar above supplies
      the card's top edge + rounding, so the table carries only the sides/bottom. -->
+{% set changes = view == 'change' %}
+{% set num = 'text-right tabular-nums whitespace-nowrap' %}
+{# In the Changes view a month with no movement shows a faint dash, so the
+   months that do move stand out. #}
+{% macro amount(v) %}{% if changes and v == 0 %}<span class="text-gray-300 dark:text-gray-600">&ndash;</span>{% else %}{{ v | fmt_money }}{% endif %}{% endmacro %}
+{% macro heading_cell(v) %}<td class="px-1.5 py-1.5 {{ num }} text-sm {% if v < 0 %}!text-red-600 dark:!text-red-400{% endif %}">{{ amount(v) }}</td>{% endmacro %}
+{% macro num_cell(v) %}<td class="{{ sheet.cell_class(num, sheet.neg(v < 0)) }}"{% if changes and v == 0 %} data-sort-value="0"{% endif %}>{{ amount(v) }}</td>{% endmacro %}
 <div class="table-scroll-container rounded-b-lg border-l border-b border-r border-gray-300 dark:border-gray-600 shadow-sm" data-sheet-scroll>
 {# Client-side column sort (web/static/js/sortable.js) via `sortable` + the
    sheet.thead hooks; the (unassigned)/Liquid/Net-worth rows live in <tfoot> so
    the sorter (tbody-only) leaves them pinned in place. #}
-<table data-projection-table class="sortable sheet-freeze-col w-full text-sm border-collapse bg-white dark:bg-gray-800" style="white-space:nowrap">
-    {{ sheet.thead(["Account", "Now"] + (result.months | map(attribute='label') | list),
-                   right_align_cols=range(1, (result.months | length) + 2) | list,
+<table data-projection-table data-view="{{ view }}" class="sortable sheet-freeze-col w-full text-sm border-collapse bg-white dark:bg-gray-800" style="white-space:nowrap">
+    {% set _months = result.months | map(attribute='label') | list %}
+    {% if changes %}
+    {{ sheet.thead(["Account"] + _months,
+                   right_align_cols=range(1, (_months | length) + 1) | list,
+                   tooltips=["Account or holding name"]) }}
+    {% else %}
+    {{ sheet.thead(["Account", "Now"] + _months,
+                   right_align_cols=range(1, (_months | length) + 2) | list,
                    tooltips=["Account or holding name", "Current balance (start of projection)"]) }}
+    {% endif %}
     {% for group in groups %}
     <tbody class="projection-group" data-group="{{ group.key }}" x-data="{ open: {{ 'true' if group.key in open_groups else 'false' }} }" :data-open="open">
         <tr class="projection-group-heading cursor-pointer select-none" @click="open = !open">
@@ -139,19 +158,18 @@
                 <span class="inline-block transition-transform duration-150 text-[0.6rem] mr-0.5" :class="open && 'rotate-90'">&#9656;</span>
                 {{ group.label }}
             </td>
-            <td class="px-1.5 py-1.5 text-right tabular-nums whitespace-nowrap text-sm {% if group.start < 0 %}!text-red-600 dark:!text-red-400{% endif %}">{{ group.start | fmt_money }}</td>
-            {% for s in group.subtotals %}
-            <td class="px-1.5 py-1.5 text-right tabular-nums whitespace-nowrap text-sm {% if s | display_is_negative %}!text-red-600 dark:!text-red-400{% endif %}">{{ s }}</td>
-            {% endfor %}
+            {% if not changes %}{{ heading_cell(group.start) }}{% endif %}
+            {% for v in group.cells %}{{ heading_cell(v) }}{% endfor %}
         </tr>
         {% for row in group.rows %}
         <tr class="{{ sheet.row_class() }}" x-show="open" x-transition.opacity>
             <td class="{{ sheet.cell_class() }}">{{ row.account | account_label }}</td>
-            <td class="{{ sheet.cell_class('text-right tabular-nums whitespace-nowrap', sheet.neg(row.start < 0)) }}">{{ row.start | fmt_money }}</td>
-            {% for bal in row.balances %}
-            <td class="{{ sheet.cell_class('text-right tabular-nums whitespace-nowrap',
+            {% if not changes %}{{ num_cell(row.start) }}{% endif %}
+            {% for v in row.cells %}
+            {# Below-minimum is about the balance, so it marks the cell in either view. #}
+            <td class="{{ sheet.cell_class(num,
                 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 font-medium' if row.below[loop.index0]
-                else sheet.neg(bal | display_is_negative)) }}">{{ bal | fmt_money }}</td>
+                else sheet.neg(v < 0)) }}"{% if row.below[loop.index0] %} title="Below the {{ row.account.minimum_balance | fmt_money_header }} minimum"{% endif %}{% if changes and v == 0 %} data-sort-value="0"{% endif %}>{{ amount(v) }}</td>
             {% endfor %}
         </tr>
         {% endfor %}
@@ -160,26 +178,20 @@
     <tfoot>
         {% if result.has_unassigned %}
         <tr class="italic text-gray-600 dark:text-gray-300 border-b border-gray-200 dark:border-gray-700">
-            <td class="{{ sheet.cell_class('', 'whitespace-nowrap') }}">(unassigned)</td>
-            <td class="{{ sheet.cell_class('text-right tabular-nums whitespace-nowrap') }}">{{ 0 | fmt_money }}</td>
-            {% for v in result.unassigned %}
-            <td class="{{ sheet.cell_class('text-right tabular-nums whitespace-nowrap', sheet.neg(v | display_is_negative)) }}">{{ v | fmt_money }}</td>
-            {% endfor %}
+            <td class="{{ sheet.cell_class('', 'whitespace-nowrap') }}" title="Budget entries with no account set">(unassigned)</td>
+            {% if not changes %}{{ num_cell(0) }}{% endif %}
+            {% for v in footer.unassigned %}{{ num_cell(v) }}{% endfor %}
         </tr>
         {% endif %}
         <tr class="total-row total-upper bg-gray-100 dark:bg-gray-700 border-t-2 border-gray-300 dark:border-gray-600 font-medium">
-            <td class="{{ sheet.cell_class('', 'whitespace-nowrap') }}">Liquid total</td>
-            <td class="{{ sheet.cell_class('text-right tabular-nums whitespace-nowrap', sheet.neg(result.start_liquid < 0)) }}">{{ result.start_liquid | fmt_money }}</td>
-            {% for v in result.liquid %}
-            <td class="{{ sheet.cell_class('text-right tabular-nums whitespace-nowrap', sheet.neg(v | display_is_negative)) }}">{{ v | fmt_money }}</td>
-            {% endfor %}
+            <td class="{{ sheet.cell_class('', 'whitespace-nowrap') }}">{{ 'Liquid change' if changes else 'Liquid total' }}</td>
+            {% if not changes %}{{ num_cell(result.start_liquid) }}{% endif %}
+            {% for v in footer.liquid %}{{ num_cell(v) }}{% endfor %}
         </tr>
         <tr class="total-row bg-gray-100 dark:bg-gray-700 font-medium">
-            <td class="{{ sheet.cell_class('', 'whitespace-nowrap') }}">Net worth</td>
-            <td class="{{ sheet.cell_class('text-right tabular-nums whitespace-nowrap', sheet.neg(result.start_net_worth < 0)) }}">{{ result.start_net_worth | fmt_money }}</td>
-            {% for v in result.net_worth %}
-            <td class="{{ sheet.cell_class('text-right tabular-nums whitespace-nowrap', sheet.neg(v | display_is_negative)) }}">{{ v | fmt_money }}</td>
-            {% endfor %}
+            <td class="{{ sheet.cell_class('', 'whitespace-nowrap') }}">{{ 'Net worth change' if changes else 'Net worth' }}</td>
+            {% if not changes %}{{ num_cell(result.start_net_worth) }}{% endif %}
+            {% for v in footer.net_worth %}{{ num_cell(v) }}{% endfor %}
         </tr>
     </tfoot>
 </table>

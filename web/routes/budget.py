@@ -5,8 +5,8 @@ from decimal import Decimal
 
 from flask import Blueprint, abort, current_app, render_template, request
 
+from fintrack.budget import reconcile
 from fintrack.budget import repository as repo_budget
-from fintrack.budget.reconcile import budget_actuals
 from fintrack.core import filters, tables
 from fintrack.core.loader import load_finances_from_db
 from fintrack.ledger.repository.categories import get_category_names
@@ -160,9 +160,44 @@ def _valid_month(year: int, month: int, default: date) -> date:
 def actual_view(filename: str):
     """Per-entry budget-vs-actual for one month (issue #53), on its own page
     (issue #73): expected vs realized from linked transactions, with
-    missed/upcoming/drift flags. Read-only. Month paging (``?year=&month=``,
-    default: now) and htmx partial swaps mirror the Transactions sheet."""
+    missed/upcoming/drift flags. Month paging (``?year=&month=``, default: now)
+    and htmx partial swaps mirror the Transactions sheet. In edit mode, link
+    suggestions for the month sit under the entry they'd realize, with
+    Apply / Dismiss actions (issue #70)."""
+    return _render_actual(filename, validate_snapshot(filename))
+
+
+def _suggestion_action(filename: str, action):
+    """Run a link-suggestion action, then re-render the page for the month and
+    filters in the query string (the buttons post to the page's own query)."""
     snapshot_id = validate_snapshot(filename)
+    try:
+        txn_id = int(request.form["transaction_id"])
+        entry_ref = int(request.form["budget_entry_ref"])
+    except (KeyError, ValueError):
+        return "", 422
+    engine = current_app.config["engine"]
+    with engine.connect() as conn:
+        try:
+            action(conn, snapshot_id, txn_id, entry_ref)
+        except ValueError:  # incl. SnapshotMismatch / KindMismatch
+            return "", 422
+    return _render_actual(filename, snapshot_id)
+
+
+@budget_bp.route("/<filename>/budget/actual/link", methods=["POST"])
+def actual_link(filename: str):
+    """Apply a link suggestion."""
+    return _suggestion_action(filename, reconcile.link_transaction)
+
+
+@budget_bp.route("/<filename>/budget/actual/dismiss", methods=["POST"])
+def actual_dismiss(filename: str):
+    """Dismiss a link suggestion so it isn't proposed again."""
+    return _suggestion_action(filename, reconcile.dismiss_suggestion)
+
+
+def _render_actual(filename: str, snapshot_id: int):
     edit_mode = request.args.get("edit") == "1"
     ctx = get_common_context(snapshot_id, filename, edit_mode)
     ctx["active_tab"] = "budget_actual"
@@ -174,7 +209,10 @@ def actual_view(filename: str):
     )
     engine = current_app.config["engine"]
     with engine.connect() as conn:
-        actuals = budget_actuals(
+        actuals = reconcile.budget_actuals(
+            conn, snapshot_id, year=viewed.year, month=viewed.month
+        )
+        suggestions = reconcile.suggest_links(
             conn, snapshot_id, year=viewed.year, month=viewed.month
         )
     active = [a for a in actuals if a.status != "inactive"]
@@ -212,12 +250,23 @@ def actual_view(filename: str):
 
     net_expected, net_actual = _net("expected"), _net("actual")
 
+    # Suggestions grouped under the entry they'd realize, best first
+    # (suggest_links already sorts by score). Only shown entries host them.
+    shown_refs = {a.entry_ref for a in shown}
+    suggestions_by_entry: dict[int, list] = {}
+    for sug in suggestions:
+        if sug.entry_ref in shown_refs:
+            suggestions_by_entry.setdefault(sug.entry_ref, []).append(sug)
+
     prev = date(viewed.year - (viewed.month == 1), (viewed.month - 2) % 12 + 1, 1)
     nxt = date(viewed.year + (viewed.month == 12), viewed.month % 12 + 1, 1)
     ctx.update(
         budget_actuals=shown,
         missing_count=sum(a.status == "missing" for a in active),
         drift_count=sum(bool(a.drift_amount) for a in active),
+        suggestions_by_entry=suggestions_by_entry,
+        suggestion_count=sum(len(v) for v in suggestions_by_entry.values()),
+        self_query=request.query_string.decode(),
         net_expected=net_expected,
         net_actual=net_actual,
         net_delta=net_actual - net_expected,

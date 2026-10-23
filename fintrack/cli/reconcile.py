@@ -10,8 +10,10 @@ import click
 from fintrack.budget.reconcile import (
     SnapshotMismatch,
     budget_actuals,
+    dismiss_suggestion,
     link_transaction,
     suggest_links,
+    undismiss_suggestions,
     unlink_transaction,
 )
 from fintrack.budget.repository import get_budget_entries
@@ -33,6 +35,14 @@ def _entry_index_map(entries) -> dict[int, int]:
     return {e["_db_id"]: i for i, e in enumerate(entries)}
 
 
+def _entry_at(entries, entry_index: int):
+    if entry_index < 0 or entry_index >= len(entries):
+        raise click.ClickException(
+            f"Budget index {entry_index} out of range (0..{len(entries) - 1})"
+        )
+    return entries[entry_index]
+
+
 @click.group()
 def transactions():
     """Associate transactions with budget entries and review the results."""
@@ -47,12 +57,7 @@ def link(cli, txn_id, entry_index):
     `fintrack budget`)."""
     with cli.connect() as conn:
         snapshot_id = cli.snapshot_id(conn)
-        entries = get_budget_entries(conn, snapshot_id)
-        if entry_index < 0 or entry_index >= len(entries):
-            raise click.ClickException(
-                f"Budget index {entry_index} out of range (0..{len(entries) - 1})"
-            )
-        entry = entries[entry_index]
+        entry = _entry_at(get_budget_entries(conn, snapshot_id), entry_index)
         try:
             link_transaction(conn, snapshot_id, txn_id, entry["_db_id"])
         except SnapshotMismatch as e:
@@ -72,6 +77,32 @@ def unlink(cli, txn_id):
     click.echo(f"Unlinked transaction {txn_id}")
 
 
+@transactions.command("dismiss")
+@click.argument("txn_id", type=int)
+@click.argument("entry_index", type=int)
+@pass_cli
+def dismiss(cli, txn_id, entry_index):
+    """Stop suggesting budget entry ENTRY_INDEX for transaction TXN_ID."""
+    with cli.connect() as conn:
+        snapshot_id = cli.snapshot_id(conn)
+        entry = _entry_at(get_budget_entries(conn, snapshot_id), entry_index)
+        try:
+            dismiss_suggestion(conn, snapshot_id, txn_id, entry["_db_id"])
+        except ValueError as e:
+            raise click.ClickException(str(e)) from e
+    click.echo(f"Dismissed suggestion: txn {txn_id} → {entry.get('description', '')!r}")
+
+
+@transactions.command("undismiss")
+@click.argument("txn_id", type=int)
+@pass_cli
+def undismiss(cli, txn_id):
+    """Forget dismissed suggestions for transaction TXN_ID."""
+    with cli.connect() as conn:
+        count = undismiss_suggestions(conn, txn_id)
+    click.echo(f"Cleared {count} dismissed suggestion(s) for transaction {txn_id}")
+
+
 @transactions.command("suggest")
 @click.option("--year", type=int, default=None)
 @click.option("--month", type=int, default=None)
@@ -79,14 +110,15 @@ def unlink(cli, txn_id):
     "--apply",
     "apply_",
     is_flag=True,
-    help="Prompt to confirm and apply each suggestion",
+    help="Prompt to apply (y), skip (n), or dismiss (d) each suggestion",
 )
 @pass_cli
 def suggest(cli, year, month, apply_):
     """Propose budget-entry links for still-unlinked transactions.
 
     Read-only by default; --apply confirms each suggestion before linking
-    (suggestions are never applied silently)."""
+    (suggestions are never applied silently). Dismissed suggestions are not
+    proposed again; see `dismiss` / `undismiss`."""
     with cli.connect() as conn:
         snapshot_id = cli.snapshot_id(conn)
         suggestions = suggest_links(conn, snapshot_id, year=year, month=month)
@@ -122,7 +154,7 @@ def suggest(cli, year, month, apply_):
             )
             return
 
-        applied = 0
+        applied = dismissed = 0
         for s in suggestions:
             merchant = s.transaction.get("merchant") or ""
             prompt = (
@@ -132,10 +164,21 @@ def suggest(cli, year, month, apply_):
                 f"{s.entry.get('description', '')} "
                 f"[{s.confidence} {s.score:.2f}]?"
             )
-            if click.confirm(prompt, default=(s.confidence == "high")):
+            choice = click.prompt(
+                prompt,
+                type=click.Choice(["y", "n", "d"]),
+                default="y" if s.confidence == "high" else "n",
+            )
+            if choice == "y":
                 link_transaction(conn, snapshot_id, s.transaction["id"], s.entry_ref)
                 applied += 1
-        click.echo(f"\nApplied {applied} of {len(suggestions)} suggestion(s).")
+            elif choice == "d":
+                dismiss_suggestion(conn, snapshot_id, s.transaction["id"], s.entry_ref)
+                dismissed += 1
+        summary = f"\nApplied {applied} of {len(suggestions)} suggestion(s)"
+        if dismissed:
+            summary += f", dismissed {dismissed}"
+        click.echo(summary + ".")
 
 
 @transactions.command("budget-actual")

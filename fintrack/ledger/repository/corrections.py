@@ -1,6 +1,10 @@
 from sqlalchemy import Connection, delete, insert, select, update
 
-from fintrack.core.models import transaction_corrections
+from fintrack.core.models import (
+    budget_entries,
+    link_suggestion_dismissals,
+    transaction_corrections,
+)
 
 # Overlay columns that carry a user fix. A correction row with all of these
 # NULL carries no information and is pruned (see _prune_if_empty), so a row that
@@ -133,3 +137,53 @@ def get_correction(conn: Connection, transaction_id: int) -> dict | None:
         )
     ).fetchone()
     return dict(row._mapping) if row else None
+
+
+def add_link_dismissal(
+    conn: Connection, transaction_id: int, budget_entry_ref: int
+) -> None:
+    """Record that the user rejected suggesting ``budget_entry_ref`` for
+    ``transaction_id``. Idempotent. Snapshot consistency is validated by the
+    caller (fintrack.budget.reconcile.dismiss_suggestion)."""
+    exists = conn.execute(
+        select(link_suggestion_dismissals.c.id).where(
+            link_suggestion_dismissals.c.transaction_id == transaction_id,
+            link_suggestion_dismissals.c.budget_entry_ref == budget_entry_ref,
+        )
+    ).fetchone()
+    if exists is None:
+        conn.execute(
+            insert(link_suggestion_dismissals).values(
+                transaction_id=transaction_id, budget_entry_ref=budget_entry_ref
+            )
+        )
+    conn.commit()
+
+
+def clear_link_dismissals(conn: Connection, transaction_id: int) -> int:
+    """Forget every dismissed suggestion for ``transaction_id``; returns how
+    many were removed."""
+    result = conn.execute(
+        delete(link_suggestion_dismissals).where(
+            link_suggestion_dismissals.c.transaction_id == transaction_id
+        )
+    )
+    conn.commit()
+    return result.rowcount
+
+
+def get_link_dismissals(conn: Connection, snapshot_id: int) -> set[tuple[int, int]]:
+    """Dismissed ``(transaction_id, budget_entry_ref)`` pairs in a snapshot,
+    scoped through the budget entry (which carries the snapshot_id)."""
+    stmt = (
+        select(
+            link_suggestion_dismissals.c.transaction_id,
+            link_suggestion_dismissals.c.budget_entry_ref,
+        )
+        .join(
+            budget_entries,
+            link_suggestion_dismissals.c.budget_entry_ref == budget_entries.c.id,
+        )
+        .where(budget_entries.c.snapshot_id == snapshot_id)
+    )
+    return {(row[0], row[1]) for row in conn.execute(stmt)}

@@ -170,6 +170,9 @@ Single `MetaData` in `fintrack/core/models.py`.
   unlinking prunes a row left with every overlay column NULL. A row that exists
   only for a link is not a "correction": the Transactions Status filter keys on
   category/merchant/notes being set, not on the row existing.
+- **link_suggestion_dismissals** — `(transaction_id, budget_entry_ref)` pairs
+  the user rejected as link suggestions, unique per pair; both FKs cascade.
+  Snapshot consistency is checked in `reconcile`, as for the link itself.
 - **categories** — the shared taxonomy, seeded from `configs/categories.yaml`.
 - **budget_entries** — scheduled income/expenses: `kind`, `amount`,
   `recurrence` plus its parameters (`date`, `day_of_month`, `month`,
@@ -337,8 +340,16 @@ Three things build on the link:
   so the classifier privacy constraint is untouched) scores each unlinked
   transaction against candidate entries on amount closeness (gated to ±25%),
   category match, flow-account match, and date proximity to the expected
-  occurrence. Suggestions are always presented for confirmation, never applied
-  silently.
+  occurrence. Entries measured by category total (below) are never proposed:
+  their category already counts the transaction, and a link would only re-pin
+  its category. Suggestions are always presented for confirmation, never applied
+  silently. A rejected suggestion can be **dismissed**: the pair is stored in
+  `link_suggestion_dismissals` and never proposed again (the transaction may
+  still be offered its next-best entry, and manual linking is unaffected). On
+  the Budget vs Actual page each entry shows how many of the month's unlinked
+  transactions look like it; in edit mode a row under the entry lists them with
+  Apply / Dismiss. The CLI has `transactions suggest [--apply]` (y / n / d per
+  suggestion) and `transactions dismiss` / `undismiss`.
 - **Budget-vs-actual per entry** (`budget_actuals`) — for a month, each entry's
   scheduled amount is compared to its actual and classified matched / over /
   under / missing / upcoming / unlinked / inactive. Discrete entries (bills,
@@ -351,7 +362,8 @@ Three things build on the link:
   say nothing about whether the money moved. Each result carries a tone
   (good / bad / neutral) so over/under read correctly for both kinds: earning
   over budget is good, spending over it is bad. Surfaced on its own
-  Budget vs Actual page (`/s/<snapshot>/budget/actual`, read-only, in the
+  Budget vs Actual page (`/s/<snapshot>/budget/actual`, read-only apart from
+  the edit-mode link suggestions, in the
   Spending nav group; month pager, Kind/Category/Status filters, and a net
   income − expenses total row, laid out like the Transactions sheet) and `fintrack transactions budget-actual`.
 - **Projection true-up** — in the current (partial) month, a budget flow already
@@ -487,7 +499,7 @@ accounts   list|add|edit|delete
 balance    set <account> <amount> [--date] | history <account>
 import     <files…> --account NAME
 staging    list | confirm <id> | reject <id>
-transactions link <txn> <entry> | unlink <txn> | suggest | budget-actual
+transactions link <txn> <entry> | unlink <txn> | suggest | dismiss <txn> <entry> | undismiss <txn> | budget-actual
 merchants  list | set
 categories list|add|edit|delete
 report     monthly | trends

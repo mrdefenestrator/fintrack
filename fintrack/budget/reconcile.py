@@ -11,6 +11,8 @@ layer on top of it:
 - ``suggest_links`` — a purely local heuristic matcher (no API, so the
   classifier privacy constraint is untouched) that proposes entry candidates
   for still-unlinked transactions, always for user confirmation.
+- ``dismiss_suggestion`` / ``undismiss_suggestions`` — remember (or forget)
+  rejected suggestions so they aren't proposed again.
 - ``budget_actuals`` — per-entry budget-vs-actual for a month: expected vs
   realized, price drift, and missed / upcoming recurring charges.
 
@@ -33,7 +35,12 @@ from fintrack.budget.recurrence import budget_entry_in_month, money
 from fintrack.budget.repository import get_budget_entries, get_budget_entry
 from fintrack.core.models import holdings, transactions
 from fintrack.ledger.repository.aggregations import get_monthly_category_totals
-from fintrack.ledger.repository.corrections import set_budget_link
+from fintrack.ledger.repository.corrections import (
+    add_link_dismissal,
+    clear_link_dismissals,
+    get_link_dismissals,
+    set_budget_link,
+)
 from fintrack.ledger.repository.transactions import (
     get_budget_link_date_ranges,
     get_transactions,
@@ -76,6 +83,27 @@ def _txn_snapshot_and_amount(
     return (row[0], money(row[1])) if row else None
 
 
+def _validated_pair(
+    conn: Connection, snapshot_id: int, transaction_id: int, budget_entry_ref: int
+) -> tuple[Decimal, dict[str, Any]]:
+    """Return the transaction's amount and the entry, after checking both are
+    in ``snapshot_id`` (ValueError / SnapshotMismatch otherwise)."""
+    found = _txn_snapshot_and_amount(conn, transaction_id)
+    if found is None:
+        raise ValueError(f"Transaction {transaction_id} not found")
+    txn_snap, amount = found
+    if txn_snap != snapshot_id:
+        raise SnapshotMismatch(
+            f"Transaction {transaction_id} is in snapshot {txn_snap}, not {snapshot_id}"
+        )
+    entry = get_budget_entry(conn, snapshot_id, budget_entry_ref)
+    if entry is None:
+        raise SnapshotMismatch(
+            f"Budget entry {budget_entry_ref} is not in snapshot {snapshot_id}"
+        )
+    return amount, entry
+
+
 def link_transaction(
     conn: Connection,
     snapshot_id: int,
@@ -91,19 +119,7 @@ def link_transaction(
     take deposits, expense entries take charges), the same rule the picker and
     suggester apply; a mismatched link would also pin the wrong category.
     """
-    found = _txn_snapshot_and_amount(conn, transaction_id)
-    if found is None:
-        raise ValueError(f"Transaction {transaction_id} not found")
-    txn_snap, amount = found
-    if txn_snap != snapshot_id:
-        raise SnapshotMismatch(
-            f"Transaction {transaction_id} is in snapshot {txn_snap}, not {snapshot_id}"
-        )
-    entry = get_budget_entry(conn, snapshot_id, budget_entry_ref)
-    if entry is None:
-        raise SnapshotMismatch(
-            f"Budget entry {budget_entry_ref} is not in snapshot {snapshot_id}"
-        )
+    amount, entry = _validated_pair(conn, snapshot_id, transaction_id, budget_entry_ref)
     kind = entry.get("kind", "expense")
     if not _kind_matches_sign(kind, amount):
         raise KindMismatch(
@@ -121,6 +137,26 @@ def unlink_transaction(conn: Connection, transaction_id: int) -> None:
 # ---------------------------------------------------------------------------
 # Occurrence helpers
 # ---------------------------------------------------------------------------
+
+
+def dismiss_suggestion(
+    conn: Connection,
+    snapshot_id: int,
+    transaction_id: int,
+    budget_entry_ref: int,
+) -> None:
+    """Stop suggesting ``budget_entry_ref`` for ``transaction_id`` (issue #70).
+
+    Same snapshot guard as ``link_transaction``. The transaction stays
+    linkable to that entry by hand, and may still be suggested other entries.
+    """
+    _validated_pair(conn, snapshot_id, transaction_id, budget_entry_ref)
+    add_link_dismissal(conn, transaction_id, budget_entry_ref)
+
+
+def undismiss_suggestions(conn: Connection, transaction_id: int) -> int:
+    """Forget every dismissed suggestion for a transaction; returns the count."""
+    return clear_link_dismissals(conn, transaction_id)
 
 
 def occurs_in_month(entry: dict[str, Any], year: int, month: int) -> bool:
@@ -201,6 +237,14 @@ def _amount_component(txn_abs: Decimal, entry_amount: Decimal) -> Decimal:
     return Decimal(1) - reldiff / _AMOUNT_GATE
 
 
+def _measured_by_category(entry: dict[str, Any], claims: Counter) -> bool:
+    """A variable, continuous entry that alone claims its category is measured
+    by that category's month total, not by links (see ``budget_actuals``).
+    ``claims`` counts entries per category across the snapshot."""
+    category = entry.get("category")
+    return bool(entry.get("continuous") and category and claims[category] == 1)
+
+
 def _kind_matches_sign(entry_kind: str, amount: Decimal) -> bool:
     if entry_kind == "income":
         return amount > _ZERO
@@ -279,17 +323,27 @@ def suggest_links(
 
     Suggestions are for confirmation only — nothing is written. Scoped to a
     month when both ``year`` and ``month`` are given, else all transactions.
+    Pairs the user dismissed are skipped, so a transaction whose best match
+    was rejected may be offered its next-best entry instead. Entries measured
+    by category total are never proposed: their category already counts the
+    transaction, and a link would only re-pin its category (silently
+    recategorizing it when the guess is wrong).
     """
     entries = get_budget_entries(conn, snapshot_id)
+    claims = Counter(e["category"] for e in entries if e.get("category"))
+    entries = [e for e in entries if not _measured_by_category(e, claims)]
     if not entries:
         return []
     txns = get_transactions(conn, year=year, month=month, snapshot_id=snapshot_id)
+    dismissed = get_link_dismissals(conn, snapshot_id)
     suggestions: list[Suggestion] = []
     for txn in txns:
         if txn.get("budget_entry_ref") is not None:
             continue
         best: Suggestion | None = None
         for entry in entries:
+            if (txn["id"], entry["_db_id"]) in dismissed:
+                continue
             cand = _score_pair(txn, entry)
             if cand is None:
                 continue
@@ -421,7 +475,7 @@ def budget_actuals(
         expected = budget_entry_in_month(entry, year, month)
         category = entry.get("category")
         drift = _ZERO
-        if entry.get("continuous") and category and claims[category] == 1:
+        if _measured_by_category(entry, claims):
             source = "category"
             row = category_totals.get(category)
             count = row["count"] if row else 0

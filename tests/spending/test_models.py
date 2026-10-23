@@ -15,6 +15,7 @@ def test_all_tables_created(engine):
         "transactions",
         "merchant_cache",
         "transaction_corrections",
+        "link_suggestion_dismissals",
         "categories",
         "budget_entries",
         "balance_history",

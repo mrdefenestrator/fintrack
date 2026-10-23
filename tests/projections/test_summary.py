@@ -172,7 +172,12 @@ def test_summarize(conn, snapshot_id):
 def test_month_breakdown_groups_by_holding(conn, snapshot_id):
     _household(conn, snapshot_id)
     result = project(conn, snapshot_id, months=3, today=TODAY)
-    groups = month_breakdown(result, 0)
+    breakdown = month_breakdown(result, 0)
+    assert breakdown["label"] == "Jul 2026"
+    assert breakdown["money_in"] == Decimal(3000)  # salary on the 28th
+    assert breakdown["autopay"] == Decimal(500)  # card paid on the 25th
+    assert breakdown["money_out"] < 0  # groceries, prorated
+    groups = breakdown["groups"]
     names = [g["name"] for g in groups]
     assert names[0] == "Checking"
     assert names[-1] == "(unassigned)"

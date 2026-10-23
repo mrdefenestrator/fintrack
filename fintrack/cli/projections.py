@@ -26,8 +26,14 @@ from fintrack.projections import engine
     is_flag=True,
     help="Show each month's change instead of month-end balances",
 )
+@click.option(
+    "--month",
+    metavar="YYYY-MM",
+    help="Instead of the table, list every money movement in this month "
+    "(must be within the horizon)",
+)
 @pass_cli
-def project(cli, months, estimate, changes):
+def project(cli, months, estimate, changes, month):
     """Project ending balances per account, month by month."""
     with cli.connect() as conn:
         snapshot_id = cli.snapshot_id(conn)
@@ -35,9 +41,56 @@ def project(cli, months, estimate, changes):
             conn, snapshot_id, months=months, include_estimate=estimate
         )
 
+    month_index = _month_index(result, month) if month else None
+
     summary = engine.summarize(result)
     _echo_summary(summary)
 
+    if month_index is not None:
+        _echo_breakdown(engine.month_breakdown(result, month_index))
+    else:
+        _echo_table(result, changes)
+
+    _echo_estimate(result)
+    _echo_warnings(summary)
+
+
+def _month_index(result: dict, month: str) -> int:
+    try:
+        year, mon = (int(part) for part in month.split("-"))
+    except ValueError:
+        raise click.BadParameter("use YYYY-MM", param_hint="--month") from None
+    for i, m in enumerate(result["months"]):
+        if (m["year"], m["month"]) == (year, mon):
+            return i
+    first, last = result["months"][0]["label"], result["months"][-1]["label"]
+    raise click.BadParameter(
+        f"{month} is outside the projection ({first} to {last}); "
+        "use --months to look further ahead",
+        param_hint="--month",
+    )
+
+
+def _echo_breakdown(breakdown: dict) -> None:
+    click.echo(f"What happens in {breakdown['label']}")
+    totals = [
+        f"Money in {_change(breakdown['money_in'])}",
+        f"Money out {_change(breakdown['money_out'])}",
+    ]
+    if breakdown["autopay"]:
+        totals.append(f"Card autopay {_plain(breakdown['autopay'])}")
+    if breakdown["holdings_change"]:
+        totals.append(f"Assets & loans {_change(breakdown['holdings_change'])}")
+    click.echo("  " + " · ".join(totals))
+    if not breakdown["groups"]:
+        click.echo("\nNothing changes this month.")
+    for group in breakdown["groups"]:
+        click.echo(f"\n{group['name']}: {_change(group['total'])}")
+        for f in group["flows"]:
+            click.echo(f"  {f['label']}: {_change(f['amount'])}")
+
+
+def _echo_table(result: dict, changes: bool) -> None:
     labels = [m["label"] for m in result["months"]]
     # Each table line: (label, starting value, monthly series).
     lines = [
@@ -75,6 +128,8 @@ def project(cli, months, estimate, changes):
             rows.append([label, fmt_money(start)] + [fmt_money(v) for v in series])
     echo_table(rows, headers, ("left",) + ("right",) * (len(headers) - 1))
 
+
+def _echo_estimate(result: dict) -> None:
     if result["estimate"] is not None:
         monthly = result["estimate"]["monthly"]
         click.echo(
@@ -86,6 +141,8 @@ def project(cli, months, estimate, changes):
         ):
             click.echo(f"  {category}: {fmt_money(avg)}")
 
+
+def _echo_warnings(summary: dict) -> None:
     for w in summary["warnings"]:
         months_below = w["months_below"]
         click.echo(

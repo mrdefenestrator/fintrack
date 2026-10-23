@@ -73,3 +73,24 @@ def test_project_changes_flag(tmp_path):
         line for line in result.output.splitlines() if line.startswith("Account")
     )
     assert "Now" not in header
+
+
+def test_project_month_breakdown(tmp_path):
+    from datetime import date, datetime
+
+    db = tmp_path / "t.db"
+    assert _invoke(db, "snapshots", "add", "main").exit_code == 0
+    today = datetime.now().astimezone().date()
+    next_month = date(today.year + today.month // 12, today.month % 12 + 1, 1)
+    result = _invoke(
+        db, "project", "--months", "3", "--month", next_month.strftime("%Y-%m")
+    )
+    assert result.exit_code == 0
+    assert f"What happens in {next_month:%b %Y}" in result.output
+    assert "Money in" in result.output
+    # The table is replaced by the breakdown.
+    assert "Liquid total" not in result.output
+
+    outside = _invoke(db, "project", "--months", "3", "--month", "1999-01")
+    assert outside.exit_code != 0
+    assert "outside the projection" in outside.output

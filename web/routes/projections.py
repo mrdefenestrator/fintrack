@@ -2,7 +2,7 @@
 
 Finances-style view (explicit filename argument); horizon, estimator, and the
 grid view are query params (?months=N&estimate=1&view=change) so states are
-linkable. The Balances view shows month-end balances after a "Now" column; the
+linkable; ?month=I (0-based) opens that month's breakdown above the grid. The Balances view shows month-end balances after a "Now" column; the
 Changes view shows each month's change instead.
 """
 
@@ -88,6 +88,7 @@ def projections_view(filename):
     estimate = request.args.get("estimate") == "1"
     view = "change" if request.args.get("view") == "change" else "balances"
     open_groups = set(request.args.getlist("open"))
+    month_index = request.args.get("month", type=int)
 
     context = get_common_context(snapshot_id, filename, edit_mode)
     eng = current_app.config["engine"]
@@ -96,11 +97,18 @@ def projections_view(filename):
             conn, snapshot_id, months=months, include_estimate=estimate
         )
 
+    if month_index is not None and not 0 <= month_index < len(result["months"]):
+        month_index = None
+    breakdown = (
+        engine.month_breakdown(result, month_index) if month_index is not None else None
+    )
+
     params = {
         "months": months,
         "estimate": 1 if estimate else None,
         "view": "change" if view == "change" else None,
         "edit": 1 if edit_mode else None,
+        "month": month_index,
     }
 
     def proj_url(**overrides):
@@ -122,6 +130,8 @@ def projections_view(filename):
         month_choices=MONTH_CHOICES,
         estimate=estimate,
         view=view,
+        month_index=month_index,
+        breakdown=breakdown,
         proj_url=proj_url,
         open_groups=open_groups,
         **context,

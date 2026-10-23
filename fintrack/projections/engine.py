@@ -500,15 +500,22 @@ def summarize(result: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def month_breakdown(result: dict[str, Any], month_index: int) -> list[dict[str, Any]]:
-    """One month's flows grouped by holding (rows order, unassigned last).
-    Each group: {"name", "flows", "total"}; holdings with no flows are left out."""
+_MONEY_IN = {"income"}
+_MONEY_OUT = {"expense", "estimate"}
+_HOLDINGS = {"growth", "contribution", "interest", "payment"}
+
+
+def month_breakdown(result: dict[str, Any], month_index: int) -> dict[str, Any]:
+    """What happens in one month: its flows grouped by holding (rows order,
+    unassigned last; holdings with no flows left out), plus totals for money
+    in, money out, card autopay moved between accounts, and asset/loan
+    changes (growth, contributions, interest, scheduled payments)."""
     flows = result["flows"][month_index]
-    groups = []
     keys: list[tuple[int | None, str]] = [
         (row["account"]["id"], fmt_account_label(row["account"]))
         for row in result["rows"]
     ] + [(None, "(unassigned)")]
+    groups = []
     for holding_id, name in keys:
         mine = [f for f in flows if f["holding_id"] == holding_id]
         if mine:
@@ -519,4 +526,19 @@ def month_breakdown(result: dict[str, Any], month_index: int) -> list[dict[str, 
                     "total": sum((f["amount"] for f in mine), _ZERO),
                 }
             )
-    return groups
+
+    def total(kinds: set[str]) -> Decimal:
+        return sum((f["amount"] for f in flows if f["kind"] in kinds), _ZERO)
+
+    return {
+        "label": result["months"][month_index]["label"],
+        "groups": groups,
+        "money_in": total(_MONEY_IN),
+        "money_out": total(_MONEY_OUT),
+        # Autopay nets to zero across accounts; report the amount paid.
+        "autopay": sum(
+            (f["amount"] for f in flows if f["kind"] == "autopay" and f["amount"] > 0),
+            _ZERO,
+        ),
+        "holdings_change": total(_HOLDINGS),
+    }

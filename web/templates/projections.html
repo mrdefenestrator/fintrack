@@ -98,10 +98,52 @@
 </details>
 {% endif %}
 
+{% if breakdown %}
+{# Month breakdown (?month=I): every money movement the projection applies that
+   month, by account, with totals. Opened from the icon in a month's header. #}
+{% macro signed(v) %}<span class="tabular-nums {% if v < 0 %}text-red-600 dark:text-red-400{% elif v > 0 %}text-emerald-700 dark:text-emerald-400{% endif %}">{{ v | fmt_change }}</span>{% endmacro %}
+<section data-month-breakdown class="rounded-lg bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 shadow-sm text-sm">
+    <div class="flex flex-wrap items-center gap-x-5 gap-y-1 px-3 py-1.5 border-b border-gray-200 dark:border-gray-700">
+        <div class="flex items-center gap-1.5" data-proj-nav>
+            {% set _arrow = 'w-6 h-6 flex items-center justify-center rounded text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700' %}
+            {% if month_index > 0 %}<a href="{{ proj_url(month=month_index - 1) }}" title="Previous month" class="{{ _arrow }}">&#9664;</a>{% else %}<span class="{{ _arrow }} opacity-30">&#9664;</span>{% endif %}
+            <span class="font-semibold text-gray-800 dark:text-gray-100">What happens in {{ breakdown.label }}</span>
+            {% if month_index < (result.months | length) - 1 %}<a href="{{ proj_url(month=month_index + 1) }}" title="Next month" class="{{ _arrow }}">&#9654;</a>{% else %}<span class="{{ _arrow }} opacity-30">&#9654;</span>{% endif %}
+        </div>
+        <div class="flex flex-wrap gap-x-4 text-gray-600 dark:text-gray-300" data-breakdown-totals>
+            <span>Money in {{ signed(breakdown.money_in) }}</span>
+            <span>Money out {{ signed(breakdown.money_out) }}</span>
+            {% if breakdown.autopay %}<span title="Moves money between your own accounts; doesn't change the totals">Card autopay <span class="tabular-nums">{{ breakdown.autopay | fmt_money_header }}</span></span>{% endif %}
+            {% if breakdown.holdings_change %}<span title="Asset growth and contributions, loan interest and scheduled payments">Assets &amp; loans {{ signed(breakdown.holdings_change) }}</span>{% endif %}
+        </div>
+        <a href="{{ proj_url(month=none) }}" data-breakdown-close title="Close" aria-label="Close"
+           class="ml-auto w-6 h-6 flex items-center justify-center rounded text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700">&times;</a>
+    </div>
+    {% if breakdown.groups %}
+    <div class="max-h-64 overflow-auto px-3 py-2 grid gap-x-8 gap-y-3 sm:grid-cols-2 xl:grid-cols-3">
+        {% for g in breakdown.groups %}
+        <div data-breakdown-group>
+            <div class="flex justify-between gap-3 font-medium text-gray-800 dark:text-gray-100 border-b border-gray-200 dark:border-gray-700 pb-0.5 mb-0.5">
+                <span>{{ g.name }}</span>{{ signed(g.total) }}
+            </div>
+            <ul class="text-gray-600 dark:text-gray-300">
+                {% for f in g.flows %}
+                <li class="flex justify-between gap-3"><span>{{ f.label }}</span>{{ signed(f.amount) }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="px-3 py-2 text-gray-500 dark:text-gray-400">Nothing changes this month.</p>
+    {% endif %}
+</section>
+{% endif %}
+
 </div><!-- end top band -->
 
 {% call fb.filter_bar(active_count=0,
-    reset_url=proj_url(months=none, estimate=none, view=none),
+    reset_url=proj_url(months=none, estimate=none, view=none, month=none),
     use_htmx=false, label='Options',
     icon='M10.5 6h9.75M10.5 6a1.5 1.5 0 1 1-3 0m3 0a1.5 1.5 0 1 0-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-9.75 0h9.75') %}
     <div class="flex items-center gap-2" data-proj-nav>
@@ -142,14 +184,24 @@
    the sorter (tbody-only) leaves them pinned in place. #}
 <table data-projection-table data-view="{{ view }}" class="sortable sheet-freeze-col w-full text-sm border-collapse bg-white dark:bg-gray-800" style="white-space:nowrap">
     {% set _months = result.months | map(attribute='label') | list %}
+    {% set _month_links = [] %}
+    {% for label in _months %}
+    {% set _open = month_index == loop.index0 %}
+    {% set _ = _month_links.append({
+        'url': proj_url(month=none if _open else loop.index0),
+        'title': ('Close ' ~ label ~ ' breakdown') if _open else ('What happens in ' ~ label),
+        'active': _open}) %}
+    {% endfor %}
     {% if changes %}
     {{ sheet.thead(["Account"] + _months,
                    right_align_cols=range(1, (_months | length) + 1) | list,
-                   tooltips=["Account or holding name"]) }}
+                   tooltips=["Account or holding name"],
+                   header_links=[none] + _month_links) }}
     {% else %}
     {{ sheet.thead(["Account", "Now"] + _months,
                    right_align_cols=range(1, (_months | length) + 2) | list,
-                   tooltips=["Account or holding name", "Current balance (start of projection)"]) }}
+                   tooltips=["Account or holding name", "Current balance (start of projection)"],
+                   header_links=[none, none] + _month_links) }}
     {% endif %}
     {% for group in groups %}
     <tbody class="projection-group" data-group="{{ group.key }}" x-data="{ open: {{ 'true' if group.key in open_groups else 'false' }} }" :data-open="open">
@@ -214,12 +266,15 @@
         if (e.target.closest('.projection-group-heading'))
             requestAnimationFrame(function() { history.replaceState(null, '', withOpen(location.href)); });
     });
+    // Capture phase, so it also sees the month-header links (which stop the
+    // click from bubbling to the column sorter).
     document.addEventListener('click', function(e) {
-        var link = e.target.closest('[data-proj-nav] a, [data-estimate-toggle]');
+        var link = e.target.closest('[data-proj-nav] a, [data-estimate-toggle], [data-header-link], [data-breakdown-close]');
         if (!link) return;
         e.preventDefault();
+        e.stopPropagation();
         location.href = withOpen(link.href);
-    });
+    }, true);
 })();
 </script>
 {% endblock %}

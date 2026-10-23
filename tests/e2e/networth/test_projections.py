@@ -1,5 +1,7 @@
 """Projections page e2e tests."""
 
+import re
+
 import pytest
 
 pytestmark = pytest.mark.e2e
@@ -123,3 +125,33 @@ def test_projections_changes_view(page, flask_server):
     page.click("[data-view-toggle] >> text=Balances")
     page.wait_for_url(lambda url: "view=change" not in url)
     assert tbl.locator("tfoot tr.total-row", has_text="Liquid total").count() == 1
+
+
+def test_projections_month_breakdown(page, flask_server):
+    """The icon in a month's header opens that month's breakdown without
+    sorting the column; arrows step through months; the close link hides it."""
+    page.goto(f"{flask_server}/s/test_finances/projections")
+    assert page.locator("[data-month-breakdown]").count() == 0
+
+    tbl = page.locator("[data-projection-table]")
+    second_month = tbl.locator("thead th[data-col='3']")
+    label = second_month.inner_text().strip()
+    second_month.locator("[data-header-link]").click()
+    page.wait_for_url("**month=1**")
+
+    panel = page.locator("[data-month-breakdown]")
+    assert f"What happens in {label}" in panel.inner_text()
+    # Salary lands on checking every month in the fixture.
+    assert (
+        panel.locator("[data-breakdown-group]", has_text="Main Checking").count() == 1
+    )
+    assert "Money in +$" in panel.locator("[data-breakdown-totals]").inner_text()
+    # The header click didn't sort the column (sorting records sort_col).
+    assert "sort_col" not in page.url
+
+    panel.locator("a[title='Next month']").click()
+    page.wait_for_url("**month=2**")
+
+    panel.locator("[data-breakdown-close]").click()
+    page.wait_for_url(lambda url: not re.search(r"[?&]month=", url))
+    assert page.locator("[data-month-breakdown]").count() == 0

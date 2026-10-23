@@ -391,7 +391,10 @@ also lists the warnings and, with the estimate on, its per-category breakdown.
 A Balances / Changes toggle (`?view=change`, CLI `--changes`) swaps the grid's
 month-end balances for each month's change (`changes()`: month 0 against
 "now", then month against month), so lumpy months stand out; below-minimum
-cells stay marked by balance in either view.
+cells stay marked by balance in either view. An icon in each month's header
+(`?month=I`, CLI `--month YYYY-MM`) opens that month's breakdown above the
+grid: its flows by account (`month_breakdown()`), with money in, money out,
+card autopay, and asset/loan totals.
 There is deliberately no chart: one shared axis made the small, meaningful
 movements (cash, cards) unreadable next to houses and mortgages (#54).
 

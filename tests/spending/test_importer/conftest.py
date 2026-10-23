@@ -189,3 +189,43 @@ def sample_csv(tmp_path):
     path = tmp_path / "test.csv"
     path.write_text(content)
     return path
+
+
+@pytest.fixture
+def sample_loan_ofx(tmp_path):
+    """Loan servicer statement: principal owed reported as a positive
+    LEDGERBAL (#79)."""
+    content = """<?xml version="1.0" encoding="UTF-8"?>
+<?OFX OFXHEADER="200" VERSION="220"?>
+<OFX>
+  <BANKMSGSRSV1>
+    <STMTTRNRS>
+      <STMTRS>
+        <CURDEF>USD</CURDEF>
+        <BANKACCTFROM>
+          <BANKID>021000021</BANKID>
+          <ACCTID>5550001111</ACCTID>
+          <ACCTTYPE>CREDITLINE</ACCTTYPE>
+        </BANKACCTFROM>
+        <BANKTRANLIST>
+          <DTSTART>20260101</DTSTART>
+          <DTEND>20260131</DTEND>
+          <STMTTRN>
+            <TRNTYPE>CREDIT</TRNTYPE>
+            <DTPOSTED>20260115120000</DTPOSTED>
+            <TRNAMT>1500.00</TRNAMT>
+            <FITID>LOAN20260115</FITID>
+            <NAME>MONTHLY PAYMENT</NAME>
+          </STMTTRN>
+        </BANKTRANLIST>
+        <LEDGERBAL>
+          <BALAMT>250000.00</BALAMT>
+          <DTASOF>20260131120000</DTASOF>
+        </LEDGERBAL>
+      </STMTRS>
+    </STMTTRNRS>
+  </BANKMSGSRSV1>
+</OFX>"""
+    path = tmp_path / "test_loan.ofx"
+    path.write_text(content)
+    return path

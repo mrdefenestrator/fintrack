@@ -52,6 +52,10 @@ def create_import(
     ).scalar()
     if holding_group is None:
         raise ValueError(f"Account id {account_id} not found")
+    if holding_group == "loan" and ledger_balance is not None:
+        # Loan servicers report the principal owed as a positive LEDGERBAL;
+        # store the canonical signed balance (negative = owed) regardless.
+        ledger_balance = -abs(ledger_balance)
     result = conn.execute(
         insert(imports).values(
             account_id=account_id,

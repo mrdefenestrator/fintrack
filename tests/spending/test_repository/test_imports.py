@@ -3,7 +3,7 @@ from decimal import Decimal
 
 from sqlalchemy import select
 
-from fintrack.core.models import imports
+from fintrack.core.models import balance_history, imports, loan_details
 from fintrack.ledger.repository.accounts import add_account
 from fintrack.ledger.repository.imports import (
     check_file_hash,
@@ -176,3 +176,49 @@ def test_check_file_hash_ignored_after_reject(conn):
     )
     reject_import(conn, imp_id)
     assert check_file_hash(conn, "abc123") is False
+
+
+def _loan_balance(conn, holding_id):
+    return conn.execute(
+        select(loan_details.c.balance).where(loan_details.c.holding_id == holding_id)
+    ).scalar()
+
+
+def test_loan_import_positive_balance_stored_negative(conn):
+    # Issue #79: loan servicers report the principal owed as a positive
+    # LEDGERBAL; the canonical signed balance is negative (owed).
+    acct_id = add_account(
+        conn, name="Mortgage", institution="Rocket", account_type="loan"
+    )
+    imp_id = create_import(
+        conn,
+        account_id=acct_id,
+        filename="loan.qfx",
+        file_hash="loan001",
+        ledger_balance=Decimal("250000.00"),
+        ledger_balance_date=date(2026, 1, 31),
+    )
+    row = conn.execute(select(imports).where(imports.c.id == imp_id)).fetchone()
+    assert row.ledger_balance == Decimal("-250000.00")
+
+    confirm_import(conn, imp_id)
+    point = conn.execute(
+        select(balance_history.c.balance).where(balance_history.c.account_id == acct_id)
+    ).scalar()
+    assert point == Decimal("-250000.00")
+    assert _loan_balance(conn, acct_id) == Decimal("-250000.00")
+
+
+def test_loan_import_negative_balance_unchanged(conn):
+    acct_id = add_account(
+        conn, name="Mortgage", institution="Rocket", account_type="loan"
+    )
+    imp_id = create_import(
+        conn,
+        account_id=acct_id,
+        filename="loan.qfx",
+        file_hash="loan002",
+        ledger_balance=Decimal("-250000.00"),
+    )
+    row = conn.execute(select(imports).where(imports.c.id == imp_id)).fetchone()
+    assert row.ledger_balance == Decimal("-250000.00")

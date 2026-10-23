@@ -73,9 +73,10 @@ fintrack.py                # Click CLI entrypoint
 fintrack/
   core/         engine/FK pragma, schema metadata, shared types, coercion,
                 loading, ordering, filtering, formatting, CLI table builders
-  ledger/       importer/ (OFX/QFX + CSV parsers, normalization, dedup),
-                classifier.py (Claude API), repository/ (imports, transactions,
-                merchants, corrections, categories, aggregations)
+  ledger/       importer/ (OFX/QFX + CSV parsers, normalization, dedup,
+                near-duplicate matching), duplicate_scan.py, classifier.py
+                (Claude API), repository/ (imports, transactions, merchants,
+                corrections, duplicates, categories, aggregations)
   accounts/     repository.py (unified accounts), balance_history.py
   budget/       repository.py, recurrence.py (occurrence + proration engine)
   networth/     repository.py (assets/debts), calculations.py (key numbers, funding)
@@ -106,9 +107,9 @@ Single `MetaData` in `fintrack/core/models.py`.
 - `merchant_cache` and `categories` are deliberately **global**: classification
   knowledge and the category taxonomy are shared across snapshots. A merchant
   classified in one household is classified in all of them.
-- `transaction_corrections` has no `snapshot_id`, but each correction belongs
-  to exactly one transaction and therefore inherits that transaction's account
-  and snapshot scope.
+- `transaction_corrections` and `transaction_duplicates` have no
+  `snapshot_id`, but each row belongs to exactly one transaction and
+  therefore inherits that transaction's account and snapshot scope.
 - `snapshot_id` foreign keys cascade on delete; ownership references between
   rows (`payment_account_ref`, `auto_account_ref`, `secured_asset_ref`) use
   NO ACTION, so deleting a referenced row directly is blocked while a
@@ -158,7 +159,9 @@ Single `MetaData` in `fintrack/core/models.py`.
   (`ledger_balance(_date)`, `available_balance(_date)`, `beginning_balance`).
 - **transactions** — immutable imported rows: `date`, `amount`,
   `raw_description`, `normalized_merchant`, `fingerprint` (indexed, also
-  indexed on `(account_id, date)`).
+  indexed on `(account_id, date)`), and `external_id` — the institution's own
+  transaction id (OFX `FITID`; NULL for CSV and for rows imported before ids
+  were kept), indexed on `(account_id, external_id)`.
 - **merchant_cache** — normalized merchant name → `category`, with `source`
   (`api` or `manual`).
 - **transaction_corrections** — at most one per transaction; overrides
@@ -170,6 +173,14 @@ Single `MetaData` in `fintrack/core/models.py`.
   unlinking prunes a row left with every overlay column NULL. A row that exists
   only for a link is not a "correction": the Transactions Status filter keys on
   category/merchant/notes being set, not on the row existing.
+- **transaction_duplicates** — possible-duplicate flags (see "Duplicate
+  detection"): at most one per transaction (`transaction_id` unique), naming
+  the earlier row it resembles (`duplicate_of_id`), a human-readable
+  `reason`, `source` (`import|scan`), `status`
+  (`flagged|duplicate|not_duplicate`) and `resolved_at`. An overlay like
+  corrections — raw rows never change. Both FKs cascade, so rejecting either
+  side's import clears the flag. Both rows always share an account, which
+  keeps them in one snapshot.
 - **link_suggestion_dismissals** — `(transaction_id, budget_entry_ref)` pairs
   the user rejected as link suggestions, unique per pair; both FKs cascade.
   Snapshot consistency is checked in `reconcile`, as for the link itself.
@@ -256,15 +267,64 @@ precedence by simply overwriting the cache row.
    are captured onto the import row when the format provides them.
 2. **Normalize** — merchant names cleaned via rules in
    `configs/normalization.yaml`.
-3. **Dedup** — sequence-aware fingerprinting: a fingerprint of
-   (account, date, amount, description) with an occurrence index, so two
-   identical coffees on the same day survive but re-imported files don't
-   duplicate. Duplicate files are also rejected outright by `file_hash`.
+3. **Dedup** — exact matches are skipped; near-matches are flagged for
+   review (see "Duplicate detection" below). Duplicate files are rejected
+   outright by `file_hash`.
 4. **Classify & stage** — uncached merchants from the batch are classified
    (best-effort) and the import lands in `staging` for review with categories
    already visible.
 5. **Confirm/reject** — confirming records the statement balance into balance
    history; rejecting deletes the import's transactions.
+
+## Duplicate detection
+
+Issue #82: institutions re-export the same transactions with reworded
+descriptions (Apple Card did), so exact text matching alone lets copies in.
+Detection is layered, strictest first, and runs entirely locally — no
+transaction data is sent to the Claude API.
+
+1. **Bank transaction id.** An incoming row whose `external_id` (OFX `FITID`)
+   already exists in the account is skipped, whatever its description says.
+2. **Fingerprint.** Sequence-aware: a hash of (account, date, amount, raw
+   description) with an occurrence index over the whole file, so two
+   identical coffees on the same day survive but a re-imported file doesn't
+   duplicate. Exact matches are skipped. The bank-id pass runs after it, so
+   whole-file sequence numbers stay intact.
+3. **Near-duplicate flag.** Everything still incoming is paired against
+   existing rows in the account (`fintrack/ledger/importer/near_dup.py`):
+   same amount to the cent, dates within 3 days, and a similar merchant —
+   identical normalized names, or at least 60% `difflib` similarity on the
+   raw or the normalized text (normalization strips store numbers and
+   processor prefixes, which raw text scores poorly against). Pairing is
+   one-to-one per import — closest date, then highest similarity — so two
+   real identical charges in both files don't collapse onto one row. Rows an
+   exact match already accounted for, and rows that are themselves flagged
+   or marked duplicate, are never offered as the original. Differing bank
+   ids don't rule a match out: some institutions regenerate ids on re-export,
+   and a false flag costs one click while a missed copy is silent. A
+   same-day repeat (a second identical row where the first already exists)
+   is flagged against its first-occurrence sibling. A match is **only ever a
+   flag** — the row is inserted and shown for review.
+
+Flags live in `transaction_duplicates`. The user resolves each one in the
+staging review, on the Transactions sheet ("Possible duplicate" status
+filter), or with `fintrack duplicates mark|dismiss|undo`. **`duplicate`
+hides the row from every confirmed-transaction read** — transaction lists,
+spending totals, budget actuals and link dates, merchant stats, latest
+transaction dates, and the statement reconciliation sum — through one
+clause, `ledger.repository.duplicates.not_hidden_duplicate()`; any new
+reader of confirmed transactions must apply it (or go through
+`base_transaction_query`). The "Marked duplicate" filter is the one view
+that shows hidden rows, with Undo. `not_duplicate` keeps the row and stops it
+being re-flagged.
+
+Copies that got in before flagging existed are found by a **scan**
+(`fintrack duplicates scan [--apply]`, or "Scan for duplicates" on the Import
+page), which replays import-time matching over confirmed data: per account,
+imports in arrival order, each paired against earlier imports. Rows that
+already carry any flag are left alone, so re-running is idempotent and
+dismissals stick. The older `fintrack dedup` still collapses exact
+fingerprint copies left by a past bug.
 
 ## Balance history
 
@@ -512,6 +572,8 @@ accounts   list|add|edit|delete
 balance    set <account> <amount> [--date] | history <account>
 import     <files…> --account NAME
 staging    list | confirm <id> | reject <id>
+duplicates list [--all] | mark <txn> | dismiss <txn> | undo <txn> | scan [--apply]
+dedup      [--apply]
 transactions link <txn> <entry> | unlink <txn> | suggest | dismiss <txn> <entry> | undismiss <txn> | budget-actual
 merchants  list | set
 categories list|add|edit|delete

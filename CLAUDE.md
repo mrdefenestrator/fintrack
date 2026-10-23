@@ -52,7 +52,7 @@ degrades to a warning without it).
 ## Project Structure
 
 - `fintrack/core/` — engine/FK pragma, unified models (single MetaData), the holdings supertype/subtype CRUD helper (`holdings.py`), config paths, formatting
-- `fintrack/ledger/` — statement importer (OFX/CSV, normalization, dedup), classifier, ledger repositories
+- `fintrack/ledger/` — statement importer (OFX/CSV, normalization, dedup, near-duplicate matching), duplicate scan, classifier, ledger repositories
 - `fintrack/accounts/` — unified accounts repository, balance_history, OFX account matching
 - `fintrack/budget/` — budget entries, recurrence/proration engine
 - `fintrack/networth/` — assets/debts, key-number and funding calculations, liquidity-tier totals + equity pairs
@@ -147,7 +147,15 @@ degrades to a warning without it).
 - Core product goals the UI serves: current liquid holdings, net worth,
   budgeting, spending tracking, deviation from budget, and (eventually)
   net-worth projections.
-- Sequence-aware fingerprinting for transaction dedup.
+- Duplicate detection is layered (DESIGN.md "Duplicate detection"): bank
+  transaction id (OFX FITID, `transactions.external_id`) and the
+  sequence-aware fingerprint skip exact copies; near-matches (same amount,
+  ±3 days, similar merchant) are only ever **flagged** in the
+  `transaction_duplicates` overlay for the user to resolve. A row resolved as
+  `duplicate` is hidden from every confirmed-transaction read via
+  `not_hidden_duplicate()` — apply it in any new query over confirmed
+  transactions (or build on `base_transaction_query`). Matching is local;
+  never send transaction data to the Claude API for it.
 - SQLite runs with `foreign_keys=ON`; snapshot FKs cascade, ownership refs
   (payment_account_ref, auto_account_ref, secured_asset_ref) do not. Those
   refs are composite (`(ref, snapshot_id)`), so they can't cross snapshots.

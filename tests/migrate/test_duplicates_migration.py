@@ -67,3 +67,21 @@ def test_duplicates_migration_round_trip(tmp_path):
         ("keep me",)
     ]
     conn.close()
+
+
+def test_upgrade_after_app_startup_created_the_table(tmp_path):
+    # The app/CLI run metadata.create_all() on startup: on a database still at
+    # the previous revision that creates transaction_duplicates (not the
+    # column). The upgrade must still succeed.
+    from sqlalchemy import create_engine
+
+    from fintrack.core.db import init_db
+
+    db = tmp_path / "fintrack.db"
+    _alembic(db, command.upgrade, _PREV)
+    init_db(create_engine(f"sqlite:///{db}"))
+    _alembic(db, command.upgrade, _HEAD)
+    conn = sqlite3.connect(db)
+    assert "external_id" in _columns(conn, "transactions")
+    assert "duplicate_of_id" in _columns(conn, "transaction_duplicates")
+    conn.close()

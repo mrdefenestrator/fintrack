@@ -12,6 +12,10 @@ so re-exports whose descriptions changed imported as new rows.
    stay NULL — the ids can't be recovered without the original files.
 2. transaction_duplicates holds near-duplicate flags and the user's
    resolution of them, as an overlay so raw transactions stay immutable.
+
+Idempotent: the app and CLI run metadata.create_all() on startup, which
+creates the new table (but not the new column) on a database that hasn't
+been upgraded yet, so each step is skipped when its object already exists.
 """
 
 from collections.abc import Sequence
@@ -26,12 +30,21 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    op.add_column("transactions", sa.Column("external_id", sa.String(), nullable=True))
-    op.create_index(
-        "ix_transactions_account_external_id",
-        "transactions",
-        ["account_id", "external_id"],
-    )
+    inspector = sa.inspect(op.get_bind())
+    txn_columns = {c["name"] for c in inspector.get_columns("transactions")}
+    txn_indexes = {i["name"] for i in inspector.get_indexes("transactions")}
+    if "external_id" not in txn_columns:
+        op.add_column(
+            "transactions", sa.Column("external_id", sa.String(), nullable=True)
+        )
+    if "ix_transactions_account_external_id" not in txn_indexes:
+        op.create_index(
+            "ix_transactions_account_external_id",
+            "transactions",
+            ["account_id", "external_id"],
+        )
+    if inspector.has_table("transaction_duplicates"):
+        return
     op.create_table(
         "transaction_duplicates",
         sa.Column("id", sa.Integer(), primary_key=True),

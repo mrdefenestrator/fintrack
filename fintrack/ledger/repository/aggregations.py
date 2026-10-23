@@ -11,9 +11,13 @@ from fintrack.core.models import (
     imports,
     merchant_cache,
     transaction_corrections,
+    transaction_duplicates,
     transactions,
 )
 from fintrack.ledger.repository.duplicates import not_hidden_duplicate
+
+# The transaction a flagged row resembles, for the duplicate badge.
+_dup_original = transactions.alias("dup_original")
 
 
 def _resolved_category():
@@ -36,11 +40,15 @@ def _resolved_merchant():
     ).label("merchant")
 
 
-def base_transaction_query(snapshot_id: int | None = None):
+def base_transaction_query(
+    snapshot_id: int | None = None, *, include_duplicates: bool = False
+):
     """Base query joining transactions with corrections and merchant cache.
 
     Only includes confirmed imports, minus rows resolved as duplicates (issue
-    #82); scoped to one snapshot when snapshot_id is given.
+    #82) unless include_duplicates (the Transactions sheet's "Marked
+    duplicate" view, and single-row re-renders); scoped to one snapshot when
+    snapshot_id is given.
     """
     stmt = (
         select(
@@ -77,6 +85,12 @@ def base_transaction_query(snapshot_id: int | None = None):
             # linked to an expense, a clawback to income) without a lookup.
             budget_entries.c.kind.label("linked_kind"),
             holdings.c.name.label("account_name"),
+            # Possible-duplicate flag (issue #82): NULL when never flagged.
+            transaction_duplicates.c.status.label("dup_status"),
+            transaction_duplicates.c.reason.label("dup_reason"),
+            transaction_duplicates.c.duplicate_of_id.label("dup_of_id"),
+            _dup_original.c.date.label("dup_of_date"),
+            _dup_original.c.raw_description.label("dup_of_description"),
         )
         .select_from(
             transactions.join(imports, transactions.c.import_id == imports.c.id)
@@ -98,8 +112,18 @@ def base_transaction_query(snapshot_id: int | None = None):
             == merchant_cache.c.merchant_name,
         )
         .outerjoin(holdings, transactions.c.account_id == holdings.c.id)
-        .where(imports.c.status == "confirmed", not_hidden_duplicate())
+        .outerjoin(
+            transaction_duplicates,
+            transactions.c.id == transaction_duplicates.c.transaction_id,
+        )
+        .outerjoin(
+            _dup_original,
+            transaction_duplicates.c.duplicate_of_id == _dup_original.c.id,
+        )
+        .where(imports.c.status == "confirmed")
     )
+    if not include_duplicates:
+        stmt = stmt.where(not_hidden_duplicate())
     if snapshot_id is not None:
         stmt = stmt.where(holdings.c.snapshot_id == snapshot_id)
     return stmt

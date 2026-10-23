@@ -27,10 +27,10 @@ def not_hidden_duplicate(txn_id_col=None):
     Safe under an outer join: a NULL transaction id has no flag, so it passes.
     """
     col = transactions.c.id if txn_id_col is None else txn_id_col
-    return ~exists().where(
-        transaction_duplicates.c.transaction_id == col,
-        transaction_duplicates.c.status == "duplicate",
-    )
+    # An alias, so the subquery stays self-contained even when the outer query
+    # also joins transaction_duplicates (base_transaction_query does).
+    td = transaction_duplicates.alias("hidden_dup")
+    return ~exists().where(td.c.transaction_id == col, td.c.status == "duplicate")
 
 
 def get_near_dup_candidates(
@@ -177,3 +177,38 @@ def resolve_duplicate(
         )
     )
     conn.commit()
+
+
+def get_scan_rows(conn: Connection, snapshot_id: int | None = None) -> list[dict]:
+    """Every confirmed transaction in the snapshot with its import's order and
+    its flag status (None when never flagged), for scan_for_duplicates()."""
+    stmt = (
+        select(
+            transactions.c.id,
+            transactions.c.account_id,
+            transactions.c.import_id,
+            transactions.c.date,
+            transactions.c.amount,
+            transactions.c.raw_description,
+            transactions.c.normalized_merchant,
+            transaction_duplicates.c.status.label("dup_status"),
+        )
+        .select_from(
+            transactions.join(imports, transactions.c.import_id == imports.c.id)
+            .join(holdings, transactions.c.account_id == holdings.c.id)
+            .outerjoin(
+                transaction_duplicates,
+                transactions.c.id == transaction_duplicates.c.transaction_id,
+            )
+        )
+        .where(imports.c.status == "confirmed")
+        .order_by(
+            transactions.c.account_id,
+            imports.c.imported_at,
+            imports.c.id,
+            transactions.c.id,
+        )
+    )
+    if snapshot_id is not None:
+        stmt = stmt.where(holdings.c.snapshot_id == snapshot_id)
+    return [dict(r._mapping) for r in conn.execute(stmt)]

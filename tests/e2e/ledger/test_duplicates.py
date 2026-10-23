@@ -1,4 +1,5 @@
-"""E2E: resolving possible duplicates in the staging review (issue #82).
+"""E2E: resolving possible duplicates in the staging review and on the
+Transactions sheet, and the scan button (issue #82).
 
 Shares one module-scoped ``duplicates_server``; tests run in order.
 """
@@ -57,3 +58,36 @@ def test_resolve_then_confirm_hides_only_the_copy(page, duplicates_server):
     assert rows.count() == 4
     assert rows.filter(has_text="UBER").count() == 1
     assert rows.filter(has_text="netflix").count() == 2  # has_text ignores case
+
+
+def test_marked_duplicate_filter_and_undo_on_sheet(page, duplicates_server):
+    base, _ = duplicates_server
+    page.goto(f"{base}/s/ledger/transactions?all_months=true&status=duplicate")
+    row = page.locator("tbody tr[data-dup-status]")
+    assert row.count() == 1
+    assert "Duplicate of 2026-04-01 · UBER *TRIP HELP.UBER.COM" in row.inner_text()
+
+    row.locator(".dup-action", has_text="Undo").click()
+    page.locator("tbody tr[data-dup-status='flagged']").wait_for()
+
+    page.goto(f"{base}/s/ledger/transactions?all_months=true&status=possible_duplicate")
+    row = page.locator("tbody tr[data-dup-status='flagged']")
+    assert row.count() == 1
+    row.locator(".dup-action", has_text="Duplicate").first.click()
+    page.locator("tbody tr[data-dup-status='duplicate']").wait_for()
+
+
+def test_status_filter_offers_duplicate_views(page, duplicates_server):
+    base, _ = duplicates_server
+    page.goto(f"{base}/s/ledger/transactions?all_months=true")
+    html = page.content()
+    assert "Possible duplicate" in html and "Marked duplicate" in html
+
+
+def test_scan_button_reports_nothing_new(page, duplicates_server):
+    base, _ = duplicates_server
+    page.goto(f"{base}/s/ledger/import")
+    page.click("#scan-duplicates")
+    page.locator(
+        "#scan-result", has_text="No new possible duplicates found."
+    ).wait_for()

@@ -106,5 +106,33 @@
         {% else %}
         <p class="text-gray-500 text-sm">No pending imports.</p>
         {% endif %}
+
+        {# Possible duplicates already in the books (issue #82): imports flag
+           new copies themselves; this replays that check over confirmed data
+           for copies that got in earlier. Flags only — nothing is hidden until
+           the user marks a row a duplicate on the Transactions sheet. #}
+        <div class="mt-6">
+            <h2 class="text-lg font-semibold mb-2 dark:text-gray-100">Duplicates</h2>
+            <p class="text-sm text-gray-500 dark:text-gray-400 mb-3">
+                Look for possible duplicates among confirmed transactions — same amount,
+                dates within 3 days, similar merchant, from different imports.
+            </p>
+            <button id="scan-duplicates"
+                    hx-post="/s/{{ filename }}/import/scan"
+                    hx-target="#content"
+                    class="border border-gray-300 dark:border-gray-600 px-3 py-1 rounded text-sm">
+                Scan for duplicates
+            </button>
+            {% if scan_found is defined and scan_found is not none %}
+            <p id="scan-result" class="mt-3 text-sm {{ 'text-amber-700 dark:text-amber-300' if scan_found else 'text-gray-500 dark:text-gray-400' }}">
+                {% if scan_found %}
+                Flagged {{ scan_found }} possible duplicate{{ 's' if scan_found != 1 else '' }}.
+                <a class="underline" href="/s/{{ filename }}/transactions?all_months=true&status=possible_duplicate">Review them in Transactions</a>
+                {% else %}
+                No new possible duplicates found.
+                {% endif %}
+            </p>
+            {% endif %}
+        </div>
     </div>
 </div>

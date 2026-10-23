@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from decimal import Decimal
 
-from flask import Blueprint, current_app, g, render_template, request
+from flask import Blueprint, abort, current_app, g, render_template, request
 from sqlalchemy import select
 
 from fintrack.budget import reconcile
@@ -12,6 +12,10 @@ from fintrack.ledger.repository.accounts import list_accounts
 from fintrack.ledger.repository.aggregations import base_transaction_query
 from fintrack.ledger.repository.categories import get_category_names
 from fintrack.ledger.repository.corrections import apply_transaction_correction
+from fintrack.ledger.repository.duplicates import (
+    DUPLICATE_STATUSES,
+    resolve_duplicate,
+)
 from fintrack.ledger.repository.merchants import set_merchant_category
 from fintrack.ledger.repository.transactions import get_transactions
 from web.routes.common import snapshot_scoped
@@ -28,7 +32,13 @@ _TXN_CELL_EDITORS = _TXN_EDITABLE_FIELDS | {"budget"}
 
 
 def _load_txn(conn, txn_id):
-    subq = base_transaction_query().where(txn_table.c.id == txn_id).subquery()
+    # include_duplicates: a row just marked a duplicate re-renders (with Undo)
+    # rather than vanishing mid-edit.
+    subq = (
+        base_transaction_query(include_duplicates=True)
+        .where(txn_table.c.id == txn_id)
+        .subquery()
+    )
     row = conn.execute(select(subq)).fetchone()
     return dict(row._mapping) if row else None
 
@@ -54,7 +64,7 @@ def _budget_choices(conn, snapshot_id):
     return options, labels
 
 
-def _render_row(conn, txn_id, *, editing_field=None):
+def _render_row(conn, txn_id, *, editing_field=None, edit_mode=True):
     """Render one edit-mode transaction row, or a 404 when it doesn't exist.
 
     Shared by the cell/row/update/link routes, which all swap a single row back
@@ -72,7 +82,7 @@ def _render_row(conn, txn_id, *, editing_field=None):
     return render_template(
         "partials/transaction_row.html",
         txn=txn,
-        edit_mode=True,
+        edit_mode=edit_mode,
         budget_options=budget_options,
         budget_labels=budget_labels,
         **kwargs,
@@ -251,3 +261,19 @@ def link(txn_id):
         else:
             reconcile.unlink_transaction(conn, txn_id)
         return _render_row(conn, txn_id)
+
+
+@bp.route("/transactions/<int:txn_id>/duplicate", methods=["POST"])
+def duplicate(txn_id):
+    """Resolve (or undo) a row's possible-duplicate flag (issue #82). Works in
+    view and edit mode; the row re-renders in the mode it was shown in."""
+    status = request.form.get("status", "")
+    if status not in DUPLICATE_STATUSES:
+        abort(400)
+    engine = current_app.config["engine"]
+    with engine.connect() as conn:
+        try:
+            resolve_duplicate(conn, txn_id, status, snapshot_id=g.snapshot_id)
+        except LookupError:
+            abort(404)
+        return _render_row(conn, txn_id, edit_mode=request.form.get("edit") == "1")

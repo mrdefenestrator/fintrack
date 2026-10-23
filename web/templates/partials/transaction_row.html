@@ -3,7 +3,9 @@
 {% import "partials/sheet.html" as sheet %}
 {% set row_id = "txn-row-" ~ txn.id %}
 {% set base = "/s/" ~ filename ~ "/transactions/" ~ txn.id %}
-<tr id="{{ row_id }}" class="{{ sheet.row_class() }}">
+{% set dup_open = txn.dup_status in ('flagged', 'duplicate') %}
+<tr id="{{ row_id }}" class="{{ sheet.row_class('border-amber-400' if txn.dup_status == 'flagged' else '') }}{{ ' opacity-60' if txn.dup_status == 'duplicate' else '' }}"
+    {% if txn.dup_status %}data-dup-status="{{ txn.dup_status }}"{% endif %}>
     {# Date — raw imported data, immutable #}
     {% if edit_mode %}
     {{ cell_non_editable(txn.date, false, false) }}
@@ -20,8 +22,35 @@
         <td class="{{ sheet.cell_class() }}">{{ txn.merchant }}</td>
     {% endif %}
 
-    {# Description — raw imported data, immutable #}
-    {% if edit_mode %}
+    {# Description — raw imported data, immutable. A possible duplicate (issue
+       #82) adds a line naming the row it resembles, with Duplicate / Not
+       duplicate actions (Undo once marked); the actions re-render this row. #}
+    {% if dup_open %}
+    <td class="{{ sheet.cell_class('', 'text-gray-400 dark:text-gray-500' if edit_mode else '') }}">
+        {{ txn.raw_description }}
+        <div class="dup-badge mt-0.5 flex flex-wrap items-center gap-1 text-xs text-amber-700 dark:text-amber-300"
+             title="{{ txn.dup_reason }}">
+            <span>{{ '&#9888; Possible duplicate of'|safe if txn.dup_status == 'flagged' else 'Duplicate of' }}
+                {{ txn.dup_of_date }} · {{ txn.dup_of_description }}</span>
+            {% set dup_url = base ~ "/duplicate" %}
+            {% set dup_vals = ', "edit": "1"' if edit_mode else '' %}
+            <span class="inline-flex gap-1 whitespace-nowrap">
+            {% if txn.dup_status == 'flagged' %}
+            <button hx-post="{{ dup_url }}" hx-vals='{"status": "duplicate"{{ dup_vals }}}'
+                    hx-target="#{{ row_id }}" hx-swap="outerHTML"
+                    class="dup-action px-1.5 rounded bg-amber-500 text-white">Duplicate</button>
+            <button hx-post="{{ dup_url }}" hx-vals='{"status": "not_duplicate"{{ dup_vals }}}'
+                    hx-target="#{{ row_id }}" hx-swap="outerHTML"
+                    class="dup-action px-1.5 rounded border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300">Not duplicate</button>
+            {% else %}
+            <button hx-post="{{ dup_url }}" hx-vals='{"status": "flagged"{{ dup_vals }}}'
+                    hx-target="#{{ row_id }}" hx-swap="outerHTML"
+                    class="dup-action px-1.5 rounded border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300">Undo</button>
+            {% endif %}
+            </span>
+        </div>
+    </td>
+    {% elif edit_mode %}
     {{ cell_non_editable(txn.raw_description, false, false) }}
     {% else %}
     <td class="{{ sheet.cell_class() }}">{{ txn.raw_description }}</td>

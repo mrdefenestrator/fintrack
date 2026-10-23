@@ -12,6 +12,7 @@ from fintrack.cli.helpers import echo_table, pass_cli
 from fintrack.core.coerce import to_date
 from fintrack.core.formatting import fmt_money
 from fintrack.ledger.classifier import classify_and_cache
+from fintrack.ledger.duplicate_scan import scan_for_duplicates
 from fintrack.ledger.importer import run_import
 from fintrack.ledger.repository.accounts import get_account_by_name
 from fintrack.ledger.repository.aggregations import (
@@ -269,6 +270,49 @@ def duplicates_list(cli, show_all):
             "\nResolve with `fintrack duplicates mark ID` (hide it) or "
             "`fintrack duplicates dismiss ID` (keep it)."
         )
+
+
+@duplicates.command("scan")
+@click.option(
+    "--apply", "apply_", is_flag=True, help="Record the flags (default: dry run)"
+)
+@pass_cli
+def duplicates_scan(cli, apply_):
+    """Find possible duplicates among already-confirmed transactions.
+
+    Replays import-time matching over existing data, so copies imported before
+    duplicate flagging existed get flagged for review. Rows that already carry
+    a flag (including ones dismissed as not duplicates) are left alone.
+    """
+    with cli.connect() as conn:
+        found = scan_for_duplicates(conn, cli.snapshot_id(conn), apply=apply_)
+    if not found:
+        click.echo("No new possible duplicates found.")
+        return
+    rows = [
+        [
+            f["txn"]["id"],
+            f["txn"]["date"],
+            f["txn"]["raw_description"],
+            fmt_money(f["txn"]["amount"]),
+            f["of"]["id"],
+            f["of"]["date"],
+            f["of"]["raw_description"],
+            f["reason"],
+        ]
+        for f in found
+    ]
+    echo_table(
+        rows,
+        ["ID", "Date", "Description", "Amount", "Of ID", "Of date"]
+        + ["Of description", "Why"],
+        ("right", "left", "left", "right", "right", "left", "left", "left"),
+    )
+    click.echo(f"\n{len(found)} possible duplicate(s).")
+    if apply_:
+        click.echo("Flagged for review — see `fintrack duplicates list`.")
+    else:
+        click.echo("Dry run — re-run with --apply to flag them for review.")
 
 
 def _resolve(cli, transaction_id: int, status: str, message: str) -> None:

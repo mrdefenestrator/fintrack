@@ -7,6 +7,7 @@ from sqlalchemy.exc import IntegrityError
 
 from fintrack.core.types import ACCOUNT_TYPE_VALUES
 from fintrack.ledger.classifier import classify_and_cache
+from fintrack.ledger.duplicate_scan import scan_for_duplicates
 from fintrack.ledger.importer import run_import
 from fintrack.ledger.importer.ofx import extract_ofx_metadata
 from fintrack.ledger.repository.accounts import add_account, list_accounts
@@ -291,6 +292,23 @@ def do_reject(import_id):
         active_tab="import",
         staging=staging,
         accounts=accounts,
+    )
+
+
+@bp.route("/import/scan", methods=["POST"])
+def scan():
+    """Flag possible duplicates among confirmed transactions (issue #82)."""
+    engine = current_app.config["engine"]
+    with engine.connect() as conn:
+        found = scan_for_duplicates(conn, g.snapshot_id, apply=True)
+        staging = get_staging_imports(conn, g.snapshot_id)
+        accounts = list_accounts(conn, g.snapshot_id)
+    return render_template(
+        "partials/import_content.html",
+        active_tab="import",
+        staging=staging,
+        accounts=accounts,
+        scan_found=len(found),
     )
 
 

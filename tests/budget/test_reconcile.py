@@ -421,6 +421,28 @@ def test_shared_category_falls_back_to_links(conn, snapshot_id, seeder):
     assert a.status == "unlinked"
 
 
+def test_suggest_skips_category_measured_lines(conn, snapshot_id, seeder):
+    # A by-category line already counts the transaction; a link would only
+    # re-pin the category, so it's never suggested.
+    make_entry_of_kind(
+        conn, snapshot_id, "expense", amount=180, category="Transport", continuous=True
+    )
+    seeder.add(date(2026, 5, 7), "-189.99", "Amazon", "Shopping")
+    assert suggest_links(conn, snapshot_id) == []
+
+
+def test_suggest_keeps_continuous_line_sharing_its_category(conn, snapshot_id, seeder):
+    # Two entries claim "Dining", so the continuous one is measured by links
+    # and stays suggestable.
+    dining = make_entry_of_kind(
+        conn, snapshot_id, "expense", amount=300, category="Dining", continuous=True
+    )
+    make_entry_of_kind(conn, snapshot_id, "expense", amount=50, category="Dining")
+    seeder.add(date(2026, 5, 3), "-300.00", "Bistro", "Dining")
+    (s,) = suggest_links(conn, snapshot_id)
+    assert s.entry_ref == dining
+
+
 def make_entry_of_kind(
     conn, snapshot_id, kind, *, amount, category=None, day=None, continuous=False
 ):

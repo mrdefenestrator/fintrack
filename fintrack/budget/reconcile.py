@@ -237,6 +237,14 @@ def _amount_component(txn_abs: Decimal, entry_amount: Decimal) -> Decimal:
     return Decimal(1) - reldiff / _AMOUNT_GATE
 
 
+def _measured_by_category(entry: dict[str, Any], claims: Counter) -> bool:
+    """A variable, continuous entry that alone claims its category is measured
+    by that category's month total, not by links (see ``budget_actuals``).
+    ``claims`` counts entries per category across the snapshot."""
+    category = entry.get("category")
+    return bool(entry.get("continuous") and category and claims[category] == 1)
+
+
 def _kind_matches_sign(entry_kind: str, amount: Decimal) -> bool:
     if entry_kind == "income":
         return amount > _ZERO
@@ -316,9 +324,14 @@ def suggest_links(
     Suggestions are for confirmation only — nothing is written. Scoped to a
     month when both ``year`` and ``month`` are given, else all transactions.
     Pairs the user dismissed are skipped, so a transaction whose best match
-    was rejected may be offered its next-best entry instead.
+    was rejected may be offered its next-best entry instead. Entries measured
+    by category total are never proposed: their category already counts the
+    transaction, and a link would only re-pin its category (silently
+    recategorizing it when the guess is wrong).
     """
     entries = get_budget_entries(conn, snapshot_id)
+    claims = Counter(e["category"] for e in entries if e.get("category"))
+    entries = [e for e in entries if not _measured_by_category(e, claims)]
     if not entries:
         return []
     txns = get_transactions(conn, year=year, month=month, snapshot_id=snapshot_id)
@@ -462,7 +475,7 @@ def budget_actuals(
         expected = budget_entry_in_month(entry, year, month)
         category = entry.get("category")
         drift = _ZERO
-        if entry.get("continuous") and category and claims[category] == 1:
+        if _measured_by_category(entry, claims):
             source = "category"
             row = category_totals.get(category)
             count = row["count"] if row else 0

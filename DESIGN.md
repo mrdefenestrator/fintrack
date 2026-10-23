@@ -340,7 +340,9 @@ Three things build on the link:
   so the classifier privacy constraint is untouched) scores each unlinked
   transaction against candidate entries on amount closeness (gated to ±25%),
   category match, flow-account match, and date proximity to the expected
-  occurrence. Suggestions are always presented for confirmation, never applied
+  occurrence. Entries measured by category total (below) are never proposed:
+  their category already counts the transaction, and a link would only re-pin
+  its category. Suggestions are always presented for confirmation, never applied
   silently. A rejected suggestion can be **dismissed**: the pair is stored in
   `link_suggestion_dismissals` and never proposed again (the transaction may
   still be offered its next-best entry, and manual linking is unaffected). On

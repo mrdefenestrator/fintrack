@@ -269,10 +269,15 @@ class FinancesData(TypedDict, total=False):
 # ---------------------------------------------------------------------------
 
 
-class ParsedTransaction(TypedDict):
+class _ParsedTransactionRequired(TypedDict):
     date: date
     amount: Decimal
     raw_description: str
+
+
+class ParsedTransaction(_ParsedTransactionRequired, total=False):
+    # The institution's transaction id (OFX FITID); absent for CSV.
+    external_id: str | None
 
 
 class _ImportResultRequired(TypedDict):

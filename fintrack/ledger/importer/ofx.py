@@ -39,6 +39,7 @@ def parse_ofx(file_path: str | Path) -> ImportResult:
                     date=txn.date.date() if hasattr(txn.date, "date") else txn.date,
                     amount=Decimal(str(txn.amount)),
                     raw_description=txn.payee or txn.memo or "",
+                    external_id=(txn.id or "").strip() or None,
                 )
             )
         if getattr(stmt, "balance", None) is not None:

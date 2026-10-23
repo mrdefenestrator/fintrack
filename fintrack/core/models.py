@@ -304,9 +304,14 @@ transactions = Table(
     Column("raw_description", String, nullable=False),
     Column("normalized_merchant", String, nullable=False),
     Column("fingerprint", String, nullable=False),
+    # The institution's own transaction id (OFX FITID), when the format has
+    # one. A match within the account is a definite duplicate (issue #82);
+    # NULL for CSV rows and rows imported before ids were kept.
+    Column("external_id", String, nullable=True),
     Column("created_at", DateTime, default=_utcnow),
     Index("ix_transactions_fingerprint", "fingerprint"),
     Index("ix_transactions_account_date", "account_id", "date"),
+    Index("ix_transactions_account_external_id", "account_id", "external_id"),
 )
 
 merchant_cache = Table(
@@ -379,6 +384,47 @@ link_suggestion_dismissals = Table(
     UniqueConstraint(
         "transaction_id", "budget_entry_ref", name="uq_link_dismissal_pair"
     ),
+)
+
+# A possible duplicate (issue #82): one row per transaction flagged as a likely
+# copy of `duplicate_of_id`, found at import or by a scan. The user resolves it:
+# 'duplicate' hides the row from every confirmed-transaction read (see
+# ledger.repository.duplicates.not_duplicate()), 'not_duplicate' keeps it and
+# stops it being re-flagged. Raw transactions stay immutable — this is an
+# overlay, like corrections. Both FKs cascade, so rejecting either side's
+# import clears the flag. Both rows always share an account (the matcher only
+# compares within one), which keeps them in one snapshot.
+transaction_duplicates = Table(
+    "transaction_duplicates",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column(
+        "transaction_id",
+        Integer,
+        ForeignKey("transactions.id", ondelete="CASCADE"),
+        unique=True,
+        nullable=False,
+    ),
+    Column(
+        "duplicate_of_id",
+        Integer,
+        ForeignKey("transactions.id", ondelete="CASCADE"),
+        nullable=False,
+    ),
+    Column("status", String, nullable=False, default="flagged"),
+    Column("reason", String, nullable=False),
+    Column("source", String, nullable=False),
+    Column("created_at", DateTime, default=_utcnow),
+    Column("resolved_at", DateTime, nullable=True),
+    CheckConstraint(
+        "status IN ('flagged', 'duplicate', 'not_duplicate')",
+        name="ck_txn_duplicate_status",
+    ),
+    CheckConstraint("source IN ('import', 'scan')", name="ck_txn_duplicate_source"),
+    CheckConstraint(
+        "transaction_id != duplicate_of_id", name="ck_txn_duplicate_not_self"
+    ),
+    Index("ix_transaction_duplicates_of", "duplicate_of_id"),
 )
 
 categories = Table(

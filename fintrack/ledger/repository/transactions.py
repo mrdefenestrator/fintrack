@@ -9,6 +9,7 @@ from fintrack.core.coerce import (
     parse_amount_filter,
 )
 from fintrack.ledger.repository.aggregations import base_transaction_query
+from fintrack.ledger.repository.duplicates import not_hidden_duplicate
 
 
 def _apply_amount_filter(stmt, amount_col, spec: AmountFilterSpec):
@@ -57,13 +58,17 @@ def get_transactions(
     / `categories`, matched with IN) for the multi-select filter UI. `amount`
     accepts the search syntax parsed by fintrack.core.coerce.parse_amount_filter
     (e.g. "12.34", "-12.34", "10-20", ">50"); invalid amount text is ignored.
+    `status` is one of corrected / uncategorized / categorized, or
+    possible_duplicate (open flags) / duplicate (rows marked duplicate — the
+    only view that includes them; issue #82).
     """
     from fintrack.core.models import transactions
 
     acct_filter = account_ids if account_ids else ([account_id] if account_id else None)
     cat_filter = categories if categories else ([category] if category else None)
 
-    subq = base_transaction_query(snapshot_id)
+    # "duplicate" is the one view that shows rows hidden as duplicates.
+    subq = base_transaction_query(snapshot_id, include_duplicates=status == "duplicate")
 
     if year and month:
         start = date(year, month, 1)
@@ -107,6 +112,10 @@ def get_transactions(
         stmt = stmt.where(subq.c.has_correction)
     elif status == "uncategorized":
         stmt = stmt.where(subq.c.category == "Uncategorized")
+    elif status == "possible_duplicate":
+        stmt = stmt.where(subq.c.dup_status == "flagged")
+    elif status == "duplicate":
+        stmt = stmt.where(subq.c.dup_status == "duplicate")
     elif status == "categorized":
         stmt = stmt.where(
             subq.c.category != "Uncategorized",
@@ -155,6 +164,7 @@ def get_budget_link_date_ranges(
         .where(
             ref.isnot(None),
             imports.c.status == "confirmed",
+            not_hidden_duplicate(),
             holdings.c.snapshot_id == snapshot_id,
             not_(
                 or_(

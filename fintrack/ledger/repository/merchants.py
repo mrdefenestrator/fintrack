@@ -9,6 +9,7 @@ from fintrack.core.models import (
     transaction_corrections,
     transactions,
 )
+from fintrack.ledger.repository.duplicates import not_hidden_duplicate
 
 
 def get_cached_category(conn: Connection, merchant_name: str) -> str | None:
@@ -106,6 +107,7 @@ def _stats_query(snapshot_id: int | None = None):
         )
         .outerjoin(imports, transactions.c.import_id == imports.c.id)
         .where((imports.c.status == "confirmed") | (imports.c.id.is_(None)))
+        .where(not_hidden_duplicate())
         .group_by(merchant_cache.c.id)
     )
 

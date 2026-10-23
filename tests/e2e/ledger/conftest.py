@@ -236,6 +236,11 @@ def _form_post(url: str, fields: dict[str, str] | None = None) -> str:
         return resp.read().decode()
 
 
+def _get(url: str) -> str:
+    with urllib.request.urlopen(url) as resp:
+        return resp.read().decode()
+
+
 def _multipart_post(
     url: str,
     fields: dict[str, str],
@@ -416,6 +421,83 @@ def import_server(tmp_path_factory):
     base_url = f"http://127.0.0.1:{port}"
     _create_ledger_snapshot(base_url)
     yield base_url
+    _stop_server(proc)
+
+
+# ---------------------------------------------------------------------------
+# Module-scoped server with a possible duplicate — used by test_duplicates.py
+# ---------------------------------------------------------------------------
+
+
+def _ofx(rows: list[tuple[str, str, str, str]]) -> bytes:
+    """OFX bytes from (fitid, yyyymmdd, amount, name) rows."""
+    txns = "".join(
+        f"<STMTTRN><TRNTYPE>DEBIT</TRNTYPE><DTPOSTED>{day}120000</DTPOSTED>"
+        f"<TRNAMT>{amount}</TRNAMT><FITID>{fitid}</FITID><NAME>{name}</NAME>"
+        "</STMTTRN>"
+        for fitid, day, amount, name in rows
+    )
+    return (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<?OFX OFXHEADER="200" VERSION="220"?>\n'
+        "<OFX><BANKMSGSRSV1><STMTTRNRS><STMTRS>"
+        "<BANKACCTFROM><ACCTID>5555</ACCTID></BANKACCTFROM>"
+        f"<BANKTRANLIST>{txns}</BANKTRANLIST>"
+        "</STMTRS></STMTTRNRS></BANKMSGSRSV1></OFX>"
+    ).encode()
+
+
+@pytest.fixture(scope="module")
+def duplicates_server(tmp_path_factory):
+    """Two overlapping Apple-Card-style exports (issue #82).
+
+    The first ("first.qfx": UBER *TRIP -$56.78 2026-04-01, NETFLIX.COM -$15.99
+    2026-04-02) is confirmed. The second ("second.qfx") re-exports both with
+    new bank ids, reworded descriptions and the Uber a day later, plus a new
+    SHELL OIL -$45.00; it is left staged with two possible duplicates.
+    Yields (base_url, second import id).
+    """
+    port = _free_port()
+    db_path = tmp_path_factory.mktemp("duplicates_db") / "test.db"
+    proc = _start_server(port, db_path)
+    base_url = f"http://127.0.0.1:{port}"
+    _create_ledger_snapshot(base_url)
+    html = _form_post(
+        f"{base_url}/s/ledger/import/accounts",
+        {
+            "acct_name": "Apple Card",
+            "acct_institution": "Apple",
+            "acct_type": "credit_card",
+        },
+    )
+    account_id = re.search(r'<option value="(\d+)"', html).group(1)
+
+    def upload(name, rows):
+        _multipart_post(
+            f"{base_url}/s/ledger/import/upload",
+            {"account_id": account_id},
+            {"files": (name, _ofx(rows))},
+        )
+
+    upload(
+        "first.qfx",
+        [
+            ("A1", "20260401", "-56.78", "UBER *TRIP HELP.UBER.COM"),
+            ("A2", "20260402", "-15.99", "NETFLIX.COM"),
+        ],
+    )
+    [first_id] = re.findall(r'id="batch-(\d+)"', _get(f"{base_url}/s/ledger/import"))
+    _form_post(f"{base_url}/s/ledger/import/{first_id}/confirm")
+    upload(
+        "second.qfx",
+        [
+            ("B1", "20260402", "-56.78", "Uber Trip Help.Uber.Com"),
+            ("B2", "20260402", "-15.99", "Netflix.com"),
+            ("B3", "20260403", "-45.00", "SHELL OIL"),
+        ],
+    )
+    [second_id] = re.findall(r'id="batch-(\d+)"', _get(f"{base_url}/s/ledger/import"))
+    yield base_url, second_id
     _stop_server(proc)
 
 

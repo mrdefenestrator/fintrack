@@ -12,7 +12,9 @@
 {% set status_opts = [
     {'value': 'categorized', 'display': 'Categorized'},
     {'value': 'uncategorized', 'display': 'Uncategorized'},
-    {'value': 'corrected', 'display': 'Corrected'}] %}
+    {'value': 'corrected', 'display': 'Corrected'},
+    {'value': 'possible_duplicate', 'display': 'Possible duplicate'},
+    {'value': 'duplicate', 'display': 'Marked duplicate'}] %}
 
 {# filter_qs carries the column filters (multi account_id / category, status, q)
    for the time-nav links; month/all-months state is passed explicitly. #}

@@ -23,6 +23,7 @@ from fintrack.core.models import (
     imports,
     transactions,
 )
+from fintrack.ledger.repository.duplicates import not_hidden_duplicate
 
 RECONCILE_TOLERANCE = Decimal("0.005")
 
@@ -173,6 +174,7 @@ def reconciliation_note(
             transactions.c.date > previous["as_of"],
             transactions.c.date <= as_of,
             imports.c.status == "confirmed",
+            not_hidden_duplicate(),
         )
     ).scalar()
     expected = previous["balance"] + Decimal(str(txn_sum))

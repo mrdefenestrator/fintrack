@@ -3,9 +3,11 @@ from decimal import Decimal
 import pytest
 from sqlalchemy import select
 
-from fintrack.core.models import imports
+from fintrack.core.models import holdings, imports, loan_details
 from fintrack.ledger.importer import run_import
 from fintrack.ledger.repository.accounts import add_account
+from fintrack.ledger.repository.imports import confirm_import
+from fintrack.networth.repository import get_asset_entries
 
 
 @pytest.fixture
@@ -51,3 +53,24 @@ def test_run_import_venmo_csv_persists_balances(conn, sample_account_id, tmp_pat
     ).fetchone()
     assert row.beginning_balance == Decimal("10.00")
     assert row.ledger_balance == Decimal("35.00")
+
+
+def test_run_import_loan_ofx_stores_balance_as_owed(conn, sample_loan_ofx):
+    # Issue #79: a servicer's positive LEDGERBAL is principal owed. End to end
+    # (parse → stage → confirm), the canonical balance is negative and the
+    # debt-side dict API presents the amount owed as positive.
+    loan_id = add_account(
+        conn, name="Mortgage", institution="Servicer", account_type="loan"
+    )
+    result = run_import(conn, sample_loan_ofx, account_id=loan_id)
+    assert result.get("error") is None
+    confirm_import(conn, result["import_id"])
+
+    assert conn.execute(
+        select(loan_details.c.balance).where(loan_details.c.holding_id == loan_id)
+    ).scalar() == Decimal("-250000.00")
+    snapshot_id = conn.execute(
+        select(holdings.c.snapshot_id).where(holdings.c.id == loan_id)
+    ).scalar()
+    (entry,) = [e for e in get_asset_entries(conn, snapshot_id) if e["id"] == loan_id]
+    assert entry["balance"] == Decimal("250000.00")

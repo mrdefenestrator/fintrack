@@ -199,8 +199,9 @@ migrate-legacy` or `yaml_import`, both of which now write the split schema.
 A holding's detail `balance` is the canonical **signed** balance: negative
 means owed (credit cards and loans). This gives `balance_history` one
 semantics across sources — OFX statements provide a signed ledger balance
-directly, while credit-card editing in the UI works in limit/balance terms
-and available is computed (`credit_limit + balance`) rather than stored, so it
+directly (except loan servicers, which report principal owed as positive;
+`create_import` stores a loan's statement balance as `-abs()`), while
+credit-card editing in the UI works in limit/balance terms and available is computed (`credit_limit + balance`) rather than stored, so it
 never drifts from the imported balance. The debt-side dict API still presents
 a loan's amount owed as positive; the repository negates at the boundary.
 

@@ -1,7 +1,7 @@
 from calendar import monthrange
 from datetime import date
 
-from sqlalchemy import Connection, func, select
+from sqlalchemy import Connection, and_, func, not_, or_, select
 
 from fintrack.core.coerce import (
     AMOUNT_FILTER_TOLERANCE,
@@ -128,8 +128,12 @@ def get_budget_link_date_ranges(
 
     Keyed by ``budget_entry_ref``; entries with no linked transactions are
     absent. Counts confirmed imports only, like ``base_transaction_query``.
+    Reversals (a refund linked to an expense, a clawback to income) are
+    ignored: they never count as the money moving, so they must not make an
+    entry "tracked" or set its last-seen date (see reconcile.is_reversal).
     """
     from fintrack.core.models import (
+        budget_entries,
         holdings,
         imports,
         transaction_corrections,
@@ -146,11 +150,18 @@ def get_budget_link_date_ranges(
             )
             .join(imports, transactions.c.import_id == imports.c.id)
             .join(holdings, transactions.c.account_id == holdings.c.id)
+            .join(budget_entries, ref == budget_entries.c.id)
         )
         .where(
             ref.isnot(None),
             imports.c.status == "confirmed",
             holdings.c.snapshot_id == snapshot_id,
+            not_(
+                or_(
+                    and_(budget_entries.c.kind == "expense", transactions.c.amount > 0),
+                    and_(budget_entries.c.kind == "income", transactions.c.amount < 0),
+                )
+            ),
         )
         .group_by(ref)
     )

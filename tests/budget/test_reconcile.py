@@ -410,6 +410,33 @@ def test_refund_alone_does_not_count_as_paid(conn, snapshot_id, seeder):
     assert a.actual == Decimal("-50.00")
 
 
+def test_refund_alone_does_not_make_entry_tracked(conn, snapshot_id, seeder):
+    # A refund linked last month is not a payment: with nothing linked this
+    # month the entry is "unlinked", not "missing", and has no last-seen date.
+    gym = make_expense_entry(conn, snapshot_id, amount=45, day_of_month=1)
+    refund = seeder.add(date(2026, 4, 10), "10.00", "Gym")
+    link_transaction(conn, snapshot_id, refund, gym)
+    assert get_budget_link_date_ranges(conn, snapshot_id) == {}
+    a = _by_ref(
+        budget_actuals(conn, snapshot_id, year=2026, month=5, today=date(2026, 6, 1)),
+        gym,
+    )
+    assert a.status == "unlinked"
+    assert a.last_linked is None
+
+
+def test_last_seen_ignores_later_refund(conn, snapshot_id, seeder):
+    rent = make_rent_entry(conn, snapshot_id)
+    charge = seeder.add(date(2026, 4, 1), "-2000.00", "Landlord", "Housing")
+    refund = seeder.add(date(2026, 4, 20), "100.00", "Landlord", "Housing")
+    link_transaction(conn, snapshot_id, charge, rent)
+    link_transaction(conn, snapshot_id, refund, rent)
+    assert get_budget_link_date_ranges(conn, snapshot_id)[rent] == (
+        date(2026, 4, 1),
+        date(2026, 4, 1),
+    )
+
+
 def test_clawback_nets_against_income_actual(conn, snapshot_id, seeder):
     salary = make_entry_of_kind(conn, snapshot_id, "income", amount=5000, day=1)
     pay = seeder.add(date(2026, 5, 1), "5000.00", "Employer", "Income")

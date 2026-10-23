@@ -339,7 +339,8 @@ expense line, a clawback on an income line (`reconcile.is_reversal`). A
 reversal nets against the entry's actual (charges − refunds, so a month can go
 negative) but is never treated as the money having moved: it doesn't count
 toward N, can't satisfy the missed-charge check (a refund alone leaves a
-tracked bill **missing**), is excluded from price drift, doesn't realize an
+tracked bill **missing**, and can't make an entry tracked or set its Last
+seen date), is excluded from price drift, doesn't realize an
 occurrence for projection true-up, and is never suggested. Like any link it
 pins the entry's category, so a refund also nets that category's totals.
 

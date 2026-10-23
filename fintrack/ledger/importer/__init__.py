@@ -92,17 +92,22 @@ def run_import(
     file_path: str | Path,
     account_id: int,
     configs_dir: str | None = None,
+    filename: str | None = None,
 ) -> dict:
     """Run the full import pipeline for a single file.
+
+    `filename` is the name to record when file_path is a temporary copy (web
+    uploads); it defaults to file_path's own name.
 
     Returns a dict with keys: import_id, new_count, skipped_count,
     flagged_count, new_merchants.
     """
     file_path = Path(file_path)
+    name = filename or file_path.name
 
     file_hash = compute_file_hash(file_path)
     if check_file_hash(conn, file_hash):
-        return _error(f"File already imported: {file_path.name}")
+        return _error(f"File already imported: {name}")
 
     suffix = file_path.suffix.lower()
     if suffix in (".ofx", ".qfx"):
@@ -112,7 +117,7 @@ def run_import(
             file_path, configs_dir or str(INSTITUTIONS_DIR)
         )
         if config_path is None:
-            return _error(f"No institution config matches: {file_path.name}")
+            return _error(f"No institution config matches: {name}")
         result = parse_csv(file_path, config_path)
     else:
         return _error(f"Unsupported format: {suffix}")
@@ -144,7 +149,7 @@ def run_import(
     import_id = create_import(
         conn,
         account_id=account_id,
-        filename=file_path.name,
+        filename=name,
         file_hash=file_hash,
         ledger_balance=result.get("ledger_balance"),
         ledger_balance_date=result.get("ledger_balance_date"),

@@ -108,3 +108,22 @@ def test_upload_empty_file_reports_unreadable(client, conn):
     assert response.status_code == 200
     html = response.data.decode()
     assert "test.ofx: file arrived empty" in html
+
+
+def test_upload_records_the_uploaded_filename(client, conn):
+    from fintrack.ledger.repository.imports import get_staging_imports
+
+    acct_id = add_account(
+        conn, name="Test", institution="Test Bank", account_type="checking"
+    )
+    with patch("web.routes.imports.classify_and_cache", return_value=(0, None)):
+        client.post(
+            "/s/ledger/import/upload",
+            data={
+                "account_id": str(acct_id),
+                "files": (io.BytesIO(_SIMPLE_OFX), "april.qfx"),
+            },
+            content_type="multipart/form-data",
+        )
+    [staged] = get_staging_imports(conn)
+    assert staged["filename"] == "april.qfx"

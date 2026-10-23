@@ -2,7 +2,7 @@ import os
 import tempfile
 from pathlib import Path
 
-from flask import Blueprint, current_app, g, render_template, request
+from flask import Blueprint, abort, current_app, g, render_template, request
 from sqlalchemy.exc import IntegrityError
 
 from fintrack.core.types import ACCOUNT_TYPE_VALUES
@@ -10,6 +10,11 @@ from fintrack.ledger.classifier import classify_and_cache
 from fintrack.ledger.importer import run_import
 from fintrack.ledger.importer.ofx import extract_ofx_metadata
 from fintrack.ledger.repository.accounts import add_account, list_accounts
+from fintrack.ledger.repository.duplicates import (
+    DUPLICATE_STATUSES,
+    list_duplicates,
+    resolve_duplicate,
+)
 from fintrack.ledger.repository.imports import (
     confirm_import,
     get_staging_imports,
@@ -88,7 +93,7 @@ def upload():
                         "read it. Re-select the file and try again."
                     }
                 else:
-                    result = run_import(conn, tmp_path, account_id)
+                    result = run_import(conn, tmp_path, account_id, filename=f.filename)
             finally:
                 if tmp_path:
                     os.unlink(tmp_path)
@@ -221,14 +226,42 @@ def detect_account():
     )
 
 
+def _render_batch(conn, import_id):
+    txns = get_staging_transactions(conn, import_id)
+    flags = {
+        d["transaction_id"]: d
+        for d in list_duplicates(
+            conn, g.snapshot_id, statuses=DUPLICATE_STATUSES, import_id=import_id
+        )
+    }
+    return render_template(
+        "partials/import_batch.html",
+        transactions=txns,
+        import_id=import_id,
+        duplicates=flags,
+    )
+
+
 @bp.route("/import/<int:import_id>/review")
 def review(import_id):
     engine = current_app.config["engine"]
     with engine.connect() as conn:
-        txns = get_staging_transactions(conn, import_id)
-    return render_template(
-        "partials/import_batch.html", transactions=txns, import_id=import_id
-    )
+        return _render_batch(conn, import_id)
+
+
+@bp.route("/import/<int:import_id>/duplicate/<int:txn_id>", methods=["POST"])
+def resolve(import_id, txn_id):
+    """Resolve (or undo) a staged row's possible-duplicate flag (issue #82)."""
+    status = request.form.get("status", "")
+    if status not in DUPLICATE_STATUSES:
+        abort(400)
+    engine = current_app.config["engine"]
+    with engine.connect() as conn:
+        try:
+            resolve_duplicate(conn, txn_id, status, snapshot_id=g.snapshot_id)
+        except LookupError:
+            abort(404)
+        return _render_batch(conn, import_id)
 
 
 @bp.route("/import/<int:import_id>/confirm", methods=["POST"])

@@ -30,17 +30,32 @@ def project(cli, months, estimate):
             conn, snapshot_id, months=months, include_estimate=estimate
         )
 
+    summary = engine.summarize(result)
+    _echo_summary(summary)
+
     labels = [m["label"] for m in result["months"]]
-    headers = ["Account"] + labels
+    headers = ["Account", "Now"] + labels
     rows = []
     for row in result["rows"]:
-        rows.append([row["account"]["name"]] + [fmt_money(b) for b in row["balances"]])
+        rows.append(
+            [row["account"]["name"], fmt_money(row["start"])]
+            + [fmt_money(b) for b in row["balances"]]
+        )
     if result["has_unassigned"]:
-        rows.append(["(unassigned)"] + [fmt_money(v) for v in result["unassigned"]])
+        rows.append(
+            ["(unassigned)", fmt_money(0)]
+            + [fmt_money(v) for v in result["unassigned"]]
+        )
     rows.append(["-" for _ in headers])
-    rows.append(["Liquid total"] + [fmt_money(v) for v in result["liquid"]])
-    rows.append(["Net worth"] + [fmt_money(v) for v in result["net_worth"]])
-    echo_table(rows, headers, ("left",) + ("right",) * len(labels))
+    rows.append(
+        ["Liquid total", fmt_money(result["start_liquid"])]
+        + [fmt_money(v) for v in result["liquid"]]
+    )
+    rows.append(
+        ["Net worth", fmt_money(result["start_net_worth"])]
+        + [fmt_money(v) for v in result["net_worth"]]
+    )
+    echo_table(rows, headers, ("left",) + ("right",) * (len(labels) + 1))
 
     if result["estimate"] is not None:
         monthly = result["estimate"]["monthly"]
@@ -53,9 +68,42 @@ def project(cli, months, estimate):
         ):
             click.echo(f"  {category}: {fmt_money(avg)}")
 
-    for w in result["warnings"]:
+    for w in summary["warnings"]:
+        months_below = w["months_below"]
         click.echo(
-            f"warning: {w['account']['name']} falls to {fmt_money(w['balance'])} "
-            f"in {w['month_label']} (minimum {fmt_money(w['minimum'])})",
+            f"warning: {w['account']['name']} drops below its "
+            f"{_plain(w['minimum'])} minimum in {w['first_month_label']} "
+            f"(lowest {_plain(w['lowest'])}, {months_below} "
+            f"month{'s' if months_below != 1 else ''} below)",
             err=True,
         )
+
+
+def _plain(x) -> str:
+    """Money without the table padding: $1,234.00 / ($1,234.00)."""
+    return fmt_money(x).strip()
+
+
+def _change(x) -> str:
+    if x == 0:
+        return "$0.00"
+    return f"{'+' if x > 0 else '-'}${abs(x):,.2f}"
+
+
+def _echo_summary(summary: dict) -> None:
+    end = summary["end_label"]
+    for name, key in (("Liquid", "liquid"), ("Net worth", "net_worth")):
+        t = summary[key]
+        click.echo(
+            f"{name} by {end}: {_plain(t['end'])} "
+            f"(now {_plain(t['start'])}, {_change(t['change'])}, "
+            f"{_change(t['per_month'])}/mo)"
+        )
+    low = summary["lowest_liquid"]
+    click.echo(f"Lowest liquid: {_plain(low['amount'])} in {low['month_label']}")
+    if summary["payoffs"]:
+        paid = ", ".join(
+            f"{p['name']} ({p['month_label']})" for p in summary["payoffs"]
+        )
+        click.echo(f"Paid off: {paid}")
+    click.echo()

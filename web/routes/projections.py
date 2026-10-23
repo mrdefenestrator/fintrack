@@ -1,10 +1,9 @@
-"""Projections page: accounts × months ending-balance grid with a line chart.
+"""Projections page: headline summary plus an accounts × months grid.
 
 Finances-style view (explicit filename argument); horizon and estimator are
 query params (?months=N&estimate=1) so states are linkable.
 """
 
-import math
 from decimal import Decimal
 
 from flask import Blueprint, current_app, render_template, request
@@ -14,13 +13,6 @@ from fintrack.projections import engine
 from web.routes.common import get_common_context, validate_snapshot
 
 projections_bp = Blueprint("projections", __name__)
-
-CHART_WIDTH = 960
-CHART_HEIGHT = 280
-CHART_PAD_L = 56
-CHART_PAD_R = 56
-CHART_PAD_T = 16
-CHART_PAD_B = 28
 
 MONTH_CHOICES = (6, 12, 24, 36)
 
@@ -55,174 +47,19 @@ def _group_rows(result) -> list[dict]:
         if not rows:
             continue
         n = len(result["months"])
-        raw_subtotals = [
+        subtotals = [
             sum((r["balances"][mi] for r in rows), Decimal(0)) for mi in range(n)
         ]
-        subtotals = [fmt_money(v) for v in raw_subtotals]
         groups.append(
             {
                 "key": key,
                 "label": label,
                 "rows": rows,
-                "subtotals": subtotals,
-                "raw_subtotals": raw_subtotals,
+                "start": sum((r["start"] for r in rows), Decimal(0)),
+                "subtotals": [fmt_money(v) for v in subtotals],
             }
         )
     return groups
-
-
-def _fmt_compact(v: float) -> str:
-    """Short money label for axis ticks / tooltips, e.g. $9k, -$1.2k, $500."""
-    neg = v < 0
-    a = abs(v)
-    if a >= 1000:
-        thousands = a / 1000
-        body = f"${thousands:.0f}k" if a % 1000 < 1 else f"${thousands:.1f}k"
-    else:
-        body = f"${a:.0f}"
-    return f"-{body}" if neg else body
-
-
-def _nice_ticks(lo: float, hi: float, count: int = 4) -> list[float]:
-    """Evenly-spaced, human-friendly y-axis tick values spanning [lo, hi]."""
-    span = hi - lo
-    if span <= 0:
-        return [lo]
-    raw = span / count
-    mag = 10 ** math.floor(math.log10(raw))
-    norm = raw / mag
-    nice = 1 if norm < 1.5 else 2 if norm < 3 else 5 if norm < 7 else 10
-    step = nice * mag
-    start = math.ceil(lo / step) * step
-    ticks = []
-    v = start
-    while v <= hi + step * 1e-6:
-        ticks.append(round(v, 6))
-        v += step
-    return ticks
-
-
-_GROUP_COLORS = {
-    "cash": "#34d399",
-    "credit": "#fb7185",
-    "loan": "#fbbf24",
-    "asset": "#3b82f6",
-}
-
-
-def _chart(result, groups) -> dict | None:
-    """Precompute an SVG line chart (gridlines, points, area fills, hover
-    bands, endpoint labels) for the liquid-total and net-worth series,
-    plus thinner per-group subtotal lines.
-    Dependency-free — the template renders the returned coordinates directly."""
-    liquid = [float(v) for v in result["liquid"]]
-    net_worth = [float(v) for v in result["net_worth"]]
-    labels = [m["label"] for m in result["months"]]
-    n = len(liquid)
-    if n < 2:
-        return None
-
-    group_series = [
-        {
-            "key": g["key"],
-            "label": g["label"],
-            "color": _GROUP_COLORS.get(g["key"], "#9ca3af"),
-            "values": [float(v) for v in g["raw_subtotals"]],
-        }
-        for g in groups
-    ]
-
-    all_values = liquid + net_worth
-    for gs in group_series:
-        all_values.extend(gs["values"])
-    lo = min(min(all_values), 0.0)
-    hi = max(max(all_values), 0.0)
-    if hi == lo:
-        hi += 1.0
-    plot_w = CHART_WIDTH - CHART_PAD_L - CHART_PAD_R
-    plot_h = CHART_HEIGHT - CHART_PAD_T - CHART_PAD_B
-
-    def x(i):
-        return CHART_PAD_L + plot_w * i / (n - 1)
-
-    def y(v):
-        return CHART_PAD_T + plot_h * (hi - v) / (hi - lo)
-
-    def polyline(series):
-        return " ".join(f"{x(i):.1f},{y(v):.1f}" for i, v in enumerate(series))
-
-    def area_path(series):
-        baseline_y = CHART_PAD_T + plot_h
-        pts = " ".join(f"L{x(i):.1f},{y(v):.1f}" for i, v in enumerate(series))
-        return f"M{x(0):.1f},{baseline_y} {pts} L{x(n - 1):.1f},{baseline_y} Z"
-
-    def dots(series):
-        return [
-            {"x": round(x(i), 1), "y": round(y(v), 1)} for i, v in enumerate(series)
-        ]
-
-    def endpoint_label(series, color_key):
-        last_i = n - 1
-        return {
-            "x": round(x(last_i) + 6, 1),
-            "y": round(y(series[last_i]) + 4, 1),
-            "label": _fmt_compact(series[last_i]),
-        }
-
-    gridlines = [
-        {"y": round(y(t), 1), "label": _fmt_compact(t), "is_zero": abs(t) < 1e-9}
-        for t in _nice_ticks(lo, hi)
-    ]
-    band_w = plot_w / (n - 1)
-    bands = [
-        {
-            "x": round(x(i) - band_w / 2, 1),
-            "w": round(band_w, 1),
-            "cx": round(x(i), 1),
-            "label": labels[i],
-            "liquid": _fmt_compact(liquid[i]),
-            "net_worth": _fmt_compact(net_worth[i]),
-        }
-        for i in range(n)
-    ]
-    step = max(1, (n - 1) // 6)
-    ticks = [{"x": round(x(i), 1), "label": labels[i]} for i in range(0, n, step)]
-
-    chart_groups = [
-        {
-            "key": gs["key"],
-            "label": gs["label"],
-            "color": gs["color"],
-            "points": polyline(gs["values"]),
-            "endpoint": endpoint_label(gs["values"], gs["key"]),
-        }
-        for gs in group_series
-    ]
-
-    return {
-        "width": CHART_WIDTH,
-        "height": CHART_HEIGHT,
-        "pad_l": CHART_PAD_L,
-        "pad_r": CHART_PAD_R,
-        "pad_t": CHART_PAD_T,
-        "plot_w": plot_w,
-        "plot_h": plot_h,
-        "plot_bottom": CHART_PAD_T + plot_h,
-        "liquid_points": polyline(liquid),
-        "net_worth_points": polyline(net_worth),
-        "liquid_area": area_path(liquid),
-        "net_worth_area": area_path(net_worth),
-        "liquid_dots": dots(liquid),
-        "net_worth_dots": dots(net_worth),
-        "liquid_endpoint": endpoint_label(liquid, "liquid"),
-        "net_worth_endpoint": endpoint_label(net_worth, "net_worth"),
-        "gridlines": gridlines,
-        "bands": bands,
-        "ticks": ticks,
-        "zero_y": round(y(0.0), 1),
-        "show_zero": lo < 0.0 < hi,
-        "groups": chart_groups,
-    }
 
 
 @projections_bp.route("/s/<string:filename>/projections")
@@ -241,14 +78,12 @@ def projections_view(filename):
             conn, snapshot_id, months=months, include_estimate=estimate
         )
 
-    groups = _group_rows(result)
-
     return render_template(
         "projections.html",
         active_tab="projections",
         result=result,
-        groups=groups,
-        chart=_chart(result, groups),
+        groups=_group_rows(result),
+        summary=engine.summarize(result),
         months=months,
         month_choices=MONTH_CHOICES,
         estimate=estimate,

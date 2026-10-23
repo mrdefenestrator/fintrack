@@ -33,6 +33,9 @@ def test_project_smoke(tmp_path):
     assert "Checking" in result.output
     assert "Liquid total" in result.output
     assert "Net worth" in result.output
+    assert "Liquid by" in result.output
+    assert "now $1,000.00" in result.output
+    assert "Lowest liquid: $1,000.00" in result.output
     # 3 month columns: current month appears as a header
     assert len(result.output.splitlines()[0].split()) >= 4
 

@@ -6,11 +6,24 @@ pytestmark = pytest.mark.e2e
 
 
 def test_projections_page_renders(page, flask_server):
-    """Grid and chart render for the fixture snapshot."""
+    """Summary and grid render for the fixture snapshot; the old chart is gone."""
     page.goto(f"{flask_server}/s/test_finances/projections")
     assert "Projections" in page.title()
     assert page.locator("[data-projection-table]").is_visible()
-    assert page.locator("[data-projection-chart]").is_visible()
+    assert page.locator("[data-projection-chart]").count() == 0
+    liquid = page.locator("[data-summary='liquid']")
+    assert liquid.is_visible()
+    assert "Liquid by" in liquid.inner_text()
+    assert "now $5,000.00" in liquid.inner_text()
+    assert page.locator("[data-summary='net-worth']").is_visible()
+    assert "Lowest liquid" in page.locator("[data-summary='lowest']").inner_text()
+    # "Now" column sits between Account and the first month.
+    assert (
+        page.locator("[data-projection-table] thead th[data-col='1']")
+        .inner_text()
+        .strip()
+        == "Now"
+    )
     # Totals rows are present
     assert page.locator("[data-projection-table] >> text=Liquid total").is_visible()
     assert page.locator("[data-projection-table] >> text=Net worth").is_visible()
@@ -60,8 +73,7 @@ def test_projections_sort_keeps_totals_in_footer(page, flask_server):
 def test_projections_horizon_and_estimate_toggles(page, flask_server):
     page.goto(f"{flask_server}/s/test_finances/projections")
 
-    # Target the horizon link by href — "24" as bare text now also appears in
-    # the chart's axis labels / tooltips, so text=24 is ambiguous.
+    # Target the horizon link by href — "24" as bare text is ambiguous.
     page.click("a[href*='months=24']")
     page.wait_for_url("**months=24**")
     assert page.locator("[data-projection-table]").is_visible()
@@ -71,3 +83,22 @@ def test_projections_horizon_and_estimate_toggles(page, flask_server):
     assert page.locator("[data-projection-table]").is_visible()
     # months choice is preserved across the estimate toggle
     assert "months=24" in page.url
+    # The estimate's breakdown is shown once the estimate is on.
+    assert page.locator("[data-summary='estimate']").is_visible()
+
+
+def test_projections_minimum_balance_warning(page, flask_server, _db_path):
+    """An account that dips below its minimum gets one plain-language line."""
+    from sqlalchemy import create_engine, update
+
+    from fintrack.core.models import cash_details
+
+    engine = create_engine(f"sqlite:///{_db_path}")
+    with engine.begin() as conn:
+        conn.execute(update(cash_details).values(minimum_balance=6000))
+    engine.dispose()
+
+    page.goto(f"{flask_server}/s/test_finances/projections")
+    warnings = page.locator("[data-summary='warnings']")
+    assert warnings.is_visible()
+    assert "drops below its $6,000.00 minimum" in warnings.inner_text()

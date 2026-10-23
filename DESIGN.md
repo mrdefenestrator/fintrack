@@ -373,8 +373,23 @@ balance. Per month, in order:
 
 Totals reuse the net-worth key-number calculations. Accounts dipping below
 `minimum_balance` are flagged.
+
+The result also carries the starting point ("now": each row's current
+balance, `start_liquid`, `start_net_worth`) and a flow list per month — every
+balance movement the engine applies (autopay, budget income/expense, the
+estimate, asset growth/contribution, loan interest/payment), tagged with the
+holding it lands on (none = unassigned). A row's change in a month is exactly
+the sum of its flows. `summarize()` turns a result into the headline numbers:
+liquid and net worth now → end of horizon (change and per-month average), the
+lowest liquid month, loans paid off within the horizon, and minimum-balance
+warnings collapsed to one line per account.
+
 Surfaced at `/s/<snapshot>/projections` (horizon and estimator as query
-params, inline-SVG chart) and `fintrack project --months N [--estimate]`.
+params) and `fintrack project --months N [--estimate]`. Both lead with the
+summary, then the grid with a "Now" column ahead of the months; the web page
+also lists the warnings and, with the estimate on, its per-category breakdown.
+There is deliberately no chart: one shared axis made the small, meaningful
+movements (cash, cards) unreadable next to houses and mortgages (#54).
 
 Budget-vs-actual comparison (monthly budgeted amount, delta) is integrated
 into the Trends page as Budget/mo and Delta columns alongside the existing

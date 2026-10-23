@@ -133,20 +133,71 @@ def test_page_marks_its_sidebar_entry_active(client, db_engine):
     assert 'aria-current="page">Budget vs Actual</a>' in body
 
 
-def test_month_param_selects_month_and_pager(client, db_engine):
+def test_month_params_select_month_and_pager(client, db_engine):
     _add_rent(db_engine)
-    body = client.get("/s/home/budget/actual?month=2025-01").get_data(as_text=True)
+    body = client.get("/s/home/budget/actual?year=2025&month=1").get_data(as_text=True)
     assert "Jan 2025" in body
-    assert "month=2024-12" in body
-    assert "month=2025-02" in body
+    assert "year=2024&amp;month=12" in body
+    assert "year=2025&amp;month=2" in body
 
 
 def test_bad_month_param_falls_back_to_current(client, db_engine):
     _add_rent(db_engine)
-    resp = client.get("/s/home/budget/actual?month=nope")
+    resp = client.get("/s/home/budget/actual?year=2025&month=13")
     assert resp.status_code == 200
     today = datetime.now().astimezone().date()
     assert f"{today:%b %Y}" in resp.get_data(as_text=True)
+
+
+def test_htmx_request_renders_partial(client, db_engine):
+    _add_rent(db_engine)
+    body = client.get("/s/home/budget/actual", headers={"HX-Request": "true"}).get_data(
+        as_text=True
+    )
+    assert "budget-actual-table" in body
+    assert "<html" not in body
+
+
+def _add_entries(db_engine):
+    with db_engine.connect() as conn:
+        sid = create_snapshot(conn, "home")
+        for kind, desc, amount, cat in [
+            ("expense", "Rent", 2000, "Housing"),
+            ("expense", "Netflix", 15, "Entertainment"),
+            ("income", "Paycheck", 4000, "Income"),
+        ]:
+            add_budget_entry(
+                conn,
+                sid,
+                {
+                    "kind": kind,
+                    "description": desc,
+                    "amount": amount,
+                    "recurrence": "monthly",
+                    "category": cat,
+                },
+            )
+
+
+def test_filters_narrow_rows(client, db_engine):
+    _add_entries(db_engine)
+    body = client.get("/s/home/budget/actual?kind=income").get_data(as_text=True)
+    assert "Paycheck" in body
+    assert "Netflix" not in body
+    body = client.get("/s/home/budget/actual?category=Housing").get_data(as_text=True)
+    assert "Rent" in body
+    assert "Paycheck" not in body
+    body = client.get("/s/home/budget/actual?status=matched").get_data(as_text=True)
+    assert "No matching budget entries" in body
+
+
+def test_total_row_is_net_income_minus_expenses(client, db_engine):
+    _add_entries(db_engine)
+    body = client.get("/s/home/budget/actual").get_data(as_text=True)
+    # Expected: 4000 - 2000 - 15; nothing realized, so delta is the negation.
+    assert "3 entries · net" in body
+    assert "+$1,985.00" in body
+    assert "-$1,985.00" in body
 
 
 def test_page_empty_state(client, db_engine):

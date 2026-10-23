@@ -11,8 +11,7 @@
    state). latest_url is optional: when provided, a "Latest" button is always
    shown (Trends) — disabled at the latest window rather than removed, so the
    controls don't shift when you page away from latest (QA item 20). is_latest
-   disables the next arrow too. use_htmx=false renders plain links for
-   full-page views (Budget vs Actual). #}
+   disables the next arrow too. #}
 {# Shared segmented control: a row of joined pills where exactly one is active,
    used for the mutually-exclusive time-range selectors on Transactions
    (This month / All time) and Trends (Quarterly / Year to Date / Trailing 12 Mo)
@@ -41,17 +40,17 @@
 {%- endmacro -%}
 
 
-{%- macro pager(prev_url, next_url, label, is_latest=false, latest_url=none, target='#content', label_width='w-28', use_htmx=true) -%}
+{%- macro pager(prev_url, next_url, label, is_latest=false, latest_url=none, target='#content', label_width='w-28') -%}
 {% set _btn = 'h-8 w-8 flex items-center justify-center rounded-md border border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer' %}
 {% set _btn_off = 'h-8 w-8 flex items-center justify-center rounded-md border border-gray-200 dark:border-gray-700 text-gray-300 dark:text-gray-600 cursor-not-allowed' %}
 <div class="flex items-center gap-2">
-    <a href="{{ prev_url }}" {% if use_htmx %}hx-get="{{ prev_url }}" hx-target="{{ target }}" hx-push-url="true"{% endif %}
+    <a href="{{ prev_url }}" hx-get="{{ prev_url }}" hx-target="{{ target }}" hx-push-url="true"
        title="Earlier" class="{{ _btn }}">&#9664;</a>
     <span class="h-8 flex items-center justify-center px-2 {{ label_width }} text-center text-sm font-medium text-gray-700 dark:text-gray-200 whitespace-nowrap overflow-hidden">{{ label }}</span>
     {% if is_latest %}
     <span title="Already at the latest window" aria-disabled="true" class="{{ _btn_off }}">&#9654;</span>
     {% else %}
-    <a href="{{ next_url }}" {% if use_htmx %}hx-get="{{ next_url }}" hx-target="{{ target }}" hx-push-url="true"{% endif %}
+    <a href="{{ next_url }}" hx-get="{{ next_url }}" hx-target="{{ target }}" hx-push-url="true"
        title="Later" class="{{ _btn }}">&#9654;</a>
     {% endif %}
     {% if latest_url is not none %}
@@ -59,7 +58,7 @@
     <span aria-disabled="true" title="Already at the latest window"
        class="px-3 h-8 flex items-center text-sm rounded-md border border-gray-200 dark:border-gray-700 text-gray-300 dark:text-gray-600 cursor-not-allowed">Latest</span>
     {% else %}
-    <a href="{{ latest_url }}" {% if use_htmx %}hx-get="{{ latest_url }}" hx-target="{{ target }}" hx-push-url="true"{% endif %}
+    <a href="{{ latest_url }}" hx-get="{{ latest_url }}" hx-target="{{ target }}" hx-push-url="true"
        class="px-3 h-8 flex items-center text-sm rounded-md border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer">Latest</a>
     {% endif %}
     {% endif %}

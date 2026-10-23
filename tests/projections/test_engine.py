@@ -367,3 +367,26 @@ def test_linked_transaction_trues_up_current_month(conn, snapshot_id):
     _link_txn(conn, snapshot_id, checking, entry_ref, date(2026, 7, 5), "-100.00")
     result = project(conn, snapshot_id, months=3, today=TODAY)
     assert _series(result, checking) == [Decimal(1000), Decimal(900), Decimal(800)]
+
+
+def test_linked_refund_does_not_true_up_current_month(conn, snapshot_id):
+    """A refund linked to an expense entry is a reversal, not the charge: the
+    current month still projects the scheduled amount (issue #70)."""
+    from fintrack.budget.repository import get_budget_entries
+
+    checking = _add(conn, snapshot_id, balance=1000)
+    add_budget_entry(
+        conn,
+        snapshot_id,
+        {
+            "kind": "expense",
+            "description": "rent",
+            "amount": 100,
+            "recurrence": "monthly",
+            "autoAccountRef": checking,
+        },
+    )
+    entry_ref = get_budget_entries(conn, snapshot_id)[-1]["_db_id"]
+    _link_txn(conn, snapshot_id, checking, entry_ref, date(2026, 7, 5), "20.00")
+    result = project(conn, snapshot_id, months=3, today=TODAY)
+    assert _series(result, checking) == [Decimal(900), Decimal(800), Decimal(700)]

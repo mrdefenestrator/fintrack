@@ -72,6 +72,9 @@ def base_transaction_query(snapshot_id: int | None = None):
             # tell when a row's category is inherited from its budget link (the
             # Transactions sheet renders that cell read-only).
             budget_entries.c.category.label("linked_category"),
+            # The linked entry's kind, so callers can spot reversals (a refund
+            # linked to an expense, a clawback to income) without a lookup.
+            budget_entries.c.kind.label("linked_kind"),
             holdings.c.name.label("account_name"),
         )
         .select_from(

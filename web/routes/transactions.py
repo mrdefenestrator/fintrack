@@ -36,11 +36,10 @@ def _load_txn(conn, txn_id):
 def _budget_choices(conn, snapshot_id):
     """Budget-entry link options (with kind + category) + a ref->label map.
 
-    Returned as a flat pool; the Transactions row filters it to the row's own
-    kind (an expense links only to expense entries) and surfaces the row's
-    category first, so the picker shows the handful of relevant lines rather
-    than every budget entry (issue #53). The label map backs the read-only
-    Budget cell."""
+    Returned as a flat pool; the Transactions row leads with the row's own
+    kind (an expense → expense entries), the row's category first, and lists
+    opposite-kind entries last as refunds/clawbacks (issues #53, #70). The
+    label map backs the read-only Budget cell."""
     entries = get_budget_entries(conn, snapshot_id)
     options = [
         {

@@ -180,7 +180,7 @@ def _suggestion_action(filename: str, action):
     with engine.connect() as conn:
         try:
             action(conn, snapshot_id, txn_id, entry_ref)
-        except ValueError:  # incl. SnapshotMismatch / KindMismatch
+        except ValueError:  # incl. SnapshotMismatch
             return "", 422
     return _render_actual(filename, snapshot_id)
 

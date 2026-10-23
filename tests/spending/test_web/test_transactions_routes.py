@@ -273,8 +273,9 @@ def test_linked_row_shows_category_inherited_and_readonly(client, seeded, db_eng
     assert "/cell?field=category" not in body
 
 
-def test_link_rejects_kind_mismatch(client, seeded, db_engine):
-    # The seeded transaction is a -$42.50 charge; an income entry can't take it.
+def test_link_accepts_clawback_and_labels_it(client, seeded, db_engine):
+    # The seeded transaction is a -$42.50 charge; linked to an income entry it
+    # is a clawback (issue #70) and the Budget cell says so.
     sid, txn_id = seeded
     with db_engine.connect() as conn:
         ref = _add_budget_entry(
@@ -283,9 +284,10 @@ def test_link_rejects_kind_mismatch(client, seeded, db_engine):
     resp = client.post(
         f"/s/ledger/transactions/{txn_id}/link", data={"budget_entry_ref": str(ref)}
     )
-    assert resp.status_code == 422
+    assert resp.status_code == 200
+    assert "Salary (clawback)" in resp.get_data(as_text=True)
     with db_engine.connect() as conn:
-        assert get_correction(conn, txn_id) is None
+        assert get_correction(conn, txn_id)["budget_entry_ref"] == ref
 
 
 def test_budget_cell_uses_category_style_editor(client, seeded, db_engine):
@@ -307,4 +309,6 @@ def test_budget_cell_uses_category_style_editor(client, seeded, db_engine):
     assert '<select name="budget_entry_ref" class="table-cell-select' in editor
     assert f'hx-get="/s/ledger/transactions/{txn_id}/row"' in editor  # blur reverts
     assert "Groceries" in editor
-    assert "Salary" not in editor  # a charge can't realize an income entry
+    # Opposite-kind entries come last, in their own reversal group.
+    assert 'label="Clawback · other income"' in editor
+    assert editor.index("Groceries") < editor.index("Salary")

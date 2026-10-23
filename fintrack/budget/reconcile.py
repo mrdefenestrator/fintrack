@@ -59,11 +59,6 @@ class SnapshotMismatch(ValueError):
     """A transaction and budget entry that don't share a snapshot."""
 
 
-class KindMismatch(ValueError):
-    """A transaction whose sign doesn't match the entry's kind (e.g. a deposit
-    linked to an expense entry)."""
-
-
 # ---------------------------------------------------------------------------
 # Linking
 # ---------------------------------------------------------------------------
@@ -114,18 +109,13 @@ def link_transaction(
 
     Raises SnapshotMismatch if the transaction's account or the budget entry is
     not in ``snapshot_id`` — the schema can't make a cross-snapshot link
-    unrepresentable here, so the repository is the guard. Raises KindMismatch
-    when the transaction's sign doesn't match the entry's kind (income entries
-    take deposits, expense entries take charges), the same rule the picker and
-    suggester apply; a mismatched link would also pin the wrong category.
+    unrepresentable here, so the repository is the guard.
+
+    Either sign may link: a transaction against its entry's kind (a refund on
+    an expense, a clawback on income) is a *reversal* that nets against the
+    entry's actual (see ``is_reversal``).
     """
-    amount, entry = _validated_pair(conn, snapshot_id, transaction_id, budget_entry_ref)
-    kind = entry.get("kind", "expense")
-    if not _kind_matches_sign(kind, amount):
-        raise KindMismatch(
-            f"Transaction {transaction_id} ({amount}) can't realize {kind} entry "
-            f"{entry.get('description', '')!r}"
-        )
+    _validated_pair(conn, snapshot_id, transaction_id, budget_entry_ref)
     set_budget_link(conn, transaction_id, budget_entry_ref)
 
 
@@ -251,6 +241,18 @@ def _kind_matches_sign(entry_kind: str, amount: Decimal) -> bool:
     return amount < _ZERO  # expense
 
 
+def is_reversal(entry_kind: str | None, amount: Any) -> bool:
+    """True for a linked transaction that runs against its entry's kind — a
+    refund (deposit) on an expense, a clawback (charge) on income. Reversals
+    net against the entry's actual but never count as the money having moved:
+    they don't realize an occurrence, satisfy a missed-charge check, feed price
+    drift, or get suggested."""
+    amount = money(amount)
+    if entry_kind == "income":
+        return amount < _ZERO
+    return amount > _ZERO  # expense
+
+
 def _score_pair(txn: dict[str, Any], entry: dict[str, Any]) -> Suggestion | None:
     amount = money(txn["amount"])
     kind = entry.get("kind", "expense")
@@ -365,9 +367,11 @@ class EntryActual:
     entry: dict[str, Any]
     entry_ref: int
     expected: Decimal  # scheduled monthly amount (0 if inactive this month)
-    actual: Decimal  # realized magnitude this month (see ``source``)
+    # Realized magnitude this month (see ``source``), net of reversals — may
+    # go negative when refunds exceed charges.
+    actual: Decimal
     delta: Decimal  # actual - expected
-    count: int  # transactions behind ``actual``
+    count: int  # transactions behind ``actual``, excluding reversals
     # matched | over | under | missing | upcoming | unlinked | inactive
     status: str
     last_linked: date | None  # most recent linked transaction date, any month
@@ -377,6 +381,9 @@ class EntryActual:
     # its category — actual is that category's total for the month, since
     # nobody links every coffee to "Dining Out".
     source: str = "links"
+    # Magnitude of linked reversals (refunds / clawbacks) netted into
+    # ``actual``; always 0 for category-measured lines.
+    reversed_amount: Decimal = _ZERO
 
     @property
     def tone(self) -> str:
@@ -475,6 +482,7 @@ def budget_actuals(
         expected = budget_entry_in_month(entry, year, month)
         category = entry.get("category")
         drift = _ZERO
+        reversed_amount = _ZERO
         if _measured_by_category(entry, claims):
             source = "category"
             row = category_totals.get(category)
@@ -486,8 +494,21 @@ def budget_actuals(
         else:
             source = "links"
             linked = by_entry_month.get(ref, [])
-            count = len(linked)
-            actual = abs(sum((money(t["amount"]) for t in linked), _ZERO))
+            kind = entry.get("kind", "expense")
+            flows = [t for t in linked if not is_reversal(kind, t["amount"])]
+            reversed_amount = abs(
+                sum(
+                    (
+                        money(t["amount"])
+                        for t in linked
+                        if is_reversal(kind, t["amount"])
+                    ),
+                    _ZERO,
+                )
+            )
+            count = len(flows)
+            flow_total = abs(sum((money(t["amount"]) for t in flows), _ZERO))
+            actual = flow_total - reversed_amount
             tracked = ref in link_ranges and link_ranges[ref][0] < month_start
             status = _classify_linked(
                 entry,
@@ -503,7 +524,7 @@ def budget_actuals(
             # matches what was scheduled (else the delta is partial/extra
             # activity, not a price change).
             if count and count == expected_occurrences(entry, year, month):
-                drift = actual / Decimal(count) - money(entry.get("amount"))
+                drift = flow_total / Decimal(count) - money(entry.get("amount"))
         results.append(
             EntryActual(
                 entry=entry,
@@ -516,6 +537,7 @@ def budget_actuals(
                 last_linked=link_ranges[ref][1] if ref in link_ranges else None,
                 drift_amount=drift,
                 source=source,
+                reversed_amount=reversed_amount,
             )
         )
     return results

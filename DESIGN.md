@@ -330,10 +330,20 @@ transactions stay immutable and the one-row-per-transaction shape enforces the
 cardinality: a transaction realizes **at most one** budget entry; an entry is
 realized by **many** transactions over time. The occurrence a transaction
 belongs to is derived from its date, not stored. Snapshot consistency (the
-transaction and entry share a snapshot) and kind (a deposit realizes an income
-entry, a charge an expense entry) are validated in the repository, since
+transaction and entry share a snapshot) is validated in the repository, since
 corrections carry no `snapshot_id` and the composite-FK guard used elsewhere is
 unavailable here.
+
+**Reversals.** Normally a charge realizes an expense entry and a deposit an
+income entry. A transaction of the opposite sign may also link — a refund on an
+expense line, a clawback on an income line (`reconcile.is_reversal`). A
+reversal nets against the entry's actual (charges − refunds, so a month can go
+negative) but is never treated as the money having moved: it doesn't count
+toward N, can't satisfy the missed-charge check (a refund alone leaves a
+tracked bill **missing**, and can't make an entry tracked or set its Last
+seen date), is excluded from price drift, doesn't realize an
+occurrence for projection true-up, and is never suggested. Like any link it
+pins the entry's category, so a refund also nets that category's totals.
 
 Three things build on the link:
 
@@ -374,11 +384,13 @@ Three things build on the link:
   the day-based remainder and the category-exclusion estimator).
 
 Manual linking is available on the Transactions sheet (a Budget-entry picker per
-row) and via `fintrack transactions link/unlink`. The picker is filtered to the
-row's own kind (an expense links only to expense entries) and lists the row's
-category first, with other same-kind entries below as an escape hatch (linking
-to one re-pins the category), so it offers the few relevant lines rather than
-every budget entry.
+row) and via `fintrack transactions link/unlink`. The picker leads with the
+row's own kind (an expense → expense entries), the row's category first, with
+other same-kind entries below as an escape hatch (linking to one re-pins the
+category). Opposite-kind entries follow in separately labeled groups
+("Refund · …" / "Clawback · …"), and a linked reversal reads e.g.
+"Rent (refund)" in the Budget cell. Budget vs Actual notes each line's netted
+reversals beside its actual; the CLI's `budget-actual` has a Reversed column.
 
 **A linked entry pins the transaction's category.** Category and the budget link
 are two axes — classification vs. which planned line a transaction realizes —

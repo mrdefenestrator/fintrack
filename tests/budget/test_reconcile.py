@@ -8,11 +8,11 @@ import pytest
 from sqlalchemy import func, select, update
 
 from fintrack.budget.reconcile import (
-    KindMismatch,
     SnapshotMismatch,
     budget_actuals,
     dismiss_suggestion,
     expected_day,
+    is_reversal,
     link_transaction,
     suggest_links,
     undismiss_suggestions,
@@ -362,12 +362,93 @@ def test_delete_entry_purges_link_only_corrections(conn, snapshot_id, seeder):
     assert kept["notes"] == "late fee waived"
 
 
-def test_link_rejects_kind_mismatch(conn, snapshot_id, seeder):
+# --------------------------------------------------------------------------
+# Reversals: refunds on expenses, clawbacks on income
+# --------------------------------------------------------------------------
+
+
+def test_is_reversal():
+    assert is_reversal("expense", "20.00")
+    assert not is_reversal("expense", "-20.00")
+    assert is_reversal("income", "-20.00")
+    assert not is_reversal("income", "20.00")
+
+
+def test_refund_links_to_expense_entry(conn, snapshot_id, seeder):
     rent = make_rent_entry(conn, snapshot_id)
-    paycheck = seeder.add(MAY, "5200.00", "Employer", "Income")
-    with pytest.raises(KindMismatch):
-        link_transaction(conn, snapshot_id, paycheck, rent)
-    assert get_correction(conn, paycheck) is None
+    refund = seeder.add(MAY, "150.00", "Landlord", "Housing")
+    link_transaction(conn, snapshot_id, refund, rent)
+    assert get_correction(conn, refund)["budget_entry_ref"] == rent
+
+
+def test_refund_nets_against_expense_actual(conn, snapshot_id, seeder):
+    rent = make_rent_entry(conn, snapshot_id)
+    charge = seeder.add(date(2026, 5, 1), "-2000.00", "Landlord", "Housing")
+    refund = seeder.add(date(2026, 5, 20), "200.00", "Landlord", "Housing")
+    link_transaction(conn, snapshot_id, charge, rent)
+    link_transaction(conn, snapshot_id, refund, rent)
+    a = _by_ref(budget_actuals(conn, snapshot_id, year=2026, month=5), rent)
+    assert a.actual == Decimal("1800.00")
+    assert a.reversed_amount == Decimal("200.00")
+    assert a.count == 1  # the refund isn't an occurrence
+    assert a.status == "under"
+    assert a.drift_amount == Decimal(0)  # drift uses the charge alone
+
+
+def test_refund_alone_does_not_count_as_paid(conn, snapshot_id, seeder):
+    rent = make_rent_entry(conn, snapshot_id)
+    april = seeder.add(date(2026, 4, 1), "-2000.00", "Landlord", "Housing")
+    refund = seeder.add(date(2026, 5, 10), "50.00", "Landlord", "Housing")
+    link_transaction(conn, snapshot_id, april, rent)
+    link_transaction(conn, snapshot_id, refund, rent)
+    a = _by_ref(
+        budget_actuals(conn, snapshot_id, year=2026, month=5, today=date(2026, 6, 1)),
+        rent,
+    )
+    assert a.status == "missing"
+    assert a.count == 0
+    assert a.actual == Decimal("-50.00")
+
+
+def test_refund_alone_does_not_make_entry_tracked(conn, snapshot_id, seeder):
+    # A refund linked last month is not a payment: with nothing linked this
+    # month the entry is "unlinked", not "missing", and has no last-seen date.
+    gym = make_expense_entry(conn, snapshot_id, amount=45, day_of_month=1)
+    refund = seeder.add(date(2026, 4, 10), "10.00", "Gym")
+    link_transaction(conn, snapshot_id, refund, gym)
+    assert get_budget_link_date_ranges(conn, snapshot_id) == {}
+    a = _by_ref(
+        budget_actuals(conn, snapshot_id, year=2026, month=5, today=date(2026, 6, 1)),
+        gym,
+    )
+    assert a.status == "unlinked"
+    assert a.last_linked is None
+
+
+def test_last_seen_ignores_later_refund(conn, snapshot_id, seeder):
+    rent = make_rent_entry(conn, snapshot_id)
+    charge = seeder.add(date(2026, 4, 1), "-2000.00", "Landlord", "Housing")
+    refund = seeder.add(date(2026, 4, 20), "100.00", "Landlord", "Housing")
+    link_transaction(conn, snapshot_id, charge, rent)
+    link_transaction(conn, snapshot_id, refund, rent)
+    assert get_budget_link_date_ranges(conn, snapshot_id)[rent] == (
+        date(2026, 4, 1),
+        date(2026, 4, 1),
+    )
+
+
+def test_clawback_nets_against_income_actual(conn, snapshot_id, seeder):
+    salary = make_entry_of_kind(conn, snapshot_id, "income", amount=5000, day=1)
+    pay = seeder.add(date(2026, 5, 1), "5000.00", "Employer", "Income")
+    clawback = seeder.add(date(2026, 5, 15), "-300.00", "Employer", "Income")
+    link_transaction(conn, snapshot_id, pay, salary)
+    link_transaction(conn, snapshot_id, clawback, salary)
+    a = _by_ref(budget_actuals(conn, snapshot_id, year=2026, month=5), salary)
+    assert a.actual == Decimal("4700.00")
+    assert a.reversed_amount == Decimal("300.00")
+    assert a.count == 1
+    assert a.status == "under"
+    assert a.tone == "bad"
 
 
 def test_tone_flips_with_kind(conn, snapshot_id, seeder):

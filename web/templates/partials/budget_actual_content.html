@@ -84,8 +84,8 @@
         ["Entry", "Category", "Expected", "Actual", "Delta", "N", "Status", "Drift", "Last seen"],
         [2, 3, 4, 5, 7],
         tooltips=["Budget entry", "Budget category", "Scheduled amount this month",
-                  "Realized from linked transactions (or the category total for a variable line)",
-                  "Actual minus expected", "Number of linked transactions",
+                  "Realized from linked transactions, net of linked refunds/clawbacks (or the category total for a variable line)",
+                  "Actual minus expected", "Number of linked transactions (refunds/clawbacks excluded)",
                   "Matched / over / under / missing / upcoming / not linked",
                   "Linked charge vs budgeted amount (price drift)",
                   "Date of the most recent linked transaction (any month)"]) }}
@@ -100,7 +100,9 @@
             </td>
             <td class="{{ sheet.cell_class(extra='text-gray-500 dark:text-gray-400') }}">{{ a.entry.category or '—' }}</td>
             <td class="{{ sheet.cell_class('text-right tabular-nums') }}">${{ a.expected|money }}</td>
-            <td class="{{ sheet.cell_class('text-right tabular-nums') }}">${{ a.actual|money }}</td>
+            <td class="{{ sheet.cell_class('text-right tabular-nums') }}"{% if a.reversed_amount %} data-actual-reversed title="Net of ${{ a.reversed_amount|money }} in linked {{ 'refunds' if a.entry.kind == 'expense' else 'clawbacks' }}"{% endif %}>
+                {% if a.reversed_amount %}<span class="mr-1 text-xs text-gray-400 dark:text-gray-500">−${{ a.reversed_amount|money }} {{ 'refund' if a.entry.kind == 'expense' else 'clawback' }}</span>{% endif %}{{ '-' if a.actual < 0 }}${{ a.actual|abs|money }}
+            </td>
             <td class="{{ sheet.cell_class('text-right tabular-nums', _delta_text[a.tone]) }}">
                 {{ '+' if a.delta > 0 else ('-' if a.delta < 0 else '') }}${{ a.delta|abs|money }}
             </td>

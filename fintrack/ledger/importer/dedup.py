@@ -29,6 +29,12 @@ def _fingerprint(base_key: str, seq: int) -> str:
     return hashlib.sha256(f"{base_key}|{seq}".encode()).hexdigest()
 
 
+def first_occurrence_fingerprint(txn: ParsedTransaction, account_id: int) -> str:
+    """Fingerprint of the first identical (date, amount, description) row —
+    the existing sibling a same-day repeat is flagged against."""
+    return _fingerprint(_base_key(txn, account_id), 0)
+
+
 def compute_fingerprints(txns: list[ParsedTransaction], account_id: int) -> list[str]:
     counts: Counter[str] = Counter()
     fingerprints: list[str] = []

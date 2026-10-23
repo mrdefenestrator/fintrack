@@ -13,6 +13,7 @@ from fintrack.core.models import (
     transaction_corrections,
     transactions,
 )
+from fintrack.ledger.repository.duplicates import not_hidden_duplicate
 
 
 def _resolved_category():
@@ -38,8 +39,8 @@ def _resolved_merchant():
 def base_transaction_query(snapshot_id: int | None = None):
     """Base query joining transactions with corrections and merchant cache.
 
-    Only includes confirmed imports; scoped to one snapshot when snapshot_id
-    is given.
+    Only includes confirmed imports, minus rows resolved as duplicates (issue
+    #82); scoped to one snapshot when snapshot_id is given.
     """
     stmt = (
         select(
@@ -97,7 +98,7 @@ def base_transaction_query(snapshot_id: int | None = None):
             == merchant_cache.c.merchant_name,
         )
         .outerjoin(holdings, transactions.c.account_id == holdings.c.id)
-        .where(imports.c.status == "confirmed")
+        .where(imports.c.status == "confirmed", not_hidden_duplicate())
     )
     if snapshot_id is not None:
         stmt = stmt.where(holdings.c.snapshot_id == snapshot_id)

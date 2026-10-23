@@ -79,9 +79,11 @@ def insert_transactions(
     import_id: int,
     account_id: int,
     transactions_data: list[dict],
-) -> None:
+) -> list[int]:
+    """Insert rows in order; returns their ids in the same order."""
+    ids = []
     for txn in transactions_data:
-        conn.execute(
+        result = conn.execute(
             insert(transactions).values(
                 import_id=import_id,
                 account_id=account_id,
@@ -93,7 +95,9 @@ def insert_transactions(
                 external_id=txn.get("external_id"),
             )
         )
+        ids.append(result.inserted_primary_key[0])
     conn.commit()
+    return ids
 
 
 def get_existing_fingerprints(conn: Connection, account_id: int) -> set[str]:
@@ -103,6 +107,20 @@ def get_existing_fingerprints(conn: Connection, account_id: int) -> set[str]:
         )
     ).fetchall()
     return {row[0] for row in rows}
+
+
+def get_transaction_ids_by_fingerprint(
+    conn: Connection, account_id: int, fingerprints: set[str]
+) -> dict[str, int]:
+    if not fingerprints:
+        return {}
+    rows = conn.execute(
+        select(transactions.c.fingerprint, transactions.c.id).where(
+            transactions.c.account_id == account_id,
+            transactions.c.fingerprint.in_(fingerprints),
+        )
+    ).fetchall()
+    return {fp: txn_id for fp, txn_id in rows}
 
 
 def get_existing_external_ids(conn: Connection, account_id: int) -> set[str]:

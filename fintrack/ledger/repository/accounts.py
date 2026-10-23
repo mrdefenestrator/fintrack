@@ -19,6 +19,7 @@ from fintrack.core.holdings import (
 )
 from fintrack.core.models import holdings, imports, transactions
 from fintrack.core.types import IMPORTABLE_GROUPS, group_for_account_type
+from fintrack.ledger.repository.duplicates import not_hidden_duplicate
 from fintrack.snapshots.repository import ensure_default_snapshot
 
 
@@ -60,6 +61,7 @@ def list_accounts(conn: Connection, snapshot_id: int | None = None) -> list[dict
             transactions.c.account_id,
             func.max(transactions.c.date).label("latest_txn_date"),
         )
+        .where(not_hidden_duplicate())
         .group_by(transactions.c.account_id)
         .subquery()
     )

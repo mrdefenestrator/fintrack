@@ -1,3 +1,4 @@
+from datetime import timedelta
 from pathlib import Path
 
 from sqlalchemy import Connection
@@ -5,15 +6,25 @@ from sqlalchemy import Connection
 from fintrack.core.config import INSTITUTIONS_DIR
 from fintrack.core.types import ParsedTransaction
 from fintrack.ledger.importer.csv_parser import detect_institution_config, parse_csv
-from fintrack.ledger.importer.dedup import compute_fingerprints, deduplicate
+from fintrack.ledger.importer.dedup import (
+    compute_fingerprints,
+    deduplicate,
+    first_occurrence_fingerprint,
+)
+from fintrack.ledger.importer.near_dup import DATE_WINDOW_DAYS, find_near_duplicates
 from fintrack.ledger.importer.normalize import normalize_merchant
 from fintrack.ledger.importer.ofx import parse_ofx
+from fintrack.ledger.repository.duplicates import (
+    add_duplicate_flags,
+    get_near_dup_candidates,
+)
 from fintrack.ledger.repository.imports import (
     check_file_hash,
     compute_file_hash,
     create_import,
     get_existing_external_ids,
     get_existing_fingerprints,
+    get_transaction_ids_by_fingerprint,
     insert_transactions,
 )
 
@@ -34,6 +45,46 @@ def _drop_known_ids(
 ) -> tuple[list[ParsedTransaction], list[str]]:
     kept = [(t, fp) for t, fp in zip(txns, fps) if t.get("external_id") not in known]
     return [t for t, _ in kept], [fp for _, fp in kept]
+
+
+def _near_duplicates(
+    conn: Connection,
+    account_id: int,
+    parsed: list[ParsedTransaction],
+    parsed_fps: list[str],
+    to_insert: list[ParsedTransaction],
+    to_insert_fps: list[str],
+) -> dict[int, tuple[int, str]]:
+    """Map index-into-to_insert -> (existing transaction id, reason) for rows
+    that look like a copy of something already on file (issue #82).
+
+    Existing rows an exact match already accounts for (a skipped row with the
+    same fingerprint or bank id) are left out, so they can't also absorb a
+    near-duplicate.
+    """
+    if not to_insert:
+        return {}
+    # Whole-file fingerprints are unique within a file, so they identify rows.
+    inserted = set(to_insert_fps)
+    skipped = [(t, fp) for t, fp in zip(parsed, parsed_fps) if fp not in inserted]
+    used_fps = {fp for _, fp in skipped}
+    used_ids = {t.get("external_id") for t, _ in skipped} - {None}
+
+    window = timedelta(days=DATE_WINDOW_DAYS)
+    existing = [
+        row
+        for row in get_near_dup_candidates(
+            conn,
+            account_id,
+            min(t["date"] for t in to_insert) - window,
+            max(t["date"] for t in to_insert) + window,
+        )
+        if row["fingerprint"] not in used_fps and row["external_id"] not in used_ids
+    ]
+    return {
+        m.incoming: (existing[m.existing]["id"], m.reason)
+        for m in find_near_duplicates(to_insert, existing)
+    }
 
 
 def run_import(
@@ -102,50 +153,64 @@ def run_import(
         beginning_balance=result.get("beginning_balance"),
     )
 
-    # Build transaction records with fingerprints
-    txn_records = []
-    for txn, fp in zip(new_txns, new_fps):
-        txn_records.append(
-            {
-                "date": txn["date"],
-                "amount": txn["amount"],
-                "raw_description": txn["raw_description"],
-                "normalized_merchant": txn["normalized_merchant"],
-                "fingerprint": fp,
-                "external_id": txn.get("external_id"),
-            }
-        )
+    # Same-day repeats (flagged by deduplicate) are inserted too and reviewed
+    # in staging. Reuse the whole-file fingerprints from deduplicate() so a
+    # re-import compares against a consistent sequence basis.
+    to_insert = new_txns + flagged
+    to_insert_fps = new_fps + flagged_fps
+    near_dups = _near_duplicates(
+        conn, account_id, result["transactions"], fingerprints, to_insert, to_insert_fps
+    )
 
-    # Insert flagged transactions too (they'll be reviewed in staging).
-    # Reuse the whole-file fingerprints from deduplicate() so a re-import
-    # compares against a consistent sequence basis.
-    for txn, fp in zip(flagged, flagged_fps):
-        txn_records.append(
-            {
-                "date": txn["date"],
-                "amount": txn["amount"],
-                "raw_description": txn["raw_description"],
-                "normalized_merchant": txn["normalized_merchant"],
-                "fingerprint": fp,
-                "external_id": txn.get("external_id"),
-            }
-        )
-
-    if txn_records:
-        insert_transactions(
+    txn_ids = []
+    if to_insert:
+        txn_ids = insert_transactions(
             conn,
             import_id=import_id,
             account_id=account_id,
-            transactions_data=txn_records,
+            transactions_data=[
+                {
+                    "date": txn["date"],
+                    "amount": txn["amount"],
+                    "raw_description": txn["raw_description"],
+                    "normalized_merchant": txn["normalized_merchant"],
+                    "fingerprint": fp,
+                    "external_id": txn.get("external_id"),
+                }
+                for txn, fp in zip(to_insert, to_insert_fps)
+            ],
         )
 
+    flags = {txn_ids[i]: (dup_of, reason) for i, (dup_of, reason) in near_dups.items()}
+    # A same-day repeat the matcher didn't pair still gets reviewed against its
+    # first-occurrence sibling, as before.
+    repeats = [
+        (len(new_txns) + k, first_occurrence_fingerprint(txn, account_id))
+        for k, txn in enumerate(flagged)
+        if txn_ids[len(new_txns) + k] not in flags
+    ]
+    siblings = get_transaction_ids_by_fingerprint(
+        conn, account_id, {fp for _, fp in repeats}
+    )
+    for i, fp in repeats:
+        if fp in siblings:
+            flags[txn_ids[i]] = (
+                siblings[fp],
+                "repeat of an identical same-day charge already on file",
+            )
+    add_duplicate_flags(
+        conn,
+        [(txn_id, dup_of, reason) for txn_id, (dup_of, reason) in flags.items()],
+        source="import",
+    )
+
     # Collect new merchant names
-    new_merchants = list({txn["normalized_merchant"] for txn in new_txns + flagged})
+    new_merchants = list({txn["normalized_merchant"] for txn in to_insert})
 
     return {
         "import_id": import_id,
-        "new_count": len(new_txns),
+        "new_count": len(to_insert) - len(flags),
         "skipped_count": skipped_count,
-        "flagged_count": len(flagged),
+        "flagged_count": len(flags),
         "new_merchants": new_merchants,
     }

@@ -19,7 +19,11 @@ from fintrack.budget.reconcile import (
     unlink_transaction,
 )
 from fintrack.budget.repository import delete_budget_entry, get_budget_entries
-from fintrack.core.models import imports, link_suggestion_dismissals
+from fintrack.core.models import (
+    imports,
+    link_suggestion_dismissals,
+    transaction_duplicates,
+)
 from fintrack.ledger.repository.corrections import (
     apply_transaction_correction,
     get_correction,
@@ -596,3 +600,32 @@ def test_one_tolerance_for_match_and_drift(
     link_transaction(conn, snapshot_id, txn_id, rent)
     a = _by_ref(budget_actuals(conn, snapshot_id, year=2026, month=5), rent)
     assert a.status == status
+
+
+def test_resolved_duplicate_is_not_an_actual(conn, snapshot_id, seeder):
+    # Issue #82: a copy resolved as a duplicate drops out of actuals and the
+    # entry's last-seen date, even while still linked.
+    rent = make_rent_entry(conn, snapshot_id)
+    charge = seeder.add(date(2026, 5, 1), "-2000.00", "Landlord", "Housing")
+    copy = seeder.add(date(2026, 5, 3), "-2000.00", "Landlord", "Housing")
+    link_transaction(conn, snapshot_id, charge, rent)
+    link_transaction(conn, snapshot_id, copy, rent)
+    conn.execute(
+        transaction_duplicates.insert().values(
+            transaction_id=copy,
+            duplicate_of_id=charge,
+            reason="test",
+            source="scan",
+            status="duplicate",
+        )
+    )
+    conn.commit()
+    assert get_budget_link_date_ranges(conn, snapshot_id)[rent] == (
+        date(2026, 5, 1),
+        date(2026, 5, 1),
+    )
+    a = _by_ref(
+        budget_actuals(conn, snapshot_id, year=2026, month=5, today=date(2026, 6, 1)),
+        rent,
+    )
+    assert (a.count, a.actual) == (1, Decimal("2000.00"))

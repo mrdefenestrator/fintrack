@@ -9,6 +9,7 @@ from fintrack.core.coerce import (
     parse_amount_filter,
 )
 from fintrack.ledger.repository.aggregations import base_transaction_query
+from fintrack.ledger.repository.duplicates import not_hidden_duplicate
 
 
 def _apply_amount_filter(stmt, amount_col, spec: AmountFilterSpec):
@@ -155,6 +156,7 @@ def get_budget_link_date_ranges(
         .where(
             ref.isnot(None),
             imports.c.status == "confirmed",
+            not_hidden_duplicate(),
             holdings.c.snapshot_id == snapshot_id,
             not_(
                 or_(

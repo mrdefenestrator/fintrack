@@ -27,7 +27,7 @@ from typing import Any
 from sqlalchemy import Connection
 
 from fintrack.accounts.repository import get_accounts
-from fintrack.budget.reconcile import expected_occurrences
+from fintrack.budget.reconcile import expected_occurrences, is_reversal
 from fintrack.budget.recurrence import (
     budget_entry_in_month,
     money,
@@ -91,11 +91,13 @@ def _realized_occurrences(
     conn: Connection, snapshot_id: int, year: int, month: int
 ) -> dict[int, int]:
     """Count transactions linked to each budget entry in the given month,
-    keyed by budget-entry db id. Used for current-month projection true-up."""
+    keyed by budget-entry db id. Used for current-month projection true-up.
+    Reversals (a refund on an expense, a clawback on income) don't realize an
+    occurrence, so they aren't counted."""
     counts: dict[int, int] = {}
     for t in get_transactions(conn, year=year, month=month, snapshot_id=snapshot_id):
         ref = t.get("budget_entry_ref")
-        if ref is not None:
+        if ref is not None and not is_reversal(t.get("linked_kind"), t["amount"]):
             counts[ref] = counts.get(ref, 0) + 1
     return counts
 

@@ -5,10 +5,12 @@ from datetime import date
 
 import pytest
 from click.testing import CliRunner
+from sqlalchemy import select
 
 from fintrack.accounts.repository import add_account
 from fintrack.cli import cli
 from fintrack.core.db import get_engine, init_db
+from fintrack.core.models import transactions
 from fintrack.ledger.repository.corrections import get_correction
 from fintrack.snapshots.repository import create_snapshot
 from tests.budget.conftest import TxnSeeder, make_entry
@@ -77,3 +79,18 @@ def test_suggest_apply_yes_links(db):
     with engine.connect() as conn:
         assert get_correction(conn, txn_id)["budget_entry_ref"] is not None
     engine.dispose()
+
+
+def test_budget_actual_shows_reversed_column(db):
+    path, txn_id = db
+    engine = get_engine(str(path))
+    with engine.connect() as conn:
+        acct = conn.execute(select(transactions.c.account_id)).scalar()
+        refund = TxnSeeder(conn, acct).add(date(2026, 5, 20), "200.00", "Landlord")
+    engine.dispose()
+    _run(path, "link", str(txn_id), "0")
+    _run(path, "link", str(refund), "0")
+    out = _run(path, "budget-actual", "--year", "2026", "--month", "5")
+    assert "Reversed" in out
+    assert "$1,800.00" in out
+    assert "($200.00)" in out

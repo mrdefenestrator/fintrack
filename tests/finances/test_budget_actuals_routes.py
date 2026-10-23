@@ -333,3 +333,32 @@ def test_suggestion_actions_reject_bad_input(client, db_engine):
         data={"transaction_id": txn_id, "budget_entry_ref": foreign},
     )
     assert resp.status_code == 422
+
+
+def test_actual_cell_notes_netted_refund(client, db_engine):
+    sid, ref, txn_id = _rent_with_unlinked_charge(db_engine)
+    with db_engine.connect() as conn:
+        link_transaction(conn, sid, txn_id, ref)
+        acct = conn.execute(
+            select(transactions.c.account_id).where(transactions.c.id == txn_id)
+        ).scalar()
+        imp = conn.execute(
+            select(transactions.c.import_id).where(transactions.c.id == txn_id)
+        ).scalar()
+        refund = conn.execute(
+            insert(transactions).values(
+                import_id=imp,
+                account_id=acct,
+                date=date(2026, 5, 20),
+                amount="200.00",
+                raw_description="Landlord",
+                normalized_merchant="Landlord",
+                fingerprint=uuid.uuid4().hex,
+            )
+        ).inserted_primary_key[0]
+        conn.commit()
+        link_transaction(conn, sid, refund, ref)
+    body = client.get(_MAY).get_data(as_text=True)
+    assert "data-actual-reversed" in body
+    assert "−$200.00 refund" in body
+    assert "$1,800.00" in body

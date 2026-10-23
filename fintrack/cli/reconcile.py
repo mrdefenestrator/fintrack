@@ -187,7 +187,8 @@ def suggest(cli, year, month, apply_):
 @pass_cli
 def budget_actual(cli, year, month):
     """Per-entry budget-vs-actual for a month (default: current): expected,
-    realized, delta, and missed/upcoming recurring charges."""
+    realized (net of linked refunds/clawbacks, shown under Reversed), delta,
+    and missed/upcoming recurring charges."""
     today = datetime.now().astimezone().date()
     year, month = year or today.year, month or today.month
     with cli.connect() as conn:
@@ -208,6 +209,7 @@ def budget_actual(cli, year, month):
                 a.entry.get("kind", ""),
                 fmt_money(a.expected),
                 fmt_money(a.actual),
+                fmt_money(-a.reversed_amount) if a.reversed_amount else "",
                 fmt_money(a.delta),
                 a.count,
                 "category" if a.source == "category" else "links",
@@ -223,11 +225,23 @@ def budget_actual(cli, year, month):
             "Kind",
             "Expected",
             "Actual",
+            "Reversed",
             "Delta",
             "N",
             "Basis",
             "Status",
             "Drift",
         ],
-        ("left", "left", "right", "right", "right", "right", "left", "left", "right"),
+        (
+            "left",
+            "left",
+            "right",
+            "right",
+            "right",
+            "right",
+            "right",
+            "left",
+            "left",
+            "right",
+        ),
     )

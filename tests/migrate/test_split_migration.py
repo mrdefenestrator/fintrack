@@ -235,7 +235,7 @@ def test_migrated_schema_matches_create_all(tmp_path):
     from fintrack.core.db import init_db
 
     mig = tmp_path / "mig.db"
-    _upgrade(mig, _HEAD)  # fresh empty DB -> full chain
+    _upgrade(mig, "head")  # fresh empty DB -> full chain
     created = tmp_path / "created.db"
     init_db(create_engine(f"sqlite:///{created}"))
 

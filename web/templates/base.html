@@ -693,7 +693,7 @@
            name, and the always-visible utilities (lock/edit, import, theme,
            snapshot picker). #}
         {% set _cur_tab = active_tab if active_tab is defined else none %}
-        {% set _edit_honoring = _cur_tab in ('holdings', 'budget', 'merchants', 'categories', 'transactions') %}
+        {% set _edit_honoring = _cur_tab in ('holdings', 'budget', 'budget_actual', 'merchants', 'categories', 'transactions') %}
         {% set _page_names = {'holdings':'Holdings','budget':'Budget','budget_actual':'Budget vs Actual','projections':'Projections','trends':'Trends','transactions':'Transactions','merchants':'Merchants','categories':'Categories','import':'Import'} %}
         {% set _page_name = _page_names.get(_cur_tab, '') %}
         <div class="flex items-center h-12 px-2 gap-1">
@@ -851,7 +851,7 @@
                                     </div>
                                 </div>
                                 {% else %}
-                                <a href="{% if active_tab is defined and active_tab == 'budget' %}{{ url_for('budget.budget_view', filename=f, edit=1 if edit_mode else none) }}{% elif active_tab is defined and active_tab == 'budget_actual' %}{{ url_for('budget.actual_view', filename=f) }}{% else %}{{ url_for('holdings.holdings_view', filename=f, edit=1 if edit_mode else none) }}{% endif %}"
+                                <a href="{% if active_tab is defined and active_tab == 'budget' %}{{ url_for('budget.budget_view', filename=f, edit=1 if edit_mode else none) }}{% elif active_tab is defined and active_tab == 'budget_actual' %}{{ url_for('budget.actual_view', filename=f, edit=1 if edit_mode else none) }}{% else %}{{ url_for('holdings.holdings_view', filename=f, edit=1 if edit_mode else none) }}{% endif %}"
                                     class="flex-1 px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 truncate text-gray-700 dark:text-gray-200">
                                     {{ f }}
                                 </a>

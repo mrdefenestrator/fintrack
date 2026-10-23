@@ -354,6 +354,33 @@ transaction_corrections = Table(
     Column("created_at", DateTime, default=_utcnow),
 )
 
+# A link suggestion the user rejected (issue #70): the (transaction, entry) pair
+# is never proposed again, though the suggester may still offer that transaction
+# a different entry. Dismissals only filter suggestions — they never block a
+# manual link. Both FKs cascade, so a dismissal goes away with either side.
+# Like corrections, snapshot consistency is checked in reconcile, not here.
+link_suggestion_dismissals = Table(
+    "link_suggestion_dismissals",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column(
+        "transaction_id",
+        Integer,
+        ForeignKey("transactions.id", ondelete="CASCADE"),
+        nullable=False,
+    ),
+    Column(
+        "budget_entry_ref",
+        Integer,
+        ForeignKey("budget_entries.id", ondelete="CASCADE"),
+        nullable=False,
+    ),
+    Column("created_at", DateTime, default=_utcnow),
+    UniqueConstraint(
+        "transaction_id", "budget_entry_ref", name="uq_link_dismissal_pair"
+    ),
+)
+
 categories = Table(
     "categories",
     metadata,

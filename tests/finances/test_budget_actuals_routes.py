@@ -2,7 +2,7 @@
 expected-vs-realized for a month, on its own page rather than the Budget sheet."""
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
 import pytest
 from sqlalchemy import create_engine, insert, select
@@ -12,6 +12,7 @@ from fintrack.budget.reconcile import link_transaction
 from fintrack.budget.repository import add_budget_entry, get_budget_entries
 from fintrack.core.db import init_db
 from fintrack.core.models import imports, transactions
+from fintrack.ledger.repository.corrections import get_correction
 from fintrack.snapshots.repository import create_snapshot
 
 
@@ -205,3 +206,130 @@ def test_page_empty_state(client, db_engine):
         create_snapshot(conn, "home")
     body = client.get("/s/home/budget/actual").get_data(as_text=True)
     assert "No active budget entries" in body
+
+
+# --- Link suggestions (issue #70) -------------------------------------------
+
+
+def _rent_with_unlinked_charge(db_engine):
+    """Snapshot "home" with a Rent entry and one matching unlinked charge in
+    May 2026. Returns (snapshot_id, entry_ref, txn_id)."""
+    with db_engine.connect() as conn:
+        sid = create_snapshot(conn, "home")
+        acct = add_account(conn, sid, {"name": "Checking", "type": "checking"})
+        add_budget_entry(
+            conn,
+            sid,
+            {
+                "kind": "expense",
+                "description": "Rent",
+                "amount": 2000,
+                "recurrence": "monthly",
+                "dayOfMonth": 1,
+            },
+        )
+        ref = get_budget_entries(conn, sid)[-1]["_db_id"]
+        imp = conn.execute(
+            insert(imports).values(
+                account_id=acct,
+                holding_group="cash",
+                filename="s.ofx",
+                file_hash=uuid.uuid4().hex,
+                status="confirmed",
+            )
+        ).inserted_primary_key[0]
+        txn_id = conn.execute(
+            insert(transactions).values(
+                import_id=imp,
+                account_id=acct,
+                date=date(2026, 5, 1),
+                amount="-2000.00",
+                raw_description="Landlord",
+                normalized_merchant="Landlord",
+                fingerprint=uuid.uuid4().hex,
+            )
+        ).inserted_primary_key[0]
+        conn.commit()
+    return sid, ref, txn_id
+
+
+_MAY = "/s/home/budget/actual?year=2026&month=5"
+
+
+def test_view_mode_shows_suggestion_count_linking_to_edit_mode(client, db_engine):
+    _rent_with_unlinked_charge(db_engine)
+    body = client.get(_MAY).get_data(as_text=True)
+    assert "1 suggested link" in body
+    assert "year=2026&amp;month=5&amp;edit=1" in body
+    # Actions are edit-mode only.
+    assert "data-suggestion-apply" not in body
+
+
+def test_edit_mode_lists_suggestion_under_entry(client, db_engine):
+    _, ref, txn_id = _rent_with_unlinked_charge(db_engine)
+    body = client.get(_MAY + "&edit=1").get_data(as_text=True)
+    assert f'data-suggestions-for="{ref}"' in body
+    assert f'data-transaction-id="{txn_id}"' in body
+    assert "Landlord" in body
+    assert "data-suggestion-apply" in body
+    assert "data-suggestion-dismiss" in body
+
+
+def test_apply_links_and_rerenders_month(client, db_engine):
+    _, ref, txn_id = _rent_with_unlinked_charge(db_engine)
+    resp = client.post(
+        "/s/home/budget/actual/link?year=2026&month=5&edit=1",
+        data={"transaction_id": txn_id, "budget_entry_ref": ref},
+        headers={"HX-Request": "true"},
+    )
+    body = resp.get_data(as_text=True)
+    assert resp.status_code == 200
+    assert "May 2026" in body
+    assert "Matched" in body
+    assert "data-suggestion-apply" not in body
+    with db_engine.connect() as conn:
+        assert get_correction(conn, txn_id)["budget_entry_ref"] == ref
+
+
+def test_dismiss_hides_suggestion_without_linking(client, db_engine):
+    _, ref, txn_id = _rent_with_unlinked_charge(db_engine)
+    resp = client.post(
+        "/s/home/budget/actual/dismiss?year=2026&month=5&edit=1",
+        data={"transaction_id": txn_id, "budget_entry_ref": ref},
+        headers={"HX-Request": "true"},
+    )
+    body = resp.get_data(as_text=True)
+    assert resp.status_code == 200
+    assert "data-suggestion-dismiss" not in body
+    assert "suggested link" not in body
+    with db_engine.connect() as conn:
+        assert get_correction(conn, txn_id) is None
+    # Stays dismissed on a fresh load.
+    assert "suggested link" not in client.get(_MAY).get_data(as_text=True)
+
+
+def test_suggestion_actions_reject_bad_input(client, db_engine):
+    _, _, txn_id = _rent_with_unlinked_charge(db_engine)
+    url = "/s/home/budget/actual/link"
+    assert client.post(url, data={"transaction_id": "x"}).status_code == 422
+    # Unknown entry → SnapshotMismatch → 422, nothing linked.
+    resp = client.post(url, data={"transaction_id": txn_id, "budget_entry_ref": 999})
+    assert resp.status_code == 422
+    with db_engine.connect() as conn:
+        other = create_snapshot(conn, "other")
+        add_budget_entry(
+            conn,
+            other,
+            {
+                "kind": "expense",
+                "description": "X",
+                "amount": 1,
+                "recurrence": "monthly",
+            },
+        )
+        foreign = get_budget_entries(conn, other)[-1]["_db_id"]
+    resp = client.post(
+        "/s/home/budget/actual/dismiss",
+        data={"transaction_id": txn_id, "budget_entry_ref": foreign},
+    )
+    assert resp.status_code == 422

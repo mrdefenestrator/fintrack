@@ -5,7 +5,12 @@
    the Transactions sheet: a time-nav row (month pager) above a filter card
    fused to the table, htmx partial swaps into #content, sticky total row.
    Colors follow the result's tone (EntryActual.tone), not the delta's sign:
-   earning over budget is good, spending over budget is bad. #}
+   earning over budget is good, spending over budget is bad.
+   Link suggestions (issue #70): each entry shows how many of the month's
+   unlinked transactions look like it; in edit mode a detail row under the
+   entry lists them with Apply (link) / Dismiss (never suggest again). The
+   actions post to this page's own query string so the month and filters
+   survive the re-render. #}
 {% import "partials/sheet.html" as sheet %}
 {% import "partials/pager.html" as nav %}
 {% import "partials/filter_controls.html" as fc %}
@@ -45,6 +50,15 @@
     <div class="flex items-center gap-1.5 text-xs">
         {% if missing_count %}<span data-actuals-missing class="px-1.5 py-0.5 rounded {{ _badge['bad'] }}">{{ missing_count }} missing</span>{% endif %}
         {% if drift_count %}<span data-actuals-drift class="px-1.5 py-0.5 rounded {{ _badge['drift'] }}">{{ drift_count }} drift</span>{% endif %}
+        {% if suggestion_count %}
+        {% set _sug_label %}{{ suggestion_count }} suggested link{{ 's' if suggestion_count != 1 }}{% endset %}
+        {% if edit_mode %}
+        <span data-actuals-suggested class="px-1.5 py-0.5 rounded {{ _badge['neutral'] }}">{{ _sug_label }}</span>
+        {% else %}
+        {% set _edit_url = "%s?%s%sedit=1" | format(_url, self_query, '&' if self_query else '') %}
+        <a data-actuals-suggested href="{{ _edit_url }}" class="px-1.5 py-0.5 rounded {{ _badge['neutral'] }} hover:underline" title="Review in edit mode">{{ _sug_label }}</a>
+        {% endif %}
+        {% endif %}
     </div>
     {{ nav.pager(
         prev_url="%s?year=%s&month=%s%s" | format(_url, prev_year, prev_month, filter_qs),
@@ -77,10 +91,12 @@
                   "Date of the most recent linked transaction (any month)"]) }}
     <tbody>
         {% for a in budget_actuals %}
+        {% set _sugs = suggestions_by_entry.get(a.entry_ref, []) %}
         <tr class="{{ sheet.row_class() }}">
             <td class="{{ sheet.cell_class() }}">
                 {{ a.entry.description }}
                 {% if a.source == 'category' %}<span class="ml-1 text-xs text-gray-400 dark:text-gray-500" title="Variable line: actual is this category's total for the month, not linked transactions">by category</span>{% endif %}
+                {% if _sugs %}<span class="ml-1 px-1 rounded text-xs {{ _badge['neutral'] }}" title="Unlinked transactions this month that look like this entry">{{ _sugs | length }} suggested</span>{% endif %}
             </td>
             <td class="{{ sheet.cell_class(extra='text-gray-500 dark:text-gray-400') }}">{{ a.entry.category or '—' }}</td>
             <td class="{{ sheet.cell_class('text-right tabular-nums') }}">${{ a.expected|money }}</td>
@@ -95,6 +111,35 @@
             </td>
             <td class="{{ sheet.cell_class(extra='text-gray-500 dark:text-gray-400') }}">{{ a.last_linked or '—' }}</td>
         </tr>
+        {% if edit_mode and _sugs %}
+        {# One detail row per entry: sortable.js keeps it under its entry. #}
+        <tr data-detail-row data-suggestions-for="{{ a.entry_ref }}" class="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40">
+            <td colspan="9" class="px-1.5 py-1">
+                <ul class="space-y-1 pl-4 text-xs">
+                    {% for s in _sugs %}
+                    {% set t = s.transaction %}
+                    {% set _vals = {'transaction_id': t.id, 'budget_entry_ref': s.entry_ref} | tojson %}
+                    <li data-suggestion data-transaction-id="{{ t.id }}" class="flex flex-wrap items-center gap-2">
+                        <span class="text-gray-500 dark:text-gray-400 tabular-nums">{{ t.date }}</span>
+                        <span>{{ t.merchant or '—' }}</span>
+                        <span class="tabular-nums {{ sheet.neg(t.amount < 0) }}">{{ '-' if t.amount < 0 }}${{ t.amount|abs|money }}</span>
+                        <span class="px-1 rounded {{ _badge['good'] if s.confidence == 'high' else _badge['neutral'] }}" title="Score {{ '%.2f' | format(s.score) }}">{{ s.confidence }}</span>
+                        <span class="text-gray-500 dark:text-gray-400">{{ s.reasons | join(', ') }}</span>
+                        <button type="button" data-suggestion-apply
+                                hx-post="{{ url_for('budget.actual_link', filename=filename) }}?{{ self_query }}"
+                                hx-vals='{{ _vals }}' hx-target="#content"
+                                class="px-2 py-0.5 rounded bg-blue-600 text-white hover:bg-blue-700">Apply</button>
+                        <button type="button" data-suggestion-dismiss
+                                hx-post="{{ url_for('budget.actual_dismiss', filename=filename) }}?{{ self_query }}"
+                                hx-vals='{{ _vals }}' hx-target="#content"
+                                title="Don't suggest this entry for this transaction again"
+                                class="px-2 py-0.5 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700">Dismiss</button>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </td>
+        </tr>
+        {% endif %}
         {% else %}
         <tr><td colspan="9" class="px-2 py-3 text-center text-gray-500 dark:text-gray-400">No {{ 'matching' if _active else 'active' }} budget entries for {{ month_label }}.</td></tr>
         {% endfor %}

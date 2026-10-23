@@ -5,19 +5,21 @@ from datetime import date
 from decimal import Decimal
 
 import pytest
-from sqlalchemy import update
+from sqlalchemy import func, select, update
 
 from fintrack.budget.reconcile import (
     KindMismatch,
     SnapshotMismatch,
     budget_actuals,
+    dismiss_suggestion,
     expected_day,
     link_transaction,
     suggest_links,
+    undismiss_suggestions,
     unlink_transaction,
 )
 from fintrack.budget.repository import delete_budget_entry, get_budget_entries
-from fintrack.core.models import imports
+from fintrack.core.models import imports, link_suggestion_dismissals
 from fintrack.ledger.repository.corrections import (
     apply_transaction_correction,
     get_correction,
@@ -160,6 +162,54 @@ def test_suggest_skips_already_linked(conn, snapshot_id, seeder):
     txn_id = seeder.add(date(2026, 5, 1), "-2000.00", "Landlord", "Housing")
     link_transaction(conn, snapshot_id, txn_id, entry)
     assert suggest_links(conn, snapshot_id) == []
+
+
+def test_dismissed_suggestion_is_not_proposed_again(conn, snapshot_id, seeder):
+    entry = make_rent_entry(conn, snapshot_id)
+    txn_id = seeder.add(date(2026, 5, 1), "-2000.00", "Landlord", "Housing")
+    dismiss_suggestion(conn, snapshot_id, txn_id, entry)
+    assert suggest_links(conn, snapshot_id) == []
+    # Dismissal only filters suggestions — a manual link still works.
+    link_transaction(conn, snapshot_id, txn_id, entry)
+    assert get_correction(conn, txn_id)["budget_entry_ref"] == entry
+
+
+def test_dismissal_falls_back_to_next_best_entry(conn, snapshot_id, seeder):
+    rent = make_rent_entry(conn, snapshot_id)
+    other = make_expense_entry(conn, snapshot_id, amount=1900)
+    txn_id = seeder.add(date(2026, 5, 1), "-2000.00", "Landlord", "Housing")
+    assert suggest_links(conn, snapshot_id)[0].entry_ref == rent
+    dismiss_suggestion(conn, snapshot_id, txn_id, rent)
+    (s,) = suggest_links(conn, snapshot_id)
+    assert s.entry_ref == other
+
+
+def test_dismiss_is_idempotent_and_undismiss_restores(conn, snapshot_id, seeder):
+    entry = make_rent_entry(conn, snapshot_id)
+    txn_id = seeder.add(date(2026, 5, 1), "-2000.00", "Landlord", "Housing")
+    dismiss_suggestion(conn, snapshot_id, txn_id, entry)
+    dismiss_suggestion(conn, snapshot_id, txn_id, entry)
+    assert undismiss_suggestions(conn, txn_id) == 1
+    assert [s.entry_ref for s in suggest_links(conn, snapshot_id)] == [entry]
+
+
+def test_dismiss_rejects_cross_snapshot_entry(conn, snapshot_id, seeder):
+    other_snap = create_snapshot(conn, "other")
+    foreign = make_rent_entry(conn, other_snap)
+    txn_id = seeder.add(date(2026, 5, 1), "-2000.00", "Landlord", "Housing")
+    with pytest.raises(SnapshotMismatch):
+        dismiss_suggestion(conn, snapshot_id, txn_id, foreign)
+
+
+def test_dismissal_cascades_with_budget_entry(conn, snapshot_id, seeder):
+    entry = make_rent_entry(conn, snapshot_id)
+    txn_id = seeder.add(date(2026, 5, 1), "-2000.00", "Landlord", "Housing")
+    dismiss_suggestion(conn, snapshot_id, txn_id, entry)
+    delete_budget_entry(conn, snapshot_id, 0)
+    count = conn.execute(
+        select(func.count()).select_from(link_suggestion_dismissals)
+    ).scalar()
+    assert count == 0
 
 
 # --------------------------------------------------------------------------

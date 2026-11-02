@@ -34,8 +34,10 @@ border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gra
    0-based indices to right-align; `actions_col` appends a trailing (unlabelled)
    actions header used by the editable Finances sheets. Column sorting is wired
    client-side by web/static/js/sortable.js via the `sortable-th` / `data-col`
-   hooks below. #}
-{%- macro thead(headers, right_align_cols=[], actions_col=false, tooltips=[]) -%}
+   hooks below. `header_links` (optional, per column: none or
+   {url, title, active}) adds a small link icon after a label; clicking it
+   follows the link without sorting the column. #}
+{%- macro thead(headers, right_align_cols=[], actions_col=false, tooltips=[], header_links=[]) -%}
 <thead>
     {# No border-b here: the header's bottom border is drawn as a box-shadow on
        the sticky <thead> cells (base.html), because a border-collapse border
@@ -49,7 +51,14 @@ border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gra
            up with the shadow at rest. #}
         {% for h in headers -%}
         <th class="sortable-th px-1.5 py-0.5 {% if loop.index0 in right_align_cols %}text-right{% else %}text-left{% endif %} font-medium text-gray-800 dark:text-gray-100 cursor-pointer select-none hover:bg-gray-200 dark:hover:bg-gray-600"
-            data-col="{{ loop.index0 }}" role="button" tabindex="0" title="{{ tooltips[loop.index0] if tooltips and loop.index0 < tooltips | length and tooltips[loop.index0] else h }}">{{ h }} <span class="sort-indicator"></span></th>
+            data-col="{{ loop.index0 }}" role="button" tabindex="0" title="{{ tooltips[loop.index0] if tooltips and loop.index0 < tooltips | length and tooltips[loop.index0] else h }}">
+            {%- set _link = header_links[loop.index0] if loop.index0 < header_links | length else none -%}
+            {%- if _link -%}
+            <a href="{{ _link.url }}" data-header-link title="{{ _link.title }}" aria-label="{{ _link.title }}"
+               onclick="event.stopPropagation()" onkeydown="event.stopPropagation()"
+               class="inline-flex align-[-2px] mr-1 rounded {{ 'text-blue-600 dark:text-blue-400' if _link.active else 'text-gray-400 hover:text-blue-600 dark:hover:text-blue-400' }}"><svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0ZM3.75 12h.007v.008H3.75V12Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm-.375 5.25h.007v.008H3.75v-.008Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z"/></svg></a>
+            {%- endif -%}
+            {{ h }} <span class="sort-indicator"></span></th>
         {% endfor -%}
         {% if actions_col %}<th class="table-actions-cell px-1.5 py-0.5" aria-label="Actions"></th>{% endif %}
     </tr>

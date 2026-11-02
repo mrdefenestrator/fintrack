@@ -57,11 +57,22 @@ def _fmt_money_header(x):
     return f"${x:,.2f}"
 
 
+def _fmt_change(x):
+    """Format a signed change for prose: +$1,234.00 / -$1,234.00 / $0.00."""
+    if x is None:
+        return ""
+    if x == 0:
+        return "$0.00"
+    sign = "+" if x > 0 else "-"
+    return f"{sign}${abs(x):,.2f}"
+
+
 def _register_filters(app: Flask) -> None:
     app.jinja_env.filters["fmt_money"] = lambda x: (
         formatting.fmt_money(x) if x is not None else "-"
     )
     app.jinja_env.filters["fmt_money_header"] = _fmt_money_header
+    app.jinja_env.filters["fmt_change"] = _fmt_change
     app.jinja_env.filters["fmt_qty"] = formatting.fmt_qty
     app.jinja_env.filters["display_is_negative"] = lambda x: _display_is_negative(x)
     app.jinja_env.filters["format_type"] = lambda x: formatting.fmt_type_display(x)

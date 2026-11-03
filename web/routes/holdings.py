@@ -173,7 +173,7 @@ _GROUPS: list[tuple[str, str, str, str, list]] = [
     ("asset", "Assets", "asset", "asset", _ASSET_COLS),
 ]
 _GROUP_COLS = {key: cols for key, _, _, _, cols in _GROUPS}
-# Band tone (grouped-sheet.css palette), temperature-coded: cool = you own it,
+# Band tone (partials/grouped_sheet.css palette), temperature-coded: cool = you own it,
 # warm = you owe it.
 _GROUP_TONES = {"cash": "emerald", "credit": "rose", "loan": "amber", "asset": "blue"}
 _MAX_COLS = max(len(cols) for cols in _GROUP_COLS.values())

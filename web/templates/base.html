@@ -683,7 +683,14 @@
             }
         }
     </style>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/grouped-sheet.css') }}">
+    {# Grouped-sheet chrome (Holdings, Budget): inlined, not a <link>ed static
+       file, so the band tints, rails and sticky headers arrive with the page.
+       The PR-preview Lambda runs at reserved concurrency 1 and rejects parallel
+       subresource requests (429) instead of queueing them; a dropped stylesheet
+       left the sheets unstyled there. #}
+    <style>
+{% include "partials/grouped_sheet.css" %}
+    </style>
 </head>
 
 <body x-data="{ navOpen: window.matchMedia('(min-width: 1024px)').matches, init() { this._narrow = window.matchMedia('(max-width: 1023px)').matches; window.addEventListener('resize', () => { const n = window.matchMedia('(max-width: 1023px)').matches; if (n !== this._narrow) { this._narrow = n; this.navOpen = !n; } }); } }" class="h-full flex flex-col overflow-hidden bg-gray-50 dark:bg-gray-900 dark:text-gray-100">

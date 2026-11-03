@@ -206,3 +206,15 @@ def test_recategorizing_moves_row_to_its_new_band(client):
     housing = body.split('data-group="cat-housing"')[1].split("</tbody>")[0]
     assert 'id="budget-row-2"' in housing
     assert 'data-group="cat-groceries"' not in body
+
+
+@pytest.mark.parametrize("page", ["budget", "holdings"])
+def test_band_css_ships_inline_with_the_page(client, page):
+    """The band chrome (tints, rails, sticky heading/header) must arrive with
+    the HTML: the PR-preview Lambda (reserved concurrency 1) 429s parallel
+    subresource requests, so a <link>ed stylesheet could silently drop."""
+    body = client.get(f"/s/home/{page}").get_data(as_text=True)
+    head = body.split("</head>")[0]
+    assert '.grouped-sheet [data-tone="emerald"]' in head
+    assert ".grouped-sheet .sheet-group-heading > td" in head
+    assert "grouped-sheet.css" not in body  # no separate stylesheet request

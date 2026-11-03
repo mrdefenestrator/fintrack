@@ -5,7 +5,8 @@ A grouped sheet is ONE table split into bands. Each band is its own
 its own sortable column-header row, its data rows, and (in edit mode) an add
 row. A trailing tbody holds the pinned master footer. The markup lives in
 ``templates/partials/grouped_sheet.html``, the look in
-``static/css/grouped-sheet.css``, per-band sorting in ``static/js/group-sort.js``.
+``templates/partials/grouped_sheet.css`` (inlined by ``base.html``), per-band
+sorting in ``static/js/group-sort.js``.
 
 This module holds the Python side both sheets share: turning a column layout
 into the per-group header metadata the templates read, and mapping a band's

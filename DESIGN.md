@@ -579,7 +579,10 @@ sheet reuses them rather than copying Holdings:
 - markup — `templates/partials/grouped_sheet.html` (macros `group_attrs`,
   `heading`/`subtotal_cell`, `header_row`, `row_class`, `empty_row`,
   `add_row`/`add_button`, `footer`); each page keeps its own cell rendering;
-- look — `static/css/grouped-sheet.css`: the tone palette (emerald · rose ·
+- look — `templates/partials/grouped_sheet.css`, inlined into every page by
+  `base.html` (not a `<link>`ed static file: the PR-preview Lambda runs at
+  reserved concurrency 1 and 429s parallel subresource requests, which dropped
+  the stylesheet): the tone palette (emerald · rose ·
   amber · blue · slate; a band, or a single row, picks one via `data-tone`),
   accent rail, sticky heading/header, sticky edit-mode actions column, footer;
 - per-band sorting — `static/js/group-sort.js` (asc → desc → none, state in
@@ -603,7 +606,7 @@ WebKit and Chromium). **So no border on a sticky row may be a border-collapse
 border**: draw it as a `box-shadow` on the cell instead (it paints with the
 sticky element and stays put). Header underline + inter-column dividers, the
 group heading accents, and the row group accents are all
-box-shadows (`web/static/css/grouped-sheet.css`, `base.html`). Only the total row
+box-shadows (`web/templates/partials/grouped_sheet.css`, `base.html`). Only the total row
 stays pinned to the bottom; the add ("+ Add …") row flows inline as the last row
 of its group. `web/static/js/sheet-scroll.js` pins the total(s) to the bottom
 with a faint grid canvas and drives the four edge scroll-shadows (the side

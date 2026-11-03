@@ -81,8 +81,8 @@
             // form the pinned top region (same height for every group). The
             // column header sticks just below the heading, so publish the
             // heading height too (its CSS `top`).
-            var heading = container.querySelector(".holdings-group-heading");
-            var header = container.querySelector(".holdings-group-header");
+            var heading = container.querySelector(".sheet-group-heading");
+            var header = container.querySelector(".sheet-group-header");
             var headingH = heading ? heading.offsetHeight : 0;
             headerH = headingH + (header ? header.offsetHeight : 0);
             frame.style.setProperty("--sheet-heading-h", headingH + "px");
@@ -109,8 +109,8 @@
 
     // Inject (once) a single filler row and grow it to push the total row to the
     // sheet's bottom (QA item 17), with a grid canvas filling the gap. It sits
-    // just above the total row, in the total row's OWN tbody: on the grouped
-    // Holdings sheet the total lives in a trailing tbody of its own, so this
+    // just above the total row, in the total row's OWN tbody: on a grouped
+    // sheet the total lives in a trailing tbody of its own, so this
     // keeps the canvas below the last group instead of wedging it between groups
     // (and lets each group's add row flow inline right under its data). Kept in
     // place on every call.

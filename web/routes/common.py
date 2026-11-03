@@ -116,15 +116,6 @@ def get_common_context(snapshot_id: int, filename: str, edit_mode: bool):
     }
 
 
-def drop_separator_rows(rows):
-    """Remove separator rows (all cells are dashes) from table rows."""
-    return [
-        row
-        for row in rows
-        if not all(isinstance(c, str) and set(c.strip()) <= {"-"} for c in row)
-    ]
-
-
 # =============================================================================
 # Accounts table configuration
 # =============================================================================

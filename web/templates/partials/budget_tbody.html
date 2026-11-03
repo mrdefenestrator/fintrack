@@ -1,25 +1,47 @@
-{# Budget table tbody - used for full tbody swap after cell edit #}
-{% from "macros/table.html" import total_row %}
-{% set _rec_sort = {'One Time': 1, 'Biweekly': 2, 'Monthly': 3, 'Quarterly': 4, 'Semiannual': 5, 'Annual': 6} %}
-{% if edit_mode %}
-{% for kind, index, row_cells in budget_edit_rows %}
-{% include "partials/budget_row_display.html" %}
-{% endfor %}
-{% include "partials/budget_row_add.html" %}
-{% if rows %}
-{{ total_row(rows[-1], [3, 5, 6, 7, 8]) }}
-{% endif %}
-{% else %}
-{% for kind, index, row_cells in budget_edit_rows %}
-<tr class="border-b border-gray-200 dark:border-b-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 border-l-4 {{ 'border-l-emerald-400' if kind == 'income' else 'border-l-rose-400' }}" id="budget-row-{{ index }}">
-    {% for cell in row_cells %}
-    <td class="px-1.5 py-0.5 border-r border-gray-100 dark:border-gray-700 last:border-r-0 {% if loop.index0 in [3, 5, 6, 7, 8] %}text-right tabular-nums{% endif %}{% if cell | display_is_negative %} text-red-600 dark:text-red-400{% endif %}"{% if loop.index0 == 4 and _rec_sort.get(cell | trim) %} data-sort-value="{{ _rec_sort[cell | trim] }}"{% endif %}>
-        {{ cell }}</td>
+{# Budget table body — the whole inside of #budget-table: colgroup, one band
+   (<tbody class="sheet-group">) per category, and the pinned Net footer. It is
+   the swap unit for edits (hx-target #budget-table, innerHTML), so the colgroup
+   lives here and survives a swap. Shared band markup: partials/grouped_sheet.html. #}
+{% import "partials/grouped_sheet.html" as gs %}
+{# The actions column (drag + delete) exists only in edit mode. #}
+{% set span = max_cols + 1 if edit_mode else max_cols %}
+<colgroup>
+    <col style="width: 10rem">
+    <col>
+    <col style="width: 7rem">
+    <col style="width: 8rem">
+    <col style="width: 7rem">
+    <col style="width: 7rem">
+    <col style="width: 6.5rem">
+    <col style="width: 6.5rem">
+    <col style="width: 10rem">
+</colgroup>
+{% macro add_buttons(category, first_kind) %}
+{% set kinds = ['income', 'expense'] if first_kind == 'income' else ['expense', 'income'] %}
+{% for k in kinds %}{{ gs.add_button(url_for('budget.add', filename=filename), 'Add ' ~ k, {'kind': k, 'category': category}) }}{% endfor %}
+{% endmacro %}
+{% for group in groups %}
+<tbody {{ gs.group_attrs(group, url_for('budget.reorder', filename=filename, category=group.category) if edit_mode else none) }}>
+    {% call gs.heading(group.label, label_span, edit_mode) %}
+        {% for total in group.totals %}{{ gs.subtotal_cell(total) }}{% endfor %}
+        <td colspan="{{ max_cols - label_span - group.totals | length }}"></td>
+    {% endcall %}
+    {{ gs.header_row(group, max_cols, edit_mode) }}
+    {% for row in group.rows %}
+    {% set reorder_index = loop.index0 %}
+    {% include "partials/budget_row.html" %}
     {% endfor %}
-    {% with edit_mode=false %}{% include "partials/budget_delete_icon.html" %}{% endwith %}
-</tr>
+    {% if edit_mode %}
+    {% call gs.add_row(span) %}{{ add_buttons(group.category, group.first_kind) }}{% endcall %}
+    {% endif %}
+</tbody>
+{% else %}
+{# No bands: nothing budgeted yet, or every entry filtered out. #}
+<tbody class="sheet-group" data-tone="slate">
+    {{ gs.empty_row(span, 'No entries match the current filters.' if filters_active else 'No budget entries yet.') }}
+    {% if edit_mode and not filters_active %}
+    {% call gs.add_row(span) %}{{ add_buttons('', 'expense') }}{% endcall %}
+    {% endif %}
+</tbody>
 {% endfor %}
-{% if rows %}
-{{ total_row(rows[-1], [3, 5, 6, 7, 8]) }}
-{% endif %}
-{% endif %}
+{{ gs.footer(footer_rows, total_pos, edit_mode) }}

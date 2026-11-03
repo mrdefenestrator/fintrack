@@ -59,6 +59,7 @@ from fintrack.networth.repository import (
 
 from .common import account_field_editable, get_common_context, validate_snapshot
 from .crud import ACCOUNTS_COERCION, ASSETS_COERCION, coerce_value, handle_delete
+from .grouped_sheet import group_columns, parse_order, remap_group_order
 
 holdings_bp = Blueprint("holdings", __name__, url_prefix="/s")
 
@@ -172,6 +173,9 @@ _GROUPS: list[tuple[str, str, str, str, list]] = [
     ("asset", "Assets", "asset", "asset", _ASSET_COLS),
 ]
 _GROUP_COLS = {key: cols for key, _, _, _, cols in _GROUPS}
+# Band tone (partials/grouped_sheet.css palette), temperature-coded: cool = you own it,
+# warm = you owe it.
+_GROUP_TONES = {"cash": "emerald", "credit": "rose", "loan": "amber", "asset": "blue"}
 _MAX_COLS = max(len(cols) for cols in _GROUP_COLS.values())
 
 
@@ -191,26 +195,6 @@ def _entity_group_key(source: str, entity: dict) -> str:
     return (
         _account_group_key(entity) if source == "account" else _asset_group_key(entity)
     )
-
-
-def _col_keys(cols):
-    return [k for k, _, _, _ in cols]
-
-
-def _col_headers(cols):
-    return [h for _, h, _, _ in cols]
-
-
-def _col_right_align(cols):
-    return [i for i, (_, _, ra, _) in enumerate(cols) if ra]
-
-
-def _col_spans(cols):
-    return [span for _, _, _, span in cols]
-
-
-def _col_tooltips(cols):
-    return [_COL_TOOLTIPS.get(k, h) for k, h, _, _ in cols]
 
 
 # Editable columns per account group, mapping the display column key to the
@@ -441,7 +425,7 @@ def _make_row(
     and Loans are liabilities (red) even at a zero balance; Cash and Assets are
     green — rather than by the sign of the current amount.
     """
-    keys = _col_keys(cols)
+    keys = [k for k, _, _, _ in cols]
     cells = [values.get(k, _BLANK) for k in keys]
     staleness = _staleness_class(values.get("as_of_iso"), today)
     cell_classes = []
@@ -720,14 +704,10 @@ def _groups_ctx(rows_by_group: dict[str, list[dict]], accounts, assets, rates=No
             {
                 "key": key,
                 "label": label,
+                "tone": _GROUP_TONES[key],
                 "source": source,
                 "add_noun": add_noun,
-                "col_keys": _col_keys(cols),
-                "headers": _col_headers(cols),
-                "tooltips": _col_tooltips(cols),
-                "right_align": _col_right_align(cols),
-                "spans": _col_spans(cols),
-                "ncols": len(cols),
+                **group_columns(cols, _COL_TOOLTIPS),
                 "rows": grp_rows,
                 "total": fmt_money(total),
                 "reorderable": True,
@@ -1038,11 +1018,8 @@ def reorder(filename: str, group: str):
     if group not in _GROUP_COLS:
         abort(404)
     source = "account" if group in ("cash", "credit") else "asset"
-    try:
-        local_order = [
-            int(x) for x in request.form.get("order", "").split(",") if x != ""
-        ]
-    except ValueError:
+    local_order = parse_order(request.form.get("order", ""))
+    if local_order is None:
         return "", 400
 
     engine = current_app.config["engine"]
@@ -1052,18 +1029,11 @@ def reorder(filename: str, group: str):
             if source == "account"
             else get_asset_entries(conn, snapshot_id)
         )
-        positions = [
-            i
-            for i, ent in enumerate(entities)
-            if _entity_group_key(source, ent) == group
-        ]
-        if sorted(local_order) != list(range(len(positions))):
+        full = remap_group_order(
+            entities, lambda ent: _entity_group_key(source, ent) == group, local_order
+        )
+        if full is None:
             return "", 400
-        # Map the group's local permutation onto its global slots; other rows
-        # keep their positions.
-        full = list(range(len(entities)))
-        for new_local, old_local in enumerate(local_order):
-            full[positions[new_local]] = positions[old_local]
         try:
             if source == "account":
                 reorder_accounts(conn, snapshot_id, full)

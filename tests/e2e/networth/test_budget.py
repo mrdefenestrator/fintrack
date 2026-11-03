@@ -10,17 +10,41 @@ pytestmark = pytest.mark.e2e
 def test_budget_view_shows_data(page, flask_server):
     """Budget page shows the test fixture data rows."""
     page.goto(f"{flask_server}/s/test_finances/budget")
-    tbody = page.locator("#budget-tbody")
+    tbody = page.locator("#budget-table")
     assert tbody.get_by_text("Salary", exact=True).first.is_visible()
     assert tbody.get_by_text("Rent", exact=True).first.is_visible()
     assert tbody.get_by_text("Groceries", exact=True).first.is_visible()
 
 
 def test_budget_shows_total_row(page, flask_server):
-    """Budget page shows a total row."""
+    """Budget page shows a pinned Net total row."""
     page.goto(f"{flask_server}/s/test_finances/budget")
-    total_cell = page.locator("#budget-tbody td:has-text('Total')")
-    assert total_cell.count() >= 1
+    total_cell = page.locator("#budget-table tr.total-row td:has-text('Net')")
+    assert total_cell.count() == 1
+
+
+def test_budget_grouped_by_category(page, flask_server):
+    """Issue #51: one band per category, each with its own heading (carrying
+    its subtotals) and its own column header row."""
+    page.goto(f"{flask_server}/s/test_finances/budget")
+    bands = page.locator("#budget-table tbody.sheet-group")
+    labels = [
+        t.strip().lower()
+        for t in page.locator(".sheet-group-heading td:first-child").all_inner_texts()
+    ]
+    for category in ("income", "housing", "groceries", "insurance"):
+        assert category in labels
+    assert bands.count() == len(labels)
+    assert page.locator(".sheet-group-header").count() == bands.count()
+    # Rent lives in the Housing band.
+    housing = page.locator("tbody.sheet-group[data-group='cat-housing']")
+    assert housing.get_by_text("Rent", exact=True).is_visible()
+    # Monthly subtotal sits in the band heading.
+    assert (
+        housing.locator(".sheet-group-heading")
+        .get_by_text("($1,500.00)")
+        .first.is_visible()
+    )
 
 
 def test_scroll_shadows_toggle_with_scroll_position(page, flask_server):
@@ -68,13 +92,13 @@ def test_budget_click_to_edit(page, flask_server):
     enable_edit_mode(page)
 
     # Click on the Salary description cell
-    salary_row = page.locator("#budget-tbody tr:has-text('Salary')").first
-    # Description is the third cell (index 2)
-    desc_cell = salary_row.locator("td").nth(2)
+    salary_row = page.locator("#budget-table tr:has-text('Salary')").first
+    # Description is the second cell (index 1)
+    desc_cell = salary_row.locator("td").nth(1)
     desc_cell.click()
 
     # Should show an input
-    input_el = page.locator("#budget-tbody input[name='value']")
+    input_el = page.locator("#budget-table input[name='value']")
     input_el.wait_for(state="visible")
     assert input_el.input_value() == "Salary"
 
@@ -84,11 +108,11 @@ def test_budget_update_cell(page, flask_server):
     page.goto(f"{flask_server}/s/test_finances/budget")
     enable_edit_mode(page)
 
-    salary_row = page.locator("#budget-tbody tr:has-text('Salary')").first
-    desc_cell = salary_row.locator("td").nth(2)
+    salary_row = page.locator("#budget-table tr:has-text('Salary')").first
+    desc_cell = salary_row.locator("td").nth(1)
     desc_cell.click()
 
-    input_el = page.locator("#budget-tbody input[name='value']")
+    input_el = page.locator("#budget-table input[name='value']")
     input_el.wait_for(state="visible")
 
     # Explicitly click the input to register focus with Playwright's CDP layer.
@@ -100,11 +124,11 @@ def test_budget_update_cell(page, flask_server):
         lambda r: "/budget/update/" in r.url and r.request.method == "POST",
         timeout=5000,
     ):
-        page.locator("#budget-tbody tr.total-row td").first.click()
+        page.locator("#budget-table tr.total-row td").first.click()
 
     # Verify
     page.goto(f"{flask_server}/s/test_finances/budget")
-    assert page.locator("#budget-tbody").get_by_text("Monthly Salary").is_visible()
+    assert page.locator("#budget-table").get_by_text("Monthly Salary").is_visible()
 
 
 def test_budget_add_expense(page, flask_server):
@@ -115,10 +139,14 @@ def test_budget_add_expense(page, flask_server):
     with page.expect_response(
         lambda r: "/budget/add" in r.url and r.request.method == "POST"
     ):
-        page.locator("button", has_text="+ Add expense").click()
+        page.locator(
+            "tbody[data-group='cat-housing'] button", has_text="+ Add expense"
+        ).click()
     page.wait_for_load_state("networkidle")
 
-    assert page.locator("#budget-tbody").get_by_text("New entry").is_visible()
+    # Filed under the band it was added from.
+    housing = page.locator("tbody[data-group='cat-housing']")
+    assert housing.get_by_text("New entry").is_visible()
 
 
 def test_budget_add_income(page, flask_server):
@@ -129,10 +157,13 @@ def test_budget_add_income(page, flask_server):
     with page.expect_response(
         lambda r: "/budget/add" in r.url and r.request.method == "POST"
     ):
-        page.locator("button", has_text="+ Add income").click()
+        page.locator(
+            "tbody[data-group='cat-income'] button", has_text="+ Add income"
+        ).click()
     page.wait_for_load_state("networkidle")
 
-    assert page.locator("#budget-tbody").get_by_text("New entry").is_visible()
+    income = page.locator("tbody[data-group='cat-income']")
+    assert income.get_by_text("New entry").is_visible()
 
 
 def test_budget_delete(page, flask_server):
@@ -141,7 +172,7 @@ def test_budget_delete(page, flask_server):
     enable_edit_mode(page)
 
     # Find the Salary row and click delete
-    salary_row = page.locator("#budget-tbody tr:has-text('Salary')").first
+    salary_row = page.locator("#budget-table tr:has-text('Salary')").first
     salary_row.locator("button[title='Delete']").click()
 
     # Confirm delete
@@ -153,7 +184,7 @@ def test_budget_delete(page, flask_server):
     # Verify - reload page (exclude add row, whose type select contains "salary" as an option)
     page.goto(f"{flask_server}/s/test_finances/budget")
     assert (
-        page.locator("#budget-tbody tr:not([data-add-row])")
+        page.locator("#budget-table tr:not([data-add-row])")
         .filter(has_text="Salary")
         .count()
         == 0
@@ -171,7 +202,7 @@ def test_budget_filter_by_kind(page, flask_server):
     page.locator(".sm\\:flex input[name='include_kind'][value='income']").click()
     page.wait_for_url("**/budget**include_kind**")
 
-    tbody = page.locator("#budget-tbody")
+    tbody = page.locator("#budget-table")
     # Should show income items but not expenses
     assert tbody.get_by_text("Salary", exact=True).first.is_visible()
     # Rent is an expense - should not be shown in table rows
@@ -202,32 +233,37 @@ def test_budget_filter_by_kind_mobile(page, flask_server):
     assert page.locator(".sm\\:hidden .tabular-nums").is_visible()
 
     # Correct rows shown
-    tbody = page.locator("#budget-tbody")
+    tbody = page.locator("#budget-table")
     assert tbody.get_by_text("Salary", exact=True).first.is_visible()
     assert tbody.locator("tr").filter(has_text="Rent").count() == 0
 
 
 def test_budget_sort(page, flask_server):
-    """Clicking a column header sorts the budget table."""
+    """Clicking a band's column header sorts just that band (persisted in the
+    URL per band)."""
     page.goto(f"{flask_server}/s/test_finances/budget")
+    income = page.locator("tbody[data-group='cat-income']")
 
-    # Click on sortable header
-    page.locator(".sortable-th").first.click()
+    def descriptions():
+        return [
+            t.strip()
+            for t in income.locator(
+                "tr[data-reorder-index] td:nth-child(2)"
+            ).all_inner_texts()
+        ]
 
-    indicator = page.locator(".sort-indicator")
-    has_indicator = False
-    for i in range(indicator.count()):
-        if indicator.nth(i).text_content().strip():
-            has_indicator = True
-            break
-    assert has_indicator
+    assert descriptions() == ["Salary", "Freelance", "Tax Refund"]
+    income.locator(".sortable-th", has_text="Description").click()
+    assert descriptions() == ["Freelance", "Salary", "Tax Refund"]
+    assert income.locator(".sort-indicator").get_by_text("↑").count() == 1
+    assert "sort_cat-income_col=c1" in page.url
 
 
 def test_budget_monthly_and_annual_columns_visible(page, flask_server):
     """Both Monthly and Annual columns are always visible in the budget table."""
     page.goto(f"{flask_server}/s/test_finances/budget")
 
-    headers = page.locator("table thead th")
+    headers = page.locator(".sheet-group-header").first.locator("th")
     header_texts = headers.all_inner_texts()
     assert "Monthly" in header_texts
     assert "Annual" in header_texts
@@ -238,13 +274,13 @@ def test_budget_when_one_time_date_picker(page, flask_server):
     page.goto(f"{flask_server}/s/test_finances/budget")
     enable_edit_mode(page)
 
-    # Find the Tax Refund row (one_time) and click its When cell (col index 5)
-    refund_row = page.locator("#budget-tbody tr:has-text('Tax Refund')").first
-    when_cell = refund_row.locator("td").nth(5)
+    # Find the Tax Refund row (one_time) and click its When cell (col index 4)
+    refund_row = page.locator("#budget-table tr:has-text('Tax Refund')").first
+    when_cell = refund_row.locator("td").nth(4)
     when_cell.click()
 
     # Should show a text input for the date value
-    date_input = page.locator("#budget-tbody input[name='value']")
+    date_input = page.locator("#budget-table input[name='value']")
     date_input.wait_for(state="visible")
     assert date_input.is_visible()
 
@@ -254,11 +290,11 @@ def test_budget_when_one_time_sets_date(page, flask_server):
     page.goto(f"{flask_server}/s/test_finances/budget")
     enable_edit_mode(page)
 
-    refund_row = page.locator("#budget-tbody tr:has-text('Tax Refund')").first
-    when_cell = refund_row.locator("td").nth(5)
+    refund_row = page.locator("#budget-table tr:has-text('Tax Refund')").first
+    when_cell = refund_row.locator("td").nth(4)
     when_cell.click()
 
-    date_input = page.locator("#budget-tbody input[name='value']")
+    date_input = page.locator("#budget-table input[name='value']")
     date_input.wait_for(state="visible")
 
     # Explicitly click the input to register focus with Playwright's CDP layer.
@@ -270,11 +306,11 @@ def test_budget_when_one_time_sets_date(page, flask_server):
         lambda r: "/budget/update/" in r.url and r.request.method == "POST",
         timeout=5000,
     ):
-        page.locator("#budget-tbody tr.total-row td").first.click()
+        page.locator("#budget-table tr.total-row td").first.click()
 
     # Reload and verify the date is displayed
     page.goto(f"{flask_server}/s/test_finances/budget")
-    refund_row = page.locator("#budget-tbody tr:has-text('Tax Refund')").first
+    refund_row = page.locator("#budget-table tr:has-text('Tax Refund')").first
     assert refund_row.get_by_text("2026-02-15").is_visible()
 
 
@@ -284,8 +320,8 @@ def test_budget_when_monthly_day_edit(page, flask_server):
     enable_edit_mode(page)
 
     # Find the Salary row (monthly, dayOfMonth=1) and click its When cell
-    salary_row = page.locator("#budget-tbody tr:has-text('Salary')").first
-    when_cell = salary_row.locator("td").nth(5)
+    salary_row = page.locator("#budget-table tr:has-text('Salary')").first
+    when_cell = salary_row.locator("td").nth(4)
     when_cell.click()
 
     # Should show compound editor with dayOfMonth input (no continuous for income)
@@ -307,7 +343,7 @@ def test_budget_when_monthly_day_edit(page, flask_server):
 
     # Verify display shows 5th
     page.goto(f"{flask_server}/s/test_finances/budget")
-    salary_row = page.locator("#budget-tbody tr:has-text('Salary')").first
+    salary_row = page.locator("#budget-table tr:has-text('Salary')").first
     assert salary_row.get_by_text("5th").is_visible()
 
 
@@ -317,8 +353,10 @@ def test_budget_when_continuous_toggle_off(page, flask_server):
     enable_edit_mode(page)
 
     # Find the Groceries row (monthly, continuous=true) and click its When cell
-    groceries_row = page.locator("#budget-tbody tr:has-text('Groceries')").first
-    when_cell = groceries_row.locator("td").nth(5)
+    groceries_row = page.locator(
+        "#budget-table tr[id^='budget-row-']:has-text('Groceries')"
+    ).first
+    when_cell = groceries_row.locator("td").nth(4)
     when_cell.click()
 
     # Should show compound editor with checkbox checked
@@ -347,7 +385,9 @@ def test_budget_when_continuous_toggle_off(page, flask_server):
 
     # Reload and verify display changed from "continuous" to "5th"
     page.goto(f"{flask_server}/s/test_finances/budget")
-    groceries_row = page.locator("#budget-tbody tr:has-text('Groceries')").first
+    groceries_row = page.locator(
+        "#budget-table tr[id^='budget-row-']:has-text('Groceries')"
+    ).first
     assert groceries_row.get_by_text("5th").is_visible()
 
 
@@ -358,7 +398,7 @@ def test_budget_when_continuous_toggle_on(page, flask_server):
 
     # Find the Rent row (monthly expense, dayOfMonth=1, no continuous) and click its When cell
     rent_row = page.locator("#budget-row-3")
-    when_cell = rent_row.locator("td").nth(5)
+    when_cell = rent_row.locator("td").nth(4)
     when_cell.click()
 
     # Check continuous
@@ -382,8 +422,8 @@ def test_budget_when_annual_compound_edit(page, flask_server):
     enable_edit_mode(page)
 
     # Find the Car Insurance row (annual, month=3, dayOfMonth=15) and click its When cell
-    row = page.locator("#budget-tbody tr:has-text('Car Insurance')").first
-    when_cell = row.locator("td").nth(5)
+    row = page.locator("#budget-table tr:has-text('Car Insurance')").first
+    when_cell = row.locator("td").nth(4)
     when_cell.click()
 
     # Should show compound editor with month select and day input
@@ -408,5 +448,5 @@ def test_budget_when_annual_compound_edit(page, flask_server):
 
     # Reload and verify display shows "Apr 10th"
     page.goto(f"{flask_server}/s/test_finances/budget")
-    row = page.locator("#budget-tbody tr:has-text('Car Insurance')").first
+    row = page.locator("#budget-table tr:has-text('Car Insurance')").first
     assert row.get_by_text("Apr 10th").is_visible()

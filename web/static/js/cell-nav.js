@@ -11,7 +11,7 @@
  *
  * Tables opt in by adding `data-cell-nav` on the container element (the
  * <table> or a wrapper).  The attribute's value names the htmx swap target id
- * (e.g. "holdings-table" or "budget-tbody") for tables that swap their whole
+ * (e.g. "holdings-table" or "budget-table") for tables that swap their whole
  * tbody.  For per-row tables (merchants), set data-cell-nav-swap="outerHTML"
  * and saves will use the field's own hx-target.
  *

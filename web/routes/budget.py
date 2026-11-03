@@ -1,5 +1,23 @@
-"""Budget blueprint - unified income/expenses table and CRUD operations."""
+"""Budget blueprint - the grouped Budget sheet, Budget vs Actual, and CRUD.
 
+The Budget sheet is a grouped sheet (see grouped_sheet.py), like Holdings: ONE
+table split into one band per **category**, in the category taxonomy's order
+(entries whose category isn't in the taxonomy follow alphabetically; entries
+with none close the table as "Uncategorized"). Each band's heading carries its
+Remaining / Monthly / Annual subtotals (signed: income positive, expenses
+negative); a pinned footer shows the Net across every shown entry. Each
+category gets its own band color, cycling a palette in category order so
+neighbouring bands differ (Uncategorized is slate). There is no Kind column:
+an entry's kind shows in its sign (expenses are negative), and it is set by
+the band's "+ Add expense" / "+ Add income" buttons.
+
+Rows are addressed by their position in the full, sort-ordered budget list
+(`index`), so edit/delete URLs are unaffected by grouping. Drag-reorder is per
+band: the band's local permutation is mapped onto the band's own slots in the
+full ordering (grouped_sheet.remap_group_order).
+"""
+
+import re
 from datetime import date
 from decimal import Decimal
 
@@ -8,77 +26,189 @@ from flask import Blueprint, abort, current_app, render_template, request
 from fintrack.budget import reconcile
 from fintrack.budget import repository as repo_budget
 from fintrack.core import filters, tables
+from fintrack.core.formatting import fmt_money
 from fintrack.core.loader import load_finances_from_db
 from fintrack.ledger.repository.categories import get_category_names
 from fintrack.networth import calculations
 
-from .common import drop_separator_rows, get_common_context, validate_snapshot
+from .common import get_common_context, validate_snapshot
 from .crud import (
     BUDGET_COERCION,
     coerce_value,
     handle_delete,
     handle_move,
-    handle_reorder,
 )
+from .grouped_sheet import group_columns, parse_order, remap_group_order
 
 budget_bp = Blueprint("budget", __name__, url_prefix="/s")
 
 BUDGET_KINDS = calculations.BUDGET_KINDS
 RECURRENCE_OPTIONS = calculations.RECURRENCE_OPTIONS
 
+# Column layout (key, header, right_align, span): tables.BUDGET_HEADERS minus
+# Kind (the first cell of budget_entry_row, dropped below).
+_COLS = [
+    ("category", "Category", False, 1),
+    ("description", "Description", False, 1),
+    ("amount", "Amount", True, 1),
+    ("recurrence", "Recurrence", False, 1),
+    ("when", "When", True, 1),
+    ("remaining", "Remaining", True, 1),
+    ("monthly", "Monthly", True, 1),
+    ("annual", "Annual", True, 1),
+    ("auto_account", "Auto account", False, 1),
+]
+_TOOLTIPS = {
+    "category": "Budget category",
+    "description": "Description of this budget entry",
+    "amount": "Per-occurrence amount",
+    "recurrence": "How often this entry recurs",
+    "when": "Day of month or specific date",
+    "remaining": "Prorated amount remaining this month",
+    "monthly": "Expected total for this month",
+    "annual": "Annualized total",
+    "auto_account": "Account for auto-matching transactions",
+}
+_COLUMN_META = group_columns(_COLS, _TOOLTIPS)
+_NCOLS = len(_COLS)
+# The heading label spans Category..When; the Remaining/Monthly/Annual subtotals
+# sit under their columns.
+_LABEL_SPAN = 5
+_TOTAL_POS = [5, 6, 7]
+# Band colors (partials/grouped_sheet.css palette), cycled in category order.
+# Ordered so consecutive hues contrast, including the wrap from last to first.
+_CATEGORY_TONES = [
+    "blue",
+    "amber",
+    "violet",
+    "emerald",
+    "rose",
+    "cyan",
+    "orange",
+    "indigo",
+    "lime",
+    "fuchsia",
+    "teal",
+    "pink",
+]
+_UNCATEGORIZED_TONE = "slate"
+_UNCATEGORIZED = "Uncategorized"
 
-def _render_tbody(
-    snapshot_id: int,
-    filename: str,
-    edit_mode=True,
-    updated_index=None,
-    updated_field=None,
-    editing_index=None,
-    editing_field=None,
-    editing_value=None,
-    editing_when_recurrence=None,
-    editing_when_month=None,
-    editing_when_day=None,
-    editing_when_continuous=False,
-):
-    ctx = get_common_context(snapshot_id, filename, edit_mode)
-    budget = ctx["budget"]
-    _headers, rows = tables._build_budget_table(
-        budget,
-        ctx["year"],
-        ctx["month"],
-        ctx["day"],
-        account_display_by_id=ctx["account_display_by_id"],
+
+def _band_key(category: str) -> str:
+    """A stable DOM/URL-safe key for a category band (per-band sort state)."""
+    if not category:
+        return "uncategorized"
+    return "cat-" + (re.sub(r"[^a-z0-9]+", "-", category.lower()).strip("-") or "x")
+
+
+def _sheet_ctx(
+    budget: list[dict],
+    shown: list[int],
+    categories: list[str],
+    ctx: dict,
+    edit_mode: bool,
+    filters_active: bool = False,
+) -> dict:
+    """Template context for the grouped budget table: the category bands for
+    the `shown` entries (indices into `budget`), the Net footer, and the column
+    metadata."""
+    by_category: dict[str, list[dict]] = {}
+    for i in shown:
+        e = budget[i]
+        cells, figures = tables.budget_entry_row(
+            e,
+            ctx["year"],
+            ctx["month"],
+            ctx["day"],
+            account_display_by_id=ctx["account_display_by_id"],
+        )
+        by_category.setdefault(e.get("category") or "", []).append(
+            {
+                "index": i,
+                "kind": e.get("kind", "income"),
+                "cells": cells[1:],  # drop Kind
+                "figures": figures,
+            }
+        )
+
+    # Every category in band order: the taxonomy, then any others the budget
+    # uses. Colors index into this full list (not just the shown bands), so a
+    # category keeps its color while filters hide its neighbours.
+    known = set(categories)
+    all_categories = categories + sorted(
+        {e.get("category") for e in budget if e.get("category")} - known
     )
-    rows = drop_separator_rows(rows)
+    tone_of = {
+        c: _CATEGORY_TONES[i % len(_CATEGORY_TONES)]
+        for i, c in enumerate(all_categories)
+    }
+    order = [c for c in all_categories if c in by_category] + (
+        [""] if "" in by_category else []
+    )
+    keys: set[str] = set()
+    groups = []
+    for category in order:
+        rows = by_category[category]
+        incomes = sum(r["kind"] == "income" for r in rows)
+        key = _band_key(category)
+        while key in keys:  # two categories that slugify alike
+            key += "-"
+        keys.add(key)
+        groups.append(
+            {
+                "key": key,
+                "category": category,
+                "label": category or _UNCATEGORIZED,
+                "tone": tone_of.get(category, _UNCATEGORIZED_TONE),
+                # The add row leads with the band's majority kind.
+                "first_kind": "income" if incomes * 2 > len(rows) else "expense",
+                "rows": rows,
+                "totals": [
+                    fmt_money(sum((r["figures"][j] for r in rows), Decimal(0)))
+                    for j in range(3)
+                ],
+                **_COLUMN_META,
+            }
+        )
 
-    data_rows = rows[: len(budget)] if rows else []
-    budget_edit_rows = [
-        (budget[i].get("kind", "income"), i, data_rows[i]) for i in range(len(budget))
-    ]
+    all_rows = [r for g in groups for r in g["rows"]]
+    net = [""] * _NCOLS
+    net[0] = "Net"
+    for j, pos in enumerate(_TOTAL_POS):
+        net[pos] = fmt_money(sum((r["figures"][j] for r in all_rows), Decimal(0)))
 
+    return {
+        "groups": groups,
+        "footer_rows": [net] if all_rows else [],
+        "filters_active": filters_active,
+        "max_cols": _NCOLS,
+        "label_span": _LABEL_SPAN,
+        "total_pos": _TOTAL_POS,
+        "edit_mode": edit_mode,
+        "categories": categories,
+        "recurrence_options": RECURRENCE_OPTIONS,
+        "account_display_by_id": ctx["account_display_by_id"],
+    }
+
+
+def _category_names() -> list[str]:
     engine = current_app.config["engine"]
     with engine.connect() as conn:
-        categories = get_category_names(conn)
+        return get_category_names(conn)
 
+
+def _render_tbody(snapshot_id: int, filename: str, edit_mode=True, **editing):
+    """Re-render the whole grouped table body (colgroup + every band + footer)
+    for an edit swap (target #budget-table). Shows every entry: an edit swap
+    doesn't carry the page's filters."""
+    ctx = get_common_context(snapshot_id, filename, edit_mode)
+    budget = ctx["budget"]
+    sheet = _sheet_ctx(
+        budget, list(range(len(budget))), _category_names(), ctx, edit_mode
+    )
     return render_template(
-        "partials/budget_tbody.html",
-        filename=filename,
-        edit_mode=edit_mode,
-        budget_edit_rows=budget_edit_rows,
-        rows=rows,
-        updated_index=updated_index,
-        updated_field=updated_field,
-        categories=categories,
-        recurrence_options=RECURRENCE_OPTIONS,
-        account_display_by_id=ctx["account_display_by_id"],
-        editing_index=editing_index,
-        editing_field=editing_field,
-        editing_value=editing_value,
-        editing_when_recurrence=editing_when_recurrence,
-        editing_when_month=editing_when_month,
-        editing_when_day=editing_when_day,
-        editing_when_continuous=editing_when_continuous,
+        "partials/budget_tbody.html", filename=filename, **sheet, **editing
     )
 
 
@@ -88,8 +218,6 @@ def budget_view(filename: str):
     edit_mode = request.args.get("edit") == "1"
     ctx = get_common_context(snapshot_id, filename, edit_mode)
     ctx["active_tab"] = "budget"
-    ctx["sort_col"] = request.args.get("sort_col", "")
-    ctx["sort_dir"] = request.args.get("sort_dir", "")
     include_kinds = (
         request.args.getlist("include_kind") or request.args.getlist("kind") or []
     )
@@ -101,39 +229,35 @@ def budget_view(filename: str):
         or request.args.getlist("recurrence")
         or []
     )
-    budget = filters.apply_budget_filters(
-        ctx["budget"],
+    full_budget = ctx["budget"]
+    filtered = filters.apply_budget_filters(
+        full_budget,
         include_kinds=include_kinds or None,
         include_categories=include_categories or None,
         include_recurrence=include_recurrence or None,
     )
+    # Filters return the same entry dicts; map them back to their positions in
+    # the full list (by identity — two identical entries must stay distinct).
+    kept = {id(e) for e in filtered}
+    shown = [i for i, e in enumerate(full_budget) if id(e) in kept]
+    categories = _category_names()
     include_kinds_set = {k.lower() for k in include_kinds}
-    ctx["headers"], ctx["rows"] = tables._build_budget_table(
-        budget,
-        ctx["year"],
-        ctx["month"],
-        ctx["day"],
-        account_display_by_id=ctx["account_display_by_id"],
-    )
-    ctx["rows"] = drop_separator_rows(ctx["rows"])
-    full_budget = ctx["budget"]
-    budget_global = [full_budget.index(e) for e in budget] if budget else []
-    data_rows = ctx["rows"][: len(budget)] if ctx["rows"] else []
-    ctx["budget_edit_rows"] = [
-        (budget[i].get("kind", "income"), budget_global[i], data_rows[i])
-        for i in range(len(budget))
-    ]
-    engine = current_app.config["engine"]
-    with engine.connect() as conn:
-        categories = get_category_names(conn)
     ctx["include_kinds"] = [k for k in BUDGET_KINDS if k in include_kinds_set]
     ctx["include_categories"] = [c for c in categories if c in set(include_categories)]
     ctx["include_recurrence"] = [
         r for r in RECURRENCE_OPTIONS if r in set(include_recurrence)
     ]
     ctx["budget_kinds"] = BUDGET_KINDS
-    ctx["categories"] = categories
-    ctx["recurrence_options"] = RECURRENCE_OPTIONS
+    ctx.update(
+        _sheet_ctx(
+            full_budget,
+            shown,
+            categories,
+            ctx,
+            edit_mode,
+            filters_active=len(shown) < len(full_budget),
+        )
+    )
     return render_template("budget.html", **ctx)
 
 
@@ -354,14 +478,28 @@ def move(filename: str, index: int):
 
 @budget_bp.route("/<filename>/budget/reorder", methods=["POST"])
 def reorder(filename: str):
+    """Persist a drag reorder within one category band (``?category=``; empty
+    for Uncategorized). The posted ``order`` permutes the band's own rows; it is
+    mapped onto the band's slots in the full ordering, leaving other bands'
+    rows in place."""
     snapshot_id = validate_snapshot(filename)
+    category = request.args.get("category", "")
+    local_order = parse_order(request.form.get("order", ""))
+    if not local_order:
+        return "", 422
     engine = current_app.config["engine"]
-    return handle_reorder(
-        lambda conn, order: repo_budget.reorder_budget_entries(
-            conn, snapshot_id, order
-        ),
-        engine,
-    )
+    with engine.connect() as conn:
+        budget = load_finances_from_db(conn, snapshot_id).get("budget") or []
+        full = remap_group_order(
+            budget, lambda e: (e.get("category") or "") == category, local_order
+        )
+        if full is None:
+            return "", 422
+        try:
+            repo_budget.reorder_budget_entries(conn, snapshot_id, full)
+        except ValueError:
+            return "", 422
+    return "", 204
 
 
 @budget_bp.route("/<filename>/budget/add", methods=["POST"])
@@ -379,6 +517,15 @@ def add(filename: str):
     engine = current_app.config["engine"]
     try:
         with engine.connect() as conn:
+            # Added from a category band: file the stub under that band's
+            # category (a taxonomy category, or one the snapshot already uses).
+            category = request.form.get("category", "").strip()
+            if category:
+                budget = load_finances_from_db(conn, snapshot_id).get("budget") or []
+                if category in get_category_names(conn) or any(
+                    e.get("category") == category for e in budget
+                ):
+                    entry["category"] = category
             repo_budget.add_budget_entry(conn, snapshot_id, entry)
     except ValueError:
         return "", 422

@@ -1,14 +1,16 @@
 /**
- * Per-group column sorting for the grouped Holdings table.
+ * Per-band column sorting for grouped sheets (Holdings, Budget — see
+ * templates/partials/grouped_sheet.html).
  *
- * Each group is one <tbody data-group="..."> containing a heading, a header row
- * (`.holdings-group-header` with `.sortable-th` cells), the data rows (carrying
- * data-reorder-index), an add-row, and a subtotal. Clicking a header cell sorts
- * only that group's data rows (asc -> desc -> none), re-inserting them ahead of
- * the add-row/subtotal so the header and footer stay put. State is persisted in
- * the URL (sort_<group>_col / sort_<group>_dir) so it survives reloads and tbody
- * swaps. While a group is sorted its tbody gets `data-sorted`, which disables
- * that group's drag-reorder (see row-reorder.js).
+ * Each band is one <tbody class="sheet-group" data-group="..."> containing a
+ * heading, a header row (`.sheet-group-header` with `.sortable-th` cells), the
+ * data rows (carrying data-reorder-index), and an add-row. Clicking a header
+ * cell sorts only that band's data rows (asc -> desc -> none), re-inserting them
+ * ahead of the add-row so the heading and header stay put. A cell's
+ * `data-sort-value` (e.g. Budget's recurrence rank) overrides its text. State is
+ * persisted in the URL (sort_<group>_col / sort_<group>_dir) so it survives
+ * reloads and table swaps. While a band is sorted its tbody gets `data-sorted`,
+ * which disables that band's drag-reorder (see row-reorder.js).
  */
 (function () {
     "use strict";
@@ -32,7 +34,10 @@
 
     function rowSortText(row, key) {
         var col = parseInt((key || "").slice(1), 10);
-        return row.cells[col] && row.cells[col].textContent;
+        var cell = row.cells[col];
+        if (!cell) return undefined;
+        var v = cell.getAttribute("data-sort-value");
+        return v !== null ? v : cell.textContent;
     }
 
     function apply(groupTbody, key, dir) {
@@ -51,12 +56,11 @@
         } else {
             groupTbody.removeAttribute("data-sorted");
         }
-        // Re-insert the (sorted) data rows before the add-row / subtotal so the
-        // header and footer rows stay in place.
-        var anchor = groupTbody.querySelector(":scope > [data-add-row]")
-            || groupTbody.querySelector(":scope > .holdings-subtotal");
+        // Re-insert the (sorted) data rows before the add-row (or at the end)
+        // so the heading and header rows stay in place.
+        var anchor = groupTbody.querySelector(":scope > [data-add-row]");
         rows.forEach(function (r) { groupTbody.insertBefore(r, anchor); });
-        document.dispatchEvent(new CustomEvent("holdings:sorted"));
+        document.dispatchEvent(new CustomEvent("sheet:group-sorted"));
     }
 
     function updateIndicators(headerRow, key, dir) {
@@ -89,7 +93,7 @@
 
     function init(groupTbody) {
         var group = groupTbody.getAttribute("data-group");
-        var headerRow = groupTbody.querySelector(".holdings-group-header");
+        var headerRow = groupTbody.querySelector(".sheet-group-header");
         if (!headerRow) return;
 
         // Re-apply a persisted sort (fresh load, or after a tbody swap).
@@ -101,8 +105,8 @@
             updateIndicators(headerRow, saved.key, saved.dir);
         }
 
-        if (groupTbody._holdingsSort) return;
-        groupTbody._holdingsSort = true;
+        if (groupTbody._groupSort) return;
+        groupTbody._groupSort = true;
         headerRow.querySelectorAll(".sortable-th").forEach(function (th) {
             var key = th.getAttribute("data-sort-key");
             if (!key) return;
@@ -126,12 +130,12 @@
     }
 
     function scan() {
-        document.querySelectorAll("tbody[data-group]").forEach(init);
+        document.querySelectorAll("tbody.sheet-group").forEach(init);
     }
 
     document.addEventListener("DOMContentLoaded", scan);
     document.addEventListener("htmx:afterSwap", function () {
-        document.querySelectorAll("tbody[data-group]").forEach(function (t) { delete t._origOrder; });
+        document.querySelectorAll("tbody.sheet-group").forEach(function (t) { delete t._origOrder; });
         scan();
     });
     if (document.readyState !== "loading") scan();

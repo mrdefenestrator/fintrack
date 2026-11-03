@@ -6,138 +6,9 @@
 {% import "partials/sheet_filter_bar.html" as fb %}
 
 <style>
-    /* Per-group color coding (issue #4). Each type group gets one accent color,
-       declared as custom properties on its <tbody data-group>; every rule below
-       reads var(--accent)/--band/--label, so the whole palette lives here. It is
-       temperature-coded — cool = you own it (Cash emerald, Assets blue), warm =
-       you owe it (Credit Cards rose, Loans amber) — so the old asset/liability
-       read survives while each group also gains its own identity. (Data rows keep
-       their data-accent attribute for semantics; it no longer drives color.) */
-    #holdings-table .holdings-group[data-group="cash"]   { --accent: #34d399; --band: #ecfdf5; --band-dark: #022c22; --label: #065f46; --label-dark: #6ee7b7; }
-    #holdings-table .holdings-group[data-group="credit"] { --accent: #fb7185; --band: #fff1f2; --band-dark: #4c0519; --label: #9f1239; --label-dark: #fda4af; }
-    #holdings-table .holdings-group[data-group="loan"]   { --accent: #fbbf24; --band: #fffbeb; --band-dark: #451a03; --label: #92400e; --label-dark: #fcd34d; }
-    #holdings-table .holdings-group[data-group="asset"]  { --accent: #3b82f6; --band: #eff6ff; --band-dark: #172554; --label: #1e40af; --label-dark: #bfdbfe; }
-
-    /* Continuous left accent rail down the whole group (heading, column header,
-       data rows, add-row) so each group reads as one block. Drawn as an inset
-       box-shadow, not a border-collapse border: a collapsed border is painted in
-       the table's own layer, which WebKit renders over/beside the sticky heading/
-       header/total rows — so a rail on a data row scrolling behind them leaked out
-       in the gaps. A box-shadow paints with the cell (z-auto), so the z-7 sticky
-       chrome reliably covers it. The heading/header first-cell rules below repeat
-       the rail (a more specific box-shadow fully replaces this one). */
-    #holdings-table .holdings-group > tr > :first-child {
-        box-shadow: inset 4px 0 0 var(--accent);
-    }
-    #holdings-table .holdings-group > tr > td.cell-editing:first-child:has(.table-cell-input:focus),
-    #holdings-table .holdings-group > tr > td.cell-editing:first-child:has(.table-cell-select:focus) {
-        box-shadow: inset 4px 0 0 var(--accent), inset 0 0 0 2px rgb(59 130 246);
-    }
-    .dark #holdings-table .holdings-group > tr > td.cell-editing:first-child:has(.table-cell-input:focus),
-    .dark #holdings-table .holdings-group > tr > td.cell-editing:first-child:has(.table-cell-select:focus) {
-        box-shadow: inset 4px 0 0 var(--accent), inset 0 0 0 2px rgb(96 165 250);
-    }
-    /* Lift the data-row accent rail above the top scroll shadow (z-4) so the rail
-       stays crisp as rows scroll up under the pinned header, while the shadow
-       still falls over the rest of the data cells. Kept below the sticky group
-       chrome (z-7) and the actions column (z-6) so the accent still clips
-       correctly behind them (the box-shadow-not-border reason above). */
-    #holdings-table .holdings-group > tr[data-accent] > td:first-child {
-        position: relative;
-        z-index: 5;
-    }
-    /* Actions column sticks to the right edge; data scrolls behind it. A uniform
-       background (the actions column is chrome, not data) keeps scrolled cells
-       from showing through. The scroll shadow that reads as "data behind here"
-       is the frame's --right overlay, positioned just left of this column (see
-       data-sticky-actions + --sheet-right-h). */
-    #holdings-table .table-actions-cell {
-        position: sticky;
-        right: 0;
-        z-index: 6;
-        width: 2.75rem;
-        background: #ffffff;
-    }
-    .dark #holdings-table .table-actions-cell { background: #1f2937; }  /* gray-800 */
-    /* The sticky total row (z-7) must sit above the sticky actions column (z-6)
-       so data rows — including their action buttons — clip under it when they
-       scroll past, instead of poking above the total. */
-    #holdings-table .total-row { z-index: 7; }
-    /* The total row's actions cell is part of the total band, not the white
-       actions chrome — fill it with the band color (gray-100/gray-700) so the
-       total styling runs the full width instead of stopping at the edit column. */
-    #holdings-table .total-row .table-actions-cell { z-index: 7; background: #f3f4f6; }
-    .dark #holdings-table .total-row .table-actions-cell { background: #374151; }
-    /* First column (Institution / group label): the 4px asset/liability accent
-       eats into the normal cell padding, so give the leading cells a touch more
-       left padding — content then clears the accent by the same ~6px other
-       columns clear their divider. */
-    #holdings-table th:first-child,
-    #holdings-table td:first-child { padding-left: 0.625rem; }
-    /* Total-row divider box-shadows (footer grid matching the header) are shared
-       in base.html: `.table-scroll-container tr.total-row td:not(:last-child)`. */
-    /* Sticky group section headers: each group's heading band + column header
-       stick to the top while its rows scroll, then the next group's header
-       replaces them. Sticky is confined to the <tbody>, which is why each group
-       is a single tbody. Rows are 1.75rem tall, so the column header sits just
-       below the heading band. z-7 keeps them above data + the sticky actions
-       column (z-6); the header rule's higher specificity also wins the corner
-       actions cell. */
-    #holdings-table .holdings-group-heading > td {
-        position: sticky;
-        top: 0;
-        z-index: 7;
-        /* Tinted band + a continuous accent border on BOTH the top and bottom
-           edge of the title row (issue #4). Applied to every cell so the two
-           lines run the full row width. Drawn as box-shadows, not border-collapse
-           borders: a collapsed border belongs to the table's paint layer and
-           scrolls away / shifts when the row is sticky (QA #5); a box-shadow is
-           painted with the sticky cell and stays put. */
-        background: var(--band);
-        box-shadow: inset 0 1px 0 var(--accent), inset 0 -1px 0 var(--accent);
-    }
-    .dark #holdings-table .holdings-group-heading > td { background: var(--band-dark); }
-    /* First cell also carries the left rail (composed with the top/bottom accent
-       borders) and the group-colored label text. */
-    #holdings-table .holdings-group-heading > td:first-child {
-        color: var(--label);
-        box-shadow: inset 4px 0 0 var(--accent), inset 0 1px 0 var(--accent), inset 0 -1px 0 var(--accent);
-    }
-    .dark #holdings-table .holdings-group-heading > td:first-child { color: var(--label-dark); }
-    #holdings-table .holdings-group-header > th {
-        position: sticky;
-        top: var(--sheet-heading-h, 1.75rem);
-        z-index: 7;
-        background: #f3f4f6;   /* gray-100 */
-        /* Underline (gray-300, 2px) drawn as box-shadow — see above. */
-        box-shadow: inset 0 -2px 0 #d1d5db;
-    }
-    .dark #holdings-table .holdings-group-header > th {
-        background: #374151;   /* gray-700 */
-        box-shadow: inset 0 -2px 0 #4b5563;   /* gray-600 */
-    }
-    /* Inter-column dividers (gray-200, 1px) are border-collapse borders too, so
-       they scroll away when the header sticks — redraw them as a box-shadow on
-       every column except the last (matches the header's `last:border-r-0`),
-       combined with the underline above. */
-    #holdings-table .holdings-group-header > th:not(:last-child) {
-        box-shadow: inset -1px 0 0 #e5e7eb, inset 0 -2px 0 #d1d5db;
-    }
-    .dark #holdings-table .holdings-group-header > th:not(:last-child) {
-        box-shadow: inset -1px 0 0 #4b5563, inset 0 -2px 0 #4b5563;
-    }
-    /* The column-header row joins the accent rail too, keeping it continuous
-       through the group; compose it with the divider + underline above. (Ordered
-       after the :not(:last-child) rule — equal specificity — so it wins for the
-       first cell.) */
-    #holdings-table .holdings-group-header > th:first-child {
-        box-shadow: inset 4px 0 0 var(--accent), inset -1px 0 0 #e5e7eb, inset 0 -2px 0 #d1d5db;
-    }
-    .dark #holdings-table .holdings-group-header > th:first-child {
-        box-shadow: inset 4px 0 0 var(--accent), inset -1px 0 0 #4b5563, inset 0 -2px 0 #4b5563;
-    }
-    /* Two-line master footer (Liquid `total-upper` pinned above Net worth) is
-       shared in base.html: `.table-scroll-container tr.total-row.total-upper`. */
+    /* Band chrome (tone palette, accent rail, sticky heading/header, sticky
+       actions column, footer) is shared with Budget: partials/grouped_sheet.css.
+       Only the Holdings-specific price-refresh controls are styled here. */
 
     /* On-demand price refresh. On a hover pointer the per-symbol ↻ hides until
        you hover its cell (or focus it), so the sheet stays clean; on touch it
@@ -189,12 +60,13 @@
 </form>
 
 <div class="table-scroll-container rounded-b-lg border-l border-b border-r border-gray-300 dark:border-gray-600 shadow-sm" data-sheet-scroll{% if edit_mode %} data-sticky-actions{% endif %}>
-{# One table, four type-based groups. The first four columns (Institution, Type,
-   Name, Amount) are shared; each group appends its own trailing columns as real
-   <td> cells, giving a ragged right edge with native table auto-sizing. Headers
-   are per-group rows inside the tbody, so there is no global thead. The sticky
-   actions column (drag + delete) renders only in edit mode. #}
-<table id="holdings-table" class="editable-table w-full text-sm border-collapse bg-white dark:bg-gray-800" data-cell-nav="holdings-table" style="white-space:nowrap">
+{# One grouped sheet (partials/grouped_sheet.html), four type-based groups. The
+   first four columns (Institution, Type, Name, Amount) are shared; each group
+   appends its own trailing columns as real <td> cells, giving a ragged right
+   edge with native table auto-sizing. Headers are per-group rows inside the
+   tbody, so there is no global thead. The sticky actions column (drag + delete)
+   renders only in edit mode. #}
+<table id="holdings-table" class="grouped-sheet editable-table w-full text-sm border-collapse bg-white dark:bg-gray-800" data-cell-nav="holdings-table" style="white-space:nowrap">
     {# The colgroup lives inside the swapped partial so an innerHTML swap of the
        table (edits, price refresh) re-renders it instead of dropping it — without
        it the fixed leading-column widths vanish and the whole table reflows. #}

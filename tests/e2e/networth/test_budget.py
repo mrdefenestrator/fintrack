@@ -93,8 +93,8 @@ def test_budget_click_to_edit(page, flask_server):
 
     # Click on the Salary description cell
     salary_row = page.locator("#budget-table tr:has-text('Salary')").first
-    # Description is the third cell (index 2)
-    desc_cell = salary_row.locator("td").nth(2)
+    # Description is the second cell (index 1)
+    desc_cell = salary_row.locator("td").nth(1)
     desc_cell.click()
 
     # Should show an input
@@ -109,7 +109,7 @@ def test_budget_update_cell(page, flask_server):
     enable_edit_mode(page)
 
     salary_row = page.locator("#budget-table tr:has-text('Salary')").first
-    desc_cell = salary_row.locator("td").nth(2)
+    desc_cell = salary_row.locator("td").nth(1)
     desc_cell.click()
 
     input_el = page.locator("#budget-table input[name='value']")
@@ -248,7 +248,7 @@ def test_budget_sort(page, flask_server):
         return [
             t.strip()
             for t in income.locator(
-                "tr[data-reorder-index] td:nth-child(3)"
+                "tr[data-reorder-index] td:nth-child(2)"
             ).all_inner_texts()
         ]
 
@@ -256,7 +256,7 @@ def test_budget_sort(page, flask_server):
     income.locator(".sortable-th", has_text="Description").click()
     assert descriptions() == ["Freelance", "Salary", "Tax Refund"]
     assert income.locator(".sort-indicator").get_by_text("↑").count() == 1
-    assert "sort_cat-income_col=c2" in page.url
+    assert "sort_cat-income_col=c1" in page.url
 
 
 def test_budget_monthly_and_annual_columns_visible(page, flask_server):
@@ -274,9 +274,9 @@ def test_budget_when_one_time_date_picker(page, flask_server):
     page.goto(f"{flask_server}/s/test_finances/budget")
     enable_edit_mode(page)
 
-    # Find the Tax Refund row (one_time) and click its When cell (col index 5)
+    # Find the Tax Refund row (one_time) and click its When cell (col index 4)
     refund_row = page.locator("#budget-table tr:has-text('Tax Refund')").first
-    when_cell = refund_row.locator("td").nth(5)
+    when_cell = refund_row.locator("td").nth(4)
     when_cell.click()
 
     # Should show a text input for the date value
@@ -291,7 +291,7 @@ def test_budget_when_one_time_sets_date(page, flask_server):
     enable_edit_mode(page)
 
     refund_row = page.locator("#budget-table tr:has-text('Tax Refund')").first
-    when_cell = refund_row.locator("td").nth(5)
+    when_cell = refund_row.locator("td").nth(4)
     when_cell.click()
 
     date_input = page.locator("#budget-table input[name='value']")
@@ -321,7 +321,7 @@ def test_budget_when_monthly_day_edit(page, flask_server):
 
     # Find the Salary row (monthly, dayOfMonth=1) and click its When cell
     salary_row = page.locator("#budget-table tr:has-text('Salary')").first
-    when_cell = salary_row.locator("td").nth(5)
+    when_cell = salary_row.locator("td").nth(4)
     when_cell.click()
 
     # Should show compound editor with dayOfMonth input (no continuous for income)
@@ -356,7 +356,7 @@ def test_budget_when_continuous_toggle_off(page, flask_server):
     groceries_row = page.locator(
         "#budget-table tr[id^='budget-row-']:has-text('Groceries')"
     ).first
-    when_cell = groceries_row.locator("td").nth(5)
+    when_cell = groceries_row.locator("td").nth(4)
     when_cell.click()
 
     # Should show compound editor with checkbox checked
@@ -398,7 +398,7 @@ def test_budget_when_continuous_toggle_on(page, flask_server):
 
     # Find the Rent row (monthly expense, dayOfMonth=1, no continuous) and click its When cell
     rent_row = page.locator("#budget-row-3")
-    when_cell = rent_row.locator("td").nth(5)
+    when_cell = rent_row.locator("td").nth(4)
     when_cell.click()
 
     # Check continuous
@@ -423,7 +423,7 @@ def test_budget_when_annual_compound_edit(page, flask_server):
 
     # Find the Car Insurance row (annual, month=3, dayOfMonth=15) and click its When cell
     row = page.locator("#budget-table tr:has-text('Car Insurance')").first
-    when_cell = row.locator("td").nth(5)
+    when_cell = row.locator("td").nth(4)
     when_cell.click()
 
     # Should show compound editor with month select and day input

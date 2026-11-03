@@ -12,20 +12,29 @@
    A band (or a single row) picks a tone; every rule below reads var(--accent) /
    --band / --label, so the whole palette lives here. Holdings is temperature-
    coded (cool = owned: emerald cash, blue assets; warm = owed: rose cards, amber
-   loans); Budget uses emerald for income and rose for expenses. */
+   loans); Budget gives each category its own hue, cycling the whole palette
+   (Uncategorized is slate). */
 .grouped-sheet [data-tone="emerald"] { --accent: #34d399; --band: #ecfdf5; --band-dark: #022c22; --label: #065f46; --label-dark: #6ee7b7; }
 .grouped-sheet [data-tone="rose"]    { --accent: #fb7185; --band: #fff1f2; --band-dark: #4c0519; --label: #9f1239; --label-dark: #fda4af; }
 .grouped-sheet [data-tone="amber"]   { --accent: #fbbf24; --band: #fffbeb; --band-dark: #451a03; --label: #92400e; --label-dark: #fcd34d; }
 .grouped-sheet [data-tone="blue"]    { --accent: #3b82f6; --band: #eff6ff; --band-dark: #172554; --label: #1e40af; --label-dark: #bfdbfe; }
 .grouped-sheet [data-tone="slate"]   { --accent: #94a3b8; --band: #f8fafc; --band-dark: #1e293b; --label: #334155; --label-dark: #cbd5e1; }
+/* Further hues for sheets with many bands (Budget cycles these per category). */
+.grouped-sheet [data-tone="violet"]  { --accent: #a78bfa; --band: #f5f3ff; --band-dark: #2e1065; --label: #5b21b6; --label-dark: #c4b5fd; }
+.grouped-sheet [data-tone="cyan"]    { --accent: #22d3ee; --band: #ecfeff; --band-dark: #083344; --label: #155e75; --label-dark: #67e8f9; }
+.grouped-sheet [data-tone="orange"]  { --accent: #fb923c; --band: #fff7ed; --band-dark: #431407; --label: #9a3412; --label-dark: #fdba74; }
+.grouped-sheet [data-tone="indigo"]  { --accent: #818cf8; --band: #eef2ff; --band-dark: #1e1b4b; --label: #3730a3; --label-dark: #a5b4fc; }
+.grouped-sheet [data-tone="lime"]    { --accent: #a3e635; --band: #f7fee7; --band-dark: #1a2e05; --label: #3f6212; --label-dark: #bef264; }
+.grouped-sheet [data-tone="fuchsia"] { --accent: #e879f9; --band: #fdf4ff; --band-dark: #4a044e; --label: #86198f; --label-dark: #f0abfc; }
+.grouped-sheet [data-tone="teal"]    { --accent: #2dd4bf; --band: #f0fdfa; --band-dark: #042f2e; --label: #115e59; --label-dark: #5eead4; }
+.grouped-sheet [data-tone="pink"]    { --accent: #f472b6; --band: #fdf2f8; --band-dark: #500724; --label: #9d174d; --label-dark: #f9a8d4; }
 
 /* ---- Accent rail --------------------------------------------------------------
    Continuous left rail down the whole band (heading, column header, data rows,
    add row) so each band reads as one block. A box-shadow, not a border: it
    paints with the cell (z-auto), so the z-7 sticky chrome reliably covers it.
    The heading/header first-cell rules below repeat the rail (a more specific
-   box-shadow fully replaces this one). A row may carry its own data-tone to
-   recolor just its rail (Budget: an income row inside a mixed band). */
+   box-shadow fully replaces this one). */
 .grouped-sheet .sheet-group > tr > :first-child {
     box-shadow: inset 4px 0 0 var(--accent);
 }

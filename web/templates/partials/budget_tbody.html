@@ -6,7 +6,6 @@
 {# The actions column (drag + delete) exists only in edit mode. #}
 {% set span = max_cols + 1 if edit_mode else max_cols %}
 <colgroup>
-    <col style="width: 5.5rem">
     <col style="width: 10rem">
     <col>
     <col style="width: 7rem">
@@ -33,7 +32,7 @@
     {% include "partials/budget_row.html" %}
     {% endfor %}
     {% if edit_mode %}
-    {% call gs.add_row(span) %}{{ add_buttons(group.category, 'income' if group.tone == 'emerald' else 'expense') }}{% endcall %}
+    {% call gs.add_row(span) %}{{ add_buttons(group.category, group.first_kind) }}{% endcall %}
     {% endif %}
 </tbody>
 {% else %}

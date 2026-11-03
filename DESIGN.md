@@ -618,18 +618,24 @@ Budget is a grouped sheet with **one band per category** (issue #51). Bands
 follow the category taxonomy's `sort_order`; categories an entry uses but the
 taxonomy lacks follow alphabetically, and entries with no category close the
 sheet as **Uncategorized**. Every band shares one column set —
-Kind·Category·Description·Amount·Recurrence·When·Remaining·Monthly·Annual·Auto
-account — so there is no ragged edge; Category stays a column (as Holdings keeps
-Type) because editing it is how an entry moves between bands.
+Category·Description·Amount·Recurrence·When·Remaining·Monthly·Annual·Auto
+account — so there is no ragged edge. Category stays a column, always shown (as
+Holdings keeps Type), because editing it is how an entry moves between bands.
+There is **no Kind column**: kind isn't editable on the sheet (the add buttons
+set it) and the amount's sign already shows it (expenses are negative). The
+CLI's `budget` table keeps its Kind column.
 
 - **Totals.** Each band heading carries its signed (income +, expense −)
   Remaining / Monthly / Annual subtotals under those columns; the pinned footer
   is a single **Net** row over every shown entry.
-- **Tone by kind.** A band is emerald when all its entries are income, rose when
-  all are expenses, slate when mixed; each row's rail keeps its own kind's tone,
-  so an income row in a mixed band still reads as income.
+- **Color by category.** Each category gets its own band hue, cycling the
+  shared 12-hue palette (`_CATEGORY_TONES`) in category order — the taxonomy,
+  then other used categories — so neighbouring bands differ. Colors index the
+  full category list, so a category keeps its hue while filters hide its
+  neighbours; reordering or adding categories can shift them. Uncategorized is
+  slate. Rows carry no tone of their own: the rail follows the band.
 - **Add / reorder per band.** A band's add row offers "+ Add expense" and
-  "+ Add income" (its dominant kind first) and files the stub under that band's
+  "+ Add income" (its majority kind first) and files the stub under that band's
   category. Drag-reorder is per band (`/budget/reorder?category=…`); rows keep
   their full-list position as the edit/delete handle. Kind / Category /
   Recurrence filters work as before, and lock reordering while active.

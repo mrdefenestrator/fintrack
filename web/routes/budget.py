@@ -5,9 +5,11 @@ table split into one band per **category**, in the category taxonomy's order
 (entries whose category isn't in the taxonomy follow alphabetically; entries
 with none close the table as "Uncategorized"). Each band's heading carries its
 Remaining / Monthly / Annual subtotals (signed: income positive, expenses
-negative); a pinned footer shows the Net across every shown entry. A band's
-tone follows its entries' kind — emerald for all-income, rose for all-expense,
-slate when mixed — and each row's rail keeps its own kind's color.
+negative); a pinned footer shows the Net across every shown entry. Each
+category gets its own band color, cycling a palette in category order so
+neighbouring bands differ (Uncategorized is slate). There is no Kind column:
+an entry's kind shows in its sign (expenses are negative), and it is set by
+the band's "+ Add expense" / "+ Add income" buttons.
 
 Rows are addressed by their position in the full, sort-ordered budget list
 (`index`), so edit/delete URLs are unaffected by grouping. Drag-reorder is per
@@ -43,9 +45,9 @@ budget_bp = Blueprint("budget", __name__, url_prefix="/s")
 BUDGET_KINDS = calculations.BUDGET_KINDS
 RECURRENCE_OPTIONS = calculations.RECURRENCE_OPTIONS
 
-# Column layout (key, header, right_align, span), in tables.BUDGET_HEADERS order.
+# Column layout (key, header, right_align, span): tables.BUDGET_HEADERS minus
+# Kind (the first cell of budget_entry_row, dropped below).
 _COLS = [
-    ("kind", "Kind", False, 1),
     ("category", "Category", False, 1),
     ("description", "Description", False, 1),
     ("amount", "Amount", True, 1),
@@ -57,7 +59,6 @@ _COLS = [
     ("auto_account", "Auto account", False, 1),
 ]
 _TOOLTIPS = {
-    "kind": "Income or expense",
     "category": "Budget category",
     "description": "Description of this budget entry",
     "amount": "Per-occurrence amount",
@@ -70,11 +71,27 @@ _TOOLTIPS = {
 }
 _COLUMN_META = group_columns(_COLS, _TOOLTIPS)
 _NCOLS = len(_COLS)
-# The heading label spans Kind..When; the Remaining/Monthly/Annual subtotals sit
-# under their columns.
-_LABEL_SPAN = 6
-_TOTAL_POS = [6, 7, 8]
-_KIND_TONES = {"income": "emerald", "expense": "rose"}
+# The heading label spans Category..When; the Remaining/Monthly/Annual subtotals
+# sit under their columns.
+_LABEL_SPAN = 5
+_TOTAL_POS = [5, 6, 7]
+# Band colors (partials/grouped_sheet.css palette), cycled in category order.
+# Ordered so consecutive hues contrast, including the wrap from last to first.
+_CATEGORY_TONES = [
+    "blue",
+    "amber",
+    "violet",
+    "emerald",
+    "rose",
+    "cyan",
+    "orange",
+    "indigo",
+    "lime",
+    "fuchsia",
+    "teal",
+    "pink",
+]
+_UNCATEGORIZED_TONE = "slate"
 _UNCATEGORIZED = "Uncategorized"
 
 
@@ -99,7 +116,6 @@ def _sheet_ctx(
     by_category: dict[str, list[dict]] = {}
     for i in shown:
         e = budget[i]
-        kind = e.get("kind", "income")
         cells, figures = tables.budget_entry_row(
             e,
             ctx["year"],
@@ -110,24 +126,31 @@ def _sheet_ctx(
         by_category.setdefault(e.get("category") or "", []).append(
             {
                 "index": i,
-                "kind": kind,
-                "tone": _KIND_TONES.get(kind, "slate"),
-                "cells": cells,
+                "kind": e.get("kind", "income"),
+                "cells": cells[1:],  # drop Kind
                 "figures": figures,
             }
         )
 
+    # Every category in band order: the taxonomy, then any others the budget
+    # uses. Colors index into this full list (not just the shown bands), so a
+    # category keeps its color while filters hide its neighbours.
     known = set(categories)
-    order = (
-        [c for c in categories if c in by_category]
-        + sorted(c for c in by_category if c and c not in known)
-        + ([""] if "" in by_category else [])
+    all_categories = categories + sorted(
+        {e.get("category") for e in budget if e.get("category")} - known
+    )
+    tone_of = {
+        c: _CATEGORY_TONES[i % len(_CATEGORY_TONES)]
+        for i, c in enumerate(all_categories)
+    }
+    order = [c for c in all_categories if c in by_category] + (
+        [""] if "" in by_category else []
     )
     keys: set[str] = set()
     groups = []
     for category in order:
         rows = by_category[category]
-        tones = {r["tone"] for r in rows}
+        incomes = sum(r["kind"] == "income" for r in rows)
         key = _band_key(category)
         while key in keys:  # two categories that slugify alike
             key += "-"
@@ -137,7 +160,9 @@ def _sheet_ctx(
                 "key": key,
                 "category": category,
                 "label": category or _UNCATEGORIZED,
-                "tone": tones.pop() if len(tones) == 1 else "slate",
+                "tone": tone_of.get(category, _UNCATEGORIZED_TONE),
+                # The add row leads with the band's majority kind.
+                "first_kind": "income" if incomes * 2 > len(rows) else "expense",
                 "rows": rows,
                 "totals": [
                     fmt_money(sum((r["figures"][j] for r in rows), Decimal(0)))

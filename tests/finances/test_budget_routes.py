@@ -71,7 +71,7 @@ def _table(body: str) -> str:
 
 def _band_labels(body: str) -> list[str]:
     return re.findall(
-        r'<tr class="sheet-group-heading">\s*<td colspan="6"[^>]*>([^<]+)</td>', body
+        r'<tr class="sheet-group-heading">\s*<td colspan="5"[^>]*>([^<]+)</td>', body
     )
 
 
@@ -97,13 +97,43 @@ def test_band_heading_subtotals_and_net_footer(client):
     assert "$1,640.00" in footer
 
 
-def test_band_tone_by_kind_mixed_is_slate(client):
+def test_band_color_per_category_in_taxonomy_order(client):
+    """Each category gets its own hue, cycled in category order (taxonomy
+    first, then other used categories); Uncategorized is slate. Rows carry no
+    tone of their own, so their rails follow the band."""
     body = client.get("/s/home/budget").get_data(as_text=True)
-    assert 'data-group="cat-income" data-tone="emerald"' in body
-    assert 'data-group="cat-groceries" data-tone="rose"' in body
-    assert 'data-group="cat-housing" data-tone="slate"' in body
-    # Each row's own rail keeps its kind color inside the mixed band.
-    assert 'id="budget-row-5" data-kind="income" data-tone="emerald"' in body
+    assert 'data-group="cat-income" data-tone="blue"' in body
+    assert 'data-group="cat-housing" data-tone="amber"' in body
+    assert 'data-group="cat-groceries" data-tone="violet"' in body
+    assert 'data-group="cat-pets" data-tone="emerald"' in body
+    assert 'data-group="uncategorized" data-tone="slate"' in body
+    assert 'id="budget-row-5" data-kind="income" data-reorder-index' in body
+
+
+def test_band_color_survives_filtering(client):
+    """A category keeps its hue when filters hide the bands before it."""
+    body = client.get("/s/home/budget?include=Groceries").get_data(as_text=True)
+    assert 'data-group="cat-groceries" data-tone="violet"' in body
+
+
+def test_no_kind_column(client):
+    """Kind is shown by the amount's sign; there is no Kind column."""
+    body = client.get("/s/home/budget?edit=1").get_data(as_text=True)
+    header = body.split('class="sheet-group-header')[1].split("</tr>")[0]
+    assert ">Kind " not in header
+    assert ">Category " in header
+    view = client.get("/s/home/budget").get_data(as_text=True)
+    row = view.split('id="budget-row-0"')[1].split("</tr>")[0]
+    assert row.count("<td") == 9  # Category … Auto account
+
+
+def test_add_row_leads_with_band_majority_kind(client):
+    body = client.get("/s/home/budget?edit=1").get_data(as_text=True)
+    income = body.split('data-group="cat-income"')[1].split("</tbody>")[0]
+    housing = body.split('data-group="cat-housing"')[1].split("</tbody>")[0]
+    add_income, add_expense = "+ Add income", "+ Add expense"
+    assert income.index(add_income) < income.index(add_expense)
+    assert housing.index(add_expense) < housing.index(add_income)
 
 
 def test_rows_keep_full_list_index_and_local_reorder_index(client):

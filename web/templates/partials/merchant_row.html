@@ -6,7 +6,7 @@
 <tr id="{{ row_id }}" class="{{ sheet.row_class() }}">
     <td class="{{ sheet.cell_class('', 'font-medium') }}">
         <a class="text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
-           href="/s/{{ filename }}/transactions?search={{ m.merchant_name | urlencode }}">{{ m.merchant_name }}</a>
+           href="/s/{{ filename }}/transactions?search={{ m.merchant_name | urlencode }}">{{ sheet.clip(m.merchant_name, '18rem') }}</a>
     </td>
     {% if edit_mode and editing_field is defined and editing_field == 'category' %}
         {{ select_edit('category', m.category, categories,

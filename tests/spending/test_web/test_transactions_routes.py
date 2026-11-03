@@ -312,3 +312,33 @@ def test_budget_cell_uses_category_style_editor(client, seeded, db_engine):
     # Opposite-kind entries come last, in their own reversal group.
     assert 'label="Clawback · other income"' in editor
     assert editor.index("Groceries") < editor.index("Salary")
+
+
+# ---- long-text clipping (issue #86) ------------------------------------------
+
+
+@pytest.mark.parametrize("edit", [False, True])
+def test_row_clips_merchant_and_description(client, seeded, edit):
+    """Merchant and Description render through sheet.clip: one ellipsized line
+    carrying the full value in the DOM and in a hover title, in view and edit
+    mode alike (the edit-mode Merchant stays a click-to-edit cell)."""
+    _, txn_id = seeded
+    qs = "?edit=1" if edit else ""
+    body = client.get(f"/s/ledger/transactions/{txn_id}/row{qs}").get_data(as_text=True)
+    assert body.count("data-clip") == 2
+    assert 'title="WHOLE FOODS">WHOLE FOODS</span>' in body
+    assert 'title="WHOLE FOODS #1234">WHOLE FOODS #1234</span>' in body
+    if edit:
+        assert "/cell?field=merchant_name" in body
+
+
+def test_clip_escapes_value(client, seeded):
+    """The clipped value is escaped in both the title and the text."""
+    _, txn_id = seeded
+    client.post(
+        f"/s/ledger/transactions/{txn_id}/update",
+        data={"field": "merchant_name", "value": 'A "B" <C>'},
+    )
+    body = client.get(f"/s/ledger/transactions/{txn_id}/row").get_data(as_text=True)
+    assert 'title="A &#34;B&#34; &lt;C&gt;">A &#34;B&#34; &lt;C&gt;</span>' in body
+    assert "<C>" not in body

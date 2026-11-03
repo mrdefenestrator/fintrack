@@ -25,6 +25,16 @@ px-1.5 py-px border-r border-gray-100 dark:border-gray-700 last:border-r-0{% if 
 border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50{% if accent %} border-l-4 {{ accent }}{% endif %}
 {%- endmacro -%}
 
+{# Long free text (merchant names, statement descriptions — issue #86): one
+   line, ellipsized at `max` (a CSS length). The full text stays in the DOM, so
+   search, sorting (textContent) and copy see all of it; `title` reveals it on
+   hover, and a tap/click toggles `.is-expanded` to wrap it in place (base.html,
+   skipped inside links and click-to-edit cells, whose editor shows the full
+   value). Styles live in base.html (`.cell-clip`). #}
+{%- macro clip(value, max='16rem') -%}
+<span class="cell-clip" data-clip style="max-width:{{ max }}" title="{{ value }}">{{ value }}</span>
+{%- endmacro -%}
+
 {# Negative-amount colour token (empty string when not negative). #}
 {%- macro neg(is_negative) -%}
 {% if is_negative %}text-red-600 dark:text-red-400{% endif %}

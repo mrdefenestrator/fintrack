@@ -353,3 +353,57 @@ def test_transactions_notes_inline_edit_saves(page, confirmed_server):
         note_input.press("Enter")
     page.wait_for_selector("table tbody tr td:has-text('reimbursable')")
     assert "reimbursable" in page.locator("table tbody").inner_text()
+
+
+# ---------------------------------------------------------------------------
+# Long-text clipping (issue #86)
+# ---------------------------------------------------------------------------
+
+_LONG = "POS PURCHASE " + "VERY LONG STATEMENT DESCRIPTION " * 6
+
+
+def test_long_description_clips_and_tap_expands(page, confirmed_server):
+    """A long Description is one ellipsized line with the full text in its
+    title; tapping it wraps the full value, tapping again collapses it."""
+    page.goto(f"{confirmed_server}/s/ledger/transactions?year=2026&month=4")
+    clip = page.locator("tr[id^='txn-row-'] td:nth-child(3) [data-clip]").first
+    # Seeded descriptions are short; lengthen one in place to exercise the clip.
+    clip.evaluate("(el, t) => { el.textContent = t; el.title = t; }", _LONG)
+
+    def metrics():
+        return clip.evaluate(
+            "el => ({clipped: el.scrollWidth > el.clientWidth,"
+            " h: el.getBoundingClientRect().height,"
+            " expanded: el.classList.contains('is-expanded')})"
+        )
+
+    before = metrics()
+    assert before["clipped"] and not before["expanded"]
+    assert clip.get_attribute("title") == _LONG
+
+    clip.click()
+    after = metrics()
+    assert after["expanded"] and not after["clipped"]
+    assert after["h"] > before["h"]
+
+    clip.click()
+    assert metrics() == before
+
+
+def test_short_value_tap_does_nothing(page, confirmed_server):
+    """A value that fits is left alone by the tap toggle."""
+    page.goto(f"{confirmed_server}/s/ledger/transactions?year=2026&month=4")
+    clip = page.locator("tr[id^='txn-row-'] td:nth-child(3) [data-clip]").first
+    clip.click()
+    assert "is-expanded" not in (clip.get_attribute("class") or "")
+
+
+def test_edit_mode_merchant_click_still_opens_editor(page, confirmed_server):
+    """In edit mode the clipped Merchant stays click-to-edit (the toggle skips
+    hx-get cells); the editor input holds the full value."""
+    page.goto(f"{confirmed_server}/s/ledger/transactions?year=2026&month=4&edit=1")
+    row = page.locator("tr[id^='txn-row-']").first
+    row.locator("td:nth-child(2) [data-clip]").click()
+    inp = row.locator("input.table-cell-input")
+    inp.wait_for()
+    assert inp.input_value()

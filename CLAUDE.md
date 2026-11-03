@@ -146,11 +146,16 @@ degrades to a warning without it).
   are both first-class; keep them at parity.
 - **Grouped sheets.** Holdings and Budget (one band per category, colored per
   category, with Remaining/Monthly/Annual subtotals and a Net footer; no Kind
-  column — the sign shows it) share one grouped-sheet
-  layer — `partials/grouped_sheet.html` macros, `partials/grouped_sheet.css`
-  (inlined in `base.html`, not a static file — the preview Lambda drops
-  parallel requests), `static/js/group-sort.js`, `web/routes/grouped_sheet.py`. Build new banded
-  sheets on it rather than copying a page's markup/CSS. See DESIGN.md
+  column — the sign shows it) share one grouped-sheet layer —
+  `partials/grouped_sheet.html` macros, `partials/grouped_sheet.css` (inlined
+  in `base.html`, not a static file — the preview Lambda drops parallel
+  requests), `static/js/group-sort.js`, `web/routes/grouped_sheet.py`. Build new
+  banded sheets on it rather than copying a page's markup/CSS. Two invariants:
+  **every row spans the full grid** — band headings included, which close with
+  their own sticky actions cell in edit mode, or heading content paints over
+  the pinned actions column (`test_every_row_spans_the_full_grid`); and row
+  templates map cells to fields **by column key, never position**, so adding or
+  dropping a column can't shift which field a click edits. See DESIGN.md
   "Holdings sheet" / "Budget sheet".
 - Core product goals the UI serves: current liquid holdings, net worth,
   budgeting, spending tracking, deviation from budget, and (eventually)
@@ -183,5 +188,40 @@ degrades to a warning without it).
   interactive e2e tests fail with "… intercepts pointer events" — an
   environment artifact, not an app bug. Check with
   `curl -sS -o /dev/null -w '%{http_code}' https://cdn.tailwindcss.com`. To run
-  e2e anyway, serve a locally compiled Tailwind (`npx tailwindcss@3`) and Alpine
-  from npm via `page.route`.
+  e2e anyway, serve a locally compiled Tailwind (`npx tailwindcss@3` with a
+  content glob over `web/**/*.{html,js,py}`) and Alpine from npm
+  (`alpinejs/dist/cdn.min.js`) via `page.route` — e.g. an autouse fixture in a
+  local pytest plugin loaded with `-p`, kept out of the repo.
+- **The PR preview drops parallel requests.** The preview Lambda runs at
+  reserved concurrency 1 and answers concurrent requests with 429 instead of
+  queueing; browsers don't retry subresources. Symptoms are *intermittent*
+  missing styles or dead behavior (sorting, inline edit, scroll shadows) on the
+  preview only — worse on mobile Safari, and content blockers shift it. Reload
+  before debugging app code: if the breakage moves around, it's this. So never
+  put styling a sheet depends on in a new static file (inline it from a
+  template, like `partials/grouped_sheet.css`), and reproduce locally by having
+  Playwright fulfil `**/static/**` with status 429.
+- **Use the dense seed for visual checks.** The e2e fixture is too small to
+  scroll. `FINTRACK_DB=x.db uv run python scripts/seed_example.py` seeds
+  **Dense Household** (overflows every sheet; what the preview shows), plus
+  Sparse and Empty households.
+- **Verify UI refactors by screenshot diff against `main`.** Check out `main`
+  in a `git worktree`, serve it and the branch side by side on copies of the
+  same seeded DB, and screenshot each sheet at top / mid / bottom vertical
+  scroll and nudged off the left and right edges (narrow the viewport until it
+  scrolls sideways), in view and edit mode (and dark). Pixel-diff the pairs —
+  identical means no visual regression.
+- Servers started by hand with `FLASK_DEBUG=0` (as e2e does) cache Jinja
+  templates — restart after editing a template. `mise run serve` runs in debug
+  and auto-reloads.
+- On grouped sheets, `tr:has-text('Groceries')` also matches the band heading
+  row (its label is the category). Target data rows with
+  `tr[data-reorder-index]` or the row's `id` (`budget-row-N`, `holding-row-…`).
+- Cloud sandbox only: the project's pinned Playwright may expect a different
+  Chromium build than the one preinstalled under `/opt/pw-browsers`. Point
+  `PLAYWRIGHT_BROWSERS_PATH` at a scratch dir containing the path it asks for
+  (e.g. `chromium_headless_shell-<ver>/chrome-linux/headless_shell`) symlinked
+  to the installed `chrome-headless-shell` binary; don't run
+  `playwright install`.
+- Find stale dev servers with `pgrep -f "python -m web[.]app"` — a plain
+  `pkill -f web.app` also matches (and kills) the shell running it.

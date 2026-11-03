@@ -597,6 +597,20 @@ The actions column (drag + delete) renders only in edit mode. Edits swap the
 table's whole body (colgroup included), so a row whose edit changes its band
 simply re-renders in the new band.
 
+Two invariants keep the grid sound:
+
+- **Every row spans the full grid** — the same number of column slots in
+  every row, actions column included in edit mode. Band headings close with
+  their own sticky actions cell (the `heading` macro adds it in edit mode;
+  callers size their filler from `max_cols`): heading cells stack above the
+  pinned actions column (z-7 vs z-6), so a heading whose last cell spanned into
+  the actions slot painted its figures over the drag/delete column when the
+  sheet scrolled sideways. `test_every_row_spans_the_full_grid` checks both
+  sheets in view and edit mode.
+- **Row templates map cells to fields by column key** (the group's
+  `col_keys`), never by position, so adding or removing a column can't silently
+  shift which field a click edits.
+
 **Sticky spreadsheet chrome — the border invariant.** These sheets use
 `border-collapse`, whose borders are painted in the *table's* own layer. When a
 row is `position: sticky` — the group heading bands, the column-header rows, the

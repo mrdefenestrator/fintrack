@@ -144,6 +144,12 @@ degrades to a warning without it).
   rows must use box-shadow, never border-collapse borders). The web GUI (Holdings)
   and the Python CLI (which keeps separate `accounts`/`assets`/`debts` commands)
   are both first-class; keep them at parity.
+- **Grouped sheets.** Holdings and Budget (one band per category, with
+  Remaining/Monthly/Annual subtotals and a Net footer) share one grouped-sheet
+  layer — `partials/grouped_sheet.html` macros, `static/css/grouped-sheet.css`,
+  `static/js/group-sort.js`, `web/routes/grouped_sheet.py`. Build new banded
+  sheets on it rather than copying a page's markup/CSS. See DESIGN.md
+  "Holdings sheet" / "Budget sheet".
 - Core product goals the UI serves: current liquid holdings, net worth,
   budgeting, spending tracking, deviation from budget, and (eventually)
   net-worth projections.

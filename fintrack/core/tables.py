@@ -207,6 +207,52 @@ def _build_accounts_table(
     return (headers, rows)
 
 
+BUDGET_HEADERS = [
+    "Kind",
+    "Category",
+    "Description",
+    "Amount",
+    "Recurrence",
+    "When",
+    "Remaining",
+    "Monthly",
+    "Annual",
+    "Auto account",
+]
+
+
+def budget_entry_row(
+    e: dict[str, Any],
+    year: int,
+    month: int,
+    day: int,
+    account_display_by_id: dict[int, str] | None = None,
+) -> tuple[list[str], tuple[Decimal, Decimal, Decimal]]:
+    """One budget entry's display cells (BUDGET_HEADERS order) plus its signed
+    (remaining-this-month, monthly, annual) figures — income positive, expenses
+    negative — so callers can subtotal any grouping of rows."""
+    account_display_by_id = account_display_by_id or {}
+    kind = e.get("kind", "income")
+    sign = 1 if kind == "income" else -1
+    remaining = sign * _subtotal_remainder_of_month(e, year, month, day)
+    monthly = sign * _budget_entry_in_month(e, year, month, day=0)
+    annual = sign * _amount_annual(e)
+    ref = e.get("autoAccountRef")
+    cells = [
+        kind.capitalize(),
+        e.get("category") or "-",
+        e.get("description", "-"),
+        fmt_money(sign * e.get("amount", 0)),
+        fmt_recurrence_display(e.get("recurrence") or "-"),
+        _expected_display(e),
+        fmt_money(remaining),
+        fmt_money(monthly),
+        fmt_money(annual),
+        account_display_by_id.get(ref, "-") if ref is not None else "-",
+    ]
+    return cells, (remaining, monthly, annual)
+
+
 def _build_budget_table(
     budget: list[dict[str, Any]],
     year: int,
@@ -219,51 +265,21 @@ def _build_budget_table(
     Shows prorated subtotal (remainder of month), monthly budget amount, and annual budget amount.
     budget is a list of entries with kind: income|expense.
     """
-    account_display_by_id = account_display_by_id or {}
-    headers = [
-        "Kind",
-        "Category",
-        "Description",
-        "Amount",
-        "Recurrence",
-        "When",
-        "Remaining",
-        "Monthly",
-        "Annual",
-        "Auto account",
-    ]
+    headers = list(BUDGET_HEADERS)
     if show_index:
         headers = ["Index"] + headers
-
-    def _auto_account(entry: dict[str, Any]) -> str:
-        ref = entry.get("autoAccountRef")
-        return account_display_by_id.get(ref, "-") if ref is not None else "-"
 
     rows = []
     total_subtotal = Decimal(0)
     total_monthly = Decimal(0)
     total_annual = Decimal(0)
     for idx, e in enumerate(budget):
-        kind = e.get("kind", "income")
-        sign = 1 if kind == "income" else -1
-        st = _subtotal_remainder_of_month(e, year, month, day)
-        monthly_amt = _budget_entry_in_month(e, year, month, day=0)
-        annual_amt = _amount_annual(e)
-        total_subtotal += sign * st
-        total_monthly += sign * monthly_amt
-        total_annual += sign * annual_amt
-        row = [
-            kind.capitalize(),
-            e.get("category") or "-",
-            e.get("description", "-"),
-            fmt_money(sign * e.get("amount", 0)),
-            fmt_recurrence_display(e.get("recurrence") or "-"),
-            _expected_display(e),
-            fmt_money(sign * st),
-            fmt_money(sign * monthly_amt),
-            fmt_money(sign * annual_amt),
-            _auto_account(e),
-        ]
+        row, (st, monthly_amt, annual_amt) = budget_entry_row(
+            e, year, month, day, account_display_by_id
+        )
+        total_subtotal += st
+        total_monthly += monthly_amt
+        total_annual += annual_amt
         if show_index:
             row = [str(idx)] + row
         rows.append(row)

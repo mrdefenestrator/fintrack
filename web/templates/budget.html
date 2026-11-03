@@ -23,28 +23,15 @@
         {{ fc.multi_select('include_recurrence', 'Recurrence', rec_opts, form_id='budget-filter-form') }}
     {% endcall %}
 </form>
-<div class="table-scroll-container rounded-b-lg border-l border-b border-r border-gray-300 dark:border-gray-600 shadow-sm" data-sheet-scroll>
-<table id="budget-table" class="editable-table sortable w-full text-sm border-collapse bg-white dark:bg-gray-800" style="white-space:nowrap"
-    data-cell-nav="budget-tbody"
-    {% if _active_count %}data-reorder-locked{% endif %} {% if
-    sort_col %}data-sort-col="{{ sort_col }}" {% endif %} {% if sort_dir %}data-sort-dir="{{ sort_dir }}" {% endif %}>
-    <colgroup>
-        <col style="width: 5.5rem">
-        <col style="width: 10rem">
-        <col>
-        <col style="width: 7rem">
-        <col style="width: 8rem">
-        <col style="width: 7rem">
-        <col style="width: 7rem">
-        <col style="width: 6.5rem">
-        <col style="width: 6.5rem">
-        <col style="width: 10rem">
-    </colgroup>
-{% with headers=headers, right_align_cols=[3, 5, 6, 7, 8],
-    tooltips=["Income or expense", "Budget category", "Description of this budget entry", "Per-occurrence amount", "How often this entry recurs", "Day of month or specific date", "Prorated amount remaining this month", "Expected total for this month", "Annualized total", "Account for auto-matching transactions"] %}{% include "partials/editable_table_thead.html" %}{% endwith %}
-    <tbody id="budget-tbody"{% if edit_mode %} data-reorder-url="{{ url_for('budget.reorder', filename=filename) }}"{% endif %}>
-        {% include "partials/budget_tbody.html" %}
-    </tbody>
+<div class="table-scroll-container rounded-b-lg border-l border-b border-r border-gray-300 dark:border-gray-600 shadow-sm" data-sheet-scroll{% if edit_mode %} data-sticky-actions{% endif %}>
+{# One grouped sheet (partials/grouped_sheet.html, shared with Holdings): a band
+   per category, each with its own heading (Remaining/Monthly/Annual subtotals),
+   sortable column header, rows, and add row; a pinned Net footer. Edits swap
+   the table's whole body (#budget-table innerHTML), colgroup included. While a
+   filter hides rows, drag-reorder is locked (positions wouldn't line up). #}
+<table id="budget-table" class="grouped-sheet editable-table w-full text-sm border-collapse bg-white dark:bg-gray-800" style="white-space:nowrap"
+    data-cell-nav="budget-table"{% if _active_count %} data-reorder-locked{% endif %}>
+    {% include "partials/budget_tbody.html" %}
 </table>
 </div>
 {% endblock %}

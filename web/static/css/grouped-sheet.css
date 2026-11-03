@@ -1,0 +1,127 @@
+/* Grouped spreadsheet sheets (Holdings, Budget): one <table class="grouped-sheet">
+   split into bands, each its own <tbody class="sheet-group" data-tone="…">.
+   Markup: templates/partials/grouped_sheet.html. Sorting: js/group-sort.js.
+
+   THE BORDER INVARIANT (DESIGN.md "Holdings sheet"): these tables use
+   border-collapse, whose borders paint in the table's own layer — so on a
+   position:sticky row (group heading, column header, pinned total) a collapsed
+   border scrolls away or leaks beside the sticky cell. Every border on sticky
+   chrome, and the left accent rail, is therefore drawn as a box-shadow. */
+
+/* ---- Tone palette ------------------------------------------------------------
+   A band (or a single row) picks a tone; every rule below reads var(--accent) /
+   --band / --label, so the whole palette lives here. Holdings is temperature-
+   coded (cool = owned: emerald cash, blue assets; warm = owed: rose cards, amber
+   loans); Budget uses emerald for income and rose for expenses. */
+.grouped-sheet [data-tone="emerald"] { --accent: #34d399; --band: #ecfdf5; --band-dark: #022c22; --label: #065f46; --label-dark: #6ee7b7; }
+.grouped-sheet [data-tone="rose"]    { --accent: #fb7185; --band: #fff1f2; --band-dark: #4c0519; --label: #9f1239; --label-dark: #fda4af; }
+.grouped-sheet [data-tone="amber"]   { --accent: #fbbf24; --band: #fffbeb; --band-dark: #451a03; --label: #92400e; --label-dark: #fcd34d; }
+.grouped-sheet [data-tone="blue"]    { --accent: #3b82f6; --band: #eff6ff; --band-dark: #172554; --label: #1e40af; --label-dark: #bfdbfe; }
+.grouped-sheet [data-tone="slate"]   { --accent: #94a3b8; --band: #f8fafc; --band-dark: #1e293b; --label: #334155; --label-dark: #cbd5e1; }
+
+/* ---- Accent rail --------------------------------------------------------------
+   Continuous left rail down the whole band (heading, column header, data rows,
+   add row) so each band reads as one block. A box-shadow, not a border: it
+   paints with the cell (z-auto), so the z-7 sticky chrome reliably covers it.
+   The heading/header first-cell rules below repeat the rail (a more specific
+   box-shadow fully replaces this one). A row may carry its own data-tone to
+   recolor just its rail (Budget: an income row inside a mixed band). */
+.grouped-sheet .sheet-group > tr > :first-child {
+    box-shadow: inset 4px 0 0 var(--accent);
+}
+.grouped-sheet .sheet-group > tr > td.cell-editing:first-child:has(.table-cell-input:focus),
+.grouped-sheet .sheet-group > tr > td.cell-editing:first-child:has(.table-cell-select:focus) {
+    box-shadow: inset 4px 0 0 var(--accent), inset 0 0 0 2px rgb(59 130 246);
+}
+.dark .grouped-sheet .sheet-group > tr > td.cell-editing:first-child:has(.table-cell-input:focus),
+.dark .grouped-sheet .sheet-group > tr > td.cell-editing:first-child:has(.table-cell-select:focus) {
+    box-shadow: inset 4px 0 0 var(--accent), inset 0 0 0 2px rgb(96 165 250);
+}
+/* Lift the data-row rail above the top scroll shadow (z-4) so it stays crisp as
+   rows scroll under the pinned header, while the shadow still falls over the
+   rest of the data cells. Kept below the sticky band chrome (z-7) and the
+   actions column (z-6) so the rail still clips behind them. */
+.grouped-sheet .sheet-group > tr.sheet-group-row > td:first-child {
+    position: relative;
+    z-index: 5;
+}
+/* The rail eats into the first cell's padding; give leading cells a touch more
+   so content clears the rail by the same ~6px other columns clear a divider. */
+.grouped-sheet th:first-child,
+.grouped-sheet td:first-child { padding-left: 0.625rem; }
+
+/* ---- Sticky actions column ----------------------------------------------------
+   Edit mode only. Sticks to the right edge; data scrolls behind it. A uniform
+   background (it is chrome, not data) keeps scrolled cells from showing through;
+   the frame's --right scroll shadow sits just left of it (data-sticky-actions +
+   --sheet-right-h in sheet-scroll.js). */
+.grouped-sheet .table-actions-cell {
+    position: sticky;
+    right: 0;
+    z-index: 6;
+    width: 2.75rem;
+    background: #ffffff;
+}
+.dark .grouped-sheet .table-actions-cell { background: #1f2937; }  /* gray-800 */
+
+/* ---- Pinned footer ------------------------------------------------------------
+   The sticky total row(s) (z-7) sit above the sticky actions column (z-6) so data
+   rows — action buttons included — clip under them. Its actions cell takes the
+   total band color so the footer runs the full width. Divider shadows and the
+   two-line total-upper offset are shared in base.html. */
+/* (Scoped under .table-scroll-container to outrank base.html's z-5 total-row.) */
+.table-scroll-container .grouped-sheet tr.total-row { z-index: 7; }
+.grouped-sheet .total-row .table-actions-cell { z-index: 7; background: #f3f4f6; }
+.dark .grouped-sheet .total-row .table-actions-cell { background: #374151; }
+
+/* ---- Sticky band heading + column header ---------------------------------------
+   Each band's heading and column header stick to the top while its rows scroll,
+   then the next band's replace them. Sticky is confined to the <tbody>, which is
+   why each band is one tbody. z-7 keeps them above data + the actions column. */
+.grouped-sheet .sheet-group-heading > td {
+    position: sticky;
+    top: 0;
+    z-index: 7;
+    /* Tinted band + accent lines on BOTH the top and bottom edge, on every cell
+       so they run the full row width. */
+    background: var(--band);
+    box-shadow: inset 0 1px 0 var(--accent), inset 0 -1px 0 var(--accent);
+}
+.dark .grouped-sheet .sheet-group-heading > td { background: var(--band-dark); }
+/* First cell also carries the left rail and the tone-colored label text. */
+.grouped-sheet .sheet-group-heading > td:first-child {
+    color: var(--label);
+    box-shadow: inset 4px 0 0 var(--accent), inset 0 1px 0 var(--accent), inset 0 -1px 0 var(--accent);
+}
+.dark .grouped-sheet .sheet-group-heading > td:first-child { color: var(--label-dark); }
+.grouped-sheet .sheet-group-header > th {
+    position: sticky;
+    top: var(--sheet-heading-h, 1.75rem);
+    z-index: 7;
+    background: #f3f4f6;   /* gray-100 */
+    box-shadow: inset 0 -2px 0 #d1d5db;   /* gray-300 underline */
+}
+.dark .grouped-sheet .sheet-group-header > th {
+    background: #374151;   /* gray-700 */
+    box-shadow: inset 0 -2px 0 #4b5563;   /* gray-600 */
+}
+/* Inter-column dividers (gray-200) as box-shadow on every column but the last,
+   combined with the underline above. */
+.grouped-sheet .sheet-group-header > th:not(:last-child) {
+    box-shadow: inset -1px 0 0 #e5e7eb, inset 0 -2px 0 #d1d5db;
+}
+.dark .grouped-sheet .sheet-group-header > th:not(:last-child) {
+    box-shadow: inset -1px 0 0 #4b5563, inset 0 -2px 0 #4b5563;
+}
+/* The column header joins the accent rail too (ordered after the rule above —
+   equal specificity — so it wins for the first cell). */
+.grouped-sheet .sheet-group-header > th:first-child {
+    box-shadow: inset 4px 0 0 var(--accent), inset -1px 0 0 #e5e7eb, inset 0 -2px 0 #d1d5db;
+}
+.dark .grouped-sheet .sheet-group-header > th:first-child {
+    box-shadow: inset 4px 0 0 var(--accent), inset -1px 0 0 #4b5563, inset 0 -2px 0 #4b5563;
+}
+
+/* A sorted band's DOM order no longer matches its stored order, so hide its
+   drag handles (row-reorder.js also refuses to drag it). */
+.grouped-sheet tbody[data-sorted] .drag-handle { display: none; }

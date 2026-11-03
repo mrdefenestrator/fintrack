@@ -512,9 +512,10 @@ is the big vertical reclaim). Holdings is the landing page. Holdings subsumes th
 old standalone Accounts and Assets sheets, which were retired — it is one dense,
 spreadsheet-style view over the same tables; information density is a deliberate
 feature of these sheets, not a problem to design around. Net worth shows in the
-Holdings sheet's footer (the header carries no figures). Holdings' structure and
-the invariants that keep the sticky chrome correct are documented under
-[Holdings sheet](#holdings-sheet) below. Import is a header icon; the edit-mode
+Holdings sheet's footer (the header carries no figures). Holdings' structure,
+the grouped-sheet layer it shares with Budget, and the invariants that keep the
+sticky chrome correct are documented under [Holdings sheet](#holdings-sheet)
+and [Budget sheet](#budget-sheet) below. Import is a header icon; the edit-mode
 lock is functional on Holdings, Budget, Transactions, Merchants, and Categories
 and muted elsewhere. The old `/s/<snapshot>/status` dashboard was removed; its
 URL redirects to Holdings.
@@ -568,20 +569,67 @@ independently drag-reorderable; debt↔asset equity/LTV pairing
   the table, leaving the other group's rows fixed; a group whose rows span two
   tables is left non-reorderable rather than permuting both at once.
 
+**Grouped sheets — shared layer.** Holdings and Budget are both *grouped
+sheets*: one `<table class="grouped-sheet">` whose bands are each a
+`<tbody class="sheet-group" data-tone="…">` (tinted heading with subtotals, the
+band's own sortable column header, data rows, an edit-mode add row), closed by a
+pinned footer in a trailing tbody. The pieces are shared, so a third grouped
+sheet reuses them rather than copying Holdings:
+
+- markup — `templates/partials/grouped_sheet.html` (macros `group_attrs`,
+  `heading`/`subtotal_cell`, `header_row`, `row_class`, `empty_row`,
+  `add_row`/`add_button`, `footer`); each page keeps its own cell rendering;
+- look — `static/css/grouped-sheet.css`: the tone palette (emerald · rose ·
+  amber · blue · slate; a band, or a single row, picks one via `data-tone`),
+  accent rail, sticky heading/header, sticky edit-mode actions column, footer;
+- per-band sorting — `static/js/group-sort.js` (asc → desc → none, state in
+  `sort_<band>_col/_dir` URL params, honours a cell's `data-sort-value`;
+  a sorted band's drag-reorder is disabled);
+- Python — `web/routes/grouped_sheet.py`: `group_columns()` turns a
+  `(key, header, right_align, span)` column list into the header metadata, and
+  `remap_group_order()` maps a band's local drag permutation onto that band's
+  own slots in the full stored ordering (other bands' rows stay put).
+
+The actions column (drag + delete) renders only in edit mode. Edits swap the
+table's whole body (colgroup included), so a row whose edit changes its band
+simply re-renders in the new band.
+
 **Sticky spreadsheet chrome — the border invariant.** These sheets use
 `border-collapse`, whose borders are painted in the *table's* own layer. When a
 row is `position: sticky` — the group heading bands, the column-header rows, the
-pinned total rows, and the left asset/liability accent — a collapsed border
+pinned total rows, and the left accent rail — a collapsed border
 scrolls out of view or paints over/beside the sticky cell (reproduced in both
 WebKit and Chromium). **So no border on a sticky row may be a border-collapse
 border**: draw it as a `box-shadow` on the cell instead (it paints with the
 sticky element and stays put). Header underline + inter-column dividers, the
 group heading accents, and the row group accents are all
-box-shadows (`web/templates/holdings.html`, `base.html`). Only the total row
+box-shadows (`web/static/css/grouped-sheet.css`, `base.html`). Only the total row
 stays pinned to the bottom; the add ("+ Add …") row flows inline as the last row
 of its group. `web/static/js/sheet-scroll.js` pins the total(s) to the bottom
 with a faint grid canvas and drives the four edge scroll-shadows (the side
 shadows cover the column header but stop at the group title band).
+
+### Budget sheet
+
+Budget is a grouped sheet with **one band per category** (issue #51). Bands
+follow the category taxonomy's `sort_order`; categories an entry uses but the
+taxonomy lacks follow alphabetically, and entries with no category close the
+sheet as **Uncategorized**. Every band shares one column set —
+Kind·Category·Description·Amount·Recurrence·When·Remaining·Monthly·Annual·Auto
+account — so there is no ragged edge; Category stays a column (as Holdings keeps
+Type) because editing it is how an entry moves between bands.
+
+- **Totals.** Each band heading carries its signed (income +, expense −)
+  Remaining / Monthly / Annual subtotals under those columns; the pinned footer
+  is a single **Net** row over every shown entry.
+- **Tone by kind.** A band is emerald when all its entries are income, rose when
+  all are expenses, slate when mixed; each row's rail keeps its own kind's tone,
+  so an income row in a mixed band still reads as income.
+- **Add / reorder per band.** A band's add row offers "+ Add expense" and
+  "+ Add income" (its dominant kind first) and files the stub under that band's
+  category. Drag-reorder is per band (`/budget/reorder?category=…`); rows keep
+  their full-list position as the edit/delete handle. Kind / Category /
+  Recurrence filters work as before, and lock reordering while active.
 
 ## CLI
 

@@ -126,7 +126,7 @@ def test_holdings_grouped_layout(client):
     Liquid + Net worth."""
     resp = client.get("/s/finances/holdings")
     body = resp.get_data(as_text=True)
-    assert "holdings-group-heading" in body
+    assert "sheet-group-heading" in body
     # Every group heading renders (empty groups included).
     for label in ("Cash", "Credit Cards", "Loans", "Assets"):
         assert label in body

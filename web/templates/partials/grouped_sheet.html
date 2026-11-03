@@ -1,0 +1,113 @@
+{# Shared markup for grouped spreadsheet sheets (Holdings, Budget). Styling lives
+   in static/css/grouped-sheet.css; per-band sorting in static/js/group-sort.js;
+   the Python side (column metadata, per-band reorder) in
+   web/routes/grouped_sheet.py.
+
+   A page renders, inside <table class="grouped-sheet editable-table …">:
+
+       {% for group in groups %}
+       <tbody {{ gs.group_attrs(group, reorder_url) }}>
+           {% call gs.heading(group.label, label_span) %}…subtotal cells…{% endcall %}
+           {{ gs.header_row(group, max_cols, edit_mode) }}
+           …data rows: <tr class="{{ gs.row_class() }}" data-reorder-index=…>…
+           {% if edit_mode %}{% call gs.add_row(span) %}{{ gs.add_button(…) }}{% endcall %}{% endif %}
+       </tbody>
+       {% endfor %}
+       {{ gs.footer(rows, right_align, edit_mode) }}
+
+   A group dict carries `key`, `label`, `tone` (a palette name in the CSS), and
+   the header metadata from grouped_sheet.group_columns(): `headers`,
+   `tooltips`, `right_align`, `spans`, `ncols`. #}
+{% import "partials/sheet.html" as sheet %}
+
+{# Attributes for a band's <tbody>. `reorder_url` (edit mode only) makes the
+   band drag-reorderable on its own. #}
+{%- macro group_attrs(group, reorder_url=none) -%}
+class="sheet-group" data-group="{{ group.key }}" data-tone="{{ group.tone }}"{% if reorder_url %} data-reorder-url="{{ reorder_url }}"{% endif %}
+{%- endmacro -%}
+
+{# Data-row class: the shared sheet row look + the hook that lifts its accent
+   rail above the scroll shadow. #}
+{%- macro row_class() -%}
+sheet-group-row {{ sheet.row_class() }}
+{%- endmacro -%}
+
+{# Tinted band heading. The label spans the first `label_span` columns; the
+   caller renders the rest of the row (subtotals, padding, band controls). #}
+{% macro heading(label, label_span) %}
+<tr class="sheet-group-heading">
+    <td colspan="{{ label_span }}" class="px-2 py-1.5 text-xs font-semibold uppercase tracking-wide">{{ label }}</td>
+    {{ caller() }}
+</tr>
+{% endmacro %}
+
+{# One subtotal figure in a band heading (right-aligned, red when negative). #}
+{% macro subtotal_cell(value) %}
+<td class="px-1.5 py-1.5 text-right tabular-nums text-sm font-semibold text-gray-900 dark:text-gray-100 {% if value | display_is_negative %}!text-red-600 dark:!text-red-400{% endif %}">{{ value }}</td>
+{% endmacro %}
+
+{# The band's own sortable column header. Blank header slots render as empty
+   cells; a band narrower than the table pads out to `max_cols`. Sorting is
+   per band (group-sort.js reads data-sort-key). #}
+{% macro header_row(group, max_cols, edit_mode) %}
+<tr class="sheet-group-header bg-gray-100 dark:bg-gray-700">
+    {% for h in group.headers %}
+    {% set colspan = group.spans[loop.index0] %}
+    {% if h %}
+    <th class="sortable-th px-1.5 py-0.5 font-medium text-gray-800 dark:text-gray-100 cursor-pointer select-none hover:bg-gray-200 dark:hover:bg-gray-600 {% if loop.index0 in group.right_align %}text-right{% else %}text-left{% endif %}"
+        {% if colspan > 1 %}colspan="{{ colspan }}" {% endif %}data-sort-key="c{{ loop.index0 }}" role="button" tabindex="0" title="{{ group.tooltips[loop.index0] if group.tooltips and loop.index0 < group.tooltips | length else h }}">{{ h }} <span class="sort-indicator"></span></th>
+    {% else %}
+    <th class="sheet-blank-slot px-1.5 py-0.5"{% if colspan > 1 %} colspan="{{ colspan }}"{% endif %}></th>
+    {% endif %}
+    {% endfor %}
+    {% if group.ncols < max_cols %}
+    <th class="sheet-blank-slot px-1.5 py-0.5" colspan="{{ max_cols - group.ncols }}"></th>
+    {% endif %}
+    {% if edit_mode %}<th class="table-actions-cell px-1.5 py-0.5" aria-label="Actions"></th>{% endif %}
+</tr>
+{% endmacro %}
+
+{# Placeholder row for a band with no rows to show. #}
+{% macro empty_row(span, message) %}
+<tr>
+    <td colspan="{{ span }}" class="px-1.5 py-2 text-center text-gray-500 dark:text-gray-400">{{ message }}</td>
+</tr>
+{% endmacro %}
+
+{# Edit-mode "+ Add …" row, inline as the band's last row. The caller renders
+   one or more add_button()s. #}
+{% macro add_row(span) %}
+<tr data-add-row>
+    <td colspan="{{ span }}" class="px-1.5 py-1 border-b border-gray-200 dark:border-gray-700">
+        <span class="inline-flex items-center gap-3">{{ caller() }}</span>
+    </td>
+</tr>
+{% endmacro %}
+
+{# Stub-then-edit add button: POSTs, and the route answers HX-Refresh. #}
+{% macro add_button(url, label, vals=none) %}
+<button type="button" class="text-xs font-medium text-blue-600 dark:text-blue-400 hover:underline"
+    hx-post="{{ url }}"{% if vals %} hx-vals='{{ vals | tojson }}'{% endif %} hx-trigger="click" hx-swap="none">
+    + {{ label }}
+</button>
+{% endmacro %}
+
+{# Master footer in its own trailing tbody: each row of `rows` is a list of
+   cells (one per table column); "" renders blank. Every row but the last is a
+   `total-upper` so multi-line footers stack at the sheet's bottom edge. #}
+{% macro footer(rows, right_align, edit_mode) %}
+<tbody>
+    {% for total_row in rows %}
+    <tr class="total-row {% if not loop.last %}total-upper{% endif %} bg-gray-100 dark:bg-gray-700 {% if loop.first %}border-t-2 border-gray-400 dark:border-gray-500{% endif %} font-semibold">
+        {% for cell in total_row %}
+        {% if cell == "" %}
+        <td class="{{ sheet.cell_class() }}"></td>
+        {% else %}
+        <td class="{{ sheet.cell_class('text-right tabular-nums' if loop.index0 in right_align else '', sheet.neg(cell | display_is_negative)) }}">{{ cell }}</td>
+        {% endif %}
+        {% endfor %}
+        {% if edit_mode %}<td class="table-actions-cell px-1.5 py-0.5"></td>{% endif %}
+    </tr>
+    {% endfor %}
+</tbody>
+{% endmacro %}

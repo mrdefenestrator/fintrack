@@ -1,8 +1,23 @@
-{# One budget row in edit mode: cells clickable (display), last cell is delete. #}
+{# One budget row inside a category band (included from budget_tbody.html with
+   `row` = {index, kind, tone, cells} and `reorder_index` = its position in the
+   band). `index` is the entry's position in the full budget list — the handle
+   every cell/delete URL uses. Its own data-tone colors its accent rail by kind,
+   so an income row in a mixed band still reads as income. In view mode cells
+   are plain; in edit mode they click to edit, and the last cell holds the
+   drag + delete actions. #}
 {% from "macros/table.html" import cell_display, cell_non_editable, cell_edit_input, cell_edit_select %}
 {% import "partials/sheet.html" as sheet %}
+{% import "partials/grouped_sheet.html" as gs %}
+{% set index = row.index %}
+{% set kind = row.kind %}
+{% set row_cells = row.cells %}
 {% set _rec_sort = {'One Time': 1, 'Biweekly': 2, 'Monthly': 3, 'Quarterly': 4, 'Semiannual': 5, 'Annual': 6} %}
-<tr class="{{ sheet.row_class('border-l-emerald-400' if kind == 'income' else 'border-l-rose-400') }}" id="budget-row-{{ index }}" data-reorder-index="{{ index }}">
+<tr class="{{ gs.row_class() }}" id="budget-row-{{ index }}" data-kind="{{ kind }}" data-tone="{{ row.tone }}" data-reorder-index="{{ reorder_index }}">
+    {% if not edit_mode %}
+    {% for cell in row_cells %}
+    <td class="{{ sheet.cell_class('text-right tabular-nums' if loop.index0 in group.right_align else '', sheet.neg(cell | display_is_negative)) }}"{% if loop.index0 == 4 and _rec_sort.get(cell | trim) %} data-sort-value="{{ _rec_sort[cell | trim] }}"{% endif %}>{{ cell }}</td>
+    {% endfor %}
+    {% else %}
     {% set recurrence_display = row_cells[4] if row_cells | length > 4 else '' %}
     {% set when_display = row_cells[5] if row_cells | length > 5 else '' %}
     {% if recurrence_display == 'One Time' %}
@@ -18,7 +33,7 @@
     {% for col_index in range(10) %}
     {% set field = fields[col_index] %}
     {% set cell_value = row_cells[col_index] if col_index < row_cells | length else '' %}
-    {% set right_align = col_index in [3, 5, 6, 7, 8] %}
+    {% set right_align = col_index in group.right_align %}
     {% set is_negative = cell_value is not none and cell_value | display_is_negative %}
     {% set is_updated_cell = (updated_index is defined and updated_index==index and updated_field is defined and updated_field==field) %}
     {% set is_editing_cell = (editing_index is defined and editing_index==index and editing_field is defined and editing_field==field) %}
@@ -27,7 +42,7 @@
             {% call(caller) cell_edit_select(field, editing_value, right_align,
                 url_for('budget.update', filename=filename, index=index),
                 url_for('budget.cell_edit', filename=filename, index=index, field=field, display=1),
-                'budget-tbody', none, none) %}
+                'budget-table', none, none) %}
                 <option value="">—</option>
                 {% for c in categories %}
                 <option value="{{ c }}" {% if editing_value==c %}selected{% endif %}>{{ c }}</option>
@@ -37,7 +52,7 @@
             {% call(caller) cell_edit_select(field, editing_value, right_align,
                 url_for('budget.update', filename=filename, index=index),
                 url_for('budget.cell_edit', filename=filename, index=index, field=field, display=1),
-                'budget-tbody', none, none) %}
+                'budget-table', none, none) %}
                 {% for r in recurrence_options %}
                 <option value="{{ r }}" {% if editing_value==r %}selected{% endif %}>{{ r | format_recurrence }}</option>
                 {% endfor %}
@@ -46,7 +61,7 @@
             {% call(caller) cell_edit_select(field, editing_value, right_align,
                 url_for('budget.update', filename=filename, index=index),
                 url_for('budget.cell_edit', filename=filename, index=index, field=field, display=1),
-                'budget-tbody', none, none) %}
+                'budget-table', none, none) %}
                 <option value="">—</option>
                 {% for aid, name in account_display_by_id.items() %}
                 <option value="{{ aid }}" {% if editing_value==aid or editing_value==aid | string %}selected{% endif %}>{{ name }}</option>
@@ -64,7 +79,7 @@
                     x-data="{ cont: {{ 'true' if editing_when_continuous else 'false' }} }">
                     <form method="post" action="{{ when_update_url }}" class="flex items-center gap-0.5"
                           hx-post="{{ when_update_url }}"
-                          hx-trigger="save" hx-swap="innerHTML" hx-target="#budget-tbody"
+                          hx-trigger="save" hx-swap="innerHTML" hx-target="#budget-table"
                           onkeydown="if(event.keyCode===13) event.preventDefault();">
                         <input type="number" name="dayOfMonth" min="1" max="31"
                                value="{{ editing_when_day or '' }}"
@@ -73,7 +88,7 @@
                                :class="cont && 'opacity-40'"
                                hx-post="{{ when_update_url }}"
                                hx-trigger="focusout changed, keydown[keyCode==13]"
-                               hx-include="closest form" hx-swap="innerHTML" hx-target="#budget-tbody"
+                               hx-include="closest form" hx-swap="innerHTML" hx-target="#budget-table"
                                autofocus />
                         <label class="flex items-center gap-0.5 text-xs text-gray-500 dark:text-gray-400 cursor-pointer whitespace-nowrap select-none">
                             <input type="checkbox" name="continuous_cb" :checked="cont"
@@ -88,14 +103,14 @@
                 <td class="cell-editing {{ sheet.cell_class() }}">
                     <form method="post" action="{{ when_update_url }}" class="flex items-center gap-0.5"
                           hx-post="{{ when_update_url }}"
-                          hx-trigger="save" hx-swap="innerHTML" hx-target="#budget-tbody"
+                          hx-trigger="save" hx-swap="innerHTML" hx-target="#budget-table"
                           onkeydown="if(event.keyCode===13) event.preventDefault();">
                         <input type="number" name="dayOfMonth" min="1" max="31"
                                value="{{ editing_when_day or '' }}"
                                class="table-cell-input" style="min-width:0; width:2.5rem"
                                hx-post="{{ when_update_url }}"
                                hx-trigger="focusout changed, keydown[keyCode==13]"
-                               hx-include="closest form" hx-swap="innerHTML" hx-target="#budget-tbody"
+                               hx-include="closest form" hx-swap="innerHTML" hx-target="#budget-table"
                                autofocus />
                     </form>
                 </td>
@@ -106,7 +121,7 @@
                     @focusout.debounce.200ms="!$el.contains(document.activeElement) && $el.querySelector('form')?.requestSubmit()">
                     <form method="post" action="{{ when_update_url }}" class="flex items-center gap-0.5"
                           hx-post="{{ when_update_url }}"
-                          hx-trigger="submit" hx-swap="innerHTML" hx-target="#budget-tbody"
+                          hx-trigger="submit" hx-swap="innerHTML" hx-target="#budget-table"
                           onkeydown="if(event.keyCode===13) event.preventDefault();">
                         <select name="month"
                                 class="text-xs border-0 bg-transparent p-0 cursor-pointer focus:outline-none">
@@ -119,7 +134,7 @@
                                class="table-cell-input" style="min-width:0; width:2.5rem"
                                hx-post="{{ when_update_url }}"
                                hx-trigger="focusout changed, keydown[keyCode==13]"
-                               hx-include="closest form" hx-swap="innerHTML" hx-target="#budget-tbody"
+                               hx-include="closest form" hx-swap="innerHTML" hx-target="#budget-table"
                                autofocus />
                     </form>
                 </td>
@@ -128,22 +143,23 @@
             {{ cell_edit_input(field, editing_value, right_align,
                 url_for('budget.update', filename=filename, index=index),
                 url_for('budget.cell_edit', filename=filename, index=index, field=field, display=1),
-                'budget-tbody', none) }}
+                'budget-table', none) }}
         {% else %}
             {% set inputmode = 'numeric' if field in ['dayOfMonth', 'month', 'dayOfYear'] else none %}
             {{ cell_edit_input(field, editing_value, right_align,
                 url_for('budget.update', filename=filename, index=index),
                 url_for('budget.cell_edit', filename=filename, index=index, field=field, display=1),
-                'budget-tbody', inputmode) }}
+                'budget-table', inputmode) }}
         {% endif %}
     {% elif field %}
         {{ cell_display(cell_value, right_align, is_negative,
             url_for('budget.cell_edit', filename=filename, index=index, field=field),
-            'budget-tbody', is_updated_cell,
+            'budget-table', is_updated_cell,
             sort_value=_rec_sort.get(cell_value | trim) if field == 'recurrence' else none) }}
     {% else %}
         {{ cell_non_editable(cell_value, right_align, is_negative) }}
     {% endif %}
     {% endfor %}
-    {% with edit_mode=true %}{% include "partials/budget_delete_icon.html" %}{% endwith %}
+    {% include "partials/budget_delete_icon.html" %}
+    {% endif %}
 </tr>

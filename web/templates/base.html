@@ -683,6 +683,7 @@
             }
         }
     </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/grouped-sheet.css') }}">
 </head>
 
 <body x-data="{ navOpen: window.matchMedia('(min-width: 1024px)').matches, init() { this._narrow = window.matchMedia('(max-width: 1023px)').matches; window.addEventListener('resize', () => { const n = window.matchMedia('(max-width: 1023px)').matches; if (n !== this._narrow) { this._narrow = n; this.navOpen = !n; } }); } }" class="h-full flex flex-col overflow-hidden bg-gray-50 dark:bg-gray-900 dark:text-gray-100">
@@ -956,7 +957,7 @@
 
     <script src="{{ url_for('static', filename='js/vendor/Sortable.min.js') }}"></script>
     <script src="{{ url_for('static', filename='js/sortable.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/holdings-sort.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/group-sort.js') }}"></script>
     <script src="{{ url_for('static', filename='js/cell-nav.js') }}"></script>
     <script src="{{ url_for('static', filename='js/row-reorder.js') }}"></script>
     <script src="{{ url_for('static', filename='js/ledger.js') }}"></script>

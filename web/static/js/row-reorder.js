@@ -24,9 +24,9 @@
     // set server-side when some rows are hidden) both make the visible row
     // positions not match the stored order, so reordering must be disabled.
     function reorderDisabled(tbody) {
-        // Grouped Holdings sorts per data-tbody (holdings-sort.js sets
-        // data-sorted on the sorted group's tbody); a sorted group's DOM order
-        // no longer matches its stored order, so its reorder must be off.
+        // Grouped sheets sort per band (group-sort.js sets data-sorted on the
+        // sorted band's tbody); a sorted band's DOM order no longer matches its
+        // stored order, so its reorder must be off.
         if (tbody.hasAttribute("data-sorted")) return true;
         var table = tbody.closest("table");
         if (!table) return false;
@@ -73,7 +73,7 @@
             draggable: "[data-reorder-index]",
             // Keep dragged rows within the contiguous data block — don't cross a
             // non-draggable row (group header / add-row / subtotal). Matters for
-            // the grouped Holdings sheet, where those share the group's tbody.
+            // grouped sheets, where those share the band's tbody.
             onMove: function (evt) {
                 return !!(evt.related && evt.related.hasAttribute("data-reorder-index"));
             },
@@ -108,8 +108,8 @@
     // its Sortable instance persist); re-scan keeps the disabled state current.
     document.addEventListener("htmx:afterSwap", scan);
     document.addEventListener("htmx:afterSettle", scan);
-    // A per-group Holdings sort toggles that group's reorder on/off.
-    document.addEventListener("holdings:sorted", scan);
+    // A per-band sort on a grouped sheet toggles that band's reorder on/off.
+    document.addEventListener("sheet:group-sorted", scan);
 
     if (document.readyState !== "loading") scan();
 })();

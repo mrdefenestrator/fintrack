@@ -3,6 +3,7 @@ category with Remaining/Monthly/Annual subtotals in its heading, a pinned Net
 footer, per-band add and drag-reorder."""
 
 import re
+from html.parser import HTMLParser
 
 import pytest
 from sqlalchemy import create_engine
@@ -248,3 +249,46 @@ def test_band_css_ships_inline_with_the_page(client, page):
     assert '.grouped-sheet [data-tone="emerald"]' in head
     assert ".grouped-sheet .sheet-group-heading > td" in head
     assert "grouped-sheet.css" not in body  # no separate stylesheet request
+
+
+class _RowSpans(HTMLParser):
+    """Sum each <tr>'s cell colspans inside #budget-table / #holdings-table."""
+
+    def __init__(self):
+        super().__init__()
+        self.in_table = False
+        self.rows: list[tuple[str, int]] = []
+
+    def handle_starttag(self, tag, attrs):
+        a = dict(attrs)
+        if tag == "table" and a.get("id") in ("budget-table", "holdings-table"):
+            self.in_table = True
+        elif self.in_table and tag == "tr":
+            self.rows.append((a.get("class") or "", 0))
+        elif self.in_table and tag in ("td", "th") and self.rows:
+            cls, n = self.rows[-1]
+            self.rows[-1] = (cls, n + int(a.get("colspan") or 1))
+
+    def handle_endtag(self, tag):
+        if tag == "table":
+            self.in_table = False
+
+
+@pytest.mark.parametrize("page", ["budget", "holdings"])
+@pytest.mark.parametrize("edit", [False, True])
+def test_every_row_spans_the_full_grid(client, page, edit):
+    """Every row (band heading, column header, data, add, footer) spans the same
+    number of grid slots, and in edit mode each heading closes with its own
+    sticky actions cell — otherwise heading content paints over the pinned
+    actions column when the sheet scrolls sideways."""
+    body = client.get(f"/s/home/{page}{'?edit=1' if edit else ''}").get_data(
+        as_text=True
+    )
+    parser = _RowSpans()
+    parser.feed(body)
+    spans = {n for _, n in parser.rows}
+    assert len(spans) == 1, parser.rows
+    headings = body.split('<tr class="sheet-group-heading">')[1:]
+    assert headings
+    for h in headings:
+        assert ("table-actions-cell" in h.split("</tr>")[0]) is edit

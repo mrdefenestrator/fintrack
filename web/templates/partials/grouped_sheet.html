@@ -33,11 +33,16 @@ sheet-group-row {{ sheet.row_class() }}
 {%- endmacro -%}
 
 {# Tinted band heading. The label spans the first `label_span` columns; the
-   caller renders the rest of the row (subtotals, padding, band controls). #}
-{% macro heading(label, label_span) %}
+   caller renders the rest of the data columns (subtotals, padding, band
+   controls) — exactly `max_cols - label_span` of them. In edit mode the macro
+   closes the row with its own sticky actions cell, so heading content scrolls
+   *under* the pinned actions column like every other row instead of painting
+   over it (heading cells sit above the actions column, z-7 vs z-6). #}
+{% macro heading(label, label_span, edit_mode=false) %}
 <tr class="sheet-group-heading">
     <td colspan="{{ label_span }}" class="px-2 py-1.5 text-xs font-semibold uppercase tracking-wide">{{ label }}</td>
     {{ caller() }}
+    {% if edit_mode %}<td class="table-actions-cell px-1.5 py-1.5"></td>{% endif %}
 </tr>
 {% endmacro %}
 

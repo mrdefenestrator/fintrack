@@ -22,9 +22,9 @@
 {% endmacro %}
 {% for group in groups %}
 <tbody {{ gs.group_attrs(group, url_for('budget.reorder', filename=filename, category=group.category) if edit_mode else none) }}>
-    {% call gs.heading(group.label, label_span) %}
+    {% call gs.heading(group.label, label_span, edit_mode) %}
         {% for total in group.totals %}{{ gs.subtotal_cell(total) }}{% endfor %}
-        <td colspan="{{ span - label_span - group.totals | length }}"></td>
+        <td colspan="{{ max_cols - label_span - group.totals | length }}"></td>
     {% endcall %}
     {{ gs.header_row(group, max_cols, edit_mode) }}
     {% for row in group.rows %}

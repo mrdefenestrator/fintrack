@@ -3,6 +3,10 @@
 {% import "partials/sheet.html" as sheet %}
 {% set row_id = "txn-row-" ~ txn.id %}
 {% set base = "/s/" ~ filename ~ "/transactions/" ~ txn.id %}
+{# Long merchant / description values are clipped to one ellipsized line
+   (issue #86); see sheet.clip. #}
+{% set merchant_max = '14rem' %}
+{% set desc_max = '22rem' %}
 {% set dup_open = txn.dup_status in ('flagged', 'duplicate') %}
 <tr id="{{ row_id }}" class="{{ sheet.row_class('border-amber-400' if txn.dup_status == 'flagged' else '') }}{{ ' opacity-60' if txn.dup_status == 'duplicate' else '' }}"
     {% if txn.dup_status %}data-dup-status="{{ txn.dup_status }}"{% endif %}>
@@ -17,9 +21,9 @@
     {% if edit_mode and editing_field is defined and editing_field == 'merchant_name' %}
         {{ text_edit('merchant_name', txn.merchant, base ~ "/update", base ~ "/row", row_id) }}
     {% elif edit_mode %}
-        {{ cell_display(txn.merchant, base ~ "/cell?field=merchant_name", row_id) }}
+        {{ cell_display(sheet.clip(txn.merchant, merchant_max), base ~ "/cell?field=merchant_name", row_id) }}
     {% else %}
-        <td class="{{ sheet.cell_class() }}">{{ txn.merchant }}</td>
+        <td class="{{ sheet.cell_class() }}">{{ sheet.clip(txn.merchant, merchant_max) }}</td>
     {% endif %}
 
     {# Description — raw imported data, immutable. A possible duplicate (issue
@@ -27,11 +31,11 @@
        duplicate actions (Undo once marked); the actions re-render this row. #}
     {% if dup_open %}
     <td class="{{ sheet.cell_class('', 'text-gray-400 dark:text-gray-500' if edit_mode else '') }}">
-        {{ txn.raw_description }}
+        {{ sheet.clip(txn.raw_description, desc_max) }}
         <div class="dup-badge mt-0.5 flex flex-wrap items-center gap-1 text-xs text-amber-700 dark:text-amber-300"
              title="{{ txn.dup_reason }}">
             <span>{{ '&#9888; Possible duplicate of'|safe if txn.dup_status == 'flagged' else 'Duplicate of' }}
-                {{ txn.dup_of_date }} · {{ txn.dup_of_description }}</span>
+                {{ txn.dup_of_date }} · {{ sheet.clip(txn.dup_of_description, desc_max) }}</span>
             {% set dup_url = base ~ "/duplicate" %}
             {% set dup_vals = ', "edit": "1"' if edit_mode else '' %}
             <span class="inline-flex gap-1 whitespace-nowrap">
@@ -51,9 +55,9 @@
         </div>
     </td>
     {% elif edit_mode %}
-    {{ cell_non_editable(txn.raw_description, false, false) }}
+    {{ cell_non_editable(sheet.clip(txn.raw_description, desc_max), false, false) }}
     {% else %}
-    <td class="{{ sheet.cell_class() }}">{{ txn.raw_description }}</td>
+    <td class="{{ sheet.cell_class() }}">{{ sheet.clip(txn.raw_description, desc_max) }}</td>
     {% endif %}
 
     {# Account — immutable #}

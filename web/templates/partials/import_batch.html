@@ -2,6 +2,7 @@
    gets a second line naming the row it resembles and why, with Duplicate /
    Not duplicate actions; a resolved one shows its outcome and an Undo. The
    actions re-render this partial into #batch-<import_id>. #}
+{% import "partials/sheet.html" as sheet %}
 {% macro dup_button(txn_id, status, label, classes) %}
 <button hx-post="/s/{{ filename }}/import/{{ import_id }}/duplicate/{{ txn_id }}"
         hx-vals='{"status": "{{ status }}"}'
@@ -28,7 +29,7 @@
             data-txn-id="{{ txn.id }}"
             {% if dup %}data-dup-status="{{ dup.status }}"{% endif %}>
             <td class="py-1">{{ txn.date }}</td>
-            <td class="py-1">{{ txn.merchant }}</td>
+            <td class="py-1">{{ sheet.clip(txn.merchant, '14rem') }}</td>
             <td class="py-1 text-gray-500 dark:text-gray-400">{{ txn.category }}</td>
             <td class="py-1 text-right {{ '' if hidden else ('text-red-600' if txn.amount < 0 else 'text-green-600') }}">
                 {{ '-$' if txn.amount < 0 else '+$' }}{{ txn.amount|abs|money }}
@@ -43,7 +44,7 @@
                         {% if dup.status == 'flagged' %}&#9888; Possible duplicate of
                         {% elif dup.status == 'duplicate' %}Marked duplicate of
                         {% else %}Kept — not a duplicate of{% endif %}
-                        <span class="font-medium">{{ dup.of_date }} · {{ dup.of_raw_description }} ·
+                        <span class="font-medium">{{ dup.of_date }} · {{ sheet.clip(dup.of_raw_description, '22rem') }} ·
                             {{ '-$' if dup.of_amount < 0 else '+$' }}{{ dup.of_amount|abs|money }}</span>
                         <span class="text-gray-400 dark:text-gray-500">({{ dup.of_filename }}{{ ', pending' if dup.of_import_status == 'staging' else '' }})</span>
                     </span>

@@ -683,6 +683,34 @@
             }
         }
     </style>
+    {# Clipped long text (sheet.clip, issue #86). Inlined with the page for the
+       same reason as the grouped-sheet CSS below. A tap/click on a clipped
+       value toggles it between one ellipsized line and its full wrapped text
+       (touch has no hover tooltip); values that fit, links, and click-to-edit
+       cells are left alone. #}
+    <style>
+        .cell-clip {
+            display: inline-block;
+            max-width: 16rem;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            vertical-align: bottom;
+        }
+        .cell-clip.is-expanded {
+            white-space: normal;
+            overflow-wrap: anywhere;
+        }
+    </style>
+    <script>
+        document.addEventListener('click', function (e) {
+            var el = e.target.closest && e.target.closest('[data-clip]');
+            if (!el || el.closest('a, button, [hx-get]')) return;
+            var clipped = el.scrollWidth > el.clientWidth;
+            if (!clipped && !el.classList.contains('is-expanded')) return;
+            el.classList.toggle('is-expanded');
+        });
+    </script>
     {# Grouped-sheet chrome (Holdings, Budget): inlined, not a <link>ed static
        file, so the band tints, rails and sticky headers arrive with the page.
        The PR-preview Lambda runs at reserved concurrency 1 and rejects parallel

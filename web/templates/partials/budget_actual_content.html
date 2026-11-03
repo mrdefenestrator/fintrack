@@ -123,7 +123,7 @@
                     {% set _vals = {'transaction_id': t.id, 'budget_entry_ref': s.entry_ref} | tojson %}
                     <li data-suggestion data-transaction-id="{{ t.id }}" class="flex flex-wrap items-center gap-2">
                         <span class="text-gray-500 dark:text-gray-400 tabular-nums">{{ t.date }}</span>
-                        <span>{{ t.merchant or '—' }}</span>
+                        {{ sheet.clip(t.merchant or '—', '14rem') }}
                         <span class="tabular-nums {{ sheet.neg(t.amount < 0) }}">{{ '-' if t.amount < 0 }}${{ t.amount|abs|money }}</span>
                         <span class="px-1 rounded {{ _badge['good'] if s.confidence == 'high' else _badge['neutral'] }}" title="Score {{ '%.2f' | format(s.score) }}">{{ s.confidence }}</span>
                         <span class="text-gray-500 dark:text-gray-400">{{ s.reasons | join(', ') }}</span>

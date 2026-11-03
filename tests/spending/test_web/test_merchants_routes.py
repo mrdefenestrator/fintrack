@@ -140,3 +140,13 @@ def test_row_endpoint_returns_display_row(client, merchant_id):
     body = resp.get_data(as_text=True)
     assert f'id="merchant-row-{merchant_id}"' in body
     assert "<select" not in body  # display, not editing
+
+
+def test_row_clips_merchant_name_inside_link(client, merchant_id):
+    """Issue #86: the merchant name is clipped (sheet.clip) inside its link, so a
+    click still navigates to the merchant's transactions."""
+    body = client.get(f"/s/ledger/merchants/{merchant_id}/row").get_data(as_text=True)
+    assert (
+        '<span class="cell-clip" data-clip style="max-width:18rem" '
+        'title="WHOLE FOODS">WHOLE FOODS</span></a>'
+    ) in body

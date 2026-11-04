@@ -391,7 +391,8 @@ also lists the warnings and, with the estimate on, its per-category breakdown.
 A Balances / Changes toggle (`?view=change`, CLI `--changes`) swaps the grid's
 month-end balances for each month's change (`changes()`: month 0 against
 "now", then month against month), so lumpy months stand out; below-minimum
-cells stay marked by balance in either view. An icon in each month's header
+cells stay marked by balance in either view. The web grid is a grouped sheet
+like Holdings (see [Projections sheet](#projections-sheet)). An icon in each month's header
 (`?month=I`, CLI `--month YYYY-MM`) opens that month's breakdown above the
 grid: its flows by account (`month_breakdown()`), with money in, money out,
 card autopay, and asset/loan totals.
@@ -606,7 +607,7 @@ Two invariants keep the grid sound:
   pinned actions column (z-7 vs z-6), so a heading whose last cell spanned into
   the actions slot painted its figures over the drag/delete column when the
   sheet scrolled sideways. `test_every_row_spans_the_full_grid` checks both
-  sheets in view and edit mode.
+  sheets in view and edit mode (and Projections in each view).
 - **Row templates map cells to fields by column key** (the group's
   `col_keys`), never by position, so adding or removing a column can't silently
   shift which field a click edits.
@@ -653,6 +654,18 @@ CLI's `budget` table keeps its Kind column.
   category. Drag-reorder is per band (`/budget/reorder?category=…`); rows keep
   their full-list position as the edit/delete handle. Kind / Category /
   Recurrence filters work as before, and lock reordering while active.
+
+### Projections sheet
+
+The Projections accounts×months grid is a read-only grouped sheet (issue #52):
+the same four Cash · Credit Cards · Loans · Assets bands and tones as Holdings,
+always open (no collapse), each with its own sticky heading carrying the band's
+"Now" and per-month subtotals and its own column header (Account · Now ·
+months; no Now in the Changes view). Sorting is per band (`group-sort.js`, URL
+`sort_<group>_*`). Every band header repeats the month-breakdown icons
+(`sheet.header_link`). Budget flows with no `auto_account_ref` get a trailing
+slate **Unassigned** band with one "(no account)" row; the pinned footer holds
+Liquid total / Net worth (or their changes).
 
 ## CLI
 

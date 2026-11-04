@@ -1,7 +1,7 @@
-{# Shared markup for grouped spreadsheet sheets (Holdings, Budget). Styling lives
-   in partials/grouped_sheet.css (inlined by base.html); per-band sorting in static/js/group-sort.js;
-   the Python side (column metadata, per-band reorder) in
-   web/routes/grouped_sheet.py.
+{# Shared markup for grouped spreadsheet sheets (Holdings, Budget, Projections).
+   Styling lives in partials/grouped_sheet.css (inlined by base.html); per-band
+   sorting in static/js/group-sort.js; the Python side (column metadata,
+   per-band reorder) in web/routes/grouped_sheet.py.
 
    A page renders, inside <table class="grouped-sheet editable-table …">:
 
@@ -53,14 +53,18 @@ sheet-group-row {{ sheet.row_class() }}
 
 {# The band's own sortable column header. Blank header slots render as empty
    cells; a band narrower than the table pads out to `max_cols`. Sorting is
-   per band (group-sort.js reads data-sort-key). #}
-{% macro header_row(group, max_cols, edit_mode) %}
+   per band (group-sort.js reads data-sort-key). `links` (optional, per column:
+   none or {url, title, active}) adds sheet.header_link() icons. #}
+{% macro header_row(group, max_cols, edit_mode, links=[]) %}
 <tr class="sheet-group-header bg-gray-100 dark:bg-gray-700">
     {% for h in group.headers %}
     {% set colspan = group.spans[loop.index0] %}
     {% if h %}
     <th class="sortable-th px-1.5 py-0.5 font-medium text-gray-800 dark:text-gray-100 cursor-pointer select-none hover:bg-gray-200 dark:hover:bg-gray-600 {% if loop.index0 in group.right_align %}text-right{% else %}text-left{% endif %}"
-        {% if colspan > 1 %}colspan="{{ colspan }}" {% endif %}data-sort-key="c{{ loop.index0 }}" role="button" tabindex="0" title="{{ group.tooltips[loop.index0] if group.tooltips and loop.index0 < group.tooltips | length else h }}">{{ h }} <span class="sort-indicator"></span></th>
+        {% if colspan > 1 %}colspan="{{ colspan }}" {% endif %}data-sort-key="c{{ loop.index0 }}" role="button" tabindex="0" title="{{ group.tooltips[loop.index0] if group.tooltips and loop.index0 < group.tooltips | length else h }}">
+        {%- set _link = links[loop.index0] if loop.index0 < links | length else none -%}
+        {%- if _link %}{{ sheet.header_link(_link) }}{% endif -%}
+        {{ h }} <span class="sort-indicator"></span></th>
     {% else %}
     <th class="sheet-blank-slot px-1.5 py-0.5"{% if colspan > 1 %} colspan="{{ colspan }}"{% endif %}></th>
     {% endif %}

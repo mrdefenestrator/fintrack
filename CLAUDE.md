@@ -144,9 +144,10 @@ degrades to a warning without it).
   rows must use box-shadow, never border-collapse borders). The web GUI (Holdings)
   and the Python CLI (which keeps separate `accounts`/`assets`/`debts` commands)
   are both first-class; keep them at parity.
-- **Grouped sheets.** Holdings and Budget (one band per category, colored per
+- **Grouped sheets.** Holdings, Budget (one band per category, colored per
   category, with Remaining/Monthly/Annual subtotals and a Net footer; no Kind
-  column — the sign shows it) share one grouped-sheet layer —
+  column — the sign shows it), and the read-only Projections grid (Holdings'
+  bands + an Unassigned band) share one grouped-sheet layer —
   `partials/grouped_sheet.html` macros, `partials/grouped_sheet.css` (inlined
   in `base.html`, not a static file — the preview Lambda drops parallel
   requests), `static/js/group-sort.js`, `web/routes/grouped_sheet.py`. Build new

@@ -21,7 +21,8 @@ def test_projections_page_renders(page, flask_server):
     assert "Lowest liquid" in page.locator("[data-summary='lowest']").inner_text()
     # "Now" column sits between Account and the first month.
     assert (
-        page.locator("[data-projection-table] thead th[data-col='1']")
+        page.locator("[data-projection-table] .sheet-group-header")
+        .first.locator("th[data-sort-key='c1']")
         .inner_text()
         .strip()
         == "Now"
@@ -38,38 +39,39 @@ def test_projections_nav_tab(page, flask_server):
     assert "Projections" in page.title()
 
 
-def test_projections_grid_sticky_chrome(page, flask_server):
-    """The accounts×months grid adopts the shared sheet chrome: a sticky month
-    header, a frozen first (Account) column pinned to the left edge, and the
-    Liquid / Net worth totals pinned in a <tfoot> so client-side sort never
-    reorders them."""
+def test_projections_grid_is_a_grouped_sheet(page, flask_server):
+    """The accounts×months grid is a grouped sheet like Holdings: always-open
+    bands with a sticky heading + column header each, and the Liquid / Net
+    worth totals pinned in the footer."""
     page.goto(f"{flask_server}/s/test_finances/projections")
     tbl = page.locator("[data-projection-table]")
     assert tbl.is_visible()
+    assert "grouped-sheet" in tbl.get_attribute("class")
 
-    # Sticky month header (shared .table-scroll-container rule).
-    assert (
-        tbl.locator("thead").evaluate("e => getComputedStyle(e).position") == "sticky"
-    )
-    # Frozen first column: the corner header cell pins to the left edge.
-    corner = tbl.locator("thead th:first-child")
-    assert corner.evaluate("e => getComputedStyle(e).position") == "sticky"
-    assert corner.evaluate("e => getComputedStyle(e).left") == "0px"
+    band = tbl.locator("tbody.sheet-group").first
+    assert band.get_attribute("data-tone")
+    heading = band.locator("tr.sheet-group-heading > td").first
+    assert heading.evaluate("e => getComputedStyle(e).position") == "sticky"
+    # Every data row is visible — bands no longer collapse.
+    rows = tbl.locator("tr.sheet-group-row")
+    assert rows.count() > 0
+    for i in range(rows.count()):
+        assert rows.nth(i).is_visible()
 
-    # Both totals live in the <tfoot> as .total-row (pinned, out of the sort).
-    assert tbl.locator("tfoot tr.total-row", has_text="Liquid total").count() == 1
-    assert tbl.locator("tfoot tr.total-row", has_text="Net worth").count() == 1
+    assert tbl.locator("tr.total-row", has_text="Liquid total").count() == 1
+    assert tbl.locator("tr.total-row", has_text="Net worth").count() == 1
 
 
-def test_projections_sort_keeps_totals_in_footer(page, flask_server):
-    """Sorting a column never pulls the summary rows out of the <tfoot> into
-    the sortable <tbody>."""
+def test_projections_sort_is_per_band(page, flask_server):
+    """Sorting a band's column reorders only that band's rows; the totals stay
+    in the footer."""
     page.goto(f"{flask_server}/s/test_finances/projections")
     tbl = page.locator("[data-projection-table]")
-    tbl.locator("thead th[data-col='1']").click()
-    assert tbl.locator("tbody tr.total-row").count() == 0
-    assert tbl.locator("tfoot tr.total-row").count() == 2
-    assert tbl.locator("tfoot", has_text="Net worth").is_visible()
+    band = tbl.locator("tbody.sheet-group").first
+    band.locator(".sheet-group-header th[data-sort-key='c1']").click()
+    assert band.get_attribute("data-sorted") == "1"
+    assert band.locator("tr.total-row").count() == 0
+    assert tbl.locator("tr.total-row").count() == 2
 
 
 def test_projections_horizon_and_estimate_toggles(page, flask_server):
@@ -114,9 +116,9 @@ def test_projections_changes_view(page, flask_server):
     page.wait_for_url("**view=change**")
     tbl = page.locator("[data-projection-table]")
     assert tbl.get_attribute("data-view") == "change"
-    assert tbl.locator("thead", has_text="Now").count() == 0
-    assert tbl.locator("tfoot tr.total-row", has_text="Liquid change").count() == 1
-    assert tbl.locator("tfoot tr.total-row", has_text="Net worth change").count() == 1
+    assert tbl.locator(".sheet-group-header", has_text="Now").count() == 0
+    assert tbl.locator("tr.total-row", has_text="Liquid change").count() == 1
+    assert tbl.locator("tr.total-row", has_text="Net worth change").count() == 1
 
     page.click("a[href*='months=6']")
     page.wait_for_url("**months=6**")
@@ -124,7 +126,7 @@ def test_projections_changes_view(page, flask_server):
 
     page.click("[data-view-toggle] >> text=Balances")
     page.wait_for_url(lambda url: "view=change" not in url)
-    assert tbl.locator("tfoot tr.total-row", has_text="Liquid total").count() == 1
+    assert tbl.locator("tr.total-row", has_text="Liquid total").count() == 1
 
 
 def test_projections_month_breakdown(page, flask_server):
@@ -134,7 +136,9 @@ def test_projections_month_breakdown(page, flask_server):
     assert page.locator("[data-month-breakdown]").count() == 0
 
     tbl = page.locator("[data-projection-table]")
-    second_month = tbl.locator("thead th[data-col='3']")
+    second_month = tbl.locator(".sheet-group-header").first.locator(
+        "th[data-sort-key='c3']"
+    )
     label = second_month.inner_text().strip()
     second_month.locator("[data-header-link]").click()
     page.wait_for_url("**month=1**")
@@ -146,8 +150,8 @@ def test_projections_month_breakdown(page, flask_server):
         panel.locator("[data-breakdown-group]", has_text="Main Checking").count() == 1
     )
     assert "Money in +$" in panel.locator("[data-breakdown-totals]").inner_text()
-    # The header click didn't sort the column (sorting records sort_col).
-    assert "sort_col" not in page.url
+    # The header click didn't sort the column (sorting records sort_<group>_col).
+    assert "sort_" not in page.url
 
     panel.locator("a[title='Next month']").click()
     page.wait_for_url("**month=2**")

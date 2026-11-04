@@ -1,4 +1,4 @@
-/* Grouped spreadsheet sheets (Holdings, Budget): one <table class="grouped-sheet">
+/* Grouped spreadsheet sheets (Holdings, Budget, Projections): one <table class="grouped-sheet">
    split into bands, each its own <tbody class="sheet-group" data-tone="…">.
    Markup: templates/partials/grouped_sheet.html. Sorting: js/group-sort.js.
 
@@ -134,3 +134,4 @@
 /* A sorted band's DOM order no longer matches its stored order, so hide its
    drag handles (row-reorder.js also refuses to drag it). */
 .grouped-sheet tbody[data-sorted] .drag-handle { display: none; }
+

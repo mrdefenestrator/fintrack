@@ -430,52 +430,6 @@
             box-shadow: inset -1px 0 0 #4b5563;   /* gray-600 */
         }
 
-        /* Frozen first column (opt-in): add `sheet-freeze-col` to a
-           border-collapse sheet <table> inside a .table-scroll-container to pin
-           the first cell of every row to the left edge as the data scrolls
-           horizontally (e.g. the Projections accounts×months matrix). Dividers on
-           the pinned cells are box-shadows, not border-collapse borders, so they
-           survive the sticky (same invariant as the header/footer). Composes with
-           a sticky header (the corner cell pins in both axes) and .total-row
-           footers. */
-        .table-scroll-container table.sheet-freeze-col tbody td:first-child,
-        .table-scroll-container table.sheet-freeze-col tfoot td:first-child {
-            position: sticky;
-            left: 0;
-            z-index: 4;
-            background: #ffffff;
-            border-right-width: 0;
-            box-shadow: inset -1px 0 0 #e5e7eb;   /* gray-200 column divider */
-        }
-        .dark .table-scroll-container table.sheet-freeze-col tbody td:first-child,
-        .dark .table-scroll-container table.sheet-freeze-col tfoot td:first-child {
-            background: #1f2937;                  /* gray-800 */
-            box-shadow: inset -1px 0 0 #4b5563;   /* gray-600 */
-        }
-        /* Corner header cell: sticky in both axes, above every other header cell
-           and the frozen column so it owns the top-left corner. */
-        .table-scroll-container table.sheet-freeze-col thead th:first-child {
-            position: sticky;
-            left: 0;
-            z-index: 12;
-            background: #f3f4f6;                  /* gray-100 */
-        }
-        .dark .table-scroll-container table.sheet-freeze-col thead th:first-child {
-            background: #374151;                  /* gray-700 */
-        }
-        /* Frozen first cell of a total-row band: the total-band background + above
-           the data column. Declared after the generic frozen-cell rule so it wins
-           the background for this cell (the divider box-shadow is identical). */
-        .table-scroll-container table.sheet-freeze-col tbody tr.total-row td:first-child,
-        .table-scroll-container table.sheet-freeze-col tfoot tr.total-row td:first-child {
-            z-index: 8;
-            background: #f3f4f6;                  /* gray-100 */
-        }
-        .dark .table-scroll-container table.sheet-freeze-col tbody tr.total-row td:first-child,
-        .dark .table-scroll-container table.sheet-freeze-col tfoot tr.total-row td:first-child {
-            background: #374151;                  /* gray-700 */
-        }
-
         /* File picker row: reveal action buttons on hover (hover-capable only) */
         .file-row-actions { opacity: 0; pointer-events: none; transition: opacity 0.1s ease; }
         @media (hover: hover) {

@@ -5,33 +5,7 @@
 {% import "partials/sheet_filter_bar.html" as fb %}
 {% import "partials/pager.html" as nav %}
 
-{# The accounts×months grid uses the shared sheet chrome: `.table-scroll-container`
-   + `data-sheet-scroll` (sticky header, edge shadows, grid canvas, bottom-pinned
-   totals) and the opt-in `sheet-freeze-col` frozen first column — all defined in
-   base.html, no page-specific table CSS here. The only content-specific rule is
-   that month labels shouldn't wrap. #}
-<style>
-    [data-projection-table] thead th { white-space: nowrap; }
-    [data-projection-table] .projection-group[data-group="cash"]   { --accent: #34d399; --band: #ecfdf5; --band-dark: #022c22; --label: #065f46; --label-dark: #6ee7b7; }
-    [data-projection-table] .projection-group[data-group="credit"] { --accent: #fb7185; --band: #fff1f2; --band-dark: #4c0519; --label: #9f1239; --label-dark: #fda4af; }
-    [data-projection-table] .projection-group[data-group="loan"]   { --accent: #fbbf24; --band: #fffbeb; --band-dark: #451a03; --label: #92400e; --label-dark: #fcd34d; }
-    [data-projection-table] .projection-group[data-group="asset"]  { --accent: #3b82f6; --band: #eff6ff; --band-dark: #172554; --label: #1e40af; --label-dark: #bfdbfe; }
-    [data-projection-table] .projection-group-heading > td {
-        background: var(--band);
-        box-shadow: inset 0 1px 0 var(--accent), inset 0 -1px 0 var(--accent);
-    }
-    .dark [data-projection-table] .projection-group-heading > td { background: var(--band-dark); }
-    [data-projection-table] .projection-group-heading > td:first-child {
-        color: var(--label);
-        box-shadow: inset 4px 0 0 var(--accent), inset 0 1px 0 var(--accent), inset 0 -1px 0 var(--accent);
-    }
-    .dark [data-projection-table] .projection-group-heading > td:first-child { color: var(--label-dark); }
-    [data-projection-table] .projection-group-heading > td { color: var(--label); }
-    .dark [data-projection-table] .projection-group-heading > td { color: var(--label-dark); }
-    [data-projection-table] .projection-group > tr:not(.projection-group-heading) > :first-child {
-        box-shadow: inset 4px 0 0 var(--accent);
-    }
-</style>
+{% import "partials/grouped_sheet.html" as gs %}
 
 {# Non-scrolling top band: the headline summary (where liquid and net worth
    end up), warnings, and the (opt-in) estimate breakdown. The horizon/estimate
@@ -168,55 +142,46 @@
     </a>
 {% endcall %}
 
-<!-- Accounts × months grid (the sheet): month-end balances after a "Now"
-     column, or (view=change) each month's change. The filter bar above supplies
-     the card's top edge + rounding, so the table carries only the sides/bottom. -->
+{# Accounts × months grid: a grouped sheet (partials/grouped_sheet.html, shared
+   with Holdings/Budget) — one always-open band per holding group with its own
+   sticky heading (subtotals) and sortable column header, then the pinned
+   Liquid / Net worth footer. Columns are Account, "Now" (Balances view only),
+   then one per month: month-end balances, or (view=change) each month's
+   change. `sheet-freeze-col` pins the Account column as the months scroll
+   sideways. The filter bar above supplies the card's top edge + rounding, so
+   the frame carries only the sides/bottom. #}
 {% set changes = view == 'change' %}
 {% set num = 'text-right tabular-nums whitespace-nowrap' %}
 {# In the Changes view a month with no movement shows a faint dash, so the
    months that do move stand out. #}
 {% macro amount(v) %}{% if changes and v == 0 %}<span class="text-gray-300 dark:text-gray-600">&ndash;</span>{% else %}{{ v | fmt_money }}{% endif %}{% endmacro %}
-{% macro heading_cell(v) %}<td class="px-1.5 py-1.5 {{ num }} text-sm {% if v < 0 %}!text-red-600 dark:!text-red-400{% endif %}">{{ amount(v) }}</td>{% endmacro %}
-{% macro num_cell(v) %}<td class="{{ sheet.cell_class(num, sheet.neg(v < 0)) }}"{% if changes and v == 0 %} data-sort-value="0"{% endif %}>{{ amount(v) }}</td>{% endmacro %}
+{% set lead = [] if changes else [none] %}
+{% set _month_links = lead + [none] %}
+{% for m in result.months %}
+{% set _open = month_index == loop.index0 %}
+{% set _ = _month_links.append({
+    'url': proj_url(month=none if _open else loop.index0),
+    'title': ('Close ' ~ m.label ~ ' breakdown') if _open else ('What happens in ' ~ m.label),
+    'active': _open}) %}
+{% endfor %}
+{% set max_cols = groups[0].ncols if groups else (result.months | length) + (1 if changes else 2) %}
 <div class="table-scroll-container rounded-b-lg border-l border-b border-r border-gray-300 dark:border-gray-600 shadow-sm" data-sheet-scroll>
-{# Client-side column sort (web/static/js/sortable.js) via `sortable` + the
-   sheet.thead hooks; the (unassigned)/Liquid/Net-worth rows live in <tfoot> so
-   the sorter (tbody-only) leaves them pinned in place. #}
-<table data-projection-table data-view="{{ view }}" class="sortable sheet-freeze-col w-full text-sm border-collapse bg-white dark:bg-gray-800" style="white-space:nowrap">
-    {% set _months = result.months | map(attribute='label') | list %}
-    {% set _month_links = [] %}
-    {% for label in _months %}
-    {% set _open = month_index == loop.index0 %}
-    {% set _ = _month_links.append({
-        'url': proj_url(month=none if _open else loop.index0),
-        'title': ('Close ' ~ label ~ ' breakdown') if _open else ('What happens in ' ~ label),
-        'active': _open}) %}
-    {% endfor %}
-    {% if changes %}
-    {{ sheet.thead(["Account"] + _months,
-                   right_align_cols=range(1, (_months | length) + 1) | list,
-                   tooltips=["Account or holding name"],
-                   header_links=[none] + _month_links) }}
-    {% else %}
-    {{ sheet.thead(["Account", "Now"] + _months,
-                   right_align_cols=range(1, (_months | length) + 2) | list,
-                   tooltips=["Account or holding name", "Current balance (start of projection)"],
-                   header_links=[none, none] + _month_links) }}
-    {% endif %}
+<table id="projections-table" data-projection-table data-view="{{ view }}" class="grouped-sheet sheet-freeze-col w-full text-sm border-collapse bg-white dark:bg-gray-800" style="white-space:nowrap">
     {% for group in groups %}
-    <tbody class="projection-group" data-group="{{ group.key }}" x-data="{ open: {{ 'true' if group.key in open_groups else 'false' }} }" :data-open="open">
-        <tr class="projection-group-heading cursor-pointer select-none" @click="open = !open">
-            <td class="px-2 py-1.5 text-xs font-semibold uppercase tracking-wide whitespace-nowrap">
-                <span class="inline-block transition-transform duration-150 text-[0.6rem] mr-0.5" :class="open && 'rotate-90'">&#9656;</span>
-                {{ group.label }}
-            </td>
-            {% if not changes %}{{ heading_cell(group.start) }}{% endif %}
-            {% for v in group.cells %}{{ heading_cell(v) }}{% endfor %}
-        </tr>
+    <tbody {{ gs.group_attrs(group) }}>
+        {% call gs.heading(group.label, 1) %}
+            {% if not changes %}{{ gs.subtotal_cell(amount(group.start)) }}{% endif %}
+            {% for v in group.cells %}{{ gs.subtotal_cell(amount(v)) }}{% endfor %}
+        {% endcall %}
+        {{ gs.header_row(group, max_cols, false, _month_links) }}
         {% for row in group.rows %}
-        <tr class="{{ sheet.row_class() }}" x-show="open" x-transition.opacity>
+        <tr class="{{ gs.row_class() }}" data-reorder-index="{{ loop.index0 }}">
+            {% if row.account %}
             <td class="{{ sheet.cell_class() }}">{{ row.account | account_label }}</td>
-            {% if not changes %}{{ num_cell(row.start) }}{% endif %}
+            {% else %}
+            <td class="{{ sheet.cell_class('', 'italic text-gray-600 dark:text-gray-300') }}" title="Budget entries with no account set">(no account)</td>
+            {% endif %}
+            {% if not changes %}<td class="{{ sheet.cell_class(num, sheet.neg(row.start < 0)) }}">{{ amount(row.start) }}</td>{% endif %}
             {% for v in row.cells %}
             {# Below-minimum is about the balance, so it marks the cell in either view. #}
             <td class="{{ sheet.cell_class(num,
@@ -227,54 +192,11 @@
         {% endfor %}
     </tbody>
     {% endfor %}
-    <tfoot>
-        {% if result.has_unassigned %}
-        <tr class="italic text-gray-600 dark:text-gray-300 border-b border-gray-200 dark:border-gray-700">
-            <td class="{{ sheet.cell_class('', 'whitespace-nowrap') }}" title="Budget entries with no account set">(unassigned)</td>
-            {% if not changes %}{{ num_cell(0) }}{% endif %}
-            {% for v in footer.unassigned %}{{ num_cell(v) }}{% endfor %}
-        </tr>
-        {% endif %}
-        <tr class="total-row total-upper bg-gray-100 dark:bg-gray-700 border-t-2 border-gray-300 dark:border-gray-600 font-medium">
-            <td class="{{ sheet.cell_class('', 'whitespace-nowrap') }}">{{ 'Liquid change' if changes else 'Liquid total' }}</td>
-            {% if not changes %}{{ num_cell(result.start_liquid) }}{% endif %}
-            {% for v in footer.liquid %}{{ num_cell(v) }}{% endfor %}
-        </tr>
-        <tr class="total-row bg-gray-100 dark:bg-gray-700 font-medium">
-            <td class="{{ sheet.cell_class('', 'whitespace-nowrap') }}">{{ 'Net worth change' if changes else 'Net worth' }}</td>
-            {% if not changes %}{{ num_cell(result.start_net_worth) }}{% endif %}
-            {% for v in footer.net_worth %}{{ num_cell(v) }}{% endfor %}
-        </tr>
-    </tfoot>
+    {% set _liquid = ['Liquid change' if changes else 'Liquid total'] + ([] if changes else [amount(result.start_liquid)]) %}
+    {% set _net = ['Net worth change' if changes else 'Net worth'] + ([] if changes else [amount(result.start_net_worth)]) %}
+    {% for v in footer.liquid %}{% set _ = _liquid.append(amount(v)) %}{% endfor %}
+    {% for v in footer.net_worth %}{% set _ = _net.append(amount(v)) %}{% endfor %}
+    {{ gs.footer([_liquid, _net], range(1, max_cols) | list, false) }}
 </table>
 </div>
-<script>
-(function() {
-    var table = document.querySelector('[data-projection-table]');
-    if (!table) return;
-    function openKeys() {
-        return Array.from(table.querySelectorAll('.projection-group[data-open="true"]'))
-            .map(function(g) { return g.dataset.group; });
-    }
-    function withOpen(href) {
-        var u = new URL(href, location.origin);
-        u.searchParams.delete('open');
-        openKeys().forEach(function(k) { u.searchParams.append('open', k); });
-        return u.toString();
-    }
-    table.addEventListener('click', function(e) {
-        if (e.target.closest('.projection-group-heading'))
-            requestAnimationFrame(function() { history.replaceState(null, '', withOpen(location.href)); });
-    });
-    // Capture phase, so it also sees the month-header links (which stop the
-    // click from bubbling to the column sorter).
-    document.addEventListener('click', function(e) {
-        var link = e.target.closest('[data-proj-nav] a, [data-estimate-toggle], [data-header-link], [data-breakdown-close]');
-        if (!link) return;
-        e.preventDefault();
-        e.stopPropagation();
-        location.href = withOpen(link.href);
-    }, true);
-})();
-</script>
 {% endblock %}

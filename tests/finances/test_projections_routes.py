@@ -96,7 +96,9 @@ def test_bands_use_the_holdings_groups_and_tones(client):
         r'<tbody class="sheet-group" data-group="(\w+)" data-tone="(\w+)"', body
     )
     assert bands == [("cash", "emerald"), ("credit", "rose"), ("unassigned", "slate")]
-    assert "grouped-sheet" in body and "sheet-freeze-col" in body
+    assert "grouped-sheet" in body
+    # No frozen Account column: it ate too much of a narrow viewport.
+    assert "sheet-freeze-col" not in body
     # Bands are always open: no collapse toggle.
     assert "x-show" not in body.split('id="projections-table"')[1]
 

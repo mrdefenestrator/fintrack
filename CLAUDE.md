@@ -147,8 +147,7 @@ degrades to a warning without it).
 - **Grouped sheets.** Holdings, Budget (one band per category, colored per
   category, with Remaining/Monthly/Annual subtotals and a Net footer; no Kind
   column — the sign shows it), and the read-only Projections grid (Holdings'
-  bands + an Unassigned band, frozen Account column via `sheet-freeze-col`)
-  share one grouped-sheet layer —
+  bands + an Unassigned band) share one grouped-sheet layer —
   `partials/grouped_sheet.html` macros, `partials/grouped_sheet.css` (inlined
   in `base.html`, not a static file — the preview Lambda drops parallel
   requests), `static/js/group-sort.js`, `web/routes/grouped_sheet.py`. Build new

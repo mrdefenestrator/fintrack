@@ -147,8 +147,7 @@
    sticky heading (subtotals) and sortable column header, then the pinned
    Liquid / Net worth footer. Columns are Account, "Now" (Balances view only),
    then one per month: month-end balances, or (view=change) each month's
-   change. `sheet-freeze-col` pins the Account column as the months scroll
-   sideways. The filter bar above supplies the card's top edge + rounding, so
+   change. The filter bar above supplies the card's top edge + rounding, so
    the frame carries only the sides/bottom. #}
 {% set changes = view == 'change' %}
 {% set num = 'text-right tabular-nums whitespace-nowrap' %}
@@ -166,7 +165,7 @@
 {% endfor %}
 {% set max_cols = groups[0].ncols if groups else (result.months | length) + (1 if changes else 2) %}
 <div class="table-scroll-container rounded-b-lg border-l border-b border-r border-gray-300 dark:border-gray-600 shadow-sm" data-sheet-scroll>
-<table id="projections-table" data-projection-table data-view="{{ view }}" class="grouped-sheet sheet-freeze-col w-full text-sm border-collapse bg-white dark:bg-gray-800" style="white-space:nowrap">
+<table id="projections-table" data-projection-table data-view="{{ view }}" class="grouped-sheet w-full text-sm border-collapse bg-white dark:bg-gray-800" style="white-space:nowrap">
     {% for group in groups %}
     <tbody {{ gs.group_attrs(group) }}>
         {% call gs.heading(group.label, 1) %}

@@ -667,13 +667,6 @@ months; no Now in the Changes view). Sorting is per band (`group-sort.js`, URL
 slate **Unassigned** band with one "(no account)" row; the pinned footer holds
 Liquid total / Net worth (or their changes).
 
-The Account column stays frozen to the left edge as the months scroll sideways:
-`sheet-freeze-col` on a grouped sheet gets its own rules in
-`grouped_sheet.css`, which keep the accent rail, band tint and divider as
-box-shadows on the pinned cells (heading/header corners z-8, data cells z-5).
-The pinned footer is raised to z-9 so a heading corner at the bottom can't
-cover it.
-
 ## CLI
 
 One Click tree (`fintrack.py`), with global `--db` (default `$FINTRACK_DB`)

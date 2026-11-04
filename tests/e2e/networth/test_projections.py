@@ -41,8 +41,8 @@ def test_projections_nav_tab(page, flask_server):
 
 def test_projections_grid_is_a_grouped_sheet(page, flask_server):
     """The accounts×months grid is a grouped sheet like Holdings: always-open
-    bands with a sticky heading + column header each, the Account column frozen
-    to the left edge, and the Liquid / Net worth totals pinned in the footer."""
+    bands with a sticky heading + column header each, and the Liquid / Net
+    worth totals pinned in the footer."""
     page.goto(f"{flask_server}/s/test_finances/projections")
     tbl = page.locator("[data-projection-table]")
     assert tbl.is_visible()
@@ -57,13 +57,6 @@ def test_projections_grid_is_a_grouped_sheet(page, flask_server):
     assert rows.count() > 0
     for i in range(rows.count()):
         assert rows.nth(i).is_visible()
-
-    # Frozen Account column: the band's header corner and data cells pin left.
-    corner = band.locator("tr.sheet-group-header > th").first
-    assert corner.evaluate("e => getComputedStyle(e).position") == "sticky"
-    assert corner.evaluate("e => getComputedStyle(e).left") == "0px"
-    cell = band.locator("tr.sheet-group-row > td").first
-    assert cell.evaluate("e => getComputedStyle(e).left") == "0px"
 
     assert tbl.locator("tr.total-row", has_text="Liquid total").count() == 1
     assert tbl.locator("tr.total-row", has_text="Net worth").count() == 1

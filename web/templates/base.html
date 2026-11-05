@@ -701,7 +701,7 @@
             {% endif %}
 
             {# Shared header pill: icon + label with a `md:`-collapsing label, reused
-               by Import and the lock/edit toggle so they stay consistent and shrink
+               by Import, the lock/edit toggle and the file picker so they stay consistent and shrink
                to icon-only on narrow screens. #}
             {% set _hdr_pill = 'flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors' %}
             <div class="flex items-center ml-auto gap-1 shrink-0">
@@ -796,10 +796,12 @@
                 mode: 'list',
                 inputName: '',
                 resetMode() { this.mode = 'list'; this.inputName = ''; }
-            }" class="relative py-3 shrink-0">
+            }" class="relative py-2 shrink-0">
+                {# Same pill as Import / Locked so the file name matches the other
+                   top-bar labels' size and weight. #}
                 <button @click.stop="open = !open; if(open) resetMode()" data-file-picker
-                    class="flex items-center gap-1 text-sm text-blue-100 hover:text-white transition-colors">
-                    <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    class="{{ _hdr_pill }} text-blue-100 hover:text-white hover:bg-blue-700">
+                    <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
                     </svg>
@@ -812,19 +814,20 @@
                 <div x-init="$el.style.removeProperty('display')" :class="open ? '' : 'opacity-0 pointer-events-none'" style="display:none" @click.outside="open = false" data-file-picker-dropdown
                     class="absolute right-0 top-full mt-1 w-64 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-[60] text-sm overflow-hidden transition-opacity duration-100">
 
-                    <!-- File list mode -->
+                    <!-- File list mode. Rows and icon buttons are ~40-44px tall
+                         so they're comfortable finger targets (issue #94). -->
                     <template x-if="mode === 'list'">
                         <div class="p-2">
                             <div class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide px-1 mb-1">Files</div>
                             {% for f in available_files %}
                             <div class="flex items-center file-row">
                                 {% if f == filename %}
-                                <div class="flex-1 px-2 py-1 rounded bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-medium flex items-center justify-between min-w-0" data-active-file>
+                                <div class="flex-1 px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-medium flex items-center justify-between min-w-0" data-active-file>
                                     <span class="truncate">{{ f }}</span>
                                     <div class="flex items-center gap-0.5 shrink-0 ml-1">
                                         <button @click="mode = 'rename'; inputName = '{{ filename }}'; $nextTick(() => { $refs.nameInput.focus(); $refs.nameInput.select(); })"
                                             title="Rename" aria-label="Rename"
-                                            class="p-1 text-blue-400 hover:text-blue-600 dark:hover:text-blue-200">
+                                            class="p-3 text-blue-400 hover:text-blue-600 dark:hover:text-blue-200">
                                             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                                     d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
@@ -832,7 +835,7 @@
                                         </button>
                                         <button @click="mode = 'copy'; inputName = '{{ filename }}-copy'; $nextTick(() => { $refs.nameInput.focus(); $refs.nameInput.select(); })"
                                             title="Duplicate" aria-label="Duplicate"
-                                            class="p-1 text-blue-400 hover:text-blue-600 dark:hover:text-blue-200">
+                                            class="p-3 text-blue-400 hover:text-blue-600 dark:hover:text-blue-200">
                                             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                                     d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
@@ -842,14 +845,14 @@
                                 </div>
                                 {% else %}
                                 <a href="{% if active_tab is defined and active_tab == 'budget' %}{{ url_for('budget.budget_view', filename=f, edit=1 if edit_mode else none) }}{% elif active_tab is defined and active_tab == 'budget_actual' %}{{ url_for('budget.actual_view', filename=f, edit=1 if edit_mode else none) }}{% else %}{{ url_for('holdings.holdings_view', filename=f, edit=1 if edit_mode else none) }}{% endif %}"
-                                    class="flex-1 px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 truncate text-gray-700 dark:text-gray-200">
+                                    class="flex-1 px-2 py-3 rounded hover:bg-gray-100 dark:hover:bg-gray-700 truncate text-gray-700 dark:text-gray-200">
                                     {{ f }}
                                 </a>
                                 <form method="POST" action="{{ url_for('files.delete') }}"
                                     class="shrink-0 file-row-actions">
                                     <input type="hidden" name="name" value="{{ f }}">
                                     <button type="submit" title="Delete {{ f }}.yaml"
-                                        class="p-1 text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400"
+                                        class="p-3 text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400"
                                         onclick="return confirm('Delete {{ f }}?')">
                                         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -861,7 +864,7 @@
                             </div>
                             {% endfor %}
                             <button @click="mode = 'new'; $nextTick(() => $refs.nameInput.focus())"
-                                class="w-full text-left px-2 py-1 mt-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2 text-gray-500 dark:text-gray-400">
+                                class="w-full text-left px-2 py-3 mt-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2 text-gray-500 dark:text-gray-400">
                                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
                                 </svg>
@@ -917,7 +920,8 @@
         {# Primary navigation: docked sidebar on wide screens (>=lg), overlay
            drawer when narrow. Grouped outline — headings are labels, only the
            destination pages are links. #}
-        {% set _side = 'block px-6 py-1.5 mr-2 rounded-r-full transition-colors' %}
+        {# py-3: ~44px rows, a comfortable finger target (issue #94). #}
+        {% set _side = 'block px-6 py-3 mr-2 rounded-r-full transition-colors' %}
         {% set _side_idle = 'text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700' %}
         {% set _side_active = 'bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-200 font-medium' %}
         {% set _side_head = 'px-4 pt-3 pb-1 text-[11px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500' %}

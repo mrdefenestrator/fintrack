@@ -701,7 +701,7 @@
             {% endif %}
 
             {# Shared header pill: icon + label with a `md:`-collapsing label, reused
-               by Import and the lock/edit toggle so they stay consistent and shrink
+               by Import, the lock/edit toggle and the file picker so they stay consistent and shrink
                to icon-only on narrow screens. #}
             {% set _hdr_pill = 'flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors' %}
             <div class="flex items-center ml-auto gap-1 shrink-0">
@@ -796,10 +796,12 @@
                 mode: 'list',
                 inputName: '',
                 resetMode() { this.mode = 'list'; this.inputName = ''; }
-            }" class="relative py-3 shrink-0">
+            }" class="relative py-2 shrink-0">
+                {# Same pill as Import / Locked so the file name matches the other
+                   top-bar labels' size and weight. #}
                 <button @click.stop="open = !open; if(open) resetMode()" data-file-picker
-                    class="flex items-center gap-1 text-sm text-blue-100 hover:text-white transition-colors">
-                    <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    class="{{ _hdr_pill }} text-blue-100 hover:text-white hover:bg-blue-700">
+                    <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
                     </svg>

@@ -1,6 +1,9 @@
 /**
- * Per-band column sorting for grouped sheets (Holdings, Budget — see
- * templates/partials/grouped_sheet.html).
+ * Per-band column sorting for grouped sheets (Holdings, Budget, Projections —
+ * see templates/partials/grouped_sheet.html), and for flat (unbanded) sheets
+ * (Transactions, Merchants, Categories, Budget vs Actual), whose one
+ * `tbody.sheet-group--flat` is sorted from the header row in the table's
+ * <thead>.
  *
  * Each band is one <tbody class="sheet-group" data-group="..."> containing a
  * heading, a header row (`.sheet-group-header` with `.sortable-th` cells), the
@@ -9,7 +12,9 @@
  * ahead of the add-row so the heading and header stay put. A cell's
  * `data-sort-value` (e.g. Budget's recurrence rank) overrides its text. State is
  * persisted in the URL (sort_<group>_col / sort_<group>_dir) so it survives
- * reloads and table swaps. While a band is sorted its tbody gets `data-sorted`,
+ * reloads and table swaps. Data rows are the band's `.sheet-group-row`s (and
+ * any carrying data-reorder-index); a `data-detail-row` right after a data row
+ * belongs to it and moves with it. While a band is sorted its tbody gets `data-sorted`,
  * which disables that band's drag-reorder (see row-reorder.js).
  */
 (function () {
@@ -27,9 +32,27 @@
     }
 
     function dataRows(groupTbody) {
-        return Array.prototype.slice.call(
-            groupTbody.querySelectorAll(":scope > tr[data-reorder-index]")
+        var rows = Array.prototype.slice.call(
+            groupTbody.querySelectorAll(
+                ":scope > tr[data-reorder-index], :scope > tr.sheet-group-row"
+            )
         );
+        rows.forEach(function (r) {
+            var next = r.nextElementSibling;
+            r._detailRow = next && next.hasAttribute("data-detail-row") ? next : null;
+        });
+        return rows;
+    }
+
+    // The band's own header row, or — for a flat sheet — the one in <thead>.
+    function headerRowFor(groupTbody) {
+        var own = groupTbody.querySelector(":scope > .sheet-group-header");
+        if (own) return own;
+        if (!groupTbody.classList.contains("sheet-group--flat")) return null;
+        var table = groupTbody.closest("table");
+        return table && table.tHead
+            ? table.tHead.querySelector(".sheet-group-header")
+            : null;
     }
 
     function rowSortText(row, key) {
@@ -59,7 +82,10 @@
         // Re-insert the (sorted) data rows before the add-row (or at the end)
         // so the heading and header rows stay in place.
         var anchor = groupTbody.querySelector(":scope > [data-add-row]");
-        rows.forEach(function (r) { groupTbody.insertBefore(r, anchor); });
+        rows.forEach(function (r) {
+            groupTbody.insertBefore(r, anchor);
+            if (r._detailRow) groupTbody.insertBefore(r._detailRow, anchor);
+        });
         document.dispatchEvent(new CustomEvent("sheet:group-sorted"));
     }
 
@@ -93,7 +119,7 @@
 
     function init(groupTbody) {
         var group = groupTbody.getAttribute("data-group");
-        var headerRow = groupTbody.querySelector(".sheet-group-header");
+        var headerRow = headerRowFor(groupTbody);
         if (!headerRow) return;
 
         // Re-apply a persisted sort (fresh load, or after a tbody swap).

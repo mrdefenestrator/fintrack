@@ -1,4 +1,6 @@
-"""Shared plumbing for grouped spreadsheet sheets (Holdings, Budget).
+"""Shared plumbing for grouped spreadsheet sheets (Holdings, Budget,
+Projections) and their unbanded form (Transactions, Merchants, Categories,
+Budget vs Actual).
 
 A grouped sheet is ONE table split into bands. Each band is its own
 ``<tbody class="sheet-group">`` with a tinted heading row (label + subtotals),
@@ -8,7 +10,12 @@ row. A trailing tbody holds the pinned master footer. The markup lives in
 ``templates/partials/grouped_sheet.css`` (inlined by ``base.html``), per-band
 sorting in ``static/js/group-sort.js``.
 
-This module holds the Python side both sheets share: turning a column layout
+Banding is optional: a *flat* sheet (``flat_sheet()``) is the same table with
+its column header in a ``<thead>`` and ONE untinted body — no heading row, no
+accent rail — so a plain list shares the header, row, footer, sorting and
+sticky chrome of the banded sheets without inventing a band for it.
+
+This module holds the Python side the sheets share: turning a column layout
 into the per-group header metadata the templates read, and mapping a band's
 local drag-reorder onto the band's slots in the full, stored ordering.
 """
@@ -34,6 +41,15 @@ def group_columns(
         "spans": [span for _, _, _, span in cols],
         "ncols": len(cols),
     }
+
+
+def flat_sheet(
+    key: str, cols: Sequence[Column], tooltips: dict[str, str] | None = None
+) -> dict[str, Any]:
+    """Column metadata for an unbanded sheet: one body, keyed ``key`` (the
+    per-sheet sort state lives in ``sort_<key>_col/_dir`` URL params), with no
+    tone (so no accent rail) and no heading row."""
+    return {"key": key, "tone": None, "flat": True, **group_columns(cols, tooltips)}
 
 
 def parse_order(raw: str) -> list[int] | None:

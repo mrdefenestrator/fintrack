@@ -1,28 +1,28 @@
-{# Transactions sheet: spreadsheet-style table matching the Finances pages.
-   Column sorting is client-side (web/static/js/sortable.js) via the
-   `sortable` class + `sortable-th` headers; there is no server-side sort.
-   Inline cell editing (Merchant/Category/Notes) is preserved — see
-   partials/transaction_row.html and partials/ledger_cells.html. #}
-{% import "partials/sheet.html" as sheet %}
-<table class="sortable w-full text-sm border-collapse bg-white dark:bg-gray-800" data-cell-nav="txn-tbody" style="white-space:nowrap">
-    {{ sheet.thead(["Date", "Merchant", "Description", "Account", "Category", "Amount", "Notes", "Budget"], right_align_cols=[5],
-        tooltips=["Transaction date from statement", "Normalized merchant name", "Original description from statement", "Account this transaction belongs to", "Spending category", "Transaction amount (negative = expense)", "Optional notes", "Budget entry this transaction realizes"]) }}
-    <tbody id="txn-tbody">
+{# Transactions sheet: an unbanded grouped sheet (partials/grouped_sheet.html)
+   — the shared column header, rows, sorting (group-sort.js, URL
+   sort_transactions_*) and pinned footer of Holdings/Budget/Projections, with
+   no bands. Columns come from TRANSACTIONS_SHEET (web/routes/transactions.py).
+   Inline cell editing (Merchant/Category/Notes/Budget) swaps single rows —
+   see partials/transaction_row.html and partials/ledger_cells.html. #}
+{% import "partials/grouped_sheet.html" as gs %}
+{% set txn_sheet = flat_sheets.transactions %}
+<table class="grouped-sheet w-full text-sm border-collapse bg-white dark:bg-gray-800" data-cell-nav="txn-tbody" style="white-space:nowrap">
+    {{ gs.flat_header(txn_sheet, false) }}
+    <tbody id="txn-tbody" {{ gs.group_attrs(txn_sheet) }}>
         {% for txn in transactions %}
         {% include "partials/transaction_row.html" %}
         {% endfor %}
-        {# Sticky total row (like the Accounts/Assets sheets): the transaction
-           count doubles as the row label; the sum sits in the Amount column,
-           coloured like that column (green income / red spend). sortable.js
-           keeps `.total-row` pinned to the bottom while sorting. Hidden when
-           there are no transactions, mirroring the Accounts total row. #}
-        {% if txn_count %}
-        <tr class="total-row bg-gray-100 dark:bg-gray-700 border-t-2 border-gray-300 dark:border-gray-600 font-medium">
-            <td class="{{ sheet.cell_class('', 'whitespace-nowrap') }}" colspan="5">{{ txn_count }} transaction{{ 's' if txn_count != 1 else '' }}</td>
-            <td class="{{ sheet.cell_class('text-right tabular-nums', 'text-red-600 dark:text-red-400' if txn_total < 0 else 'text-green-600 dark:text-green-400') }}">{{ '-$' if txn_total < 0 else '+$' }}{{ txn_total|abs|money }}</td>
-            <td class="{{ sheet.cell_class() }}"></td>
-            <td class="{{ sheet.cell_class() }}"></td>
-        </tr>
-        {% endif %}
     </tbody>
+    {# Pinned total: the transaction count is the row label; the sum sits in the
+       Amount column, coloured like that column (green income / red spend).
+       Hidden when there are no transactions. #}
+    {% if txn_count %}
+    {% set _amount_at = txn_sheet.col_keys.index('amount') %}
+    {{ gs.footer([[
+        {'value': '%s transaction%s' | format(txn_count, 's' if txn_count != 1 else ''), 'span': _amount_at},
+        {'value': ('-$' if txn_total < 0 else '+$') ~ (txn_total|abs|money),
+         'extra': 'text-red-600 dark:text-red-400' if txn_total < 0 else 'text-green-600 dark:text-green-400'},
+        {'value': '', 'span': txn_sheet.ncols - _amount_at - 1},
+    ]], txn_sheet.right_align, false) }}
+    {% endif %}
 </table>

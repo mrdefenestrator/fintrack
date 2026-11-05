@@ -58,7 +58,7 @@ def test_transactions_combined_filter_by_amount(page, confirmed_server):
     q=15-16 matches only NETFLIX (-$15.99), not the other seeded rows.
     """
     page.goto(f"{confirmed_server}/s/ledger/transactions?year=2026&month=4&q=15-16")
-    body_text = page.locator("table tbody").inner_text()
+    body_text = page.locator("#txn-tbody").inner_text()
     assert "NETFLIX" in body_text
     assert "WHOLE FOODS" not in body_text
 
@@ -66,7 +66,7 @@ def test_transactions_combined_filter_by_amount(page, confirmed_server):
 def test_transactions_combined_filter_by_text(page, confirmed_server):
     """The single q box searches text when it is not an amount expression."""
     page.goto(f"{confirmed_server}/s/ledger/transactions?year=2026&month=4&q=WHOLE")
-    body_text = page.locator("table tbody").inner_text()
+    body_text = page.locator("#txn-tbody").inner_text()
     assert "WHOLE FOODS" in body_text
     assert "NETFLIX" not in body_text
 
@@ -129,15 +129,15 @@ def test_transactions_rows_visible_with_data(page, confirmed_server):
 
 
 # ---------------------------------------------------------------------------
-# Client-side column sorting (spreadsheet-style, shared sortable.js)
+# Client-side column sorting (spreadsheet-style, shared group-sort.js)
 # ---------------------------------------------------------------------------
 
 
 def test_transactions_uses_sheet_style_sortable_table(page, flask_server):
     """The table adopts the Finances sheet: a scroll container + sortable headers."""
     page.goto(f"{flask_server}/s/ledger/transactions")
-    assert page.locator("[data-sheet-scroll] table.sortable").count() == 1
-    assert page.locator("th.sortable-th[data-col='1']").is_visible()
+    assert page.locator("[data-sheet-scroll] table.grouped-sheet").count() == 1
+    assert page.locator("th.sortable-th[data-sort-key='c1']").is_visible()
 
 
 def test_transactions_sort_by_merchant_reorders_rows(page, confirmed_server):
@@ -150,10 +150,10 @@ def test_transactions_sort_by_merchant_reorders_rows(page, confirmed_server):
     # Default order is newest-first (date desc): NETFLIX (04-15) leads.
     assert "NETFLIX" in first_merchant()
     # Ascending by merchant name → CHIPOTLE sorts first.
-    page.locator("th[data-col='1']").click()
+    page.locator("th[data-sort-key='c1']").click()
     assert "CHIPOTLE" in first_merchant()
     # Descending → WHOLE FOODS sorts first.
-    page.locator("th[data-col='1']").click()
+    page.locator("th[data-sort-key='c1']").click()
     assert "WHOLE FOODS" in first_merchant()
 
 
@@ -165,10 +165,10 @@ def test_transactions_sort_by_amount_is_numeric(page, confirmed_server):
         return page.locator("table tbody tr").first.locator("td").nth(5).inner_text()
 
     # Ascending by signed amount → the largest expense (-$52.75) leads.
-    page.locator("th[data-col='5']").click()
+    page.locator("th[data-sort-key='c5']").click()
     assert "52.75" in first_amount()
     # Descending → the smallest expense (-$15.99) leads.
-    page.locator("th[data-col='5']").click()
+    page.locator("th[data-sort-key='c5']").click()
     assert "15.99" in first_amount()
 
 
@@ -196,7 +196,7 @@ def test_transactions_total_row_in_sheet(page, confirmed_server):
 def test_transactions_total_row_stays_last_when_sorted(page, confirmed_server):
     """Sorting a column keeps the total row pinned to the bottom of the sheet."""
     page.goto(f"{confirmed_server}/s/ledger/transactions?year=2026&month=4")
-    page.locator("th[data-col='1']").click()  # sort by Merchant
+    page.locator("th[data-sort-key='c1']").click()  # sort by Merchant
     last_row = page.locator("table tbody tr").last
     assert "total-row" in (last_row.get_attribute("class") or "")
 
@@ -204,7 +204,7 @@ def test_transactions_total_row_stays_last_when_sorted(page, confirmed_server):
 def test_transactions_merchant_names_visible(page, confirmed_server):
     """Seeded merchant names appear in the transaction table."""
     page.goto(f"{confirmed_server}/s/ledger/transactions?year=2026&month=4")
-    body_text = page.locator("table tbody").inner_text().upper()
+    body_text = page.locator("#txn-tbody").inner_text().upper()
     assert "WHOLE FOODS" in body_text or "CHIPOTLE" in body_text
 
 
@@ -352,7 +352,7 @@ def test_transactions_notes_inline_edit_saves(page, confirmed_server):
     with page.expect_response(lambda r: r.request.method == "POST"):
         note_input.press("Enter")
     page.wait_for_selector("table tbody tr td:has-text('reimbursable')")
-    assert "reimbursable" in page.locator("table tbody").inner_text()
+    assert "reimbursable" in page.locator("#txn-tbody").inner_text()
 
 
 # ---------------------------------------------------------------------------

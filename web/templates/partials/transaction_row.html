@@ -1,6 +1,7 @@
 {% from "partials/ledger_cells.html" import cell_display, text_edit, select_edit, grouped_select_edit %}
 {% from "macros/table.html" import cell_non_editable %}
 {% import "partials/sheet.html" as sheet %}
+{% import "partials/grouped_sheet.html" as gs %}
 {% set row_id = "txn-row-" ~ txn.id %}
 {% set base = "/s/" ~ filename ~ "/transactions/" ~ txn.id %}
 {# Long merchant / description values are clipped to one ellipsized line
@@ -8,8 +9,13 @@
 {% set merchant_max = '14rem' %}
 {% set desc_max = '22rem' %}
 {% set dup_open = txn.dup_status in ('flagged', 'duplicate') %}
-<tr id="{{ row_id }}" class="{{ sheet.row_class('border-amber-400' if txn.dup_status == 'flagged' else '') }}{{ ' opacity-60' if txn.dup_status == 'duplicate' else '' }}"
-    {% if txn.dup_status %}data-dup-status="{{ txn.dup_status }}"{% endif %}>
+{# Cells follow TRANSACTIONS_SHEET's column keys (web/routes/transactions.py),
+   never their position. A flagged possible duplicate takes the amber tone: the
+   sheet's accent rail marks just that row. #}
+<tr id="{{ row_id }}" class="{{ gs.row_class() }}{{ ' opacity-60' if txn.dup_status == 'duplicate' else '' }}"
+    {% if txn.dup_status == 'flagged' %}data-tone="amber" {% endif %}{% if txn.dup_status %}data-dup-status="{{ txn.dup_status }}"{% endif %}>
+    {% for key in flat_sheets.transactions.col_keys %}
+    {% if key == 'date' %}
     {# Date — raw imported data, immutable #}
     {% if edit_mode %}
     {{ cell_non_editable(txn.date, false, false) }}
@@ -17,6 +23,7 @@
     <td class="{{ sheet.cell_class('', 'whitespace-nowrap') }}">{{ txn.date }}</td>
     {% endif %}
 
+    {% elif key == 'merchant' %}
     {# Merchant — corrections overlay (merchant_name) #}
     {% if edit_mode and editing_field is defined and editing_field == 'merchant_name' %}
         {{ text_edit('merchant_name', txn.merchant, base ~ "/update", base ~ "/row", row_id) }}
@@ -26,6 +33,7 @@
         <td class="{{ sheet.cell_class() }}">{{ sheet.clip(txn.merchant, merchant_max) }}</td>
     {% endif %}
 
+    {% elif key == 'description' %}
     {# Description — raw imported data, immutable. A possible duplicate (issue
        #82) adds a line naming the row it resembles, with Duplicate / Not
        duplicate actions (Undo once marked); the actions re-render this row. #}
@@ -60,6 +68,7 @@
     <td class="{{ sheet.cell_class() }}">{{ sheet.clip(txn.raw_description, desc_max) }}</td>
     {% endif %}
 
+    {% elif key == 'account' %}
     {# Account — immutable #}
     {% if edit_mode %}
     {{ cell_non_editable(txn.account_name or '—', false, false) }}
@@ -67,6 +76,7 @@
     <td class="{{ sheet.cell_class() }}">{{ txn.account_name or '—' }}</td>
     {% endif %}
 
+    {% elif key == 'category' %}
     {# Category — corrections overlay, with optional apply-to-merchant. When the
        row is linked to a budget entry that has a category, the category is
        inherited from that entry (issue #53) and shown read-only: the budget
@@ -93,6 +103,7 @@
         </td>
     {% endif %}
 
+    {% elif key == 'amount' %}
     {# Amount — raw imported data, immutable #}
     {% if edit_mode %}
     {{ cell_non_editable(('-$' if txn.amount < 0 else '+$') ~ (txn.amount|abs|money), true, txn.amount < 0, is_positive=txn.amount > 0) }}
@@ -102,6 +113,7 @@
     </td>
     {% endif %}
 
+    {% elif key == 'notes' %}
     {# Notes — corrections overlay #}
     {% if edit_mode and editing_field is defined and editing_field == 'notes' %}
         {{ text_edit('notes', txn.notes or '', base ~ "/update", base ~ "/row", row_id) }}
@@ -111,6 +123,7 @@
         <td class="{{ sheet.cell_class() }}">{{ txn.notes or '—' }}</td>
     {% endif %}
 
+    {% elif key == 'budget' %}
     {# Budget — corrections overlay (budget_entry_ref, issue #53). Same
        click-to-edit interaction and styling as Category: in edit mode a display
        cell opens a table-cell-select editor that saves on change (via /link)
@@ -153,4 +166,6 @@
     {% else %}
         <td class="{{ sheet.cell_class() }}">{{ budget_label or '—' }}</td>
     {% endif %}
+    {% endif %}
+    {% endfor %}
 </tr>

@@ -10,8 +10,13 @@
    unlinked transactions look like it; in edit mode a detail row under the
    entry lists them with Apply (link) / Dismiss (never suggest again). The
    actions post to this page's own query string so the month and filters
-   survive the re-render. #}
+   survive the re-render.
+   The table is an unbanded grouped sheet (partials/grouped_sheet.html): the
+   header, rows, sorting (group-sort.js, URL sort_actual_*) and pinned footer
+   of Holdings/Budget/Projections, with no bands. Columns come from
+   ACTUAL_SHEET (web/routes/budget.py); cells map by column key. #}
 {% import "partials/sheet.html" as sheet %}
+{% import "partials/grouped_sheet.html" as gs %}
 {% import "partials/pager.html" as nav %}
 {% import "partials/filter_controls.html" as fc %}
 {% import "partials/sheet_filter_bar.html" as fb %}
@@ -78,45 +83,52 @@
     <input type="hidden" name="month" value="{{ month }}">
 {% endcall %}
 
+{% set a_sheet = flat_sheets.actual %}
 <div class="table-scroll-container rounded-b-lg border-l border-b border-r border-gray-300 dark:border-gray-600 shadow-sm" data-sheet-scroll>
-<table id="budget-actual-table" class="sortable w-full text-sm border-collapse bg-white dark:bg-gray-800" style="white-space:nowrap">
-    {{ sheet.thead(
-        ["Entry", "Category", "Expected", "Actual", "Delta", "N", "Status", "Drift", "Last seen"],
-        [2, 3, 4, 5, 7],
-        tooltips=["Budget entry", "Budget category", "Scheduled amount this month",
-                  "Realized from linked transactions, net of linked refunds/clawbacks (or the category total for a variable line)",
-                  "Actual minus expected", "Number of linked transactions (refunds/clawbacks excluded)",
-                  "Matched / over / under / missing / upcoming / not linked",
-                  "Linked charge vs budgeted amount (price drift)",
-                  "Date of the most recent linked transaction (any month)"]) }}
-    <tbody>
+<table id="budget-actual-table" class="grouped-sheet w-full text-sm border-collapse bg-white dark:bg-gray-800" style="white-space:nowrap">
+    {# Read-only: no actions column, even in edit mode (edit only reveals the
+       suggestion rows). #}
+    {{ gs.flat_header(a_sheet, false) }}
+    <tbody {{ gs.group_attrs(a_sheet) }}>
         {% for a in budget_actuals %}
         {% set _sugs = suggestions_by_entry.get(a.entry_ref, []) %}
-        <tr class="{{ sheet.row_class() }}">
+        <tr class="{{ gs.row_class() }}">
+            {% for key in a_sheet.col_keys %}
+            {% if key == 'entry' %}
             <td class="{{ sheet.cell_class() }}">
                 {{ a.entry.description }}
                 {% if a.source == 'category' %}<span class="ml-1 text-xs text-gray-400 dark:text-gray-500" title="Variable line: actual is this category's total for the month, not linked transactions">by category</span>{% endif %}
                 {% if _sugs %}<span class="ml-1 px-1 rounded text-xs {{ _badge['neutral'] }}" title="Unlinked transactions this month that look like this entry">{{ _sugs | length }} suggested</span>{% endif %}
             </td>
+            {% elif key == 'category' %}
             <td class="{{ sheet.cell_class(extra='text-gray-500 dark:text-gray-400') }}">{{ a.entry.category or '—' }}</td>
+            {% elif key == 'expected' %}
             <td class="{{ sheet.cell_class('text-right tabular-nums') }}">${{ a.expected|money }}</td>
+            {% elif key == 'actual' %}
             <td class="{{ sheet.cell_class('text-right tabular-nums') }}"{% if a.reversed_amount %} data-actual-reversed title="Net of ${{ a.reversed_amount|money }} in linked {{ 'refunds' if a.entry.kind == 'expense' else 'clawbacks' }}"{% endif %}>
                 {% if a.reversed_amount %}<span class="mr-1 text-xs text-gray-400 dark:text-gray-500">−${{ a.reversed_amount|money }} {{ 'refund' if a.entry.kind == 'expense' else 'clawback' }}</span>{% endif %}{{ '-' if a.actual < 0 }}${{ a.actual|abs|money }}
             </td>
+            {% elif key == 'delta' %}
             <td class="{{ sheet.cell_class('text-right tabular-nums', _delta_text[a.tone]) }}">
                 {{ '+' if a.delta > 0 else ('-' if a.delta < 0 else '') }}${{ a.delta|abs|money }}
             </td>
+            {% elif key == 'count' %}
             <td class="{{ sheet.cell_class('text-right tabular-nums') }}">{{ a.count }}</td>
+            {% elif key == 'status' %}
             <td class="{{ sheet.cell_class() }}"><span class="px-1.5 py-0.5 rounded text-xs {{ _badge[a.tone] }}">{{ _label.get(a.status, a.status) }}</span></td>
+            {% elif key == 'drift' %}
             <td class="{{ sheet.cell_class('text-right tabular-nums') }}">
                 {% if a.drift_amount and (a.drift_amount > 0 or a.drift_amount < 0) %}{{ '+' if a.drift_amount > 0 else '-' }}${{ a.drift_amount|abs|money }}{% else %}—{% endif %}
             </td>
+            {% elif key == 'last_seen' %}
             <td class="{{ sheet.cell_class(extra='text-gray-500 dark:text-gray-400') }}">{{ a.last_linked or '—' }}</td>
+            {% endif %}
+            {% endfor %}
         </tr>
         {% if edit_mode and _sugs %}
-        {# One detail row per entry: sortable.js keeps it under its entry. #}
+        {# One detail row per entry: group-sort.js keeps it under its entry. #}
         <tr data-detail-row data-suggestions-for="{{ a.entry_ref }}" class="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40">
-            <td colspan="9" class="px-1.5 py-1">
+            <td colspan="{{ a_sheet.ncols }}" class="px-1.5 py-1">
                 <ul class="space-y-1 pl-4 text-xs">
                     {% for s in _sugs %}
                     {% set t = s.transaction %}
@@ -143,20 +155,20 @@
         </tr>
         {% endif %}
         {% else %}
-        <tr><td colspan="9" class="px-2 py-3 text-center text-gray-500 dark:text-gray-400">No {{ 'matching' if _active else 'active' }} budget entries for {{ month_label }}.</td></tr>
+        {{ gs.empty_row(a_sheet.ncols, 'No %s budget entries for %s.' | format('matching' if _active else 'active', month_label)) }}
         {% endfor %}
-        {# Sticky net total (income − expenses), pinned like the Transactions
-           total row; sortable.js keeps `.total-row` at the bottom. #}
-        {% if budget_actuals %}
-        {% set _n = budget_actuals | length %}
-        <tr class="total-row bg-gray-100 dark:bg-gray-700 border-t-2 border-gray-300 dark:border-gray-600 font-medium">
-            <td class="{{ sheet.cell_class('', 'whitespace-nowrap') }}" colspan="2" title="Net: income minus expenses">{{ _n }} entr{{ 'ies' if _n != 1 else 'y' }} · net</td>
-            <td class="{{ sheet.cell_class('text-right tabular-nums', _sign_color(net_expected)) }}">{{ _signed(net_expected) }}</td>
-            <td class="{{ sheet.cell_class('text-right tabular-nums', _sign_color(net_actual)) }}">{{ _signed(net_actual) }}</td>
-            <td class="{{ sheet.cell_class('text-right tabular-nums', _sign_color(net_delta)) }}">{{ _signed(net_delta) }}</td>
-            <td class="{{ sheet.cell_class() }}" colspan="4"></td>
-        </tr>
-        {% endif %}
     </tbody>
+    {# Pinned net total (income − expenses), under Expected / Actual / Delta. #}
+    {% if budget_actuals %}
+    {% set _n = budget_actuals | length %}
+    {% set _expected_at = a_sheet.col_keys.index('expected') %}
+    {{ gs.footer([[
+        {'value': '%s entr%s · net' | format(_n, 'ies' if _n != 1 else 'y'), 'span': _expected_at, 'title': 'Net: income minus expenses'},
+        {'value': _signed(net_expected), 'extra': _sign_color(net_expected)},
+        {'value': _signed(net_actual), 'extra': _sign_color(net_actual)},
+        {'value': _signed(net_delta), 'extra': _sign_color(net_delta)},
+        {'value': '', 'span': a_sheet.ncols - _expected_at - 3},
+    ]], a_sheet.right_align, false) }}
+    {% endif %}
 </table>
 </div>

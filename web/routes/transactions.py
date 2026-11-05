@@ -19,8 +19,35 @@ from fintrack.ledger.repository.duplicates import (
 from fintrack.ledger.repository.merchants import set_merchant_category
 from fintrack.ledger.repository.transactions import get_transactions
 from web.routes.common import snapshot_scoped
+from web.routes.grouped_sheet import flat_sheet
 
 bp = snapshot_scoped(Blueprint("transactions", __name__, url_prefix="/s/<filename>"))
+
+# The Transactions sheet's columns (an unbanded grouped sheet). Row templates
+# map cells by key, never by position (partials/transaction_row.html).
+TRANSACTIONS_SHEET = flat_sheet(
+    "transactions",
+    [
+        ("date", "Date", False, 1),
+        ("merchant", "Merchant", False, 1),
+        ("description", "Description", False, 1),
+        ("account", "Account", False, 1),
+        ("category", "Category", False, 1),
+        ("amount", "Amount", True, 1),
+        ("notes", "Notes", False, 1),
+        ("budget", "Budget", False, 1),
+    ],
+    {
+        "date": "Transaction date from statement",
+        "merchant": "Normalized merchant name",
+        "description": "Original description from statement",
+        "account": "Account this transaction belongs to",
+        "category": "Spending category",
+        "amount": "Transaction amount (negative = expense)",
+        "notes": "Optional notes",
+        "budget": "Budget entry this transaction realizes",
+    },
+)
 
 
 # User-editable overlay fields (transaction_corrections). Raw imported columns

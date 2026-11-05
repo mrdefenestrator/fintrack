@@ -1,0 +1,55 @@
+{# Categories sheet contents (the inside of #categories-table): an unbanded
+   grouped sheet (partials/grouped_sheet.html) with one "Category" column —
+   click-to-edit rename, an edit-mode actions column (inline delete confirm),
+   a trailing add row, and the pinned count footer. Every add / rename / delete
+   re-renders this whole partial (hx-target #categories-table, innerHTML), so
+   the footer count stays current; an error (duplicate name, in-use delete)
+   comes back as a 422 with an inline error row that base.html's
+   htmx:beforeSwap hook swaps in. As on Holdings/Budget, the actions column
+   exists only in edit mode. #}
+{% import "partials/sheet.html" as sheet %}
+{% import "partials/grouped_sheet.html" as gs %}
+{% from "macros/table.html" import cell_display, cell_edit_input %}
+{% set cat_sheet = flat_sheets.categories %}
+{% set span = cat_sheet.ncols + 1 if edit_mode else cat_sheet.ncols %}
+{{ gs.flat_header(cat_sheet, edit_mode) }}
+<tbody id="categories-tbody" {{ gs.group_attrs(cat_sheet) }}>
+{% if error %}
+<tr id="categories-error-row">
+    <td colspan="{{ span }}" class="px-2 py-1 text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/40 border-b border-red-200 dark:border-red-800">{{ error }}</td>
+</tr>
+{% endif %}
+{% for c in cats %}
+<tr class="{{ gs.row_class() }}" id="category-row-{{ c.id }}">
+    {% for key in cat_sheet.col_keys %}
+    {% if key == 'name' %}
+    {% if edit_mode and editing_id == c.id %}
+        {{ cell_edit_input('name', c.name, false,
+            url_for('categories.rename', filename=filename, category_id=c.id),
+            url_for('categories.row', filename=filename, category_id=c.id),
+            'categories-table') }}
+    {% elif edit_mode %}
+        {{ cell_display(c.name, false, false,
+            url_for('categories.edit', filename=filename, category_id=c.id),
+            'categories-table', false) }}
+    {% else %}
+        <td class="{{ sheet.cell_class() }}">{{ c.name }}</td>
+    {% endif %}
+    {% endif %}
+    {% endfor %}
+    {% if edit_mode %}
+    {% with delete_confirm_url=url_for('categories.delete_confirm', filename=filename, category_id=c.id), reorderable=false %}
+    {% include "partials/editable_table_delete_icon.html" %}
+    {% endwith %}
+    {% endif %}
+</tr>
+{% else %}
+{{ gs.empty_row(span, 'No categories yet.') }}
+{% endfor %}
+{% if edit_mode %}
+{% call gs.add_row(span) %}{{ gs.add_button(url_for('categories.add', filename=filename), 'Add category') }}{% endcall %}
+{% endif %}
+</tbody>
+{% if cats %}
+{{ gs.footer([['%s categor%s' | format(cats | length, 'ies' if cats | length != 1 else 'y')]], cat_sheet.right_align, edit_mode) }}
+{% endif %}

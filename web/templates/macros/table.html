@@ -3,17 +3,6 @@
    Transactions/Merchants sheets. #}
 {% import "partials/sheet.html" as sheet %}
 
-{# --- Total row: final summary row with right-aligned columns --- #}
-{% macro total_row(cells, right_align_cols) %}
-<tr class="total-row bg-gray-100 dark:bg-gray-700 border-t-2 border-gray-300 dark:border-gray-600 font-medium">
-    {% for cell in cells %}
-    <td class="{{ sheet.cell_class('text-right tabular-nums' if loop.index0 in right_align_cols else '', sheet.neg(cell | display_is_negative)) }}">
-        {{ cell }}</td>
-    {% endfor %}
-    <td class="table-actions-cell px-1.5 py-px"></td>
-</tr>
-{% endmacro %}
-
 {# --- View-mode data cell --- #}
 {% macro cell_view(cell_value, right_align, is_negative) %}
 <td class="{{ sheet.cell_class('text-right tabular-nums' if right_align else '', sheet.neg(is_negative)) }}">

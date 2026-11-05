@@ -156,8 +156,12 @@ degrades to a warning without it).
   their own sticky actions cell in edit mode, or heading content paints over
   the pinned actions column (`test_every_row_spans_the_full_grid`); and row
   templates map cells to fields **by column key, never position**, so adding or
-  dropping a column can't shift which field a click edits. See DESIGN.md
-  "Holdings sheet" / "Budget sheet".
+  dropping a column can't shift which field a click edits. Banding is
+  optional: Transactions, Merchants, Categories, and Budget vs Actual are
+  **flat** grouped sheets (`flat_sheet()`, `gs.flat_header`, one
+  `sheet-group--flat` body, `gs.footer`) — build any new plain sheet the same
+  way rather than on bare `sortable.js` tables (Trends alone keeps its own
+  styling). See DESIGN.md "Holdings sheet" / "Budget sheet".
 - Core product goals the UI serves: current liquid holdings, net worth,
   budgeting, spending tracking, deviation from budget, and (eventually)
   net-worth projections.

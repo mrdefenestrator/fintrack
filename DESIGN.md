@@ -594,6 +594,26 @@ sheet reuses them rather than copying Holdings:
   `remap_group_order()` maps a band's local drag permutation onto that band's
   own slots in the full stored ordering (other bands' rows stay put).
 
+**Banding is optional — flat sheets (issue #48).** Transactions, Merchants,
+Categories, and Budget vs Actual are *flat* grouped sheets: the same layer with
+no bands. `flat_sheet(key, cols, tooltips)` builds the column metadata (no
+label, no tone); the page renders `gs.flat_header()` (the shared sortable
+header row, in a `<thead>` so it pins to the top with no heading above it), one
+`<tbody {{ gs.group_attrs(sheet) }}>` (`sheet-group sheet-group--flat`, no
+`data-tone`, so no accent rail), and `gs.footer()` in its own trailing tbody
+(footer cells may be `{value, span, extra, title}` dicts so a count label can
+span narrow columns). `group-sort.js` sorts the flat body from the `<thead>`
+header (URL `sort_<key>_*`), carrying any `data-detail-row` (Budget vs
+Actual's link suggestions) with the row above it. A single row may still take a
+tone — a flagged possible-duplicate transaction is `data-tone="amber"`, so the
+rail marks just that row. The column specs (`TRANSACTIONS_SHEET`,
+`MERCHANTS_SHEET`, `CATEGORIES_SHEET`, `ACTUAL_SHEET`) are exposed to templates
+as the `flat_sheets` Jinja global, since their row partials are rendered by many
+row/cell-swap routes; rows map cells by column key like the banded sheets.
+Categories' mutations swap the whole `#categories-table` (so the footer count
+stays current), and its actions column exists only in edit mode. Trends keeps
+its own table styling (and `sortable.js`).
+
 The actions column (drag + delete) renders only in edit mode. Edits swap the
 table's whole body (colgroup included), so a row whose edit changes its band
 simply re-renders in the new band.
@@ -607,7 +627,8 @@ Two invariants keep the grid sound:
   pinned actions column (z-7 vs z-6), so a heading whose last cell spanned into
   the actions slot painted its figures over the drag/delete column when the
   sheet scrolled sideways. `test_every_row_spans_the_full_grid` checks both
-  sheets in view and edit mode (and Projections in each view).
+  sheets in view and edit mode (and Projections in each view, and the four
+  flat sheets in `tests/spending/test_web/test_flat_sheets.py`).
 - **Row templates map cells to fields by column key** (the group's
   `col_keys`), never by position, so adding or removing a column can't silently
   shift which field a click edits.

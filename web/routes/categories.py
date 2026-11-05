@@ -6,13 +6,14 @@ purely for URL / navigation consistency (url_for needs `filename` to build
 links back into the current snapshot, and the shared chrome + sidebar are
 snapshot-scoped). None of the repository calls below use snapshot_id.
 
-The page reuses the shared spreadsheet chrome (sheet.thead + editable-table +
-.table-scroll-container) like Holdings/Budget: one "Category" column with
-click-to-edit rename, an inline delete confirm in the actions column, and a
-trailing add row. Every add / rename / delete re-renders the tbody
-(#categories-tbody); an error (duplicate name, in-use delete) comes back as a
-422 carrying the same tbody plus an inline error row (base.html's
-htmx:beforeSwap hook swaps non-empty 422 bodies in).
+The page is an unbanded grouped sheet (CATEGORIES_SHEET; the same header,
+rows, sorting and pinned footer as Holdings/Budget): one "Category" column
+with click-to-edit rename, an inline delete confirm in the edit-mode actions
+column, and a trailing add row. Every add / rename / delete re-renders the
+table's contents (#categories-table, so the footer count stays current); an
+error (duplicate name, in-use delete) comes back as a 422 carrying the same
+contents plus an inline error row (base.html's htmx:beforeSwap hook swaps
+non-empty 422 bodies in).
 """
 
 from flask import Blueprint, current_app, g, render_template, request, url_for
@@ -24,16 +25,20 @@ from fintrack.ledger.repository.categories import (
     rename_category,
 )
 from web.routes.common import snapshot_scoped
+from web.routes.grouped_sheet import flat_sheet
 
 bp = snapshot_scoped(Blueprint("categories", __name__, url_prefix="/s/<filename>"))
+
+# The Categories sheet: an unbanded grouped sheet with one column.
+CATEGORIES_SHEET = flat_sheet("categories", [("name", "Category", False, 1)])
 
 
 def _is_edit_mode():
     return request.args.get("edit") == "1"
 
 
-def _tbody(error=None, editing_id=None, edit_mode=True, status=200):
-    """Render the categories tbody rows (the swap target of every mutation).
+def _table(error=None, editing_id=None, edit_mode=True, status=200):
+    """Render the categories table contents (the swap target of every mutation).
 
     edit_mode defaults to True because htmx partials (edit, rename, row) are
     only reachable while editing — they don't carry the parent page's ?edit=1
@@ -43,7 +48,7 @@ def _tbody(error=None, editing_id=None, edit_mode=True, status=200):
     with engine.connect() as conn:
         cats = list_categories(conn)
     html = render_template(
-        "partials/categories_tbody.html",
+        "partials/categories_table.html",
         cats=cats,
         error=error,
         editing_id=editing_id,
@@ -87,13 +92,13 @@ def add():
 @bp.route("/categories/<int:category_id>/edit")
 def edit(category_id):
     """Switch one row into its inline rename editor."""
-    return _tbody(editing_id=category_id)
+    return _table(editing_id=category_id)
 
 
 @bp.route("/categories/<int:category_id>/row")
 def row(category_id):
     """Revert a row back to display (cancel rename, e.g. on blur)."""
-    return _tbody()
+    return _table()
 
 
 @bp.route("/categories/<int:category_id>/rename", methods=["POST"])
@@ -111,8 +116,8 @@ def rename(category_id):
         try:
             rename_category(conn, current["name"], new_name)
         except ValueError as e:
-            return _tbody(error=str(e), editing_id=category_id, status=422)
-    return _tbody()
+            return _table(error=str(e), editing_id=category_id, status=422)
+    return _table()
 
 
 @bp.route("/categories/<int:category_id>/delete-btn")
@@ -150,7 +155,7 @@ def delete(category_id):
         try:
             delete_category(conn, name=current["name"])
         except ValueError as e:
-            return _tbody(error=str(e), status=422)
+            return _table(error=str(e), status=422)
     resp = current_app.make_response("")
     resp.headers["HX-Refresh"] = "true"
     return resp

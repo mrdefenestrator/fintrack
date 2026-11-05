@@ -38,7 +38,7 @@ from .crud import (
     handle_delete,
     handle_move,
 )
-from .grouped_sheet import group_columns, parse_order, remap_group_order
+from .grouped_sheet import flat_sheet, group_columns, parse_order, remap_group_order
 
 budget_bp = Blueprint("budget", __name__, url_prefix="/s")
 
@@ -71,6 +71,34 @@ _TOOLTIPS = {
 }
 _COLUMN_META = group_columns(_COLS, _TOOLTIPS)
 _NCOLS = len(_COLS)
+
+# The Budget vs Actual sheet (read-only, unbanded); rows map cells by key
+# (partials/budget_actual_content.html).
+ACTUAL_SHEET = flat_sheet(
+    "actual",
+    [
+        ("entry", "Entry", False, 1),
+        ("category", "Category", False, 1),
+        ("expected", "Expected", True, 1),
+        ("actual", "Actual", True, 1),
+        ("delta", "Delta", True, 1),
+        ("count", "N", True, 1),
+        ("status", "Status", False, 1),
+        ("drift", "Drift", True, 1),
+        ("last_seen", "Last seen", False, 1),
+    ],
+    {
+        "entry": "Budget entry",
+        "category": "Budget category",
+        "expected": "Scheduled amount this month",
+        "actual": "Realized from linked transactions, net of linked refunds/clawbacks (or the category total for a variable line)",
+        "delta": "Actual minus expected",
+        "count": "Number of linked transactions (refunds/clawbacks excluded)",
+        "status": "Matched / over / under / missing / upcoming / not linked",
+        "drift": "Linked charge vs budgeted amount (price drift)",
+        "last_seen": "Date of the most recent linked transaction (any month)",
+    },
+)
 # The heading label spans Category..When; the Remaining/Monthly/Annual subtotals
 # sit under their columns.
 _LABEL_SPAN = 5

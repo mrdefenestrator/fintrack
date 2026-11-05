@@ -7,8 +7,29 @@ from fintrack.ledger.repository.merchants import (
     set_merchant_category,
 )
 from web.routes.common import snapshot_scoped
+from web.routes.grouped_sheet import flat_sheet
 
 bp = snapshot_scoped(Blueprint("merchants", __name__, url_prefix="/s/<filename>"))
+
+# The Merchants sheet's columns (an unbanded grouped sheet); rows map cells by
+# key (partials/merchant_row.html).
+MERCHANTS_SHEET = flat_sheet(
+    "merchants",
+    [
+        ("merchant", "Merchant", False, 1),
+        ("category", "Category", False, 1),
+        ("source", "Source", False, 1),
+        ("txn_count", "Transactions", True, 1),
+        ("last_seen", "Last Seen", False, 1),
+    ],
+    {
+        "merchant": "Normalized merchant name",
+        "category": "Assigned spending category",
+        "source": "How the category was assigned (auto, manual, correction)",
+        "txn_count": "Total number of transactions",
+        "last_seen": "Date of most recent transaction",
+    },
+)
 
 
 # Fields on a merchant row that participate in the spreadsheet inline editor.
@@ -39,7 +60,7 @@ def index():
         merchants = [m for m in merchants if m["source"] == filter_source]
 
     # Default (case-insensitive by name) order; column sorting is done
-    # client-side in the web UI (web/static/js/sortable.js).
+    # client-side in the web UI (web/static/js/group-sort.js).
     merchants = sorted(merchants, key=lambda m: (m["merchant_name"] or "").lower())
     merchant_count = len(merchants)
     total_txn_count = sum(m["txn_count"] for m in merchants)

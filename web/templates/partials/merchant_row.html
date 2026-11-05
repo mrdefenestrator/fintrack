@@ -1,13 +1,19 @@
 {% from "partials/ledger_cells.html" import cell_display, select_edit %}
 {% from "macros/table.html" import cell_non_editable %}
 {% import "partials/sheet.html" as sheet %}
+{% import "partials/grouped_sheet.html" as gs %}
 {% set source_labels = {"api": "Auto", "manual": "Manual"} %}
 {% set row_id = "merchant-row-" ~ m.id %}
-<tr id="{{ row_id }}" class="{{ sheet.row_class() }}">
+{# Cells follow MERCHANTS_SHEET's column keys (web/routes/merchants.py), never
+   their position. #}
+<tr id="{{ row_id }}" class="{{ gs.row_class() }}">
+    {% for key in flat_sheets.merchants.col_keys %}
+    {% if key == 'merchant' %}
     <td class="{{ sheet.cell_class('', 'font-medium') }}">
         <a class="text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
            href="/s/{{ filename }}/transactions?search={{ m.merchant_name | urlencode }}">{{ sheet.clip(m.merchant_name, '18rem') }}</a>
     </td>
+    {% elif key == 'category' %}
     {% if edit_mode and editing_field is defined and editing_field == 'category' %}
         {{ select_edit('category', m.category, categories,
             "/s/" ~ filename ~ "/merchants/" ~ m.id ~ "/category",
@@ -18,13 +24,24 @@
     {% else %}
         <td class="{{ sheet.cell_class() }}">{{ m.category }}</td>
     {% endif %}
+    {% elif key == 'source' %}
     {% if edit_mode %}
     {{ cell_non_editable(source_labels.get(m.source, m.source), false, false) }}
-    {{ cell_non_editable(m.txn_count, true, false) }}
-    {{ cell_non_editable(m.last_seen or '—', false, false) }}
     {% else %}
     <td class="{{ sheet.cell_class() }}">{{ source_labels.get(m.source, m.source) }}</td>
+    {% endif %}
+    {% elif key == 'txn_count' %}
+    {% if edit_mode %}
+    {{ cell_non_editable(m.txn_count, true, false) }}
+    {% else %}
     <td class="{{ sheet.cell_class('text-right tabular-nums') }}">{{ m.txn_count }}</td>
+    {% endif %}
+    {% elif key == 'last_seen' %}
+    {% if edit_mode %}
+    {{ cell_non_editable(m.last_seen or '—', false, false) }}
+    {% else %}
     <td class="{{ sheet.cell_class('', 'whitespace-nowrap') }}">{{ m.last_seen or '—' }}</td>
     {% endif %}
+    {% endif %}
+    {% endfor %}
 </tr>

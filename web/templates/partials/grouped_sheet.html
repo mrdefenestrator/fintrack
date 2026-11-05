@@ -1,4 +1,6 @@
-{# Shared markup for grouped spreadsheet sheets (Holdings, Budget, Projections).
+{# Shared markup for grouped spreadsheet sheets (Holdings, Budget, Projections)
+   and their unbanded form (Transactions, Merchants, Categories, Budget vs
+   Actual).
    Styling lives in partials/grouped_sheet.css (inlined by base.html); per-band
    sorting in static/js/group-sort.js; the Python side (column metadata,
    per-band reorder) in web/routes/grouped_sheet.py.
@@ -17,13 +19,28 @@
 
    A group dict carries `key`, `label`, `tone` (a palette name in the CSS), and
    the header metadata from grouped_sheet.group_columns(): `headers`,
-   `tooltips`, `right_align`, `spans`, `ncols`. #}
+   `tooltips`, `right_align`, `spans`, `ncols`.
+
+   Banding is optional. An unbanded ("flat") sheet — a dict from
+   grouped_sheet.flat_sheet(), no label or tone — renders the same pieces
+   minus the heading:
+
+       {{ gs.flat_header(sheet, edit_mode) }}          ← <thead>, sticks at top
+       <tbody {{ gs.group_attrs(sheet) }}>
+           …data rows: <tr class="{{ gs.row_class() }}">…  (+ add row)
+       </tbody>
+       {{ gs.footer(rows, sheet.right_align, edit_mode) }}
+
+   Its body has no tone, so no accent rail; a single row may still pick one
+   (`data-tone` on the <tr>, e.g. a flagged duplicate transaction). Sorting,
+   the pinned footer, the sticky actions column and the scroll chrome are the
+   banded sheets' own. #}
 {% import "partials/sheet.html" as sheet %}
 
-{# Attributes for a band's <tbody>. `reorder_url` (edit mode only) makes the
-   band drag-reorderable on its own. #}
+{# Attributes for a band's <tbody> (or a flat sheet's one body). `reorder_url`
+   (edit mode only) makes the band drag-reorderable on its own. #}
 {%- macro group_attrs(group, reorder_url=none) -%}
-class="sheet-group" data-group="{{ group.key }}" data-tone="{{ group.tone }}"{% if reorder_url %} data-reorder-url="{{ reorder_url }}"{% endif %}
+class="sheet-group{% if group.flat %} sheet-group--flat{% endif %}" data-group="{{ group.key }}"{% if group.tone %} data-tone="{{ group.tone }}"{% endif %}{% if reorder_url %} data-reorder-url="{{ reorder_url }}"{% endif %}
 {%- endmacro -%}
 
 {# Data-row class: the shared sheet row look + the hook that lifts its accent
@@ -76,6 +93,15 @@ sheet-group-row {{ sheet.row_class() }}
 </tr>
 {% endmacro %}
 
+{# A flat sheet's column header: the same sortable header row as a band's, in a
+   <thead> so it pins to the top of the scroll container (there is no heading
+   above it). group-sort.js sorts the table's flat body from it. #}
+{% macro flat_header(group, edit_mode, links=[]) %}
+<thead>
+    {{ header_row(group, group.ncols, edit_mode, links) }}
+</thead>
+{% endmacro %}
+
 {# Placeholder row for a band with no rows to show. #}
 {% macro empty_row(span, message) %}
 <tr>
@@ -102,18 +128,26 @@ sheet-group-row {{ sheet.row_class() }}
 {% endmacro %}
 
 {# Master footer in its own trailing tbody: each row of `rows` is a list of
-   cells (one per table column); "" renders blank. Every row but the last is a
+   cells covering the table's columns; "" renders blank. A cell may instead be
+   a dict — {value, span (columns covered, default 1), extra (classes, e.g. a
+   colour that replaces the red-when-negative default), title} — so a label
+   like "42 transactions" can span several narrow columns. Right alignment
+   follows the column the cell starts in. Every row but the last is a
    `total-upper` so multi-line footers stack at the sheet's bottom edge. #}
 {% macro footer(rows, right_align, edit_mode) %}
 <tbody>
     {% for total_row in rows %}
     <tr class="total-row {% if not loop.last %}total-upper{% endif %} bg-gray-100 dark:bg-gray-700 {% if loop.first %}border-t-2 border-gray-400 dark:border-gray-500{% endif %} font-semibold">
+        {% set ns = namespace(col=0) %}
         {% for cell in total_row %}
-        {% if cell == "" %}
-        <td class="{{ sheet.cell_class() }}"></td>
+        {% set c = cell if cell is mapping else {'value': cell} %}
+        {% set span = c.span | default(1) %}
+        {% if c.value == "" %}
+        <td class="{{ sheet.cell_class() }}"{% if span > 1 %} colspan="{{ span }}"{% endif %}></td>
         {% else %}
-        <td class="{{ sheet.cell_class('text-right tabular-nums' if loop.index0 in right_align else '', sheet.neg(cell | display_is_negative)) }}">{{ cell }}</td>
+        <td class="{{ sheet.cell_class('text-right tabular-nums' if ns.col in right_align else '', c.extra if c.extra is defined else sheet.neg(c.value | display_is_negative)) }}"{% if span > 1 %} colspan="{{ span }}"{% endif %}{% if c.title %} title="{{ c.title }}"{% endif %}>{{ c.value }}</td>
         {% endif %}
+        {% set ns.col = ns.col + span %}
         {% endfor %}
         {% if edit_mode %}<td class="table-actions-cell px-1.5 py-0.5"></td>{% endif %}
     </tr>

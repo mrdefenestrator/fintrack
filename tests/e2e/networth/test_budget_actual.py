@@ -71,7 +71,7 @@ def test_budget_actual_filter_survives_paging(page, flask_server):
 def test_budget_actual_total_row_stays_last_when_sorted(page, flask_server):
     page.goto(f"{flask_server}{_URL}?year=2026&month=4")
     assert _rows(page).count() >= 2
-    page.locator("#budget-actual-table th[data-col='2']").click()  # Expected
+    page.locator("#budget-actual-table th[data-sort-key='c2']").click()  # Expected
     last_row = page.locator("#budget-actual-table tbody tr").last
     assert "total-row" in (last_row.get_attribute("class") or "")
     assert "net" in last_row.inner_text()
@@ -148,3 +148,17 @@ def test_dismissed_suggestion_stays_dismissed(page, flask_server, _db_path):
     page.reload()
     assert page.locator("[data-actuals-suggested]").count() == 0
     assert _rent_row(page).get_by_text("Not linked").is_visible()
+
+
+def test_suggestion_row_stays_under_its_entry_when_sorted(page, flask_server, _db_path):
+    """The sheet sorts with the shared group-sort.js; a suggestion detail row
+    belongs to the entry above it and moves with it."""
+    _add_rent_charge(_db_path)
+    page.goto(f"{flask_server}{_URL}?year=2026&month=4&edit=1")
+    header = page.locator("#budget-actual-table th[data-sort-key='c0']")  # Entry
+    for _ in range(2):  # ascending, then descending
+        header.click()
+        prev = page.locator("[data-suggestions-for]").evaluate(
+            "tr => tr.previousElementSibling.cells[0].textContent"
+        )
+        assert "Rent" in prev

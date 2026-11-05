@@ -8,7 +8,8 @@
    earning over budget is good, spending over budget is bad.
    Link suggestions (issue #70): each entry shows how many of the month's
    unlinked transactions look like it; in edit mode a detail row under the
-   entry lists them with Apply (link) / Dismiss (never suggest again). The
+   entry lists them with Apply (link) / Dismiss (never suggest again), on fixed
+   columns so the buttons align across rows (issue #93). The
    actions post to this page's own query string so the month and filters
    survive the re-render.
    The table is an unbanded grouped sheet (partials/grouped_sheet.html): the
@@ -129,16 +130,22 @@
         {# One detail row per entry: group-sort.js keeps it under its entry. #}
         <tr data-detail-row data-suggestions-for="{{ a.entry_ref }}" class="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40">
             <td colspan="{{ a_sheet.ncols }}" class="px-1.5 py-1">
+                {# Fixed columns (issue #93), identical in every suggestion of every
+                   entry, so Apply/Dismiss line up down the sheet: date · merchant
+                   (clipped) · amount (right-aligned) · confidence · Apply ·
+                   Dismiss · reasons. The variable-length reasons go last so
+                   they can't push the buttons. Inline style, not a Tailwind
+                   arbitrary class, so it doesn't depend on the CDN build. #}
                 <ul class="space-y-1 pl-4 text-xs">
                     {% for s in _sugs %}
                     {% set t = s.transaction %}
                     {% set _vals = {'transaction_id': t.id, 'budget_entry_ref': s.entry_ref} | tojson %}
-                    <li data-suggestion data-transaction-id="{{ t.id }}" class="flex flex-wrap items-center gap-2">
+                    <li data-suggestion data-transaction-id="{{ t.id }}" class="grid items-center gap-x-2"
+                        style="grid-template-columns: 5rem 14rem 6rem 3.5rem auto auto minmax(0, 1fr)">
                         <span class="text-gray-500 dark:text-gray-400 tabular-nums">{{ t.date }}</span>
-                        {{ sheet.clip(t.merchant or '—', '14rem') }}
-                        <span class="tabular-nums {{ sheet.neg(t.amount < 0) }}">{{ '-' if t.amount < 0 }}${{ t.amount|abs|money }}</span>
-                        <span class="px-1 rounded {{ _badge['good'] if s.confidence == 'high' else _badge['neutral'] }}" title="Score {{ '%.2f' | format(s.score) }}">{{ s.confidence }}</span>
-                        <span class="text-gray-500 dark:text-gray-400">{{ s.reasons | join(', ') }}</span>
+                        <span class="min-w-0">{{ sheet.clip(t.merchant or '—', '14rem') }}</span>
+                        <span class="text-right tabular-nums {{ sheet.neg(t.amount < 0) }}">{{ '-' if t.amount < 0 }}${{ t.amount|abs|money }}</span>
+                        <span class="justify-self-start px-1 rounded {{ _badge['good'] if s.confidence == 'high' else _badge['neutral'] }}" title="Score {{ '%.2f' | format(s.score) }}">{{ s.confidence }}</span>
                         <button type="button" data-suggestion-apply
                                 hx-post="{{ url_for('budget.actual_link', filename=filename) }}?{{ self_query }}"
                                 hx-vals='{{ _vals }}' hx-target="#content"
@@ -148,6 +155,7 @@
                                 hx-vals='{{ _vals }}' hx-target="#content"
                                 title="Don't suggest this entry for this transaction again"
                                 class="px-2 py-0.5 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700">Dismiss</button>
+                        <span class="text-gray-500 dark:text-gray-400">{{ s.reasons | join(', ') }}</span>
                     </li>
                     {% endfor %}
                 </ul>

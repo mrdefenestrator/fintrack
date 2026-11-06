@@ -131,6 +131,31 @@ def get_balance_history(
     return rows
 
 
+def balances_on(
+    conn: Connection, account_ids: list[int], on: date
+) -> dict[int, Decimal]:
+    """Each holding's balance as of `on`: its latest history point dated on or
+    before that day. Holdings with no such point are left out."""
+    if not account_ids:
+        return {}
+    stmt = (
+        select(balance_history.c.account_id, balance_history.c.balance)
+        .where(
+            balance_history.c.account_id.in_(account_ids),
+            balance_history.c.as_of <= on,
+        )
+        .order_by(
+            balance_history.c.account_id,
+            balance_history.c.as_of,
+            balance_history.c.id,
+        )
+    )
+    out: dict[int, Decimal] = {}
+    for account_id, balance in conn.execute(stmt):
+        out[account_id] = Decimal(balance)  # later rows overwrite earlier ones
+    return out
+
+
 def latest_point(conn: Connection, account_id: int) -> dict[str, Any] | None:
     rows = get_balance_history(conn, account_id, limit=1)
     return rows[-1] if rows else None

@@ -72,7 +72,7 @@ def _table(body: str) -> str:
 
 def _band_labels(body: str) -> list[str]:
     return re.findall(
-        r'<tr class="sheet-group-heading">\s*<td colspan="5"[^>]*>([^<]+)</td>', body
+        r'<tr class="sheet-group-heading">\s*<td colspan="\d"[^>]*>([^<]+)</td>', body
     )
 
 
@@ -81,9 +81,12 @@ def test_bands_follow_category_order_with_uncategorized_last(client):
     entries with no category."""
     body = client.get("/s/home/budget").get_data(as_text=True)
     assert _band_labels(body) == _TAXONOMY + ["Pets", "Uncategorized"]
-    # Grouped sheet chrome, no global thead.
+    # Grouped sheet chrome: one shared column header in <thead> for every band,
+    # instead of a header row repeated inside each band.
     assert 'class="grouped-sheet' in body
-    assert "<thead" not in _table(body)
+    table = _table(body)
+    assert table.count("<thead") == 1
+    assert table.count('class="sheet-group-header') == 1
 
 
 def test_band_heading_subtotals_and_net_footer(client):
@@ -118,14 +121,18 @@ def test_band_color_survives_filtering(client):
 
 
 def test_no_kind_column(client):
-    """Kind is shown by the amount's sign; there is no Kind column."""
+    """Kind is shown by the amount's sign; there is no Kind column. Category is
+    a column only in edit mode (editing it moves an entry between bands); in
+    view mode the band heading already names it."""
     body = client.get("/s/home/budget?edit=1").get_data(as_text=True)
     header = body.split('class="sheet-group-header')[1].split("</tr>")[0]
     assert ">Kind " not in header
     assert ">Category " in header
     view = client.get("/s/home/budget").get_data(as_text=True)
+    view_header = view.split('class="sheet-group-header')[1].split("</tr>")[0]
+    assert ">Category " not in view_header
     row = view.split('id="budget-row-0"')[1].split("</tr>")[0]
-    assert row.count("<td") == 9  # Category … Auto account
+    assert row.count("<td") == 8  # Description … Auto account
 
 
 def test_add_row_leads_with_band_majority_kind(client):

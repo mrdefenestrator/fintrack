@@ -44,11 +44,13 @@
         return rows;
     }
 
-    // The band's own header row, or — for a flat sheet — the one in <thead>.
+    // The band's own header row, or the shared one in <thead>.
     function headerRowFor(groupTbody) {
         var own = groupTbody.querySelector(":scope > .sheet-group-header");
         if (own) return own;
-        if (!groupTbody.classList.contains("sheet-group--flat")) return null;
+        // A flat sheet — or a banded one whose bands share one header (Budget) —
+        // sorts from the header row in <thead>; with a shared header, one click
+        // sorts every band by that column.
         var table = groupTbody.closest("table");
         return table && table.tHead
             ? table.tHead.querySelector(".sheet-group-header")

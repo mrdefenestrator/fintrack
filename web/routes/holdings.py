@@ -720,15 +720,16 @@ def _groups_ctx(
         )
 
     totals = calculations.tiered_totals(accounts, assets, rates=rates)
-    before = (
-        _prior_totals(accounts, assets, rates, prior["balances"]) if prior else None
-    )
     master = []
     for label, key in (("Liquid", "liquid"), ("Net worth", "net_worth")):
         cells = [""] * _MAX_COLS
         cells[2] = label
         cells[_AMOUNT_POS] = fmt_money(totals[key])
-        if before is not None:
+        # Only Liquid gets a "since last month" note: cash and cards carry
+        # balance history; most loans and assets don't, so a net-worth change
+        # would be the liquid change in disguise.
+        if key == "liquid" and prior and prior["covered"]:
+            before = _prior_totals(accounts, assets, rates, prior["balances"])
             cells = (
                 cells[: _AMOUNT_POS + 1]
                 + [_change_cell(totals[key] - before[key], prior)]
@@ -743,9 +744,8 @@ _CHANGE_SPAN = 3
 
 
 def _prior_totals(accounts, assets, rates, balances: dict[int, Decimal]):
-    """Liquid / net worth as of the comparison date: each account's balance
-    swapped for its history point on that day, where it has one. Holdings
-    without history (most loans and assets) count at today's value."""
+    """Totals as of the comparison date: each account's balance swapped for its
+    history point on that day, where it has one; the rest at today's value."""
     then = [
         {**a, "balance": balances[a["id"]]} if a.get("id") in balances else a
         for a in accounts
@@ -763,32 +763,39 @@ def _change_cell(delta: Decimal, prior: dict) -> dict:
         arrow, tone = "▲ ", "text-green-600 dark:text-green-400 font-normal"
     else:
         arrow, tone = "▼ ", "text-red-600 dark:text-red-400 font-normal"
+    title = f"Change since {on:%b} {on.day}, from balance history"
+    if prior["covered"] < prior["total"]:
+        title += (
+            f" for {prior['covered']} of {prior['total']} liquid accounts;"
+            " the rest are counted at today's value"
+        )
     return {
-        "value": f"{arrow}{fmt_money(abs(delta))} since {on:%b} {on.day}",
+        "value": f"{arrow}{fmt_money(abs(delta)).strip()} since {on:%b} {on.day}",
         "span": _CHANGE_SPAN,
         "extra": tone,
-        "title": (
-            f"Change since {on:%b} {on.day}, from balance history for "
-            f"{prior['covered']} of {prior['total']} holdings; the rest are "
-            "counted at today's value."
-        ),
+        "title": title + ".",
     }
+
+
+def _month_ago(today: date) -> date:
+    """The same day last month, clamped to that month's last day."""
+    year, month = (
+        (today.year - 1, 12) if today.month == 1 else (today.year, today.month - 1)
+    )
+    return date(year, month, min(today.day, calendar.monthrange(year, month)[1]))
 
 
 def _prior_ctx(ctx: dict, today: date) -> dict:
-    """Balances one month back (same day, clamped) for the footer change note."""
-    month = today.month - 1 or 12
-    year = today.year - (1 if today.month == 1 else 0)
-    on = date(year, month, min(today.day, calendar.monthrange(year, month)[1]))
-    ids = [a["id"] for a in ctx["accounts"] if a.get("id") is not None]
+    """Liquid accounts' balances one month back, for the footer change note."""
+    on = _month_ago(today)
+    ids = [
+        a["id"]
+        for a in ctx["accounts"]
+        if a.get("id") is not None and calculations.account_tier(a) == "liquid"
+    ]
     with current_app.config["engine"].connect() as conn:
         balances = balances_on(conn, ids, on)
-    return {
-        "on": on,
-        "balances": balances,
-        "covered": len(balances),
-        "total": len(ctx["accounts"]) + len(ctx["assets"]),
-    }
+    return {"on": on, "balances": balances, "covered": len(balances), "total": len(ids)}
 
 
 def _ref_options(ctx: dict) -> tuple[list, list]:

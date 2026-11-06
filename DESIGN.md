@@ -559,6 +559,11 @@ independently drag-reorderable; debt↔asset equity/LTV pairing
   footer shows **Liquid** and **Net worth** (`calculations.tiered_totals`).
   Liquidity is a cross-cutting property, so it is reported independently of the
   row grouping rather than read off one group's subtotal.
+  Liquid also notes its change since the same day last month (clamped to
+  month-end), from balance history (`balance_history.balances_on`); accounts
+  without a point that old count at today's value, and the tooltip says how many
+  had one. Net worth gets no such note yet: loans and assets have no dated
+  history, so it would only repeat the Liquid change.
 - **Credit-card Available is computed and read-only** = `credit_limit + balance`.
   balance is the canonical input (kept current by statement imports); editing the
   limit or balance recomputes Available and preserves the balance
@@ -612,7 +617,13 @@ as the `flat_sheets` Jinja global, since their row partials are rendered by many
 row/cell-swap routes; rows map cells by column key like the banded sheets.
 Categories' mutations swap the whole `#categories-table` (so the footer count
 stays current), and its actions column exists only in edit mode. Trends keeps
-its own table styling (and `sortable.js`).
+its own table styling (and `sortable.js`), with the Category column pinned for
+sideways scrolling. Its heat map has two modes, chosen with a Highlight toggle
+(`?heat=size`, kept while paging): **Unusual months** (default) tints only
+months worse than the category's usual — its median completed month — by more
+than 20% (more spending, or less income), so steady bills stay plain; **Size**
+shades every month in one neutral hue by its size within the row. The month in
+progress is marked "so far", greyed, and never counted as unusual.
 
 The actions column (drag + delete) renders only in edit mode. Edits swap the
 table's whole body (colgroup included), so a row whose edit changes its band

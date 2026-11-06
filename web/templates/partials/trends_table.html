@@ -3,17 +3,31 @@
     {% set _period_opts = [] %}
     {% for p, label in [("quarterly", "Quarterly"), ("ytd", "Year to Date"), ("trailing12", "Trailing 12 Mo")] %}
     {% set _ = _period_opts.append({
-        'url': "/s/%s/trends?period=%s%s" | format(filename, p, end_qs),
+        'url': "/s/%s/trends?period=%s%s%s" | format(filename, p, end_qs, heat_qs),
         'label': label,
         'active': period == p}) %}
     {% endfor %}
-    {{ nav.segmented(_period_opts) }}
+    {# Heat map: tint only unusual months (default), or shade every month by size. #}
+    {% set _heat_opts = [] %}
+    {% for h, label, qs in [("unusual", "Unusual months", ""), ("size", "Size", "&heat=size")] %}
+    {% set _ = _heat_opts.append({
+        'url': "/s/%s/trends?period=%s%s%s" | format(filename, period, end_qs, qs),
+        'label': label,
+        'active': heat_mode == h}) %}
+    {% endfor %}
+    <div class="flex flex-wrap items-center gap-3">
+        {{ nav.segmented(_period_opts) }}
+        <div class="flex items-center gap-2" title="What the cell shading shows">
+            <span class="text-xs uppercase tracking-wide text-gray-400 dark:text-gray-500">Highlight</span>
+            {{ nav.segmented(_heat_opts) }}
+        </div>
+    </div>
     {{ nav.pager(
-        prev_url="/s/%s/trends?period=%s&end=%s" | format(filename, period, prev_end),
-        next_url="/s/%s/trends?period=%s&end=%s" | format(filename, period, next_end),
+        prev_url="/s/%s/trends?period=%s&end=%s%s" | format(filename, period, prev_end, heat_qs),
+        next_url="/s/%s/trends?period=%s&end=%s%s" | format(filename, period, next_end, heat_qs),
         label=window_label,
         is_latest=is_latest,
-        latest_url="/s/%s/trends?period=%s" | format(filename, period),
+        latest_url="/s/%s/trends?period=%s%s" | format(filename, period, heat_qs),
         label_width='w-48') }}
 </div>
 
@@ -26,7 +40,7 @@
     <td class="px-3 py-2.5 text-right tabular-nums{{ ' trends-partial' if partial }}"
         style="background-color: {{ tint.bg }}"{% if tint.title %} title="{{ tint.title }}"{% endif %}>
     {% if val != 0 %}
-        <a class="{{ 'text-white font-medium' if tint.strong else ('text-gray-400 dark:text-gray-500 italic' if partial else 'text-gray-700 dark:text-gray-100') }} hover:underline block"
+        <a class="{{ 'text-gray-400 dark:text-gray-500 italic' if partial else 'text-gray-700 dark:text-gray-100' }} hover:underline block"
            href="{{ url_for('transactions.index', year=ym[0], month=ym[1], category=row.category) }}"
            title="{{ tint.title ~ ' — ' if tint.title }}View {{ row.category }} transactions for {{ month_labels[i] }}"
            onclick="event.stopPropagation()">

@@ -76,13 +76,7 @@
     function measure(frame, container) {
         var thead = container.querySelector("thead");
         var headerH = thead ? thead.offsetHeight : 0;
-        if (thead) {
-            // A shared header above banded rows (Budget): band headings stick
-            // just below it, so the pinned top region is header + heading.
-            frame.style.setProperty("--sheet-thead-h", headerH + "px");
-            var bandHeading = container.querySelector(".sheet-group-heading");
-            if (bandHeading) headerH += bandHeading.offsetHeight;
-        } else {
+        if (!thead) {
             // Grouped sheet (no thead): the sticky heading + column-header rows
             // form the pinned top region (same height for every group). The
             // column header sticks just below the heading, so publish the

@@ -148,7 +148,7 @@ def index():
 
     # The month still in progress (only when the window ends today): its
     # figures are partial, so it's marked and never tinted as unusual.
-    heat_mode = request.args.get("heat", "deviation")
+    heat_mode = "size" if request.args.get("heat") == "size" else "unusual"
     current_key = (today.year, today.month)
     in_progress = (
         sorted_months.index(current_key)
@@ -244,6 +244,7 @@ def index():
         monthly_footer_values=monthly_footer_values,
         num_months=num_months,
         heat_mode=heat_mode,
+        heat_qs="&heat=size" if heat_mode == "size" else "",
         in_progress=in_progress,
         footer_pct_change=footer_pct_change,
         footer_budget=footer_budget,
@@ -292,9 +293,8 @@ def detail():
     )
 
 
-# Unusual-month threshold for the "deviation" heat map: a month is tinted only
-# when it differs from the category's usual (mean of completed months) by more
-# than this share.
+# "Unusual months" heat map: a month is tinted only when it is worse than the
+# category's usual (median completed month) by more than this share.
 _UNUSUAL = 0.2
 
 
@@ -306,36 +306,23 @@ def _heat_tints(
     *,
     is_income: bool,
 ) -> list[dict]:
-    """Per-month cell style for the Trends heat map: {bg, strong, title}.
+    """Per-month cell style for the Trends heat map: {bg, title}.
 
-    - "current": the original red/green intensity, scaled to the row's max.
-    - "neutral": one calm hue, same scaling — size without "bad" connotation.
-    - "deviation": only months worse than the category's usual (its median
-      completed month) get an amber tint — more spending, or less income — so
-      steady bills like rent stay plain. The median keeps one spike from making
-      every normal month look "below usual".
+    - "unusual" (default): only months worse than the category's usual (its
+      median completed month) get an amber tint — more spending, or less
+      income — so steady bills like rent stay plain. The median keeps one
+      spike from making every normal month look "below usual".
+    - "size": one calm gray, shaded by the month's size relative to the row's
+      largest month.
     """
     out = []
     done = sorted(abs(v) for i, v in enumerate(values) if i != in_progress)
     usual = statistics.median(done) if done else 0
-    plain = {"bg": "transparent", "strong": False, "title": ""}
+    plain = {"bg": "transparent", "title": ""}
     for i, v in enumerate(values):
-        if mode == "current":
-            alpha = 0.05 + heat[i] * 0.55
-            rgb = "239,68,68" if v < 0 else "34,197,94"
-            out.append(
-                {
-                    "bg": f"rgba({rgb},{alpha:.2f})",
-                    "strong": heat[i] > 0.65,
-                    "title": "",
-                }
-            )
-            continue
-        if mode == "neutral":
+        if mode == "size":
             alpha = 0.03 + heat[i] * 0.30
-            out.append(
-                {"bg": f"rgba(100,116,139,{alpha:.2f})", "strong": False, "title": ""}
-            )
+            out.append({"bg": f"rgba(100,116,139,{alpha:.2f})", "title": ""})
             continue
         if i == in_progress:
             out.append(plain)
@@ -346,7 +333,6 @@ def _heat_tints(
                 out.append(
                     {
                         "bg": "rgba(245,158,11,0.40)",
-                        "strong": False,
                         "title": "One-off: usually nothing in this category",
                     }
                 )
@@ -363,7 +349,6 @@ def _heat_tints(
         out.append(
             {
                 "bg": f"rgba(245,158,11,{alpha:.2f})",
-                "strong": False,
                 "title": f"{worse * 100:.0f}% {word} usual (${usual:,.0f}/mo)",
             }
         )

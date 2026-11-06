@@ -70,7 +70,6 @@ _TOOLTIPS = {
     "auto_account": "Account for auto-matching transactions",
 }
 _COLUMN_META = group_columns(_COLS, _TOOLTIPS)
-_VIEW_COLUMN_META = group_columns(_COLS[1:], _TOOLTIPS)
 _NCOLS = len(_COLS)
 
 # The Budget vs Actual sheet (read-only, unbanded); rows map cells by key
@@ -141,16 +140,7 @@ def _sheet_ctx(
 ) -> dict:
     """Template context for the grouped budget table: the category bands for
     the `shown` entries (indices into `budget`), the Net footer, and the column
-    metadata.
-
-    View mode drops the Category column: the band heading already names it.
-    Edit mode keeps it, because editing it is how an entry moves between bands.
-    """
-    show_category = edit_mode
-    cols = _COLS if show_category else _COLS[1:]
-    column_meta = _COLUMN_META if show_category else _VIEW_COLUMN_META
-    shift = 0 if show_category else 1
-    ncols = len(cols)
+    metadata."""
     by_category: dict[str, list[dict]] = {}
     for i in shown:
         e = budget[i]
@@ -165,7 +155,7 @@ def _sheet_ctx(
             {
                 "index": i,
                 "kind": e.get("kind", "income"),
-                "cells": cells[1 + shift :],  # drop Kind (and Category in view)
+                "cells": cells[1:],  # drop Kind
                 "figures": figures,
             }
         )
@@ -206,28 +196,23 @@ def _sheet_ctx(
                     fmt_money(sum((r["figures"][j] for r in rows), Decimal(0)))
                     for j in range(3)
                 ],
-                **column_meta,
+                **_COLUMN_META,
             }
         )
 
-    total_pos = [p - shift for p in _TOTAL_POS]
     all_rows = [r for g in groups for r in g["rows"]]
-    net = [""] * ncols
+    net = [""] * _NCOLS
     net[0] = "Net"
-    for j, pos in enumerate(total_pos):
+    for j, pos in enumerate(_TOTAL_POS):
         net[pos] = fmt_money(sum((r["figures"][j] for r in all_rows), Decimal(0)))
 
     return {
         "groups": groups,
-        # One shared, pinned column header for every band (they all share
-        # the same columns), instead of a header row repeated per band.
-        "shared_header": {"key": "budget", **column_meta},
-        "show_category": show_category,
         "footer_rows": [net] if all_rows else [],
         "filters_active": filters_active,
-        "max_cols": ncols,
-        "label_span": _LABEL_SPAN - shift,
-        "total_pos": total_pos,
+        "max_cols": _NCOLS,
+        "label_span": _LABEL_SPAN,
+        "total_pos": _TOTAL_POS,
         "edit_mode": edit_mode,
         "categories": categories,
         "recurrence_options": RECURRENCE_OPTIONS,

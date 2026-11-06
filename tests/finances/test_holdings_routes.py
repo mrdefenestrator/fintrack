@@ -4,7 +4,8 @@ unified view of accounts + asset_entries, reusing the shared sheet chrome
 secured-pair equity folded onto the loan row, and multi-select filters.
 """
 
-from datetime import UTC, datetime, timedelta
+import re
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from unittest.mock import patch
 
@@ -722,3 +723,73 @@ def test_refresh_all_prices_refetches_every_symbol(client, db_engine):
     assert resp.status_code == 200
     mock_fetch.assert_called_once()
     assert set(mock_fetch.call_args.args[0]) == {"BTC", "ETH"}
+
+
+# ---------------------------------------------------------------------------
+# Footer: Liquid change since the same day last month (issue #55)
+# ---------------------------------------------------------------------------
+
+
+_CHANGE_NOTE = re.compile(r"([▲▼]? ?\$[\d,.]+) since [A-Z][a-z]{2} \d+")
+
+
+def _checking_id(db_engine) -> int:
+    from sqlalchemy import select
+
+    from fintrack.core.models import holdings
+
+    with db_engine.connect() as conn:
+        return conn.execute(
+            select(holdings.c.id).where(holdings.c.name == "Checking")
+        ).scalar_one()
+
+
+def test_month_ago_clamps_to_month_end():
+    from web.routes.holdings import _month_ago
+
+    assert _month_ago(date(2026, 11, 6)) == date(2026, 10, 6)
+    assert _month_ago(date(2026, 3, 31)) == date(2026, 2, 28)
+    assert _month_ago(date(2026, 1, 15)) == date(2025, 12, 15)
+
+
+def test_balances_on_takes_latest_point_on_or_before_the_day(client, db_engine):
+    from fintrack.accounts.balance_history import balances_on, record_balance
+
+    acct = _checking_id(db_engine)
+    with db_engine.connect() as conn:
+        record_balance(
+            conn, account_id=acct, balance=Decimal(100), as_of=date(2026, 1, 1)
+        )
+        record_balance(
+            conn, account_id=acct, balance=Decimal(200), as_of=date(2026, 2, 1)
+        )
+        assert balances_on(conn, [acct], date(2026, 1, 31)) == {acct: Decimal(100)}
+        assert balances_on(conn, [acct], date(2026, 2, 1)) == {acct: Decimal(200)}
+        assert balances_on(conn, [acct], date(2025, 12, 31)) == {}
+        assert balances_on(conn, [], date(2026, 2, 1)) == {}
+
+
+def test_liquid_footer_shows_change_since_last_month(client, db_engine):
+    """Checking was 500 forty days ago and is 1000 now; the Visa has no point
+    that old, so it counts at today's value. Liquid rose by 500. Net worth gets
+    no note (loans and assets have no history)."""
+    from fintrack.accounts.balance_history import record_balance
+
+    today = datetime.now().astimezone().date()
+    checking = _checking_id(db_engine)
+    with db_engine.connect() as conn:
+        record_balance(
+            conn,
+            account_id=checking,
+            balance=Decimal(500),
+            as_of=today - timedelta(days=40),
+        )
+    body = client.get("/s/finances/holdings").get_data(as_text=True)
+    notes = _CHANGE_NOTE.findall(body)
+    assert notes == ["▲ $500.00"]  # Liquid only, not Net worth
+    assert "for 1 of 2 liquid accounts" in body
+
+
+def test_liquid_footer_has_no_change_without_history(client):
+    body = client.get("/s/finances/holdings").get_data(as_text=True)
+    assert _CHANGE_NOTE.findall(body) == []

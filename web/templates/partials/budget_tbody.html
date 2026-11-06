@@ -6,7 +6,7 @@
 {# The actions column (drag + delete) exists only in edit mode. #}
 {% set span = max_cols + 1 if edit_mode else max_cols %}
 <colgroup>
-    {% if show_category %}<col style="width: 10rem">{% endif %}
+    <col style="width: 10rem">
     <col>
     <col style="width: 7rem">
     <col style="width: 8rem">
@@ -20,15 +20,13 @@
 {% set kinds = ['income', 'expense'] if first_kind == 'income' else ['expense', 'income'] %}
 {% for k in kinds %}{{ gs.add_button(url_for('budget.add', filename=filename), 'Add ' ~ k, {'kind': k, 'category': category}) }}{% endfor %}
 {% endmacro %}
-{# One shared column header, pinned to the top, for every band (they all share
-   the same columns). Band headings stick just below it. #}
-{% if groups %}{{ gs.flat_header(shared_header, edit_mode) }}{% endif %}
 {% for group in groups %}
 <tbody {{ gs.group_attrs(group, url_for('budget.reorder', filename=filename, category=group.category) if edit_mode else none) }}>
     {% call gs.heading(group.label, label_span, edit_mode) %}
         {% for total in group.totals %}{{ gs.subtotal_cell(total) }}{% endfor %}
         <td colspan="{{ max_cols - label_span - group.totals | length }}"></td>
     {% endcall %}
+    {{ gs.header_row(group, max_cols, edit_mode) }}
     {% for row in group.rows %}
     {% set reorder_index = loop.index0 %}
     {% include "partials/budget_row.html" %}

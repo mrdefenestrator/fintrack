@@ -110,6 +110,26 @@ def status(cli):
     for name, now, change in rows:
         click.echo(f"{name:<10} {now:>{width}}  {change}")
 
+    cf = overview["cash_flow"]
+    m, avg = cf["this_month"], cf["average"]
+    click.echo(f"\nCash flow: {_pct(m['rate'])} saved in {cf['month_label']} so far")
+    if cf["has_this_month"]:
+        click.echo(
+            f"  Income {fmt_money_whole(m['income'])} · "
+            f"Spending {fmt_money_whole(m['spending'])} · "
+            f"Net {fmt_money_whole(m['net'])}"
+        )
+    else:
+        click.echo("  No transactions yet this month")
+    if avg["net"] is not None:
+        click.echo(
+            f"  {cf['months']}-month average: {_pct(avg['rate'])} saved · "
+            f"{fmt_money_whole(avg['net'])}/mo kept on "
+            f"{fmt_money_whole(avg['income'])} income"
+        )
+    else:
+        click.echo(f"  No completed months in the past {cf['months']} yet")
+
     warnings = summary["warnings"]
     n = len(warnings)
     if n:
@@ -127,6 +147,10 @@ def status(cli):
         )
     for p in summary["payoffs"]:
         click.echo(f"  Paid off: {p['name']} · {p['month_label']}")
+
+
+def _pct(rate: float | None) -> str:
+    return f"{rate:.0f}%" if rate is not None else "-"
 
 
 # ---------------------------------------------------------------------------

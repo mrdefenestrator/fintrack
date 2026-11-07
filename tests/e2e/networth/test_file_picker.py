@@ -103,7 +103,7 @@ def test_file_picker_rename_file(page, flask_server):
     name_input = page.locator("input[placeholder='filename']")
     name_input.wait_for(state="visible")
     name_input.fill("e2e-rename-dest")
-    page.get_by_text("Save").click()
+    page.get_by_role("button", name="Save", exact=True).click()
 
     # Should end up on a valid page (not blank /files/rename)
     page.wait_for_timeout(500)

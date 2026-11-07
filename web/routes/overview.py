@@ -38,5 +38,7 @@ def overview_view(filename):
             filename=filename,
             months=overview["months"],
         ),
+        # Cash flow card: Trends' Trailing 12, the window its average covers.
+        trends_url=url_for("trends.index", filename=filename, period="trailing12"),
         **context,
     )

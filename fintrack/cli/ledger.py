@@ -8,9 +8,11 @@ from pathlib import Path
 import click
 
 from fintrack.accounts.balance_history import get_balance_history, record_balance
+from fintrack.budget.repository import get_budget_entries
 from fintrack.cli.helpers import echo_table, pass_cli
 from fintrack.core.coerce import to_date
 from fintrack.core.formatting import fmt_money
+from fintrack.insights.cash_flow import compute_cash_flow
 from fintrack.ledger.classifier import classify_and_cache
 from fintrack.ledger.duplicate_scan import scan_for_duplicates
 from fintrack.ledger.importer import run_import
@@ -555,6 +557,7 @@ def report_trends(cli, months):
         monthly = get_monthly_totals_range(
             conn, start_date=start, end_date=today, snapshot_id=snapshot_id
         )
+        budget = get_budget_entries(conn, snapshot_id)
     if not monthly:
         click.echo("No spending data in range.")
         return
@@ -580,6 +583,39 @@ def report_trends(cli, months):
     n = len(avg_months)
     click.echo(f"Avg/month over {n} completed month{'s' if n != 1 else ''} with data")
     echo_table(rows, ["Category", "Total", "Avg/month"], ("left", "right", "right"))
+
+    current = (today.year, today.month)
+    flow = compute_cash_flow(monthly, sorted(months_seen), current, budget)
+    click.echo("\nCash flow (Transfer excluded)")
+    flow_rows = [
+        _cash_flow_row(
+            date(m["year"], m["month"], 1).strftime("%b %Y")
+            + (" (so far)" if (m["year"], m["month"]) == flow["in_progress"] else ""),
+            m,
+        )
+        for m in flow["months"]
+    ]
+    flow_rows.append(_cash_flow_row("Avg/month", flow["average"]))
+    echo_table(
+        flow_rows,
+        ["Month", "Income", "Spending", "Net", "Saved", "Budgeted net"],
+        ("left", "right", "right", "right", "right", "right"),
+    )
+
+
+def _cash_flow_row(label: str, f: dict) -> list[str]:
+    def money(v):
+        return fmt_money(v) if v is not None else "-"
+
+    rate = f"{f['rate']:.0f}%" if f["rate"] is not None else "-"
+    return [
+        label,
+        money(f["income"]),
+        money(f["spending"]),
+        money(f["net"]),
+        rate,
+        money(f["budgeted_net"]),
+    ]
 
 
 # ---------------------------------------------------------------------------

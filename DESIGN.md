@@ -81,7 +81,8 @@ fintrack/
   budget/       repository.py, recurrence.py (occurrence + proration engine)
   networth/     repository.py (assets/debts), calculations.py (key numbers, funding)
   projections/  engine.py, estimators.py
-  insights/     overview.py (Overview page + `status` numbers)
+  insights/     overview.py (Overview page + `status` numbers), cash_flow.py
+                (monthly income/spending/savings rate: Trends, Overview, CLI)
   snapshots/    repository.py
   migrate/      legacy.py and yaml_import.py (one-time import adapters)
   cli/          Click command groups and shared CLI helpers
@@ -682,9 +683,25 @@ month in progress — not every calendar month in the window, so a short history
 isn't understated and a partial month doesn't drag it down (no completed month
 → "—"). **Change** compares the last completed month to that average.
 **Delta** (Avg/mo − Budget/mo, where Budget/mo is annual ÷ 12) is worded by the
-row's kind: spending reads "$X over" / "$X under", income and the net Total
+row's kind: spending reads "$X over" / "$X under", income and the Net (kept)
 row read "$X short" / "$X ahead"; color is green when the result beats the
 budget, red when it doesn't.
+
+The footer is the month's **cash flow** (#99, `fintrack/insights/cash_flow.py`
+`compute_cash_flow()`, shared with the Overview card, `report trends`, and
+`status`): **Income** (the Income category), **Spending** (every other category
+except Transfer, as a positive outflow; refunds sit in the category they
+reverse, so they lower spending rather than count as income), **Net (kept)**
+(income − spending: the sum of every category row, and the row that carries
+Budget/mo, Delta, and Change), **Savings rate** (net ÷ income; "—" when income
+is zero or negative), and **Budgeted net** (budget income − budget expenses
+falling in that month per `budget_entry_in_month`, so an annual bill shows in
+its own month; Transfer-category entries left out). Transfer is left out
+because both legs of moving money between your own accounts — a card payment
+out of checking and onto the card — are Transfer, so only the card purchases
+count. Avg/mo for these rows follows the rule above; the average savings rate
+is average net ÷ average income, not a mean of monthly rates. The month in
+progress shows its figures so far, greyed like the body.
 
 The actions column (drag + delete) renders only in edit mode. Edits swap the
 table's whole body (colgroup included), so a row whose edit changes its band
@@ -772,6 +789,7 @@ hasn't shipped are simply absent.
 | Card | Shows | Links to |
 |---|---|---|
 | Net worth / Liquid | both now, and their projected change by the end of the 12 months | Projections (`?months=12`); the whole card is the link |
+| Cash flow | this month's savings rate, income, spending, and net so far; the average rate, net, and income over Trailing 12's completed months | Trends (`?period=trailing12`) |
 | Projection warnings | status ("All clear" / how many accounts dip below their minimum), the low point, each below-minimum account, loan payoffs | Projections (`?months=12`), where below-minimum cells are marked |
 
 Cards are terse: whole dollars (`fmt_money_whole`), changes as ▲/▼ amounts
@@ -781,7 +799,7 @@ no per-line links or footer links. Opening Projections on a specific month
 (`?month=`) waits on the month breakdown working on phones (#114).
 
 Net worth's "change over the past 12 months" waits on balance history being
-recorded over time (#107, #98). Planned cards: Cash flow (#99), Needs
+recorded over time (#107, #98). Planned cards: Needs
 attention (#100–#102), Debt and cards (#102). An empty snapshot still renders
 every card (zeros) under a pointer to Holdings and Budget.
 

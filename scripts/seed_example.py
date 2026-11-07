@@ -27,7 +27,7 @@ from calendar import monthrange
 from datetime import date, timedelta
 from decimal import Decimal
 
-from fintrack.accounts.balance_history import record_balance
+from fintrack.accounts.balance_history import latest_point, record_balance
 from fintrack.accounts.repository import add_account, get_accounts
 from fintrack.budget.reconcile import link_transaction
 from fintrack.budget.repository import add_budget_entry, get_budget_entries
@@ -39,7 +39,7 @@ from fintrack.ledger.repository.imports import (
 )
 from fintrack.ledger.repository.merchants import set_merchant_category
 from fintrack.ledger.repository.transactions import get_transactions
-from fintrack.networth.repository import add_asset_entry
+from fintrack.networth.repository import add_asset_entry, get_asset_entries
 from fintrack.snapshots.repository import create_snapshot, get_snapshot_id
 
 # Merchants whose recurring transactions are linked to a budget entry in the
@@ -859,6 +859,10 @@ def _seed_dense_transactions(conn, checking_id: int, today: date) -> None:
 # Balances six weeks back for a few liquid accounts, so Holdings' Liquid footer
 # has a "since last month" change to show. The rest have no point that old and
 # count at today's value (the tooltip says so).
+#
+# Every loan and asset also gets a value six weeks back (#107): loans owed a bit
+# more, assets worth a bit less. That gives most holdings a point that old, so
+# the Net worth footer note shows too (it waits until more than half do).
 _DENSE_PAST_BALANCES = {
     "Everyday Checking": "3180.20",
     "Emergency Fund": "14500.00",
@@ -873,6 +877,18 @@ def _seed_dense_history(conn, sid, today: date) -> None:
             conn,
             account_id=ids[name],
             balance=Decimal(balance),
+            as_of=today - timedelta(days=45),
+        )
+    for entry in get_asset_entries(conn, sid):
+        now = latest_point(conn, entry["id"])
+        if now is None:
+            continue
+        # Stored signed: a loan's point is negative, so * 1.02 owes more.
+        factor = Decimal("1.02") if entry["kind"] == "debt" else Decimal("0.97")
+        record_balance(
+            conn,
+            account_id=entry["id"],
+            balance=(Decimal(now["balance"]) * factor).quantize(Decimal("0.01")),
             as_of=today - timedelta(days=45),
         )
 

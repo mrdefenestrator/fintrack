@@ -64,6 +64,28 @@
 </td>
 {% endmacro %}
 
+{# Delta wording comes from trends._delta_words: "over"/"under" for spending,
+   "short"/"ahead" for income and the net footer; color by good/bad. #}
+{% macro delta_cell(words, delta, cell_class="px-4 py-2.5") %}
+<td class="{{ cell_class }} text-right tabular-nums whitespace-nowrap">
+    {% if words is not none %}
+        {% if words.tone == 'neutral' %}
+        <span class="text-gray-400">{{ words.word }}</span>
+        {% else %}
+        <span class="{{ 'text-green-500' if words.tone == 'good' else 'text-red-500' }}">${{ delta|abs|money(0) }} {{ words.word }}</span>
+        {% endif %}
+    {% else %}
+        <span class="text-gray-300 dark:text-gray-600">—</span>
+    {% endif %}
+</td>
+{% endmacro %}
+
+{% macro avg_cell(avg, cell_class="px-4 py-2.5 text-gray-500 dark:text-gray-400") %}
+<td class="{{ cell_class }} text-right tabular-nums">
+    {% if avg is not none %}${{ avg|abs|money(0) }}{% else %}<span class="text-gray-300 dark:text-gray-600">—</span>{% endif %}
+</td>
+{% endmacro %}
+
 {% macro budget_cells(row) %}
 <td class="px-4 py-2.5 text-right tabular-nums text-gray-500 dark:text-gray-400">
     {% if row.budget_monthly is not none %}
@@ -72,19 +94,7 @@
         <span class="text-gray-300 dark:text-gray-600">—</span>
     {% endif %}
 </td>
-<td class="px-4 py-2.5 text-right tabular-nums whitespace-nowrap">
-    {% if row.budget_delta is not none %}
-        {% if row.budget_delta < -0.5 %}
-        <span class="text-red-500">${{ row.budget_delta|abs|money(0) }} over</span>
-        {% elif row.budget_delta > 0.5 %}
-        <span class="text-green-500">${{ row.budget_delta|abs|money(0) }} under</span>
-        {% else %}
-        <span class="text-gray-400">on budget</span>
-        {% endif %}
-    {% else %}
-        <span class="text-gray-300 dark:text-gray-600">—</span>
-    {% endif %}
-</td>
+{{ delta_cell(row.delta_words, row.budget_delta) }}
 {% endmacro %}
 
 
@@ -128,10 +138,10 @@
             {% for label in month_labels %}
             <th class="{{ _sortable_th }} px-3 py-3 text-right" data-col="{{ loop.index }}" role="button" tabindex="0" title="{{ 'Month in progress — partial' if in_progress is not none and loop.index0 == in_progress else 'Sort by this column' }}">{{ label }}{% if in_progress is not none and loop.index0 == in_progress %}<span class="block normal-case tracking-normal font-normal text-[10px]">so far</span>{% endif %} <span class="sort-indicator"></span></th>
             {% endfor %}
-            <th class="{{ _sortable_th }} px-4 py-3 text-right" data-col="{{ month_labels | length + 1 }}" role="button" tabindex="0" title="Sort by this column">Avg/mo <span class="sort-indicator"></span></th>
+            <th class="{{ _sortable_th }} px-4 py-3 text-right" data-col="{{ month_labels | length + 1 }}" role="button" tabindex="0" title="Average over the {{ avg_month_count }} completed month{{ 's' if avg_month_count != 1 }} with data{{ ' (the month in progress is left out)' if in_progress is not none }} — click to sort">Avg/mo <span class="sort-indicator"></span></th>
             <th class="{{ _sortable_th }} px-4 py-3 text-right" data-col="{{ month_labels | length + 2 }}" role="button" tabindex="0" title="Sort by this column">Budget/mo <span class="sort-indicator"></span></th>
-            <th class="{{ _sortable_th }} px-4 py-3 text-right" data-col="{{ month_labels | length + 3 }}" role="button" tabindex="0" title="Sort by this column">Delta <span class="sort-indicator"></span></th>
-            <th class="{{ _sortable_th }} px-4 py-3 text-right" data-col="{{ month_labels | length + 4 }}" role="button" tabindex="0" title="Sort by this column">Change <span class="sort-indicator"></span></th>
+            <th class="{{ _sortable_th }} px-4 py-3 text-right" data-col="{{ month_labels | length + 3 }}" role="button" tabindex="0" title="Avg/mo vs Budget/mo: spending over/under, income short/ahead — click to sort">Delta <span class="sort-indicator"></span></th>
+            <th class="{{ _sortable_th }} px-4 py-3 text-right" data-col="{{ month_labels | length + 4 }}" role="button" tabindex="0" title="Last completed month vs Avg/mo — click to sort">Change <span class="sort-indicator"></span></th>
         </tr>
     </thead>
     <tbody>
@@ -143,9 +153,7 @@
                 <span id="arrow-{{ loop.index }}" class="mr-1.5 text-gray-300 text-xs">▶</span>{{ row.category }}
             </td>
             {{ month_cells(row) }}
-            <td class="px-4 py-2.5 text-right tabular-nums text-gray-500 dark:text-gray-400">
-                ${{ row.monthly_avg|abs|money(0) }}
-            </td>
+            {{ avg_cell(row.monthly_avg) }}
             {{ budget_cells(row) }}
             {{ change_cell(row.pct_change, row.total < 0) }}
         </tr>
@@ -166,9 +174,7 @@
                 {% endif %}
             </td>
             {% endfor %}
-            <td class="px-4 py-3 text-right tabular-nums {{ 'text-red-600' if grand_total < 0 else 'text-green-600' }}">
-                ${{ (grand_total|abs / num_months)|money(0) }}
-            </td>
+            {{ avg_cell(footer_avg, "px-4 py-3 " ~ ('text-red-600' if footer_avg is not none and footer_avg < 0 else 'text-green-600')) }}
             <td class="px-4 py-3 text-right tabular-nums text-gray-500 dark:text-gray-400">
                 {% if footer_budget is not none %}
                     ${{ footer_budget|abs|money(0) }}
@@ -176,19 +182,7 @@
                     <span class="text-gray-300 dark:text-gray-600">—</span>
                 {% endif %}
             </td>
-            <td class="px-4 py-3 text-right tabular-nums whitespace-nowrap">
-                {% if footer_budget_delta is not none %}
-                    {% if footer_budget_delta < -0.5 %}
-                    <span class="text-red-500">${{ footer_budget_delta|abs|money(0) }} over</span>
-                    {% elif footer_budget_delta > 0.5 %}
-                    <span class="text-green-500">${{ footer_budget_delta|abs|money(0) }} under</span>
-                    {% else %}
-                    <span class="text-gray-400">on budget</span>
-                    {% endif %}
-                {% else %}
-                    <span class="text-gray-300 dark:text-gray-600">—</span>
-                {% endif %}
-            </td>
+            {{ delta_cell(footer_delta_words, footer_budget_delta, "px-4 py-3") }}
             {{ change_cell(footer_pct_change, grand_total < 0, "px-4 py-3") }}
         </tr>
         {% if trends_excluded %}
@@ -205,9 +199,7 @@
                 <span id="arrow-ex{{ loop.index }}" class="mr-1.5 text-gray-300 text-xs">▶</span>{{ row.category }}
             </td>
             {{ month_cells(row) }}
-            <td class="px-4 py-2.5 text-right tabular-nums text-gray-500 dark:text-gray-400">
-                ${{ row.monthly_avg|abs|money(0) }}
-            </td>
+            {{ avg_cell(row.monthly_avg) }}
             {{ budget_cells(row) }}
             {{ change_cell(row.pct_change, row.total < 0) }}
         </tr>

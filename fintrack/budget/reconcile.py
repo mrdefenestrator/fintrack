@@ -53,6 +53,10 @@ _ZERO = Decimal(0)
 # to catch small drifts a category rollup hides, so anything past a cent counts.
 # A cent (not half a cent) also absorbs sub-cent noise in prorated expecteds.
 _TOLERANCE = Decimal("0.01")
+# Mid-month, a variable line (e.g. Groceries) is judged against its pace — the
+# expected amount scaled by the share of the month gone — and reads "on pace"
+# while within this share of it (#103).
+_PACE_BAND = Decimal("0.10")
 
 
 class SnapshotMismatch(ValueError):
@@ -372,7 +376,8 @@ class EntryActual:
     actual: Decimal
     delta: Decimal  # actual - expected
     count: int  # transactions behind ``actual``, excluding reversals
-    # matched | over | under | missing | upcoming | unlinked | inactive
+    # matched | over | under | on_pace | missing | upcoming | unlinked |
+    # inactive
     status: str
     last_linked: date | None  # most recent linked transaction date, any month
     drift_amount: Decimal  # per-occurrence charge vs budgeted, when comparable
@@ -384,6 +389,29 @@ class EntryActual:
     # Magnitude of linked reversals (refunds / clawbacks) netted into
     # ``actual``; always 0 for category-measured lines.
     reversed_amount: Decimal = _ZERO
+    # Expected-so-far for a category-measured line in the month in progress
+    # (expected × share of the month gone); None otherwise. When set, the
+    # status compares ``actual`` against it rather than the full month.
+    pace: Decimal | None = None
+
+    # Signed figures for display, matching the Budget sheet: income positive,
+    # expenses negative. The signed delta is positive when the result beats
+    # the budget (less spent or more earned), so a Net footer sums cleanly.
+    @property
+    def sign(self) -> int:
+        return 1 if self.entry.get("kind") == "income" else -1
+
+    @property
+    def signed_expected(self) -> Decimal:
+        return self.sign * self.expected
+
+    @property
+    def signed_actual(self) -> Decimal:
+        return self.sign * self.actual
+
+    @property
+    def signed_delta(self) -> Decimal:
+        return self.sign * self.delta
 
     @property
     def tone(self) -> str:
@@ -405,6 +433,30 @@ def _classify_delta(delta: Decimal) -> str:
     if delta < -_TOLERANCE:
         return "under"
     return "matched"
+
+
+def _classify_pace(actual: Decimal, expected: Decimal, pace: Decimal) -> str:
+    """Status for a variable line part-way through the month: "over" once it
+    passes the whole month's amount or runs well ahead of pace, "under" when
+    well behind pace, else "on_pace"."""
+    if actual - expected > _TOLERANCE:
+        return "over"
+    band = pace * _PACE_BAND
+    if actual > pace + band + _TOLERANCE:
+        return "over"
+    if actual < pace - band - _TOLERANCE:
+        return "under"
+    return "on_pace"
+
+
+def month_pace(expected: Decimal, year: int, month: int, today: date) -> Decimal | None:
+    """Expected-so-far for ``(year, month)`` on ``today``: ``expected`` × the
+    share of the month gone (days elapsed, today included). None unless the
+    month is the one in progress."""
+    if (year, month) != (today.year, today.month):
+        return None
+    days = monthrange(year, month)[1]
+    return (expected * today.day / days).quantize(Decimal("0.01"))
 
 
 def _classify_linked(
@@ -483,14 +535,19 @@ def budget_actuals(
         category = entry.get("category")
         drift = _ZERO
         reversed_amount = _ZERO
+        pace = None
         if _measured_by_category(entry, claims):
             source = "category"
             row = category_totals.get(category)
             count = row["count"] if row else 0
             actual = abs(money(row["total"])) if row else _ZERO
-            status = (
-                "inactive" if expected == _ZERO else _classify_delta(actual - expected)
-            )
+            pace = month_pace(expected, year, month, today) if expected else None
+            if expected == _ZERO:
+                status = "inactive"
+            elif pace is not None:
+                status = _classify_pace(actual, expected, pace)
+            else:
+                status = _classify_delta(actual - expected)
         else:
             source = "links"
             linked = by_entry_month.get(ref, [])
@@ -538,6 +595,7 @@ def budget_actuals(
                 drift_amount=drift,
                 source=source,
                 reversed_amount=reversed_amount,
+                pace=pace,
             )
         )
     return results

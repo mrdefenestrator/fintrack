@@ -24,6 +24,7 @@ _STATUS_LABEL = {
     "matched": "✓ matched",
     "over": "▲ over",
     "under": "▼ under",
+    "on_pace": "~ on pace",
     "missing": "✗ missing",
     "upcoming": "· upcoming",
     "unlinked": "· not linked",
@@ -188,7 +189,9 @@ def suggest(cli, year, month, apply_):
 def budget_actual(cli, year, month):
     """Per-entry budget-vs-actual for a month (default: current): expected,
     realized (net of linked refunds/clawbacks, shown under Reversed), delta,
-    and missed/upcoming recurring charges."""
+    and missed/upcoming recurring charges. Figures are signed (income +,
+    expenses −; a + delta beats the budget); mid-month, variable lines are
+    judged against their pace."""
     today = datetime.now().astimezone().date()
     year, month = year or today.year, month or today.month
     with cli.connect() as conn:
@@ -207,13 +210,16 @@ def budget_actual(cli, year, month):
             [
                 a.entry.get("description", ""),
                 a.entry.get("kind", ""),
-                fmt_money(a.expected),
-                fmt_money(a.actual),
+                fmt_money(a.signed_expected),
+                fmt_money(a.signed_actual),
                 fmt_money(-a.reversed_amount) if a.reversed_amount else "",
-                fmt_money(a.delta),
+                fmt_money(a.signed_delta),
                 a.count,
                 "category" if a.source == "category" else "links",
-                _STATUS_LABEL.get(a.status, a.status),
+                _STATUS_LABEL.get(a.status, a.status)
+                + (
+                    f" (pace {fmt_money(a.pace).strip()})" if a.pace is not None else ""
+                ),
                 drift,
             ]
         )

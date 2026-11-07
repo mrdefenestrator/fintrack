@@ -149,7 +149,7 @@ degrades to a warning without it).
   and the Python CLI (which keeps separate `accounts`/`assets`/`debts` commands)
   are both first-class; keep them at parity.
 - **Grouped sheets.** Holdings, Budget (one band per category, colored per
-  category, with Remaining/Monthly/Annual subtotals and a Net footer; no Kind
+  category, with Remaining/This month/Per month/Annual subtotals and a Net footer; no Kind
   column — the sign shows it), and the read-only Projections grid (Holdings'
   bands + an Unassigned band) share one grouped-sheet layer —
   `partials/grouped_sheet.html` macros, `partials/grouped_sheet.css` (inlined

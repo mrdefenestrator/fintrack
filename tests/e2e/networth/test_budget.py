@@ -260,12 +260,13 @@ def test_budget_sort(page, flask_server):
 
 
 def test_budget_monthly_and_annual_columns_visible(page, flask_server):
-    """Both Monthly and Annual columns are always visible in the budget table."""
+    """This month, Per month, and Annual columns are always visible."""
     page.goto(f"{flask_server}/s/test_finances/budget")
 
     headers = page.locator(".sheet-group-header").first.locator("th")
     header_texts = headers.all_inner_texts()
-    assert "Monthly" in header_texts
+    assert "This month" in header_texts
+    assert "Per month" in header_texts
     assert "Annual" in header_texts
 
 

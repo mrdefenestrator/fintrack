@@ -612,7 +612,15 @@ as the `flat_sheets` Jinja global, since their row partials are rendered by many
 row/cell-swap routes; rows map cells by column key like the banded sheets.
 Categories' mutations swap the whole `#categories-table` (so the footer count
 stays current), and its actions column exists only in edit mode. Trends keeps
-its own table styling (and `sortable.js`).
+its own table styling (and `sortable.js`), with the Category column pinned for
+sideways scrolling. Its heat map has two modes, chosen with a Highlight toggle
+(`?heat=size`, kept while paging and switching periods): **Unusual months**
+(default) tints only months worse than the category's usual — its median
+completed month — by more than 20% (more spending, or less income), so steady
+bills stay plain and one-off spending in a usually-empty category stands out;
+**Size** shades every month in one neutral hue by its size within the row. The
+month in progress is marked "so far", greyed, never shaded, and left out of
+"usual".
 
 The actions column (drag + delete) renders only in edit mode. Edits swap the
 table's whole body (colgroup included), so a row whose edit changes its band

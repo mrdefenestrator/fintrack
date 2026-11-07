@@ -19,6 +19,7 @@ from fintrack.ledger.repository.imports import (
 )
 from fintrack.snapshots.repository import get_snapshot_id
 from web.routes.trends import (
+    _heat_tints,
     _parse_end_param,
     _period_range,
     _period_stride,
@@ -397,3 +398,79 @@ def test_trends_detail_respects_end_param(client, seeded_ledger_account):
         f"&end={old_year:04d}-{old_month:02d}"
     )
     assert response.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Heat map: "unusual months" (default) vs "size" (issue #108)
+# ---------------------------------------------------------------------------
+
+
+def _tinted(tints):
+    return [t["bg"] != "transparent" for t in tints]
+
+
+def test_unusual_leaves_steady_rows_plain():
+    """Rent at the same amount every month gets no tint at all."""
+    values = [-1800.0] * 5
+    tints = _heat_tints("unusual", values, [1.0] * 5, None, is_income=False)
+    assert _tinted(tints) == [False] * 5
+
+
+def test_unusual_tints_only_spending_spikes_against_the_median():
+    """One spike doesn't make the normal months look unusual (the median, not
+    the mean, is "usual"); lower-than-usual spending is not flagged."""
+    values = [-568.0, -49.0, -113.0, -49.0, -49.0, -10.0]
+    heat = [abs(v) / 568 for v in values]
+    tints = _heat_tints("unusual", values, heat, None, is_income=False)
+    assert _tinted(tints) == [True, False, True, False, False, False]
+    assert "above usual ($49/mo)" in tints[0]["title"]
+
+
+def test_unusual_flags_income_that_falls_short():
+    values = [5200.0, 5200.0, 2600.0, 5200.0, 7000.0]
+    heat = [v / 7000 for v in values]
+    tints = _heat_tints("unusual", values, heat, None, is_income=True)
+    assert _tinted(tints) == [False, False, True, False, False]
+    assert "below usual" in tints[2]["title"]
+
+
+def test_unusual_skips_the_month_in_progress():
+    """The current month is partial: never tinted, and left out of "usual"."""
+    values = [-100.0, -100.0, -100.0, -500.0]
+    tints = _heat_tints("unusual", values, [0.2, 0.2, 0.2, 1.0], 3, is_income=False)
+    assert _tinted(tints) == [False] * 4
+
+
+def test_unusual_marks_one_offs_in_usually_empty_categories():
+    values = [0.0, 0.0, -413.0, 0.0, 0.0]
+    tints = _heat_tints("unusual", values, [0, 0, 1, 0, 0], None, is_income=False)
+    assert _tinted(tints) == [False, False, True, False, False]
+    assert "One-off" in tints[2]["title"]
+
+
+def test_size_shades_every_month_in_one_hue():
+    values = [-10.0, -50.0, -100.0]
+    tints = _heat_tints("size", values, [0.1, 0.5, 1.0], None, is_income=False)
+    assert all(t["bg"].startswith("rgba(100,116,139,") for t in tints)
+    alphas = [float(t["bg"].rstrip(")").split(",")[-1]) for t in tints]
+    assert alphas == sorted(alphas)  # lighter for smaller months
+
+
+def test_trends_highlight_toggle_defaults_to_unusual(client):
+    html = client.get("/s/ledger/trends").data.decode()
+    assert "Unusual months" in html and "Size" in html
+    # Only the toggle's own Size pill (its href + hx-get) carries the param;
+    # period and paging links stay on the default.
+    assert html.count("heat=size") == 2
+
+
+def test_trends_size_mode_is_kept_while_paging(client):
+    html = client.get("/s/ledger/trends?heat=size").data.decode()
+    # Period presets, earlier/latest arrows, and the Size pill all keep it.
+    assert html.count("heat=size") >= 5
+
+
+def test_size_leaves_the_month_in_progress_plain():
+    tints = _heat_tints("size", [-10.0, -50.0], [0.2, 1.0], 1, is_income=False)
+    assert tints[0]["bg"] != "transparent"
+    assert tints[1]["bg"] == "transparent"

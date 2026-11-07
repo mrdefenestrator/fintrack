@@ -1,4 +1,5 @@
 import re
+import statistics
 from calendar import monthrange
 from collections import defaultdict
 from datetime import date, datetime
@@ -145,6 +146,16 @@ def index():
     num_months = max((end.year - start.year) * 12 + end.month - start.month + 1, 1)
     month_labels = [date(y, m, 1).strftime("%b") for y, m in sorted_months]
 
+    # The month still in progress (only when the window ends today): its
+    # figures are partial, so it's marked and never tinted as unusual.
+    heat_mode = "size" if request.args.get("heat") == "size" else "unusual"
+    current_key = (today.year, today.month)
+    in_progress = (
+        sorted_months.index(current_key)
+        if is_latest and current_key in sorted_months
+        else None
+    )
+
     trends = []
     for cat, data in sorted(by_category.items(), key=lambda x: x[1]["total"]):
         monthly_values = [data["months"].get(m, 0) for m in sorted_months]
@@ -152,6 +163,9 @@ def index():
         max_abs = max(abs_values) if any(v > 0 for v in abs_values) else 1
 
         heat = [v / max_abs for v in abs_values]
+        tints = _heat_tints(
+            heat_mode, monthly_values, heat, in_progress, is_income=data["total"] > 0
+        )
 
         monthly_avg = data["total"] / num_months
 
@@ -178,6 +192,7 @@ def index():
                 "monthly_avg": monthly_avg,
                 "monthly_values": monthly_values,
                 "monthly_heat": heat,
+                "monthly_tints": tints,
                 "pct_change": pct_change,
                 "budget_monthly": bgt_display,
                 "budget_delta": budget_delta,
@@ -228,6 +243,9 @@ def index():
         sorted_months=sorted_months,
         monthly_footer_values=monthly_footer_values,
         num_months=num_months,
+        heat_mode=heat_mode,
+        heat_qs="&heat=size" if heat_mode == "size" else "",
+        in_progress=in_progress,
         footer_pct_change=footer_pct_change,
         footer_budget=footer_budget,
         footer_budget_delta=footer_budget_delta,
@@ -273,3 +291,67 @@ def detail():
         values=values,
         max_abs=max_abs,
     )
+
+
+# "Unusual months" heat map: a month is tinted only when it is worse than the
+# category's usual (median completed month) by more than this share.
+_UNUSUAL = 0.2
+
+
+def _heat_tints(
+    mode: str,
+    values: list[float],
+    heat: list[float],
+    in_progress: int | None,
+    *,
+    is_income: bool,
+) -> list[dict]:
+    """Per-month cell style for the Trends heat map: {bg, title}.
+
+    - "unusual" (default): only months worse than the category's usual (its
+      median completed month) get an amber tint — more spending, or less
+      income — so steady bills like rent stay plain. The median keeps one
+      spike from making every normal month look "below usual".
+    - "size": one calm gray, shaded by the month's size relative to the row's
+      largest month.
+
+    The month in progress is partial, so it is left plain in both modes.
+    """
+    out = []
+    done = sorted(abs(v) for i, v in enumerate(values) if i != in_progress)
+    usual = statistics.median(done) if done else 0
+    plain = {"bg": "transparent", "title": ""}
+    for i, v in enumerate(values):
+        if i == in_progress:
+            out.append(plain)
+            continue
+        if mode == "size":
+            alpha = 0.03 + heat[i] * 0.30
+            out.append({"bg": f"rgba(100,116,139,{alpha:.2f})", "title": ""})
+            continue
+        if not usual:
+            # Usually nothing here: any spend at all is a one-off.
+            if v and not is_income:
+                out.append(
+                    {
+                        "bg": "rgba(245,158,11,0.40)",
+                        "title": "One-off: usually nothing in this category",
+                    }
+                )
+            else:
+                out.append(plain)
+            continue
+        dev = (abs(v) - usual) / usual
+        worse = -dev if is_income else dev
+        if worse <= _UNUSUAL:
+            out.append(plain)
+            continue
+        alpha = 0.15 + min(worse, 1.5) / 1.5 * 0.35
+        word = "below" if is_income else "above"
+        out.append(
+            {
+                "bg": f"rgba(245,158,11,{alpha:.2f})",
+                "title": f"{worse * 100:.0f}% {word} usual (${usual:,.0f}/mo)",
+            }
+        )
+    return out

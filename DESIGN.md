@@ -478,7 +478,7 @@ Three things build on the link:
   suggestion) and `transactions dismiss` / `undismiss`.
 - **Budget-vs-actual per entry** (`budget_actuals`) — for a month, each entry's
   scheduled amount is compared to its actual and classified matched / over /
-  under / missing / upcoming / unlinked / inactive. Discrete entries (bills,
+  under / on pace / missing / upcoming / unlinked / inactive. Discrete entries (bills,
   paychecks) are measured by their linked transactions, exposing price drift (a
   linked charge that differs from the budgeted amount). A variable, continuous
   entry that alone claims its category is measured by that category's month
@@ -487,7 +487,16 @@ Three things build on the link:
   up; an entry that has never been linked is **unlinked**, because absent links
   say nothing about whether the money moved. Each result carries a tone
   (good / bad / neutral) so over/under read correctly for both kinds: earning
-  over budget is good, spending over it is bad. Surfaced on its own
+  over budget is good, spending over it is bad. In the month in progress a
+  category-measured variable line is judged against its **pace** — expected ×
+  the share of the month gone (days elapsed, today included) — rather than the
+  full month: within 10% of pace it is **on pace**, further ahead **over**
+  (also once past the month's full amount), further behind **under**; the
+  page shows the pace next to the status. Past months and linked bills use the
+  full expected amount. Figures are **signed** like the Budget sheet (income
+  +, expenses −), and so is Delta (actual − expected, signed), so a + Delta
+  beats the budget and the Net footer is the sum of the rows (#103). Surfaced
+  on its own
   Budget vs Actual page (`/s/<snapshot>/budget/actual`, read-only apart from
   the edit-mode link suggestions, in the
   Spending nav group; month pager, Kind/Category/Status filters, and a net
@@ -666,6 +675,17 @@ a usually-empty category stand out. Per-month size is left to each row's
 expandable bar chart. The month in progress is marked "so far", greyed, never
 highlighted, and left out of "usual".
 
+The summary columns follow the same rule (#103, `fintrack/ledger/trends.py`,
+shared with `report trends`). **Avg/mo** divides by the *completed months with
+data* — months where the snapshot has any transactions in the window, minus the
+month in progress — not every calendar month in the window, so a short history
+isn't understated and a partial month doesn't drag it down (no completed month
+→ "—"). **Change** compares the last completed month to that average.
+**Delta** (Avg/mo − Budget/mo, where Budget/mo is annual ÷ 12) is worded by the
+row's kind: spending reads "$X over" / "$X under", income and the net Total
+row read "$X short" / "$X ahead"; color is green when the result beats the
+budget, red when it doesn't.
+
 The actions column (drag + delete) renders only in edit mode. Edits swap the
 table's whole body (colgroup included), so a row whose edit changes its band
 simply re-renders in the new band.
@@ -706,15 +726,18 @@ Budget is a grouped sheet with **one band per category** (issue #51). Bands
 follow the category taxonomy's `sort_order`; categories an entry uses but the
 taxonomy lacks follow alphabetically, and entries with no category close the
 sheet as **Uncategorized**. Every band shares one column set —
-Category·Description·Amount·Recurrence·When·Remaining·Monthly·Annual·Auto
-account — so there is no ragged edge. Category stays a column, always shown (as
+Category·Description·Amount·Recurrence·When·Remaining·This month·Per month·
+Annual·Auto account — so there is no ragged edge. **This month** is what's
+scheduled in the current calendar month (an annual bill due in another month is
+$0); **Per month** is the annual amount ÷ 12, the same figure as Trends'
+Budget/mo (#103). Category stays a column, always shown (as
 Holdings keeps Type), because editing it is how an entry moves between bands.
 There is **no Kind column**: kind isn't editable on the sheet (the add buttons
 set it) and the amount's sign already shows it (expenses are negative). The
 CLI's `budget` table keeps its Kind column.
 
 - **Totals.** Each band heading carries its signed (income +, expense −)
-  Remaining / Monthly / Annual subtotals under those columns; the pinned footer
+  Remaining / This month / Per month / Annual subtotals under those columns; the pinned footer
   is a single **Net** row over every shown entry.
 - **Color by category.** Each category gets its own band hue, cycling the
   shared 12-hue palette (`_CATEGORY_TONES`) in category order — the taxonomy,

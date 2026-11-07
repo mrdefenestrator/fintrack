@@ -307,11 +307,31 @@ class TestBuildBudgetTable:
             }
         ]
         headers, rows = _build_budget_table(budget, 2025, 2, 0)
-        assert "Monthly" in headers
-        assert "Annual" in headers
-        # Monthly = 100, Annual = 100 * 12 = 1200
+        assert headers[7:10] == ["This month", "Per month", "Annual"]
+        # This month = 100, Per month = 1200 / 12 = 100, Annual = 1200
         assert "$100.00" in rows[0][7]
-        assert "$1,200.00" in rows[0][8]
+        assert "$100.00" in rows[0][8]
+        assert "$1,200.00" in rows[0][9]
+
+    def test_annual_entry_this_month_vs_per_month(self):
+        """An annual bill due in another month is $0 this month but still
+        costs annual ÷ 12 per month (#103)."""
+        budget = [
+            {
+                "kind": "expense",
+                "description": "Prime",
+                "amount": 139,
+                "recurrence": "annual",
+                "month": 6,
+                "dayOfMonth": 1,
+            }
+        ]
+        _, rows = _build_budget_table(budget, 2025, 2, 0)
+        assert rows[0][7].strip() == "$0.00"
+        assert rows[0][8] == "($11.58)"
+        assert rows[0][9] == "($139.00)"
+        # Footer totals line up under the same columns.
+        assert rows[-1][8] == "($11.58)"
 
     def test_auto_account_ref(self):
         account_map = {1: "Chase Checking"}
@@ -327,7 +347,7 @@ class TestBuildBudgetTable:
         _, rows = _build_budget_table(
             budget, 2025, 2, 0, account_display_by_id=account_map
         )
-        assert rows[0][9] == "Chase Checking"
+        assert rows[0][10] == "Chase Checking"
 
     def test_auto_account_ref_missing(self):
         budget = [
@@ -340,7 +360,7 @@ class TestBuildBudgetTable:
             }
         ]
         _, rows = _build_budget_table(budget, 2025, 2, 0)
-        assert rows[0][9] == "-"
+        assert rows[0][10] == "-"
 
     def test_empty_budget(self):
         _headers, rows = _build_budget_table([], 2025, 2, 0)

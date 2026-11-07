@@ -215,7 +215,8 @@ BUDGET_HEADERS = [
     "Recurrence",
     "When",
     "Remaining",
-    "Monthly",
+    "This month",
+    "Per month",
     "Annual",
     "Auto account",
 ]
@@ -227,16 +228,20 @@ def budget_entry_row(
     month: int,
     day: int,
     account_display_by_id: dict[int, str] | None = None,
-) -> tuple[list[str], tuple[Decimal, Decimal, Decimal]]:
+) -> tuple[list[str], tuple[Decimal, Decimal, Decimal, Decimal]]:
     """One budget entry's display cells (BUDGET_HEADERS order) plus its signed
-    (remaining-this-month, monthly, annual) figures — income positive, expenses
-    negative — so callers can subtotal any grouping of rows."""
+    (remaining-this-month, this-month, per-month, annual) figures — income
+    positive, expenses negative — so callers can subtotal any grouping of rows.
+
+    "This month" is what's scheduled in this calendar month (an annual bill
+    billed in another month is 0); "Per month" is the annual amount ÷ 12."""
     account_display_by_id = account_display_by_id or {}
     kind = e.get("kind", "income")
     sign = 1 if kind == "income" else -1
     remaining = sign * _subtotal_remainder_of_month(e, year, month, day)
     monthly = sign * _budget_entry_in_month(e, year, month, day=0)
     annual = sign * _amount_annual(e)
+    per_month = annual / 12
     ref = e.get("autoAccountRef")
     cells = [
         kind.capitalize(),
@@ -247,10 +252,11 @@ def budget_entry_row(
         _expected_display(e),
         fmt_money(remaining),
         fmt_money(monthly),
+        fmt_money(per_month),
         fmt_money(annual),
         account_display_by_id.get(ref, "-") if ref is not None else "-",
     ]
-    return cells, (remaining, monthly, annual)
+    return cells, (remaining, monthly, per_month, annual)
 
 
 def _build_budget_table(
@@ -262,7 +268,8 @@ def _build_budget_table(
     show_index: bool = False,
 ) -> tuple:
     """Build (headers, rows) for budget table (unified income+expenses). Rows include separator and total.
-    Shows prorated subtotal (remainder of month), monthly budget amount, and annual budget amount.
+    Shows prorated subtotal (remainder of month), this month's scheduled amount,
+    the per-month average (annual ÷ 12), and the annual amount.
     budget is a list of entries with kind: income|expense.
     """
     headers = list(BUDGET_HEADERS)
@@ -270,16 +277,10 @@ def _build_budget_table(
         headers = ["Index"] + headers
 
     rows = []
-    total_subtotal = Decimal(0)
-    total_monthly = Decimal(0)
-    total_annual = Decimal(0)
+    totals = [Decimal(0)] * 4
     for idx, e in enumerate(budget):
-        row, (st, monthly_amt, annual_amt) = budget_entry_row(
-            e, year, month, day, account_display_by_id
-        )
-        total_subtotal += st
-        total_monthly += monthly_amt
-        total_annual += annual_amt
+        row, figures = budget_entry_row(e, year, month, day, account_display_by_id)
+        totals = [t + f for t, f in zip(totals, figures)]
         if show_index:
             row = [str(idx)] + row
         rows.append(row)
@@ -287,9 +288,8 @@ def _build_budget_table(
     total_row = [""] * num_cols
     total_row[0] = "Total"
     offset = 1 if show_index else 0
-    total_row[6 + offset] = fmt_money(total_subtotal)
-    total_row[7 + offset] = fmt_money(total_monthly)
-    total_row[8 + offset] = fmt_money(total_annual)
+    for j, total in enumerate(totals):
+        total_row[6 + j + offset] = fmt_money(total)
     _append_table_separator_and_total(rows, headers, total_row)
     return (headers, rows)
 

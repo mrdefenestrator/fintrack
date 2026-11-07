@@ -69,10 +69,10 @@ def test_import_confirm_transaction_and_networth_account(page, unified_server):
     page.goto(f"{unified_server}/s/ledger/holdings")
     assert page.locator("td", has_text="Flow Checking").first.is_visible()
 
-    # Legacy status URL redirects to Holdings (Accounts page was retired)
+    # Legacy status URL redirects to the Overview landing page
     page.goto(f"{unified_server}/s/ledger/status")
-    page.wait_for_url("**/holdings**")
-    assert page.locator("td", has_text="Flow Checking").first.is_visible()
+    page.wait_for_url("**/s/ledger")
+    assert page.locator("[data-overview-card='net_worth_liquid']").is_visible()
 
 
 _OFX_WITH_LEDGERBAL = """\

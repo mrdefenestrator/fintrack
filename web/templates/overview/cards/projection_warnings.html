@@ -1,0 +1,22 @@
+{# Status first ("All clear" or how many accounts dip below their minimum),
+   then the low point, each below-minimum account, and loan payoffs. The
+   whole card opens Projections, where below-minimum cells are marked. #}
+{% import "overview/card.html" as ov %}
+{% set low = summary.lowest_liquid %}
+{% set n = summary.warnings | length %}
+{% call ov.card('projection_warnings', 'Projection warnings', proj_url) %}
+<div data-status class="text-lg font-semibold {% if n %}text-amber-700 dark:text-amber-300{% else %}text-gray-800 dark:text-gray-100{% endif %}">
+    {% if n %}{{ n }} account{{ "s dip below their" if n != 1 else " dips below its" }} minimum{% else %}All clear{% endif %}
+</div>
+<div data-lowest>Low point <span class="font-medium tabular-nums">{{ low.amount | fmt_money_whole }}</span> · {{ low.month_label }}</div>
+{% if n %}
+<ul data-warnings class="space-y-0.5 text-amber-900 dark:text-amber-200">
+    {% for w in summary.warnings %}
+    <li><span class="font-medium">{{ w.account | account_label }}</span>: under {{ w.minimum | fmt_money_whole }} min from {{ w.first_month_label }}</li>
+    {% endfor %}
+</ul>
+{% endif %}
+{% for p in summary.payoffs %}
+<div data-payoff>Paid off: <span class="font-medium">{{ p.name }}</span> · {{ p.month_label }}</div>
+{% endfor %}
+{% endcall %}

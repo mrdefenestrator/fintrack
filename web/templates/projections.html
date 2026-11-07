@@ -7,52 +7,21 @@
 
 {% import "partials/grouped_sheet.html" as gs %}
 
-{# Non-scrolling top band: the headline summary (where liquid and net worth
-   end up), warnings, and the (opt-in) estimate breakdown. The horizon/estimate
-   controls live in a filter bar fused to the table below; the accounts×months
-   grid is the flex-filling sheet (its own scroll viewport), matching
-   Holdings/Budget/Transactions. #}
+{# Non-scrolling top band: a one-line summary (where liquid and net worth
+   end up; the full cards and warnings live on Overview) and the (opt-in)
+   estimate breakdown. The horizon/estimate controls live in a filter bar
+   fused to the table below; the accounts×months grid is the flex-filling
+   sheet (its own scroll viewport), matching Holdings/Budget/Transactions. #}
 <div class="shrink-0 mb-2 space-y-2" data-projection-summary>
 
-{% macro trend_card(name, t, testid) %}
-<div class="px-3 py-2 rounded-lg bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 shadow-sm" data-summary="{{ testid }}">
-    <div class="flex items-baseline justify-between gap-3">
-        <span class="text-sm text-gray-500 dark:text-gray-400">{{ name }} by {{ summary.end_label }}</span>
-        <span class="text-sm font-medium tabular-nums {% if t.change < 0 %}text-red-600 dark:text-red-400{% elif t.change > 0 %}text-emerald-600 dark:text-emerald-400{% else %}text-gray-500{% endif %}">
-            {{ t.change | fmt_change }} <span class="font-normal text-gray-500 dark:text-gray-400">({{ t.per_month | fmt_change }}/mo)</span>
-        </span>
-    </div>
-    <div class="flex items-baseline justify-between gap-3">
-        <span class="text-xl font-semibold tabular-nums text-gray-800 dark:text-gray-100 {% if t.end < 0 %}!text-red-600 dark:!text-red-400{% endif %}">{{ t.end | fmt_money_header }}</span>
-        <span class="text-xs text-gray-500 dark:text-gray-400 tabular-nums">now {{ t.start | fmt_money_header }}</span>
-    </div>
-</div>
-{% endmacro %}
-
-<div class="grid gap-2 sm:grid-cols-2">
-    {{ trend_card('Liquid', summary.liquid, 'liquid') }}
-    {{ trend_card('Net worth', summary.net_worth, 'net-worth') }}
-</div>
-
-<div class="flex flex-wrap gap-x-5 gap-y-1 px-1 text-sm text-gray-600 dark:text-gray-300">
-    <span data-summary="lowest">Lowest liquid:
-        <span class="font-medium tabular-nums {% if summary.lowest_liquid.amount < 0 %}text-red-600 dark:text-red-400{% endif %}">{{ summary.lowest_liquid.amount | fmt_money_header }}</span>
-        in {{ summary.lowest_liquid.month_label }}</span>
-    {% if summary.payoffs %}
-    <span data-summary="payoffs">Paid off:
-        {% for p in summary.payoffs %}<span class="font-medium">{{ p.name }}</span> ({{ p.month_label }}){{ ", " if not loop.last }}{% endfor %}</span>
-    {% endif %}
-</div>
-
-{% if summary.warnings %}
-<ul data-summary="warnings" class="px-3 py-1.5 rounded-lg text-sm bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-200 space-y-0.5">
-    {% for w in summary.warnings %}
-    <li><span class="font-medium">{{ w.account | account_label }}</span> drops below its
-        {{ w.minimum | fmt_money_header }} minimum in {{ w.first_month_label }}
-        (lowest {{ w.lowest | fmt_money_header }}, {{ w.months_below }} month{{ "s" if w.months_below != 1 }} below).</li>
+<p data-summary="line" class="flex flex-wrap gap-x-5 gap-y-1 px-1 text-sm text-gray-600 dark:text-gray-300">
+    <span>By {{ summary.end_label }}:</span>
+    {% for name, t, testid in [('Liquid', summary.liquid, 'liquid'), ('Net worth', summary.net_worth, 'net-worth')] %}
+    <span data-summary="{{ testid }}">{{ name }}
+        <span class="font-medium tabular-nums {% if t.end < 0 %}text-red-600 dark:text-red-400{% else %}text-gray-800 dark:text-gray-100{% endif %}">{{ t.end | fmt_money_header }}</span>
+        <span class="tabular-nums {% if t.change < 0 %}text-red-600 dark:text-red-400{% elif t.change > 0 %}text-emerald-600 dark:text-emerald-400{% endif %}">({{ t.change | fmt_change }})</span></span>
     {% endfor %}
-</ul>
-{% endif %}
+</p>
 
 {% if result.estimate is not none %}
 <details data-summary="estimate" class="px-3 py-1.5 rounded-lg text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600">

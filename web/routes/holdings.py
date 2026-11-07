@@ -25,12 +25,14 @@ drifts from the imported balance. The actions column (delete) sticks to the
 right edge.
 """
 
+import calendar
 import re
 from datetime import UTC, date, datetime
 from decimal import Decimal
 
 from flask import Blueprint, abort, current_app, render_template, request
 
+from fintrack.accounts.balance_history import balances_on
 from fintrack.accounts.repository import (
     add_account,
     delete_account,
@@ -683,7 +685,9 @@ def _apply_filters(rows, type_sel, balance_sel, inst_sel):
     return rows
 
 
-def _groups_ctx(rows_by_group: dict[str, list[dict]], accounts, assets, rates=None):
+def _groups_ctx(
+    rows_by_group: dict[str, list[dict]], accounts, assets, rates=None, prior=None
+):
     """The four domain groups (headers, rows, group total, reorder wiring) + the
     master footer (Liquid + Net worth).
 
@@ -717,15 +721,81 @@ def _groups_ctx(rows_by_group: dict[str, list[dict]], accounts, assets, rates=No
 
     totals = calculations.tiered_totals(accounts, assets, rates=rates)
     master = []
-    for label, value in (
-        ("Liquid", totals["liquid"]),
-        ("Net worth", totals["net_worth"]),
-    ):
+    for label, key in (("Liquid", "liquid"), ("Net worth", "net_worth")):
         cells = [""] * _MAX_COLS
         cells[2] = label
-        cells[_AMOUNT_POS] = fmt_money(value)
+        cells[_AMOUNT_POS] = fmt_money(totals[key])
+        # Only Liquid gets a "since last month" note: cash and cards carry
+        # balance history; most loans and assets don't, so a net-worth change
+        # would be the liquid change in disguise.
+        if key == "liquid" and prior and prior["covered"]:
+            before = _prior_totals(accounts, assets, rates, prior["balances"])
+            cells = (
+                cells[: _AMOUNT_POS + 1]
+                + [_change_cell(totals[key] - before[key], prior)]
+                + [""] * (_MAX_COLS - _AMOUNT_POS - 1 - _CHANGE_SPAN)
+            )
         master.append(cells)
     return groups, master
+
+
+# How many columns the footer's "since last month" note spans after Amount.
+_CHANGE_SPAN = 3
+
+
+def _prior_totals(accounts, assets, rates, balances: dict[int, Decimal]):
+    """Totals as of the comparison date: each account's balance swapped for its
+    history point on that day, where it has one; the rest at today's value."""
+    then = [
+        {**a, "balance": balances[a["id"]]} if a.get("id") in balances else a
+        for a in accounts
+    ]
+    return calculations.tiered_totals(then, assets, rates=rates)
+
+
+def _change_cell(delta: Decimal, prior: dict) -> dict:
+    """Footer note: signed change since the comparison date, green up / red
+    down, with the history coverage in its tooltip."""
+    on = prior["on"]
+    if delta == 0:
+        arrow, tone = "", "text-gray-500 dark:text-gray-400 font-normal"
+    elif delta > 0:
+        arrow, tone = "▲ ", "text-green-600 dark:text-green-400 font-normal"
+    else:
+        arrow, tone = "▼ ", "text-red-600 dark:text-red-400 font-normal"
+    title = f"Change since {on:%b} {on.day}, from balance history"
+    if prior["covered"] < prior["total"]:
+        title += (
+            f" for {prior['covered']} of {prior['total']} liquid accounts;"
+            " the rest are counted at today's value"
+        )
+    return {
+        "value": f"{arrow}{fmt_money(abs(delta)).strip()} since {on:%b} {on.day}",
+        "span": _CHANGE_SPAN,
+        "extra": tone,
+        "title": title + ".",
+    }
+
+
+def _month_ago(today: date) -> date:
+    """The same day last month, clamped to that month's last day."""
+    year, month = (
+        (today.year - 1, 12) if today.month == 1 else (today.year, today.month - 1)
+    )
+    return date(year, month, min(today.day, calendar.monthrange(year, month)[1]))
+
+
+def _prior_ctx(ctx: dict, today: date) -> dict:
+    """Liquid accounts' balances one month back, for the footer change note."""
+    on = _month_ago(today)
+    ids = [
+        a["id"]
+        for a in ctx["accounts"]
+        if a.get("id") is not None and calculations.account_tier(a) == "liquid"
+    ]
+    with current_app.config["engine"].connect() as conn:
+        balances = balances_on(conn, ids, on)
+    return {"on": on, "balances": balances, "covered": len(balances), "total": len(ids)}
 
 
 def _ref_options(ctx: dict) -> tuple[list, list]:
@@ -749,7 +819,11 @@ def _tbody_ctx(rows_by_group, ctx: dict, filters_active=False, **editing) -> dic
     """Shared context for the tbody partial (page render and edit swaps)."""
     account_ref_options, asset_ref_options = _ref_options(ctx)
     groups, master_total = _groups_ctx(
-        rows_by_group, ctx["accounts"], ctx["assets"], rates=ctx.get("rates")
+        rows_by_group,
+        ctx["accounts"],
+        ctx["assets"],
+        rates=ctx.get("rates"),
+        prior=_prior_ctx(ctx, datetime.now().astimezone().date()),
     )
     return {
         "groups": groups,

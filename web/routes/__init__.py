@@ -9,6 +9,7 @@ from .holdings import holdings_bp
 from .imports import bp as imports_bp
 from .merchants import MERCHANTS_SHEET
 from .merchants import bp as merchants_bp
+from .overview import overview_bp
 from .projections import projections_bp
 from .status import status_bp
 from .transactions import TRANSACTIONS_SHEET
@@ -29,6 +30,7 @@ FLAT_SHEETS = {
 def register_blueprints(app):
     app.jinja_env.globals["flat_sheets"] = FLAT_SHEETS
     app.register_blueprint(status_bp)
+    app.register_blueprint(overview_bp)
     app.register_blueprint(budget_bp)
     app.register_blueprint(holdings_bp)
     app.register_blueprint(projections_bp)

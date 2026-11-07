@@ -20,17 +20,21 @@ from fintrack.core.filters import (
     filter_accounts_by_type,
     filter_assets_by_kind,
 )
-from fintrack.core.formatting import fmt_money
+from fintrack.core.formatting import (
+    fmt_account_label,
+    fmt_change_whole,
+    fmt_money_whole,
+)
 from fintrack.core.loader import load_finances_from_db
 from fintrack.core.tables import (
     _account_display_by_id,
-    _append_table_separator_and_total,
     _build_accounts_table,
     _build_budget_table,
     _build_funding_table,
     _build_net_worth_table,
 )
 from fintrack.core.types import ASSET_TYPE_VALUES
+from fintrack.insights.overview import build_overview
 from fintrack.networth import repository as repo_assets
 from fintrack.networth.calculations import (
     _ACCOUNT_TYPE_TO_CALCULATION,
@@ -39,8 +43,6 @@ from fintrack.networth.calculations import (
     RECURRENCE_OPTIONS,
     account_funding_needed,
     liquid_minus_cc,
-    net_nonliquid_total,
-    projected_change_to_eom,
 )
 from fintrack.snapshots import repository as repo_snapshots
 
@@ -87,25 +89,43 @@ def _load(cli, conn):
 @click.command()
 @pass_cli
 def status(cli):
-    """Key-numbers rollup: accounts, budget to end of month, assets."""
+    """Overview: net worth and liquid now and where the projection has them,
+    plus projection warnings (the text version of the web Overview page)."""
     with cli.connect() as conn:
-        _, data = _load(cli, conn)
-    accounts = data.get("accounts") or []
-    budget = data.get("budget") or []
-    assets = data.get("assets") or []
-    rates = data.get("rates")
-    today = datetime.now().astimezone().date()
-    n2 = liquid_minus_cc(accounts)
-    n3 = projected_change_to_eom(budget, today.year, today.month, today.day)
-    n6 = net_nonliquid_total(assets, rates=rates)
+        overview = build_overview(conn, cli.snapshot_id(conn))
+    summary = overview["summary"]
+    if not overview["has_holdings"]:
+        click.echo("No holdings yet: add accounts, assets, and debts.\n")
+
+    end = summary["end_label"]
     rows = [
-        ["Accounts", fmt_money(n2)],
-        ["Budget (prorated)", fmt_money(n3)],
-        ["Assets", fmt_money(n6)],
+        [name, fmt_money_whole(t["start"]), f"{fmt_change_whole(t['change'])} by {end}"]
+        for name, t in (
+            ("Net worth", summary["net_worth"]),
+            ("Liquid", summary["liquid"]),
+        )
     ]
-    headers = ["Kind", "Amount"]
-    _append_table_separator_and_total(rows, headers, ["Total", fmt_money(n2 + n3 + n6)])
-    echo_table(rows, headers, ("left", "right"))
+    width = max(len(r[1]) for r in rows)
+    for name, now, change in rows:
+        click.echo(f"{name:<10} {now:>{width}}  {change}")
+
+    warnings = summary["warnings"]
+    n = len(warnings)
+    if n:
+        verb = "dips below its" if n == 1 else "dip below their"
+        state = f"{n} account{'s' if n != 1 else ''} {verb} minimum"
+    else:
+        state = "All clear"
+    low = summary["lowest_liquid"]
+    click.echo(f"\nProjection warnings: {state}")
+    click.echo(f"  Low point {fmt_money_whole(low['amount'])} · {low['month_label']}")
+    for w in warnings:
+        click.echo(
+            f"  {fmt_account_label(w['account'])}: under "
+            f"{fmt_money_whole(w['minimum'])} min from {w['first_month_label']}"
+        )
+    for p in summary["payoffs"]:
+        click.echo(f"  Paid off: {p['name']} · {p['month_label']}")
 
 
 # ---------------------------------------------------------------------------

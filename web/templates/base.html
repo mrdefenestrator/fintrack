@@ -3,10 +3,10 @@
 
 <head>
     <meta charset="UTF-8">
-    {# viewport-fit=cover lets the standalone (black-translucent) web view fill
-       the whole screen. Without it iOS letterboxes the layout inside the safe
-       area, leaving a blank band above the app — most visible in landscape
-       (QA #1). The header is then padded past the notch via env() safe-area
+    {# viewport-fit=cover lets the standalone web view fill the whole screen.
+       Without it iOS letterboxes the layout inside the safe area, leaving a
+       blank band beside/above the app — most visible in landscape (QA #1). The
+       header and main are then padded past the notch via env() safe-area
        insets below. #}
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
     <meta name="theme-color" content="#1e40af">
@@ -19,7 +19,12 @@
     <link rel="manifest" href="{{ url_for('static', filename='manifest.webmanifest') }}">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    {# `default`, not `black-translucent` (issue #104): with a translucent status
+       bar, iOS 26 draws its top-edge blur over the header and nothing in CSS
+       turns it off, and the viewport comes out shorter than the screen (a bare
+       strip at the bottom). iOS reads this tag at install time, so an existing
+       home-screen app must be removed and re-added to pick up a change. #}
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="fintrack">
     <title>{% block title %}fintrack{% endblock %}</title>
 
@@ -179,17 +184,9 @@
 
         /* Installed web app only (issue #104). Desktop browsers never match. */
         @media (display-mode: standalone) {
-            /* iOS 26 can size `height: 100%` to the safe area rather than the
-               whole screen, leaving a strip of bare canvas under the sidebar and
-               content (seen on iPad). A standalone app has no browser toolbars,
-               so the large viewport height is the full screen. */
-            html { height: 100lvh; }
-            /* iOS 26 tints and blurs the translucent status-bar area from the
-               page — the body background, unless a fixed/sticky bar sits at the
-               top edge, in which case it uses that bar's color. A sticky header
-               opts into the latter so the status bar continues the header's blue
-               instead of a dark, blurred band. The body doesn't scroll, so
-               sticky changes nothing about layout. */
+            /* An opaque, full-width sticky bar at the top edge is what iOS 26
+               uses as the status bar's color source (instead of its edge blur).
+               The body doesn't scroll, so sticky changes nothing about layout. */
             #main-header { position: sticky; top: 0; }
             /* iOS composites the sticky footer rows on their own layer and
                doesn't clip that layer to the frame's rounded corners. A mask

@@ -383,8 +383,7 @@ holding it lands on (none = unassigned). A row's change in a month is exactly
 the sum of its flows. `summarize()` turns a result into the headline numbers:
 liquid and net worth now → end of horizon (change and per-month average), the
 lowest liquid month, loans paid off within the horizon, and minimum-balance
-warnings collapsed to one line per account. Each month-specific item carries
-its month index, so links can open Projections on that month (`?month=`).
+warnings collapsed to one line per account.
 
 Surfaced at `/s/<snapshot>/projections` (horizon and estimator as query
 params) and `fintrack project --months N [--estimate]`. The web page leads with
@@ -704,13 +703,13 @@ hasn't shipped are simply absent.
 | Card | Shows | Links to |
 |---|---|---|
 | Net worth / Liquid | both now, and their projected change by the end of the 12 months | Projections (`?months=12`); the whole card is the link |
-| Projection warnings | status ("All clear" / how many accounts dip below their minimum), the low point, each below-minimum account, loan payoffs | each line: Projections opened on its month (`?months=12&month=I`); the rest of the card: Projections |
+| Projection warnings | status ("All clear" / how many accounts dip below their minimum), the low point, each below-minimum account, loan payoffs | Projections (`?months=12`), where below-minimum cells are marked |
 
 Cards are terse: whole dollars (`fmt_money_whole`), changes as ▲/▼ amounts
 (`fmt_change_whole`), one short line per item; exact figures and detail live on
-the sheets they link to. Every card is a link: a stretched link covers the
-card, and lines that link to their own views sit above it (links can't nest),
-so there are no footer links.
+the sheets they link to. Each card is one link (the whole card) to one view;
+no per-line links or footer links. Opening Projections on a specific month
+(`?month=`) waits on the month breakdown working on phones (#114).
 
 Net worth's "change over the past 12 months" waits on balance history being
 recorded over time (#107, #98). Planned cards: Cash flow (#99), Needs

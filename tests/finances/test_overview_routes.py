@@ -76,7 +76,7 @@ def test_net_worth_and_liquid_card(client):
     """One card, whole dollars, and the whole card links to Projections."""
     html = client.get("/s/home").get_data(as_text=True)
     card = _card(html, "net_worth_liquid")
-    assert re.search(r'<a href="/s/home/projections\?months=12" data-card-link', card)
+    assert card.startswith('<a href="/s/home/projections?months=12"')
     for testid in ("net-worth", "liquid"):
         figure = re.search(
             rf'data-figure="{testid}".*?data-change.*?</div>', card, re.DOTALL
@@ -87,19 +87,17 @@ def test_net_worth_and_liquid_card(client):
     assert "$1,000.00" not in card
 
 
-def test_warnings_card_links_each_item_to_its_month(client):
+def test_warnings_card_is_one_link_to_projections(client):
     html = client.get("/s/home").get_data(as_text=True)
     card = _card(html, "projection_warnings")
     assert "1 account dips below its minimum" in card
     assert "Low point" in card
     assert "Chase Checking</span>: under $2,000 min from " in card
-    # Checking is below its minimum from month 0 (the current month).
-    assert 'href="/s/home/projections?months=12&amp;month=0"' in card
     assert "All clear" not in card
-    # No footer: the whole card links to Projections, above which each line
-    # links to its own month.
-    assert re.search(r'<a href="/s/home/projections\?months=12" data-card-link', card)
-    assert "&rarr;" not in card
+    # One link: the card itself, to plain Projections (no month).
+    assert card.startswith('<a href="/s/home/projections?months=12"')
+    assert card.count("<a ") == 1
+    assert "month=" not in card
 
 
 def test_empty_snapshot(client):

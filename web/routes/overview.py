@@ -27,20 +27,16 @@ def overview_view(filename):
     with current_app.config["engine"].connect() as conn:
         overview = build_overview(conn, snapshot_id)
 
-    def proj_url(month=None):
-        """Projections on the Overview's horizon, optionally opened on a month."""
-        return url_for(
-            "projections.projections_view",
-            filename=filename,
-            months=overview["months"],
-            month=month,
-        )
-
     return render_template(
         "overview.html",
         active_tab="overview",
         overview=overview,
         summary=overview["summary"],
-        proj_url=proj_url,
+        # Projections on the Overview's horizon.
+        proj_url=url_for(
+            "projections.projections_view",
+            filename=filename,
+            months=overview["months"],
+        ),
         **context,
     )

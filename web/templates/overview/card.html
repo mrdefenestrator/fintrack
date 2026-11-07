@@ -1,19 +1,12 @@
-{# One Overview card: a title, the caller's headline + context, and the
-   whole card links to the view behind it (link_label names that link for
-   screen readers). The card link is stretched over the card rather than
-   wrapping it, so lines inside can still link to their own views (links
-   can't nest): give those `ov.inner_link` to sit above it. #}
-{% macro card(key, title, href, link_label) %}
-<section data-overview-card="{{ key }}"
-    class="group relative rounded-lg bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 shadow-sm px-4 py-3 text-sm text-gray-600 dark:text-gray-300 hover:border-blue-400 dark:hover:border-blue-500 hover:bg-gray-50 dark:hover:bg-gray-700/40 transition-colors">
-    <a href="{{ href }}" data-card-link aria-label="{{ link_label }}" class="absolute inset-0 rounded-lg"></a>
+{# One Overview card: the whole card is a single link to the view behind it,
+   holding an optional title and the caller's headline + context. #}
+{% macro card(key, title, href) %}
+<a href="{{ href }}" data-overview-card="{{ key }}" data-card-link
+    class="block rounded-lg bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 shadow-sm px-4 py-3 text-sm text-gray-600 dark:text-gray-300 hover:border-blue-400 dark:hover:border-blue-500 hover:bg-gray-50 dark:hover:bg-gray-700/40 transition-colors">
     {% if title %}<h2 class="text-sm font-medium text-gray-500 dark:text-gray-400">{{ title }}</h2>{% endif %}
     <div class="space-y-1">{{ caller() }}</div>
-</section>
+</a>
 {% endmacro %}
-
-{# Classes for a link inside a card: above the stretched card link. #}
-{% set inner_link = 'relative z-10 hover:underline' %}
 
 {# A whole-dollar headline figure. #}
 {% macro figure(amount) %}

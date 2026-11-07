@@ -174,16 +174,12 @@ def test_status_is_the_text_overview(tmp_path):
                 "end_label": "Oct 2027",
                 "lowest_liquid": {
                     "amount": Decimal(200),
-                    "month_index": 3,
                     "month_label": "Feb 2027",
                 },
-                "payoffs": [
-                    {"name": "Car loan", "month_index": 4, "month_label": "Mar 2027"}
-                ],
+                "payoffs": [{"name": "Car loan", "month_label": "Mar 2027"}],
                 "warnings": [
                     {
                         "account": {"name": "Checking", "institution": "Chase"},
-                        "first_month_index": 2,
                         "first_month_label": "Jan 2027",
                         "lowest": Decimal(200),
                         "minimum": Decimal(400),

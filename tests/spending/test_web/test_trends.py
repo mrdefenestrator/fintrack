@@ -18,8 +18,10 @@ from fintrack.ledger.repository.imports import (
     create_import,
     insert_transactions,
 )
+from fintrack.ledger.trends import averaging_months, monthly_average, pct_change
 from fintrack.snapshots.repository import get_snapshot_id
 from web.routes.trends import (
+    _delta_words,
     _parse_end_param,
     _period_range,
     _period_stride,
@@ -483,3 +485,118 @@ def test_trends_highlight_off_is_kept_while_paging(client):
     # Period presets and earlier/latest arrows keep it; the toggle turns it on.
     assert html.count("highlight=off") >= 5
     assert not re.search(r'class="[^"]*heat-(worse|better)', html)
+
+
+# ---------------------------------------------------------------------------
+# Avg/mo, Change, and Delta wording (issue #103)
+# ---------------------------------------------------------------------------
+
+
+def test_average_divides_by_completed_months_with_data():
+    """6 months of $1,800 rent in a 12-month window averages $1,800, not $900;
+    the month in progress is left out."""
+    months = [(2026, m) for m in range(6, 12)]  # Jun..Nov, Nov in progress
+    rent = {m: -1800.0 for m in months[:-1]} | {(2026, 11): -300.0}
+    avg_months = averaging_months(months, (2026, 11))
+    assert avg_months == months[:-1]
+    assert monthly_average(rent, avg_months) == -1800.0
+
+
+def test_average_counts_empty_months_that_have_other_data():
+    """A one-off in a window with data every month isn't inflated: the
+    divisor is months with any data, not months this category has data."""
+    months = [(2026, m) for m in range(1, 5)]
+    assert monthly_average({(2026, 2): -400.0}, months) == -100.0
+
+
+def test_average_with_no_completed_months_is_none():
+    assert averaging_months([(2026, 11)], (2026, 11)) == []
+    assert monthly_average({(2026, 11): -50.0}, []) is None
+
+
+def test_pct_change_compares_size():
+    assert pct_change(-150.0, -100.0) == 50.0
+    assert pct_change(80.0, 100.0) == -20.0
+    assert pct_change(None, -100.0) is None
+    assert pct_change(-150.0, None) is None
+    assert pct_change(-150.0, 0.0) is None
+
+
+@pytest.mark.parametrize(
+    "delta,kind,word,tone",
+    [
+        (-8200.0, "income", "short", "bad"),  # $2,600 avg vs $10,800 budget
+        (500.0, "income", "ahead", "good"),
+        (-300.0, "expense", "over", "bad"),
+        (900.0, "expense", "under", "good"),
+        (-6195.0, "net", "short", "bad"),
+        (0.3, "expense", "on budget", "neutral"),
+    ],
+)
+def test_delta_words_by_row_kind(delta, kind, word, tone):
+    assert _delta_words(delta, kind) == {"word": word, "tone": tone}
+
+
+def test_delta_words_none_without_budget():
+    assert _delta_words(None, "expense") is None
+
+
+@pytest.fixture
+def partial_history(conn):
+    """Three completed months of $1,800 plus $100 so far this month, in a
+    trailing-12 window with no older data."""
+    snapshot_id = get_snapshot_id(conn, "ledger")
+    acct_id = add_account(
+        conn,
+        name="History Checking",
+        institution="Test Bank",
+        account_type="checking",
+        snapshot_id=snapshot_id,
+    )
+    imp_id = create_import(
+        conn, account_id=acct_id, filename="hist.ofx", file_hash="histhash"
+    )
+    confirm_import(conn, imp_id)
+    today = datetime.now().astimezone().date()
+    rows = []
+    for back in (3, 2, 1):
+        y, m = today.year, today.month - back
+        if m <= 0:
+            m += 12
+            y -= 1
+        rows.append((date(y, m, 5), "-1800.00", f"h{back}"))
+    rows.append((date(today.year, today.month, 1), "-100.00", "h0"))
+    insert_transactions(
+        conn,
+        import_id=imp_id,
+        account_id=acct_id,
+        transactions_data=[
+            {
+                "date": d,
+                "amount": Decimal(amt),
+                "raw_description": "LANDLORD",
+                "normalized_merchant": "LANDLORD",
+                "fingerprint": fp,
+            }
+            for d, amt, fp in rows
+        ],
+    )
+
+
+def _avg_and_change(html):
+    """The Avg/mo and Change cells of the Total footer row."""
+    foot = html.split("<tfoot>")[-1].split("</tr>")[0]
+    cells = re.findall(r"<td[^>]*>(.*?)</td>", foot, re.DOTALL)
+    text = [re.sub(r"<[^>]+>|\s+", " ", c).strip() for c in cells]
+    return text[-4], text[-1]
+
+
+def test_trends_avg_ignores_empty_window_months_and_month_in_progress(
+    client, partial_history
+):
+    html = client.get("/s/ledger/trends?period=trailing12").data.decode()
+    avg, change = _avg_and_change(html)
+    # Old rule: ($5,400 + $100) / 12 months = $458, and Change ▼78%.
+    assert avg == "$1,800"
+    assert "0%" in change
+    assert "Average over the 3 completed months with data" in html

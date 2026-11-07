@@ -4,7 +4,7 @@ The Budget sheet is a grouped sheet (see grouped_sheet.py), like Holdings: ONE
 table split into one band per **category**, in the category taxonomy's order
 (entries whose category isn't in the taxonomy follow alphabetically; entries
 with none close the table as "Uncategorized"). Each band's heading carries its
-Remaining / Monthly / Annual subtotals (signed: income positive, expenses
+Remaining / This month / Per month / Annual subtotals (signed: income positive, expenses
 negative); a pinned footer shows the Net across every shown entry. Each
 category gets its own band color, cycling a palette in category order so
 neighbouring bands differ (Uncategorized is slate). There is no Kind column:
@@ -54,7 +54,8 @@ _COLS = [
     ("recurrence", "Recurrence", False, 1),
     ("when", "When", True, 1),
     ("remaining", "Remaining", True, 1),
-    ("monthly", "Monthly", True, 1),
+    ("monthly", "This month", True, 1),
+    ("per_month", "Per month", True, 1),
     ("annual", "Annual", True, 1),
     ("auto_account", "Auto account", False, 1),
 ]
@@ -65,7 +66,8 @@ _TOOLTIPS = {
     "recurrence": "How often this entry recurs",
     "when": "Day of month or specific date",
     "remaining": "Prorated amount remaining this month",
-    "monthly": "Expected total for this month",
+    "monthly": "Scheduled in this calendar month (an annual bill due in another month is $0)",
+    "per_month": "Average per month: the annual amount ÷ 12",
     "annual": "Annualized total",
     "auto_account": "Account for auto-matching transactions",
 }
@@ -90,19 +92,19 @@ ACTUAL_SHEET = flat_sheet(
     {
         "entry": "Budget entry",
         "category": "Budget category",
-        "expected": "Scheduled amount this month",
-        "actual": "Realized from linked transactions, net of linked refunds/clawbacks (or the category total for a variable line)",
-        "delta": "Actual minus expected",
+        "expected": "Scheduled amount this month (income +, expenses −)",
+        "actual": "Realized from linked transactions, net of linked refunds/clawbacks (or the category total for a variable line); income +, expenses −",
+        "delta": "Actual minus expected: + is better than budget (less spent or more earned)",
         "count": "Number of linked transactions (refunds/clawbacks excluded)",
-        "status": "Matched / over / under / missing / upcoming / not linked",
+        "status": "Matched / over / under / on pace / missing / upcoming / not linked. Mid-month, a variable line is judged against its pace (expected × share of the month gone)",
         "drift": "Linked charge vs budgeted amount (price drift)",
         "last_seen": "Date of the most recent linked transaction (any month)",
     },
 )
-# The heading label spans Category..When; the Remaining/Monthly/Annual subtotals
-# sit under their columns.
+# The heading label spans Category..When; the Remaining / This month / Per month /
+# Annual subtotals sit under their columns.
 _LABEL_SPAN = 5
-_TOTAL_POS = [5, 6, 7]
+_TOTAL_POS = [5, 6, 7, 8]
 # Band colors (partials/grouped_sheet.css palette), cycled in category order.
 # Ordered so consecutive hues contrast, including the wrap from last to first.
 _CATEGORY_TONES = [
@@ -194,7 +196,7 @@ def _sheet_ctx(
                 "rows": rows,
                 "totals": [
                     fmt_money(sum((r["figures"][j] for r in rows), Decimal(0)))
-                    for j in range(3)
+                    for j in range(len(_TOTAL_POS))
                 ],
                 **_COLUMN_META,
             }
@@ -295,6 +297,7 @@ ACTUAL_STATUSES = {
     "matched": "Matched",
     "over": "Over",
     "under": "Under",
+    "on_pace": "On pace",
     "missing": "Missing",
     "upcoming": "Upcoming",
     "unlinked": "Not linked",
@@ -387,18 +390,10 @@ def _render_actual(filename: str, snapshot_id: int):
         and (not include_statuses or a.status in include_statuses)
     ]
 
-    # Net totals, signed income - expenses: a positive delta is a surplus
-    # against budget, a negative one a shortfall.
+    # Net totals of the signed figures (income +, expenses −): a positive delta
+    # is a surplus against budget, a negative one a shortfall.
     def _net(attr: str) -> Decimal:
-        return sum(
-            (
-                getattr(a, attr)
-                if a.entry.get("kind") == "income"
-                else -getattr(a, attr)
-                for a in shown
-            ),
-            Decimal(0),
-        )
+        return sum((getattr(a, f"signed_{attr}") for a in shown), Decimal(0))
 
     net_expected, net_actual = _net("expected"), _net("actual")
 

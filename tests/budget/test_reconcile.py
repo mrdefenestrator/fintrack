@@ -494,6 +494,79 @@ def test_variable_line_uses_category_total(conn, snapshot_id, seeder):
     assert a.status == "under"
 
 
+def _groceries_on(conn, snapshot_id, seeder, spent, today):
+    """A $600/mo variable Groceries line with `spent` so far in Nov 2026."""
+    groceries = make_entry_of_kind(
+        conn, snapshot_id, "expense", amount=600, category="Groceries", continuous=True
+    )
+    seeder.add(date(2026, 11, 2), f"-{spent}", "Market", "Groceries")
+    return _by_ref(
+        budget_actuals(conn, snapshot_id, year=2026, month=11, today=today),
+        groceries,
+    )
+
+
+def test_variable_line_mid_month_is_judged_against_pace(conn, snapshot_id, seeder):
+    # Nov 6 is 6/30 = 20% of the month: pace is $120, so $118 is on pace, not
+    # "under" just because the month isn't over (#103).
+    a = _groceries_on(conn, snapshot_id, seeder, "118.00", date(2026, 11, 6))
+    assert a.pace == Decimal("120.00")
+    assert a.status == "on_pace"
+    assert a.tone == "neutral"
+
+
+@pytest.mark.parametrize(
+    "spent,status",
+    [
+        ("178.00", "over"),  # 48% over pace, though under the month's $600
+        ("100.00", "under"),  # 17% behind pace
+        ("131.00", "on_pace"),  # within 10% of $120
+        ("650.00", "over"),  # past the whole month
+    ],
+)
+def test_variable_line_pace_status(conn, snapshot_id, seeder, spent, status):
+    a = _groceries_on(conn, snapshot_id, seeder, spent, date(2026, 11, 6))
+    assert a.status == status
+
+
+def test_variable_line_past_month_ignores_pace(conn, snapshot_id, seeder):
+    # Once the month is over, the full expected amount is the yardstick.
+    a = _groceries_on(conn, snapshot_id, seeder, "178.00", date(2026, 12, 3))
+    assert a.pace is None
+    assert a.status == "under"
+
+
+def test_linked_bill_has_no_pace(conn, snapshot_id, seeder):
+    # Pace only applies to category-measured variable lines.
+    rent = make_rent_entry(conn, snapshot_id)
+    txn = seeder.add(date(2026, 11, 1), "-2000.00", "Landlord", "Housing")
+    link_transaction(conn, snapshot_id, txn, rent)
+    a = _by_ref(
+        budget_actuals(conn, snapshot_id, year=2026, month=11, today=date(2026, 11, 6)),
+        rent,
+    )
+    assert a.pace is None
+    assert a.status == "matched"
+
+
+def test_signed_figures_follow_kind(conn, snapshot_id, seeder):
+    # Expenses negative, income positive; a + signed delta beats the budget.
+    groceries = make_entry_of_kind(
+        conn, snapshot_id, "expense", amount=600, category="Groceries", continuous=True
+    )
+    pay = make_entry_of_kind(
+        conn, snapshot_id, "income", amount=5000, category="Salary", continuous=True
+    )
+    seeder.add(date(2026, 5, 3), "-450.00", "Market", "Groceries")
+    seeder.add(date(2026, 5, 15), "5200.00", "Employer", "Salary")
+    rows = budget_actuals(conn, snapshot_id, year=2026, month=5)
+    g, p = _by_ref(rows, groceries), _by_ref(rows, pay)
+    assert (g.signed_expected, g.signed_actual) == (Decimal(-600), Decimal("-450.00"))
+    assert g.signed_delta == Decimal("150.00")  # $150 under: good
+    assert (p.signed_expected, p.signed_actual) == (Decimal(5000), Decimal("5200.00"))
+    assert p.signed_delta == Decimal("200.00")  # $200 ahead: good
+
+
 def test_shared_category_falls_back_to_links(conn, snapshot_id, seeder):
     # Two entries claim "Dining", so neither can own the category total.
     dining = make_entry_of_kind(

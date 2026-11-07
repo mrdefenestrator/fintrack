@@ -4,8 +4,11 @@
    Read-only insight that complements the editable Budget sheet. Layout mirrors
    the Transactions sheet: a time-nav row (month pager) above a filter card
    fused to the table, htmx partial swaps into #content, sticky total row.
-   Colors follow the result's tone (EntryActual.tone), not the delta's sign:
-   earning over budget is good, spending over budget is bad.
+   Figures are signed like the Budget sheet (income +, expenses −; issue #103),
+   so a + Delta beats the budget and the Net footer sums the rows. Colors
+   follow the result's tone (EntryActual.tone): earning over budget is good,
+   spending over budget is bad. In the month in progress a variable line is
+   judged against its pace (EntryActual.pace) and shows it next to the status.
    Link suggestions (issue #70): each entry shows how many of the month's
    unlinked transactions look like it; in edit mode a detail row under the
    entry lists them with Apply (link) / Dismiss (never suggest again), on fixed
@@ -104,19 +107,20 @@
             {% elif key == 'category' %}
             <td class="{{ sheet.cell_class(extra='text-gray-500 dark:text-gray-400') }}">{{ a.entry.category or '—' }}</td>
             {% elif key == 'expected' %}
-            <td class="{{ sheet.cell_class('text-right tabular-nums') }}">${{ a.expected|money }}</td>
+            <td class="{{ sheet.cell_class('text-right tabular-nums') }}">{{ _signed(a.signed_expected) }}</td>
             {% elif key == 'actual' %}
             <td class="{{ sheet.cell_class('text-right tabular-nums') }}"{% if a.reversed_amount %} data-actual-reversed title="Net of ${{ a.reversed_amount|money }} in linked {{ 'refunds' if a.entry.kind == 'expense' else 'clawbacks' }}"{% endif %}>
-                {% if a.reversed_amount %}<span class="mr-1 text-xs text-gray-400 dark:text-gray-500">−${{ a.reversed_amount|money }} {{ 'refund' if a.entry.kind == 'expense' else 'clawback' }}</span>{% endif %}{{ '-' if a.actual < 0 }}${{ a.actual|abs|money }}
+                {% if a.reversed_amount %}<span class="mr-1 text-xs text-gray-400 dark:text-gray-500">−${{ a.reversed_amount|money }} {{ 'refund' if a.entry.kind == 'expense' else 'clawback' }}</span>{% endif %}{{ _signed(a.signed_actual) }}
             </td>
             {% elif key == 'delta' %}
-            <td class="{{ sheet.cell_class('text-right tabular-nums', _delta_text[a.tone]) }}">
-                {{ '+' if a.delta > 0 else ('-' if a.delta < 0 else '') }}${{ a.delta|abs|money }}
+            {# A pace line's Delta is against the full month, so it isn't judged yet. #}
+            <td class="{{ sheet.cell_class('text-right tabular-nums', _delta_text[a.tone if a.pace is none else 'neutral']) }}">
+                {{ _signed(a.signed_delta) }}
             </td>
             {% elif key == 'count' %}
             <td class="{{ sheet.cell_class('text-right tabular-nums') }}">{{ a.count }}</td>
             {% elif key == 'status' %}
-            <td class="{{ sheet.cell_class() }}"><span class="px-1.5 py-0.5 rounded text-xs {{ _badge[a.tone] }}">{{ _label.get(a.status, a.status) }}</span></td>
+            <td class="{{ sheet.cell_class() }}"><span class="px-1.5 py-0.5 rounded text-xs {{ _badge[a.tone] }}"{% if a.pace is not none %} data-pace title="Month in progress: judged against pace, ${{ a.pace|money }} expected by today"{% endif %}>{{ _label.get(a.status, a.status) }}{% if a.pace is not none and a.status in ('over', 'under') %} pace{% endif %}</span>{% if a.pace is not none %}<span class="ml-1 text-xs text-gray-400 dark:text-gray-500">${{ a.pace|money }} by today</span>{% endif %}</td>
             {% elif key == 'drift' %}
             <td class="{{ sheet.cell_class('text-right tabular-nums') }}">
                 {% if a.drift_amount and (a.drift_amount > 0 or a.drift_amount < 0) %}{{ '+' if a.drift_amount > 0 else '-' }}${{ a.drift_amount|abs|money }}{% else %}—{% endif %}

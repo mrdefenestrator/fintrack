@@ -41,6 +41,7 @@ from fintrack.ledger.repository.merchants import (
     list_merchants_with_stats,
     set_merchant_category,
 )
+from fintrack.ledger.trends import averaging_months, monthly_average
 
 
 def _resolve_account(cli, conn, name: str) -> dict:
@@ -557,14 +558,27 @@ def report_trends(cli, months):
     if not monthly:
         click.echo("No spending data in range.")
         return
+    # Avg/month counts only completed months with data (#103), like the
+    # Trends page: the current month is partial and left out.
     by_category: dict = {}
+    months_seen: set = set()
     for row in monthly:
-        by_category.setdefault(row["category"], []).append(row["total"])
+        key = (row["year"], row["month"])
+        months_seen.add(key)
+        by_category.setdefault(row["category"], {})[key] = float(row["total"])
+    avg_months = averaging_months(sorted(months_seen), (today.year, today.month))
+
+    def _avg(values: dict) -> str:
+        avg = monthly_average(values, avg_months)
+        return fmt_money(avg) if avg is not None else "-"
+
     rows = [
-        [cat, fmt_money(sum(vals)), fmt_money(sum(vals) / months)]
-        for cat, vals in sorted(by_category.items(), key=lambda kv: sum(kv[1]))
+        [cat, fmt_money(sum(vals.values())), _avg(vals)]
+        for cat, vals in sorted(by_category.items(), key=lambda kv: sum(kv[1].values()))
     ]
     click.echo(f"Trailing {months} months ({start} – {today})")
+    n = len(avg_months)
+    click.echo(f"Avg/month over {n} completed month{'s' if n != 1 else ''} with data")
     echo_table(rows, ["Category", "Total", "Avg/month"], ("left", "right", "right"))
 
 

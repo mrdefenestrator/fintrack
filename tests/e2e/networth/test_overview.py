@@ -7,6 +7,14 @@ pytestmark = pytest.mark.e2e
 _CARDS = ("net_worth_liquid", "projection_warnings")
 
 
+def _tap(page, selector):
+    """Click where an element is drawn, like a finger would. The card's
+    stretched link covers its contents, so Playwright's element click
+    (which refuses when another element is on top) can't be used."""
+    box = page.locator(selector).bounding_box()
+    page.mouse.click(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+
+
 def test_snapshot_root_lands_on_overview(page, flask_server):
     page.goto(f"{flask_server}/s/test_finances")
     assert "Overview" in page.title()
@@ -31,9 +39,7 @@ def test_overview_is_first_in_the_nav(page, flask_server):
 def test_net_worth_card_links_to_projections(page, flask_server):
     """The whole Net worth / Liquid card is the link."""
     page.goto(f"{flask_server}/s/test_finances")
-    page.locator(
-        "[data-overview-card='net_worth_liquid'] [data-figure='liquid']"
-    ).click()
+    _tap(page, "[data-overview-card='net_worth_liquid'] [data-figure='liquid']")
     page.wait_for_url("**/projections?months=12")
     assert page.locator("[data-projection-table]").is_visible()
 
@@ -70,6 +76,14 @@ def test_low_point_opens_its_month(page, flask_server):
     low.click()
     page.wait_for_url("**/projections?months=12&month=*")
     assert month in page.locator("[data-month-breakdown]").inner_text()
+
+
+def test_warnings_card_body_opens_projections(page, flask_server):
+    """Clicking the card outside its line links opens Projections (no month)."""
+    page.goto(f"{flask_server}/s/test_finances")
+    _tap(page, "[data-overview-card='projection_warnings'] [data-status]")
+    page.wait_for_url("**/projections?months=12")
+    assert page.locator("[data-month-breakdown]").count() == 0
 
 
 def test_overview_on_a_phone(page, flask_server):

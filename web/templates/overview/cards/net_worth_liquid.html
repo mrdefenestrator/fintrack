@@ -1,7 +1,7 @@
 {# Net worth and liquid now, and where the projection has them at the end of
    the Overview horizon. The whole card opens Projections. #}
 {% import "overview/card.html" as ov %}
-{% call ov.card('net_worth_liquid', none, proj_url()) %}
+{% call ov.card('net_worth_liquid', none, proj_url(), 'Projections') %}
 <div class="grid grid-cols-2 gap-4">
     {% for name, t, testid in [('Net worth', summary.net_worth, 'net-worth'), ('Liquid', summary.liquid, 'liquid')] %}
     <div data-figure="{{ testid }}">

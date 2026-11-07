@@ -1,23 +1,23 @@
 {# Status first ("All clear" or how many accounts dip below their minimum),
    then the low point, each below-minimum account, and loan payoffs. Every
-   line opens Projections on its month. #}
+   line opens Projections on its month; the rest of the card opens
+   Projections. #}
 {% import "overview/card.html" as ov %}
 {% set low = summary.lowest_liquid %}
 {% set n = summary.warnings | length %}
-{% set _link = 'hover:underline' %}
 {% call ov.card('projection_warnings', 'Projection warnings', proj_url(), 'Projections') %}
 <div data-status class="text-lg font-semibold {% if n %}text-amber-700 dark:text-amber-300{% else %}text-gray-800 dark:text-gray-100{% endif %}">
     {% if n %}{{ n }} account{{ "s dip below their" if n != 1 else " dips below its" }} minimum{% else %}All clear{% endif %}
 </div>
-<a data-lowest href="{{ proj_url(low.month_index) }}" class="block {{ _link }}">Low point <span class="font-medium tabular-nums">{{ low.amount | fmt_money_whole }}</span> · {{ low.month_label }}</a>
+<a data-lowest href="{{ proj_url(low.month_index) }}" class="block w-fit {{ ov.inner_link }}">Low point <span class="font-medium tabular-nums">{{ low.amount | fmt_money_whole }}</span> · {{ low.month_label }}</a>
 {% if n %}
 <ul data-warnings class="space-y-0.5 text-amber-900 dark:text-amber-200">
     {% for w in summary.warnings %}
-    <li><a href="{{ proj_url(w.first_month_index) }}" class="{{ _link }}"><span class="font-medium">{{ w.account | account_label }}</span>: under {{ w.minimum | fmt_money_whole }} min from {{ w.first_month_label }}</a></li>
+    <li><a href="{{ proj_url(w.first_month_index) }}" class="{{ ov.inner_link }}"><span class="font-medium">{{ w.account | account_label }}</span>: under {{ w.minimum | fmt_money_whole }} min from {{ w.first_month_label }}</a></li>
     {% endfor %}
 </ul>
 {% endif %}
 {% for p in summary.payoffs %}
-<a data-payoff href="{{ proj_url(p.month_index) }}" class="block {{ _link }}">Paid off: <span class="font-medium">{{ p.name }}</span> · {{ p.month_label }}</a>
+<a data-payoff href="{{ proj_url(p.month_index) }}" class="block w-fit {{ ov.inner_link }}">Paid off: <span class="font-medium">{{ p.name }}</span> · {{ p.month_label }}</a>
 {% endfor %}
 {% endcall %}

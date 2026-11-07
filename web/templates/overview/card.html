@@ -1,24 +1,19 @@
-{# One Overview card: a title, the caller's headline + context, and a link to
-   the exact view behind it. A card with a single destination is itself the
-   link (link_label=none); a card whose lines link to their own views keeps a
-   footer link instead, since links can't nest. #}
-{% macro card(key, title, href, link_label=none) %}
-{% set _box = 'flex flex-col rounded-lg bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 shadow-sm' %}
-{% if link_label %}
-<section data-overview-card="{{ key }}" class="{{ _box }}">
-    <h2 class="px-4 pt-3 text-sm font-medium text-gray-500 dark:text-gray-400">{{ title }}</h2>
-    <div class="px-4 pt-1 pb-3 flex-1 text-sm text-gray-600 dark:text-gray-300 space-y-1">{{ caller() }}</div>
-    <a href="{{ href }}" data-card-link
-        class="block px-4 py-2.5 border-t border-gray-200 dark:border-gray-700 text-sm text-blue-600 dark:text-blue-400 hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded-b-lg">{{ link_label }} &rarr;</a>
-</section>
-{% else %}
-<a href="{{ href }}" data-overview-card="{{ key }}" data-card-link
-    class="{{ _box }} px-4 py-3 text-sm text-gray-600 dark:text-gray-300 hover:border-blue-400 dark:hover:border-blue-500 hover:bg-gray-50 dark:hover:bg-gray-700/40 transition-colors">
+{# One Overview card: a title, the caller's headline + context, and the
+   whole card links to the view behind it (link_label names that link for
+   screen readers). The card link is stretched over the card rather than
+   wrapping it, so lines inside can still link to their own views (links
+   can't nest): give those `ov.inner_link` to sit above it. #}
+{% macro card(key, title, href, link_label) %}
+<section data-overview-card="{{ key }}"
+    class="group relative rounded-lg bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 shadow-sm px-4 py-3 text-sm text-gray-600 dark:text-gray-300 hover:border-blue-400 dark:hover:border-blue-500 hover:bg-gray-50 dark:hover:bg-gray-700/40 transition-colors">
+    <a href="{{ href }}" data-card-link aria-label="{{ link_label }}" class="absolute inset-0 rounded-lg"></a>
     {% if title %}<h2 class="text-sm font-medium text-gray-500 dark:text-gray-400">{{ title }}</h2>{% endif %}
-    {{ caller() }}
-</a>
-{% endif %}
+    <div class="space-y-1">{{ caller() }}</div>
+</section>
 {% endmacro %}
+
+{# Classes for a link inside a card: above the stretched card link. #}
+{% set inner_link = 'relative z-10 hover:underline' %}
 
 {# A whole-dollar headline figure. #}
 {% macro figure(amount) %}

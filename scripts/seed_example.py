@@ -801,6 +801,15 @@ def _seed_dense_transactions(conn, checking_id: int, today: date) -> None:
         ],
     ]
 
+    # Recurring rows skipped in one month, so Trends' "unusual months" shows
+    # some lighter-than-usual (green) months next to the spikes: Shopping with
+    # no Target run, a cheaper grocery month, a month with one fewer fill-up.
+    skipped_by_month = {
+        1: {"Chevron"},
+        3: {"Target"},
+        4: {"Whole Foods Market"},
+    }
+
     # Create a confirmed import and insert all transactions.
     import_id = create_import(
         conn,
@@ -813,6 +822,8 @@ def _seed_dense_transactions(conn, checking_id: int, today: date) -> None:
     for month_idx, month_start in enumerate(month_starts):
         txns_for_month = monthly_txns + extras_by_month[month_idx]
         for day, amount, merchant, raw_desc in txns_for_month:
+            if merchant in skipped_by_month.get(month_idx, ()):
+                continue
             # Netflix raised its price mid-year: the two most recent months post
             # $17.99 against the $15.99 budget line, so the linked entry shows
             # price drift in budget-vs-actual (issue #53).

@@ -6,6 +6,7 @@ handling of the `end=YYYY-MM` query param: default-to-latest, malformed
 input, past windows, and forward-paging back to "latest".
 """
 
+import re
 from datetime import date, datetime
 from decimal import Decimal
 
@@ -24,6 +25,7 @@ from web.routes.trends import (
     _period_stride,
     _resolve_window_end,
     _shift_month,
+    _unusual_tints,
 )
 
 # ---------------------------------------------------------------------------
@@ -397,3 +399,87 @@ def test_trends_detail_respects_end_param(client, seeded_ledger_account):
         f"&end={old_year:04d}-{old_month:02d}"
     )
     assert response.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Heat map: "unusual months" (default) vs "size" (issue #108)
+# ---------------------------------------------------------------------------
+
+
+def _cls(tints):
+    return [t["cls"] for t in tints]
+
+
+def test_unusual_leaves_steady_rows_plain():
+    """Rent at the same amount every month gets no shading at all."""
+    values = [-1800.0] * 5
+    tints = _unusual_tints(values, None, is_income=False)
+    assert _cls(tints) == [""] * 5
+
+
+def test_unusual_marks_spending_above_usual_red_and_below_green():
+    """Against the median ($49): the $568 spike is red at full strength, $113
+    red, and the $10 month green. One spike doesn't drag "usual" up."""
+    values = [-568.0, -49.0, -113.0, -49.0, -49.0, -10.0]
+    tints = _unusual_tints(values, None, is_income=False)
+    assert _cls(tints) == [
+        "heat-worse-3",
+        "",
+        "heat-worse-3",
+        "",
+        "",
+        "heat-better-2",
+    ]
+    assert "above usual ($49/mo)" in tints[0]["title"]
+    assert "below usual" in tints[5]["title"]
+
+
+def test_unusual_threshold_is_15_percent():
+    """Groceries: usual $336. $391 (+16%) and $408 (+21%) flag; $380 (+13%)
+    doesn't."""
+    values = [-336.0, -408.0, -336.0, -391.0, -336.0, -380.0, -336.0]
+    tints = _unusual_tints(values, None, is_income=False)
+    assert _cls(tints) == ["", "heat-worse-1", "", "heat-worse-1", "", "", ""]
+
+
+def test_unusual_needs_a_ten_dollar_difference():
+    """$36 -> $44 is 22% but only $8, so it stays plain; $36 -> $47 flags."""
+    values = [-36.0, -36.0, -44.0, -36.0, -47.0]
+    tints = _unusual_tints(values, None, is_income=False)
+    assert _cls(tints) == ["", "", "", "", "heat-worse-1"]
+
+
+def test_unusual_income_short_is_red_and_extra_is_green():
+    values = [5200.0, 5200.0, 2600.0, 5200.0, 7000.0]
+    tints = _unusual_tints(values, None, is_income=True)
+    assert _cls(tints) == ["", "", "heat-worse-2", "", "heat-better-1"]
+    assert "below usual" in tints[2]["title"]
+
+
+def test_unusual_skips_the_month_in_progress():
+    """The current month is partial: never shaded, and left out of "usual"."""
+    values = [-100.0, -100.0, -100.0, -500.0]
+    tints = _unusual_tints(values, 3, is_income=False)
+    assert _cls(tints) == [""] * 4
+
+
+def test_unusual_marks_one_offs_in_usually_empty_categories():
+    values = [0.0, 0.0, -413.0, 0.0, 0.0]
+    tints = _unusual_tints(values, None, is_income=False)
+    assert _cls(tints) == ["", "", "heat-worse-2", "", ""]
+    assert "One-off" in tints[2]["title"]
+
+
+def test_trends_highlight_is_on_by_default(client):
+    html = client.get("/s/ledger/trends").data.decode()
+    assert "Highlight unusual months" in html
+    # Only the toggle itself (its href + hx-get) links to the off state;
+    # period and paging links stay on the default.
+    assert html.count("highlight=off") == 2
+
+
+def test_trends_highlight_off_is_kept_while_paging(client):
+    html = client.get("/s/ledger/trends?highlight=off").data.decode()
+    # Period presets and earlier/latest arrows keep it; the toggle turns it on.
+    assert html.count("highlight=off") >= 5
+    assert not re.search(r'class="[^"]*heat-(worse|better)', html)

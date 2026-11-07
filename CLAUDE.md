@@ -163,7 +163,7 @@ degrades to a warning without it).
   `sheet-group--flat` body, `gs.footer`) — build any new plain sheet the same
   way rather than on bare `sortable.js` tables (Trends alone keeps its own
   styling). See DESIGN.md "Holdings sheet" / "Budget sheet".
-- **Overview is the landing page** (`/s/<snapshot>/`, first nav item): a
+- **Overview is the landing page** (`/s/<snapshot>`, first nav item): a
   plain responsive stack of read-only cards, the one page that isn't a
   spreadsheet. Summary numbers go here, not on top of a sheet.
   `fintrack/insights/overview.py` `build_overview()` feeds both the page and

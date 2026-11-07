@@ -51,7 +51,7 @@ The root URL is the snapshot picker; every page lives under
 
 `Overview · Holdings · Budget · Projections · Trends · Budget vs Actual · Transactions · Merchants · Categories · Import`
 
-Overview (`/s/<snapshot>/`) is the landing page: read-only cards for net worth,
+Overview (`/s/<snapshot>`) is the landing page: read-only cards for net worth,
 liquid, and projection warnings, each linking to the view behind it. Holdings
 combines cash accounts, credit cards, loans, and assets in a dense
 spreadsheet-style editor (`?edit=1`). Import accepts drag-and-drop

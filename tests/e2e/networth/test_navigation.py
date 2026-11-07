@@ -90,7 +90,7 @@ def test_import_icon_in_header(page, flask_server):
 def test_status_url_redirects_to_overview(page, flask_server):
     """The removed status page's URL 302s to the Overview landing page."""
     page.goto(f"{flask_server}/s/test_finances/status")
-    page.wait_for_url("**/s/test_finances/")
+    page.wait_for_url("**/s/test_finances")
     assert "Overview" in page.title()
 
 

@@ -39,7 +39,7 @@ HX_HEADERS = {"HX-Request": "true"}
 def test_new_snapshot(client, db_engine):
     resp = client.post("/files/new", data={"name": "budget-2026"}, headers=HX_HEADERS)
     assert resp.status_code == 200
-    assert resp.headers.get("HX-Redirect") == "/s/budget-2026/"
+    assert resp.headers.get("HX-Redirect") == "/s/budget-2026"
     with db_engine.connect() as conn:
         assert get_snapshot_id(conn, "budget-2026") is not None
 
@@ -72,7 +72,7 @@ def test_copy_snapshot(client, db_engine):
         headers=HX_HEADERS,
     )
     assert resp.status_code == 200
-    assert resp.headers.get("HX-Redirect") == "/s/finances-copy/"
+    assert resp.headers.get("HX-Redirect") == "/s/finances-copy"
     with db_engine.connect() as conn:
         assert get_snapshot_id(conn, "finances-copy") is not None
 
@@ -97,7 +97,7 @@ def test_rename_snapshot(client, db_engine):
         headers=HX_HEADERS,
     )
     assert resp.status_code == 200
-    assert resp.headers.get("HX-Redirect") == "/s/renamed/"
+    assert resp.headers.get("HX-Redirect") == "/s/renamed"
     with db_engine.connect() as conn:
         assert get_snapshot_id(conn, "finances") is None
         assert get_snapshot_id(conn, "renamed") is not None
@@ -129,7 +129,7 @@ def test_delete_snapshot(client, db_engine):
         create_snapshot(conn, "deleteme")
     resp = client.post("/files/delete", data={"name": "deleteme"}, headers=HX_HEADERS)
     assert resp.status_code == 200
-    assert resp.headers.get("HX-Redirect") == "/s/finances/"
+    assert resp.headers.get("HX-Redirect") == "/s/finances"
     with db_engine.connect() as conn:
         assert get_snapshot_id(conn, "deleteme") is None
 

@@ -71,7 +71,7 @@ def test_import_confirm_transaction_and_networth_account(page, unified_server):
 
     # Legacy status URL redirects to the Overview landing page
     page.goto(f"{unified_server}/s/ledger/status")
-    page.wait_for_url("**/s/ledger/")
+    page.wait_for_url("**/s/ledger")
     assert page.locator("[data-overview-card='liquid']").is_visible()
 
 

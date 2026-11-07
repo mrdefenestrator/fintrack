@@ -514,7 +514,7 @@ breakpoint it collapses to a hamburger that opens the same outline as an overlay
 drawer, so a narrow header never clips. It is one responsive component (Alpine
 state on `<body>`), not two nav systems — which is why it reads consistently
 across desktop, mobile portrait, and mobile landscape (where the single top bar
-is the big vertical reclaim). Overview (`/s/<snapshot>/`) is the landing page
+is the big vertical reclaim). Overview (`/s/<snapshot>`) is the landing page
 (see [Overview](#overview)); creating, copying, renaming, or switching to a
 snapshot lands there. Holdings subsumes the
 old standalone Accounts and Assets sheets, which were retired — it is one dense,
@@ -685,7 +685,7 @@ CLI's `budget` table keeps its Kind column.
 
 ### Overview
 
-`/s/<snapshot>/` (issue #105) is the one page that isn't a spreadsheet: a plain
+`/s/<snapshot>` (issue #105) is the one page that isn't a spreadsheet: a plain
 responsive stack of read-only cards — one column on phones, two on `md`, three
 on `xl`. Each card is a headline number, a line or two of context, and a link
 to the exact view behind it. It exists so summary information doesn't sit on

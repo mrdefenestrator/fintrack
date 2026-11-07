@@ -47,7 +47,7 @@ def _card(html: str, key: str) -> str:
 
 
 def test_snapshot_root_is_the_overview(client):
-    resp = client.get("/s/home/")
+    resp = client.get("/s/home")
     assert resp.status_code == 200
     html = resp.get_data(as_text=True)
     assert "<title>Overview — fintrack</title>" in html
@@ -55,18 +55,21 @@ def test_snapshot_root_is_the_overview(client):
         _card(html, key)
 
 
-def test_snapshot_root_without_slash_redirects(client):
-    resp = client.get("/s/home")
-    assert resp.status_code in (301, 308)
-    assert resp.headers["Location"].endswith("/s/home/")
+@pytest.mark.parametrize("path", ["/s/home", "/s/home/"])
+def test_both_root_forms_render_without_a_redirect(client, path):
+    """No slash redirect: the PR-preview Lambda strips the trailing slash, so
+    a /s/home -> /s/home/ redirect would loop forever there."""
+    resp = client.get(path)
+    assert resp.status_code == 200
+    assert "<title>Overview — fintrack</title>" in resp.get_data(as_text=True)
 
 
 def test_unknown_snapshot_404s(client):
-    assert client.get("/s/nope/").status_code == 404
+    assert client.get("/s/nope").status_code == 404
 
 
 def test_net_worth_and_liquid_cards(client):
-    html = client.get("/s/home/").get_data(as_text=True)
+    html = client.get("/s/home").get_data(as_text=True)
     for key in ("net_worth", "liquid"):
         card = _card(html, key)
         assert "$1,000.00" in card  # now
@@ -75,7 +78,7 @@ def test_net_worth_and_liquid_cards(client):
 
 
 def test_warnings_card_links_each_item_to_its_month(client):
-    html = client.get("/s/home/").get_data(as_text=True)
+    html = client.get("/s/home").get_data(as_text=True)
     card = _card(html, "projection_warnings")
     assert "Lowest liquid" in card
     assert "drops below its $2,000.00 minimum" in card
@@ -85,7 +88,7 @@ def test_warnings_card_links_each_item_to_its_month(client):
 
 
 def test_empty_snapshot(client):
-    html = client.get("/s/empty/").get_data(as_text=True)
+    html = client.get("/s/empty").get_data(as_text=True)
     assert "data-overview-empty" in html
     assert 'href="/s/empty/holdings"' in html
     card = _card(html, "projection_warnings")
@@ -96,18 +99,18 @@ def test_overview_is_the_first_nav_item(client):
     html = client.get("/s/home/holdings").get_data(as_text=True)
     nav = re.search(r"<nav aria-label=\"Sections\".*?</nav>", html, re.DOTALL)
     links = re.findall(r"<a href=\"([^\"]+)\"[^>]*>([^<]+)</a>", nav.group(0))
-    assert links[0] == ("/s/home/", "Overview")
+    assert links[0] == ("/s/home", "Overview")
 
 
 def test_overview_marks_itself_active(client):
-    html = client.get("/s/home/").get_data(as_text=True)
+    html = client.get("/s/home").get_data(as_text=True)
     assert re.search(r'aria-current="page">Overview</a>', html)
 
 
 def test_legacy_status_url_lands_on_overview(client):
     resp = client.get("/s/home/status")
     assert resp.status_code == 302
-    assert resp.headers["Location"].endswith("/s/home/")
+    assert resp.headers["Location"].endswith("/s/home")
 
 
 def test_projections_keeps_a_one_line_summary(client):

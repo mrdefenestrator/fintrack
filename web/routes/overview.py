@@ -1,4 +1,4 @@
-"""Overview: the snapshot landing page (`/s/<snapshot>/`).
+"""Overview: the snapshot landing page (`/s/<snapshot>`).
 
 A stack of read-only cards — a headline number, a line or two of context,
 and a link to the view behind it. Not a spreadsheet: the sheets stay dense
@@ -14,7 +14,10 @@ from web.routes.common import get_common_context, validate_snapshot
 overview_bp = Blueprint("overview", __name__)
 
 
-@overview_bp.route("/s/<string:filename>/")
+# No trailing slash, and strict_slashes off so `/s/<snapshot>/` matches too
+# without a redirect: the PR-preview Lambda strips the trailing slash, so a
+# slash-redirect there loops forever.
+@overview_bp.route("/s/<string:filename>", strict_slashes=False)
 def overview_view(filename):
     snapshot_id = validate_snapshot(filename)
     # Nothing here is editable, but carry edit mode through so the nav and

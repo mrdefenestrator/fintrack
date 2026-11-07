@@ -454,7 +454,8 @@ def test_status_command_exits_zero(tmp_path):
         cli, ["--db", str(db_path), "--snapshot", "test_finances", "status"]
     )
     assert result.exit_code == 0, result.output
-    assert "Accounts" in result.output
+    assert "Net worth: $" in result.output
+    assert "Projection warnings:" in result.output
 
 
 def test_debts_cli_adds_and_displays_origination_data(tmp_path):

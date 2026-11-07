@@ -81,6 +81,7 @@ fintrack/
   budget/       repository.py, recurrence.py (occurrence + proration engine)
   networth/     repository.py (assets/debts), calculations.py (key numbers, funding)
   projections/  engine.py, estimators.py
+  insights/     overview.py (Overview page + `status` numbers)
   snapshots/    repository.py
   migrate/      legacy.py and yaml_import.py (one-time import adapters)
   cli/          Click command groups and shared CLI helpers
@@ -382,12 +383,16 @@ holding it lands on (none = unassigned). A row's change in a month is exactly
 the sum of its flows. `summarize()` turns a result into the headline numbers:
 liquid and net worth now → end of horizon (change and per-month average), the
 lowest liquid month, loans paid off within the horizon, and minimum-balance
-warnings collapsed to one line per account.
+warnings collapsed to one line per account. Each month-specific item carries
+its month index, so links can open Projections on that month (`?month=`).
 
 Surfaced at `/s/<snapshot>/projections` (horizon and estimator as query
-params) and `fintrack project --months N [--estimate]`. Both lead with the
-summary, then the grid with a "Now" column ahead of the months; the web page
-also lists the warnings and, with the estimate on, its per-category breakdown.
+params) and `fintrack project --months N [--estimate]`. The web page leads with
+a one-line summary (liquid and net worth at the end of the window) — the full
+summary and the warnings live on [Overview](#overview) — then the grid with a
+"Now" column ahead of the months and, with the estimate on, its per-category
+breakdown. The CLI leads with the full summary and prints the warnings to
+stderr.
 A Balances / Changes toggle (`?view=change`, CLI `--changes`) swaps the grid's
 month-end balances for each month's change (`changes()`: month 0 against
 "now", then month against month), so lumpy months stand out; below-minimum
@@ -500,16 +505,18 @@ Navigation is a **single-row top bar plus a collapsible side navigation**. The
 top bar carries only a nav toggle (`☰`), the current page name, and the always-
 visible utility controls — the lock/edit toggle, Import, the theme cycle, and
 the snapshot picker. Primary navigation lives in a grouped outline
-(`Finances`: Holdings · Budget · Projections; `Spending`: Trends · Budget vs Actual ·
-Transactions · Merchants · Categories — group headings are labels, only the
-destinations are links). On wide screens (≥`lg`, 1024px) that outline is a
+(Overview first, above the groups; `Finances`: Holdings · Budget · Projections;
+`Spending`: Trends · Budget vs Actual · Transactions · Merchants · Categories —
+group headings are labels, only the destinations are links). On wide screens (≥`lg`, 1024px) that outline is a
 docked left sidebar;
 the `☰` collapses it to reclaim horizontal width for the dense sheets. Below the
 breakpoint it collapses to a hamburger that opens the same outline as an overlay
 drawer, so a narrow header never clips. It is one responsive component (Alpine
 state on `<body>`), not two nav systems — which is why it reads consistently
 across desktop, mobile portrait, and mobile landscape (where the single top bar
-is the big vertical reclaim). Holdings is the landing page. Holdings subsumes the
+is the big vertical reclaim). Overview (`/s/<snapshot>/`) is the landing page
+(see [Overview](#overview)); creating, copying, renaming, or switching to a
+snapshot lands there. Holdings subsumes the
 old standalone Accounts and Assets sheets, which were retired — it is one dense,
 spreadsheet-style view over the same tables; information density is a deliberate
 feature of these sheets, not a problem to design around. Net worth shows in the
@@ -519,7 +526,7 @@ sticky chrome correct are documented under [Holdings sheet](#holdings-sheet)
 and [Budget sheet](#budget-sheet) below. Import is a header icon; the edit-mode
 lock is functional on Holdings, Budget, Transactions, Merchants, and Categories
 and muted elsewhere. The old `/s/<snapshot>/status` dashboard was removed; its
-URL redirects to Holdings.
+URL redirects to Overview.
 
 Two route-scoping/HTMX idioms coexist. Transactions, trends, merchants,
 categories, and import use a snapshot-scoped blueprint preprocessor
@@ -676,6 +683,35 @@ CLI's `budget` table keeps its Kind column.
   their full-list position as the edit/delete handle. Kind / Category /
   Recurrence filters work as before, and lock reordering while active.
 
+### Overview
+
+`/s/<snapshot>/` (issue #105) is the one page that isn't a spreadsheet: a plain
+responsive stack of read-only cards — one column on phones, two on `md`, three
+on `xl`. Each card is a headline number, a line or two of context, and a link
+to the exact view behind it. It exists so summary information doesn't sit on
+top of a sheet, pushing the table down (worst on mobile); the sheets stay dense
+tables.
+
+`fintrack/insights/overview.py` `build_overview()` gathers the numbers from the
+existing calculations (today: a 12-month `engine.project()` + `summarize()`),
+shared by the web route (`web/routes/overview.py`) and the `status` CLI
+command, which prints the same cards as text. It returns the card keys in
+order; each key renders `web/templates/overview/cards/<key>.html` with the
+`overview/card.html` macros. To add a card, gather its data there, append its
+key, add the template, and print a section in `status`. Cards whose feature
+hasn't shipped are simply absent.
+
+| Card | Shows | Links to |
+|---|---|---|
+| Net worth | now; projected change over the next 12 months | Projections (`?months=12`) |
+| Liquid | now; projected change over the next 12 months | Projections (`?months=12`) |
+| Projection warnings | lowest liquid month, accounts that drop below their minimum, loan payoffs | Projections opened on that month (`?months=12&month=I`) |
+
+Net worth's "change over the past 12 months" waits on balance history being
+recorded over time (#107, #98). Planned cards: Cash flow (#99), Needs
+attention (#100–#102), Debt and cards (#102). An empty snapshot still renders
+every card (zeros) under a pointer to Holdings and Budget.
+
 ### Projections sheet
 
 The Projections accounts×months grid is a read-only grouped sheet (issue #52):
@@ -705,7 +741,7 @@ transactions link <txn> <entry> | unlink <txn> | suggest | dismiss <txn> <entry>
 merchants  list | set
 categories list|add|edit|delete
 report     monthly | trends
-status | budget | income | expenses | assets | debts | funding
+status | budget | income | expenses | assets | debts | funding   # status = text Overview
 project    [--months N] [--estimate]
 migrate-legacy …
 serve      [--port]

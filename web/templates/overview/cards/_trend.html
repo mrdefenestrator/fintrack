@@ -1,0 +1,6 @@
+{# Shared body of the Net worth and Liquid cards: now, then the projection. #}
+{% import "overview/card.html" as ov %}
+{{ ov.headline(t.start) }}
+<p data-projected>{{ ov.change(t.change) }} projected over the next {{ overview.months }} months,
+    to <span class="font-medium tabular-nums">{{ t.end | fmt_money_header }}</span> by {{ summary.end_label }}
+    <span class="text-gray-500 dark:text-gray-400">({{ t.per_month | fmt_change }}/mo)</span></p>

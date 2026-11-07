@@ -49,11 +49,12 @@ mise run serve    # http://localhost:5003
 The root URL is the snapshot picker; every page lives under
 `/s/<snapshot>/<section>`:
 
-`Holdings · Status · Transactions · Trends · Budget · Projections · Import · Merchants · Categories`
+`Overview · Holdings · Budget · Projections · Trends · Budget vs Actual · Transactions · Merchants · Categories · Import`
 
-Holdings is the finances landing page and combines cash accounts, credit cards,
-loans, and assets in a dense spreadsheet-style editor (`?edit=1`). Status is
-the key-numbers and funding-analysis dashboard. Import accepts drag-and-drop
+Overview (`/s/<snapshot>/`) is the landing page: read-only cards for net worth,
+liquid, and projection warnings, each linking to the view behind it. Holdings
+combines cash accounts, credit cards, loans, and assets in a dense
+spreadsheet-style editor (`?edit=1`). Import accepts drag-and-drop
 statement files, stages them, and confirms/rejects per file.
 
 ## CLI
@@ -64,7 +65,7 @@ only one):
 
 ```bash
 uv run python fintrack.py --help
-uv run python fintrack.py status                                  # key-numbers rollup
+uv run python fintrack.py status                                  # text Overview
 uv run python fintrack.py snapshots list
 uv run python fintrack.py accounts list
 uv run python fintrack.py import statements/ --account "Chase Checking"

@@ -2,7 +2,7 @@
 
 import click
 
-from fintrack.cli.helpers import echo_table, pass_cli
+from fintrack.cli.helpers import echo_table, pass_cli, plain_money, signed_money
 from fintrack.core.formatting import fmt_money
 from fintrack.projections import engine
 
@@ -74,20 +74,20 @@ def _month_index(result: dict, month: str) -> int:
 def _echo_breakdown(breakdown: dict) -> None:
     click.echo(f"What happens in {breakdown['label']}")
     totals = [
-        f"Money in {_change(breakdown['money_in'])}",
-        f"Money out {_change(breakdown['money_out'])}",
+        f"Money in {signed_money(breakdown['money_in'])}",
+        f"Money out {signed_money(breakdown['money_out'])}",
     ]
     if breakdown["autopay"]:
-        totals.append(f"Card autopay {_plain(breakdown['autopay'])}")
+        totals.append(f"Card autopay {plain_money(breakdown['autopay'])}")
     if breakdown["holdings_change"]:
-        totals.append(f"Assets & loans {_change(breakdown['holdings_change'])}")
+        totals.append(f"Assets & loans {signed_money(breakdown['holdings_change'])}")
     click.echo("  " + " · ".join(totals))
     if not breakdown["groups"]:
         click.echo("\nNothing changes this month.")
     for group in breakdown["groups"]:
-        click.echo(f"\n{group['name']}: {_change(group['total'])}")
+        click.echo(f"\n{group['name']}: {signed_money(group['total'])}")
         for f in group["flows"]:
-            click.echo(f"  {f['label']}: {_change(f['amount'])}")
+            click.echo(f"  {f['label']}: {signed_money(f['amount'])}")
 
 
 def _echo_table(result: dict, changes: bool) -> None:
@@ -142,27 +142,28 @@ def _echo_estimate(result: dict) -> None:
             click.echo(f"  {category}: {fmt_money(avg)}")
 
 
-def _echo_warnings(summary: dict) -> None:
+def warning_lines(summary: dict) -> list[str]:
+    """One line per account that drops below its minimum."""
+    lines = []
     for w in summary["warnings"]:
         months_below = w["months_below"]
-        click.echo(
-            f"warning: {w['account']['name']} drops below its "
-            f"{_plain(w['minimum'])} minimum in {w['first_month_label']} "
-            f"(lowest {_plain(w['lowest'])}, {months_below} "
-            f"month{'s' if months_below != 1 else ''} below)",
-            err=True,
+        lines.append(
+            f"{w['account']['name']} drops below its "
+            f"{plain_money(w['minimum'])} minimum in {w['first_month_label']} "
+            f"(lowest {plain_money(w['lowest'])}, {months_below} "
+            f"month{'s' if months_below != 1 else ''} below)"
         )
+    return lines
 
 
-def _plain(x) -> str:
-    """Money without the table padding: $1,234.00 / ($1,234.00)."""
-    return fmt_money(x).strip()
+def payoff_line(summary: dict) -> str:
+    paid = ", ".join(f"{p['name']} ({p['month_label']})" for p in summary["payoffs"])
+    return f"Paid off: {paid}"
 
 
-def _change(x) -> str:
-    if x == 0:
-        return "$0.00"
-    return f"{'+' if x > 0 else '-'}${abs(x):,.2f}"
+def _echo_warnings(summary: dict) -> None:
+    for line in warning_lines(summary):
+        click.echo(f"warning: {line}", err=True)
 
 
 def _echo_summary(summary: dict) -> None:
@@ -170,15 +171,12 @@ def _echo_summary(summary: dict) -> None:
     for name, key in (("Liquid", "liquid"), ("Net worth", "net_worth")):
         t = summary[key]
         click.echo(
-            f"{name} by {end}: {_plain(t['end'])} "
-            f"(now {_plain(t['start'])}, {_change(t['change'])}, "
-            f"{_change(t['per_month'])}/mo)"
+            f"{name} by {end}: {plain_money(t['end'])} "
+            f"(now {plain_money(t['start'])}, {signed_money(t['change'])}, "
+            f"{signed_money(t['per_month'])}/mo)"
         )
     low = summary["lowest_liquid"]
-    click.echo(f"Lowest liquid: {_plain(low['amount'])} in {low['month_label']}")
+    click.echo(f"Lowest liquid: {plain_money(low['amount'])} in {low['month_label']}")
     if summary["payoffs"]:
-        paid = ", ".join(
-            f"{p['name']} ({p['month_label']})" for p in summary["payoffs"]
-        )
-        click.echo(f"Paid off: {paid}")
+        click.echo(payoff_line(summary))
     click.echo()

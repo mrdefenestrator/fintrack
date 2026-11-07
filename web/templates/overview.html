@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Overview — fintrack{% endblock %}
+{% block content %}
+{# The one page that isn't a spreadsheet: a plain responsive stack of
+   read-only cards (one column on phones, two or three on wide screens).
+   Each card is overview/cards/<key>.html, listed by build_overview(). #}
+<div class="flex-1 min-h-0 overflow-y-auto" data-overview>
+    <div class="max-w-6xl p-3 sm:p-4 space-y-3">
+        {% if not overview.has_holdings %}
+        <p data-overview-empty class="px-1 text-sm text-gray-600 dark:text-gray-300">
+            Nothing to show yet. Add accounts and assets on
+            <a href="{{ url_for('holdings.holdings_view', filename=filename) }}" class="text-blue-600 dark:text-blue-400 hover:underline">Holdings</a>
+            and income and expenses on
+            <a href="{{ url_for('budget.budget_view', filename=filename) }}" class="text-blue-600 dark:text-blue-400 hover:underline">Budget</a>.
+        </p>
+        {% endif %}
+        <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {% for key in overview.cards %}
+            {% include "overview/cards/" ~ key ~ ".html" %}
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}

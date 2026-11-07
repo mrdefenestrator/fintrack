@@ -57,6 +57,7 @@ degrades to a warning without it).
 - `fintrack/budget/` — budget entries, recurrence/proration engine
 - `fintrack/networth/` — assets/debts, key-number and funding calculations, liquidity-tier totals + equity pairs
 - `fintrack/projections/` — multi-month balance projection engine + estimators
+- `fintrack/insights/` — Overview numbers (web landing page + `status`)
 - `fintrack/snapshots/`, `fintrack/migrate/` (legacy one-time import), `fintrack/cli/` (one module per command group)
 - `web/` — Flask app, routes/, Jinja2/Tailwind/HTMX templates
 - `tests/` — unit tests by domain; `tests/e2e/` Playwright (marker `e2e`)
@@ -138,7 +139,7 @@ degrades to a warning without it).
   `holdings.group_key` and its detail table (Cash/Credit from `get_accounts`,
   Loans/Assets from `get_asset_entries`); no band mixes source tables, so each
   reorders independently. The standalone Accounts and Assets **web pages**
-  have been retired; Holdings is the finances landing page. See DESIGN.md
+  have been retired; Overview is the landing page. See DESIGN.md
   "Holdings sheet" for the columns, the Liquid/Net worth footer, computed CC
   Available, per-group reorder, and the **sticky-row border invariant** (sticky
   rows must use box-shadow, never border-collapse borders). The web GUI (Holdings)
@@ -162,6 +163,13 @@ degrades to a warning without it).
   `sheet-group--flat` body, `gs.footer`) — build any new plain sheet the same
   way rather than on bare `sortable.js` tables (Trends alone keeps its own
   styling). See DESIGN.md "Holdings sheet" / "Budget sheet".
+- **Overview is the landing page** (`/s/<snapshot>/`, first nav item): a
+  plain responsive stack of read-only cards, the one page that isn't a
+  spreadsheet. Summary numbers go here, not on top of a sheet.
+  `fintrack/insights/overview.py` `build_overview()` feeds both the page and
+  the `status` CLI command (its text version); add a card by appending its key
+  there plus `web/templates/overview/cards/<key>.html`. Projections keeps only a
+  one-line summary above its grid. See DESIGN.md "Overview".
 - Core product goals the UI serves: current liquid holdings, net worth,
   budgeting, spending tracking, deviation from budget, and (eventually)
   net-worth projections.

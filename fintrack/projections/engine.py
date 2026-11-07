@@ -454,7 +454,9 @@ def _trend(start: Decimal, series: list[Decimal]) -> dict[str, Decimal]:
 def summarize(result: dict[str, Any]) -> dict[str, Any]:
     """Headline numbers for a projection: liquid and net-worth trend, the
     lowest liquid month, loan payoffs within the horizon, and minimum-balance
-    warnings collapsed to one line per account."""
+    warnings collapsed to one line per account. Each month-specific item
+    carries its 0-based month index, so a link can open Projections on it
+    (``?month=``)."""
     months = result["months"]
     liquid = result["liquid"]
     low_idx = min(range(len(liquid)), key=lambda i: liquid[i])
@@ -468,6 +470,7 @@ def summarize(result: dict[str, Any]) -> dict[str, Any]:
             payoffs.append(
                 {
                     "name": row["account"]["name"],
+                    "month_index": paid_idx,
                     "month_label": months[paid_idx]["label"],
                 }
             )
@@ -478,6 +481,7 @@ def summarize(result: dict[str, Any]) -> dict[str, Any]:
         if acc_id not in by_account:
             by_account[acc_id] = {
                 "account": w["account"],
+                "first_month_index": w["month_index"],
                 "first_month_label": w["month_label"],
                 "lowest": w["balance"],
                 "minimum": w["minimum"],
@@ -493,6 +497,7 @@ def summarize(result: dict[str, Any]) -> dict[str, Any]:
         "end_label": months[-1]["label"],
         "lowest_liquid": {
             "amount": liquid[low_idx],
+            "month_index": low_idx,
             "month_label": months[low_idx]["label"],
         },
         "payoffs": payoffs,

@@ -1,0 +1,4 @@
+{% import "overview/card.html" as ov %}
+{% call ov.card('net_worth', 'Net worth', proj_url(), 'Projections') %}
+{% with t = summary.net_worth %}{% include "overview/cards/_trend.html" %}{% endwith %}
+{% endcall %}

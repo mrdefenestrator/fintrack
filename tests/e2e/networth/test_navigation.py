@@ -87,11 +87,11 @@ def test_import_icon_in_header(page, flask_server):
     assert page.locator("[data-import-link]").get_attribute("aria-current") == "page"
 
 
-def test_status_url_redirects_to_holdings(page, flask_server):
-    """The removed status page's URL 302s to the Holdings view."""
+def test_status_url_redirects_to_overview(page, flask_server):
+    """The removed status page's URL 302s to the Overview landing page."""
     page.goto(f"{flask_server}/s/test_finances/status")
-    page.wait_for_url("**/holdings**")
-    assert "Holdings" in page.title()
+    page.wait_for_url("**/s/test_finances/")
+    assert "Overview" in page.title()
 
 
 def test_lock_scoped_to_edit_pages(page, flask_server):

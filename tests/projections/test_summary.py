@@ -155,9 +155,13 @@ def test_summarize(conn, snapshot_id):
 
     low = summary["lowest_liquid"]
     assert low["amount"] == min(result["liquid"])
+    assert result["liquid"][low["month_index"]] == low["amount"]
+    assert result["months"][low["month_index"]]["label"] == low["month_label"]
 
     # A $1,000 balance on a $12k/36-month loan pays off within a few months.
     assert [p["name"] for p in summary["payoffs"]] == ["Car loan"]
+    payoff = summary["payoffs"][0]
+    assert result["months"][payoff["month_index"]]["label"] == payoff["month_label"]
 
     # Checking sits below its $8,500 minimum for two months: one line, not two.
     assert len(result["warnings"]) == 2
@@ -167,6 +171,7 @@ def test_summarize(conn, snapshot_id):
     assert w["months_below"] == sum(1 for x in result["warnings"])
     assert w["lowest"] == min(x["balance"] for x in result["warnings"])
     assert w["first_month_label"] == result["warnings"][0]["month_label"]
+    assert w["first_month_index"] == result["warnings"][0]["month_index"]
 
 
 def test_month_breakdown_groups_by_holding(conn, snapshot_id):

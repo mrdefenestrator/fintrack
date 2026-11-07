@@ -1,0 +1,23 @@
+{# Lowest liquid month, accounts that dip below their minimum, and loan
+   payoffs; each item opens Projections on its month. #}
+{% import "overview/card.html" as ov %}
+{% set low = summary.lowest_liquid %}
+{% call ov.card('projection_warnings', 'Projection warnings', proj_url(low.month_index), 'Lowest month in Projections') %}
+{{ ov.headline(low.amount) }}
+<p data-lowest>Lowest liquid balance, reached in <a href="{{ proj_url(low.month_index) }}" class="text-blue-600 dark:text-blue-400 hover:underline">{{ low.month_label }}</a></p>
+{% if summary.warnings %}
+<ul data-warnings class="space-y-0.5 text-amber-900 dark:text-amber-200">
+    {% for w in summary.warnings %}
+    <li><a href="{{ proj_url(w.first_month_index) }}" class="hover:underline"><span class="font-medium">{{ w.account | account_label }}</span>
+        drops below its {{ w.minimum | fmt_money_header }} minimum in {{ w.first_month_label }}</a>
+        (lowest {{ w.lowest | fmt_money_header }}, {{ w.months_below }} month{{ "s" if w.months_below != 1 }} below).</li>
+    {% endfor %}
+</ul>
+{% else %}
+<p data-no-warnings class="text-gray-500 dark:text-gray-400">No account drops below its minimum.</p>
+{% endif %}
+{% if summary.payoffs %}
+<p data-payoffs>Paid off:
+    {% for p in summary.payoffs %}<a href="{{ proj_url(p.month_index) }}" class="hover:underline"><span class="font-medium">{{ p.name }}</span> ({{ p.month_label }})</a>{{ ", " if not loop.last }}{% endfor %}</p>
+{% endif %}
+{% endcall %}

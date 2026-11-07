@@ -725,14 +725,11 @@ def _groups_ctx(
         cells = [""] * _MAX_COLS
         cells[2] = label
         cells[_AMOUNT_POS] = fmt_money(totals[key])
-        # Only Liquid gets a "since last month" note: cash and cards carry
-        # balance history; most loans and assets don't, so a net-worth change
-        # would be the liquid change in disguise.
-        if key == "liquid" and prior and prior["covered"]:
+        if prior and _shows_change(key, prior):
             before = _prior_totals(accounts, assets, rates, prior["balances"])
             cells = (
                 cells[: _AMOUNT_POS + 1]
-                + [_change_cell(totals[key] - before[key], prior)]
+                + [_change_cell(totals[key] - before[key], prior, key)]
                 + [""] * (_MAX_COLS - _AMOUNT_POS - 1 - _CHANGE_SPAN)
             )
         master.append(cells)
@@ -743,17 +740,43 @@ def _groups_ctx(
 _CHANGE_SPAN = 3
 
 
+def _shows_change(key: str, prior: dict) -> bool:
+    """Liquid notes its change once any liquid account has a point that old.
+    Net worth waits until most of its holdings do (#107): until then the
+    change would mostly be holdings counted at today's value."""
+    covered, total = prior[key]
+    if key == "liquid":
+        return covered > 0
+    return covered * 2 > total
+
+
 def _prior_totals(accounts, assets, rates, balances: dict[int, Decimal]):
-    """Totals as of the comparison date: each account's balance swapped for its
-    history point on that day, where it has one; the rest at today's value."""
-    then = [
+    """Totals as of the comparison date: each holding's value swapped for its
+    history point on that day, where it has one; the rest at today's value.
+
+    Points are stored signed (negative = owed), so a loan's point flips back
+    to the dict API's positive amount owed. An asset's point is its whole
+    value, so it stands in as one USD unit."""
+    then_accounts = [
         {**a, "balance": balances[a["id"]]} if a.get("id") in balances else a
         for a in accounts
     ]
-    return calculations.tiered_totals(then, assets, rates=rates)
+    then_assets = []
+    for e in assets:
+        point = balances.get(e.get("id"))
+        if point is None:
+            then_assets.append(e)
+        elif e.get("kind") == "debt":
+            then_assets.append({**e, "balance": -point})
+        else:
+            then_assets.append({**e, "value": point, "quantity": 1, "unit": "USD"})
+    return calculations.tiered_totals(then_accounts, then_assets, rates=rates)
 
 
-def _change_cell(delta: Decimal, prior: dict) -> dict:
+_CHANGE_NOUNS = {"liquid": "liquid accounts", "net_worth": "holdings"}
+
+
+def _change_cell(delta: Decimal, prior: dict, key: str = "liquid") -> dict:
     """Footer note: signed change since the comparison date, green up / red
     down, with the history coverage in its tooltip."""
     on = prior["on"]
@@ -764,9 +787,10 @@ def _change_cell(delta: Decimal, prior: dict) -> dict:
     else:
         arrow, tone = "▼ ", "text-red-600 dark:text-red-400 font-normal"
     title = f"Change since {on:%b} {on.day}, from balance history"
-    if prior["covered"] < prior["total"]:
+    covered, total = prior[key]
+    if covered < total:
         title += (
-            f" for {prior['covered']} of {prior['total']} liquid accounts;"
+            f" for {covered} of {total} {_CHANGE_NOUNS[key]};"
             " the rest are counted at today's value"
         )
     return {
@@ -786,16 +810,25 @@ def _month_ago(today: date) -> date:
 
 
 def _prior_ctx(ctx: dict, today: date) -> dict:
-    """Liquid accounts' balances one month back, for the footer change note."""
+    """Every holding's value one month back, for the footer change notes, and
+    how many liquid accounts / net-worth holdings have a point that old."""
     on = _month_ago(today)
-    ids = [
+    liquid_ids = [
         a["id"]
         for a in ctx["accounts"]
         if a.get("id") is not None and calculations.account_tier(a) == "liquid"
     ]
+    all_ids = [
+        h["id"] for h in [*ctx["accounts"], *ctx["assets"]] if h.get("id") is not None
+    ]
     with current_app.config["engine"].connect() as conn:
-        balances = balances_on(conn, ids, on)
-    return {"on": on, "balances": balances, "covered": len(balances), "total": len(ids)}
+        balances = balances_on(conn, all_ids, on)
+    return {
+        "on": on,
+        "balances": balances,
+        "liquid": (sum(i in balances for i in liquid_ids), len(liquid_ids)),
+        "net_worth": (len(balances), len(all_ids)),
+    }
 
 
 def _ref_options(ctx: dict) -> tuple[list, list]:

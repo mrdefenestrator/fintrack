@@ -41,9 +41,13 @@ def client():
 
 
 def _card(html: str, key: str) -> str:
-    m = re.search(rf'<section data-overview-card="{key}".*?</section>', html, re.DOTALL)
-    assert m, f"no {key} card"
-    return m.group(0)
+    """A card's markup: from its opening tag to the next card (or page end)."""
+    marker = f'data-overview-card="{key}"'
+    assert marker in html, f"no {key} card"
+    at = html.index(marker)
+    start = html.rfind("<", 0, at)
+    nxt = html.find("data-overview-card=", at + len(marker))
+    return html[start : nxt if nxt != -1 else len(html)]
 
 
 def test_snapshot_root_is_the_overview(client):
@@ -51,7 +55,7 @@ def test_snapshot_root_is_the_overview(client):
     assert resp.status_code == 200
     html = resp.get_data(as_text=True)
     assert "<title>Overview — fintrack</title>" in html
-    for key in ("net_worth", "liquid", "projection_warnings"):
+    for key in ("net_worth_liquid", "projection_warnings"):
         _card(html, key)
 
 
@@ -68,23 +72,30 @@ def test_unknown_snapshot_404s(client):
     assert client.get("/s/nope").status_code == 404
 
 
-def test_net_worth_and_liquid_cards(client):
+def test_net_worth_and_liquid_card(client):
+    """One card, whole dollars, and the whole card links to Projections."""
     html = client.get("/s/home").get_data(as_text=True)
-    for key in ("net_worth", "liquid"):
-        card = _card(html, key)
-        assert "$1,000.00" in card  # now
-        assert "projected over the next 12 months" in card
-        assert 'href="/s/home/projections?months=12"' in card
+    card = _card(html, "net_worth_liquid")
+    assert card.startswith('<a href="/s/home/projections?months=12"')
+    for testid in ("net-worth", "liquid"):
+        figure = re.search(
+            rf'data-figure="{testid}".*?data-change.*?</div>', card, re.DOTALL
+        ).group(0)
+        assert "$1,000<" in figure  # now, no cents
+        assert "No change" in figure
+    assert "Projected change by " in card
+    assert "$1,000.00" not in card
 
 
 def test_warnings_card_links_each_item_to_its_month(client):
     html = client.get("/s/home").get_data(as_text=True)
     card = _card(html, "projection_warnings")
-    assert "Lowest liquid" in card
-    assert "drops below its $2,000.00 minimum" in card
+    assert "1 account dips below its minimum" in card
+    assert "Low point" in card
+    assert "Chase Checking</span>: under $2,000 min from " in card
     # Checking is below its minimum from month 0 (the current month).
     assert 'href="/s/home/projections?months=12&amp;month=0"' in card
-    assert "data-no-warnings" not in card
+    assert "All clear" not in card
 
 
 def test_empty_snapshot(client):
@@ -92,7 +103,8 @@ def test_empty_snapshot(client):
     assert "data-overview-empty" in html
     assert 'href="/s/empty/holdings"' in html
     card = _card(html, "projection_warnings")
-    assert "data-no-warnings" in card
+    assert "All clear" in card
+    assert "data-warnings" not in card
 
 
 def test_overview_is_the_first_nav_item(client):

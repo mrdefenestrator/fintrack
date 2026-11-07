@@ -27,7 +27,7 @@ def build_overview(
     result = engine.project(conn, snapshot_id, months=OVERVIEW_MONTHS, today=today)
     summary = engine.summarize(result)
     return {
-        "cards": ["net_worth", "liquid", "projection_warnings"],
+        "cards": ["net_worth_liquid", "projection_warnings"],
         "months": OVERVIEW_MONTHS,
         "has_holdings": bool(result["rows"]),
         "summary": summary,

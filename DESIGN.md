@@ -703,9 +703,13 @@ hasn't shipped are simply absent.
 
 | Card | Shows | Links to |
 |---|---|---|
-| Net worth | now; projected change over the next 12 months | Projections (`?months=12`) |
-| Liquid | now; projected change over the next 12 months | Projections (`?months=12`) |
-| Projection warnings | lowest liquid month, accounts that drop below their minimum, loan payoffs | Projections opened on that month (`?months=12&month=I`) |
+| Net worth / Liquid | both now, and their projected change by the end of the 12 months | Projections (`?months=12`); the whole card is the link |
+| Projection warnings | status ("All clear" / how many accounts dip below their minimum), the low point, each below-minimum account, loan payoffs | each line: Projections opened on its month (`?months=12&month=I`); footer: Projections |
+
+Cards are terse: whole dollars (`fmt_money_whole`), changes as ▲/▼ amounts
+(`fmt_change_whole`), one short line per item; exact figures and detail live on
+the sheets they link to. A card with one destination is itself the link; one
+whose lines link separately keeps a footer link (links can't nest).
 
 Net worth's "change over the past 12 months" waits on balance history being
 recorded over time (#107, #98). Planned cards: Cash flow (#99), Needs

@@ -11,16 +11,18 @@ from fintrack.cli.helpers import (
     drop_separator_rows,
     echo_table,
     pass_cli,
-    plain_money,
-    signed_money,
     sort_items,
     sort_options,
 )
-from fintrack.cli.projections import payoff_line, warning_lines
 from fintrack.core.filters import (
     apply_budget_filters,
     filter_accounts_by_type,
     filter_assets_by_kind,
+)
+from fintrack.core.formatting import (
+    fmt_account_label,
+    fmt_change_whole,
+    fmt_money_whole,
 )
 from fintrack.core.loader import load_finances_from_db
 from fintrack.core.tables import (
@@ -86,33 +88,43 @@ def _load(cli, conn):
 @click.command()
 @pass_cli
 def status(cli):
-    """Overview: net worth and liquid now and projected, plus projection
-    warnings (the text version of the web Overview page)."""
+    """Overview: net worth and liquid now and where the projection has them,
+    plus projection warnings (the text version of the web Overview page)."""
     with cli.connect() as conn:
         overview = build_overview(conn, cli.snapshot_id(conn))
     summary = overview["summary"]
     if not overview["has_holdings"]:
         click.echo("No holdings yet: add accounts, assets, and debts.\n")
 
-    months, end = overview["months"], summary["end_label"]
-    for name, key in (("Net worth", "net_worth"), ("Liquid", "liquid")):
-        t = summary[key]
-        click.echo(f"{name}: {plain_money(t['start'])}")
-        click.echo(
-            f"  {signed_money(t['change'])} projected over the next {months} "
-            f"months, to {plain_money(t['end'])} by {end} "
-            f"({signed_money(t['per_month'])}/mo)"
+    end = summary["end_label"]
+    rows = [
+        [name, fmt_money_whole(t["start"]), f"{fmt_change_whole(t['change'])} by {end}"]
+        for name, t in (
+            ("Net worth", summary["net_worth"]),
+            ("Liquid", summary["liquid"]),
         )
+    ]
+    width = max(len(r[1]) for r in rows)
+    for name, now, change in rows:
+        click.echo(f"{name:<10} {now:>{width}}  {change}")
 
+    warnings = summary["warnings"]
+    n = len(warnings)
+    if n:
+        verb = "dips below its" if n == 1 else "dip below their"
+        state = f"{n} account{'s' if n != 1 else ''} {verb} minimum"
+    else:
+        state = "All clear"
     low = summary["lowest_liquid"]
-    click.echo("\nProjection warnings:")
-    click.echo(f"  Lowest liquid: {plain_money(low['amount'])} in {low['month_label']}")
-    for line in warning_lines(summary):
-        click.echo(f"  {line}")
-    if not summary["warnings"]:
-        click.echo("  No account drops below its minimum.")
-    if summary["payoffs"]:
-        click.echo(f"  {payoff_line(summary)}")
+    click.echo(f"\nProjection warnings: {state}")
+    click.echo(f"  Low point {fmt_money_whole(low['amount'])} · {low['month_label']}")
+    for w in warnings:
+        click.echo(
+            f"  {fmt_account_label(w['account'])}: under "
+            f"{fmt_money_whole(w['minimum'])} min from {w['first_month_label']}"
+        )
+    for p in summary["payoffs"]:
+        click.echo(f"  Paid off: {p['name']} · {p['month_label']}")
 
 
 # ---------------------------------------------------------------------------

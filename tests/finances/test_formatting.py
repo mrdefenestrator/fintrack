@@ -1,10 +1,18 @@
+from decimal import Decimal
+
+import pytest
+
 """Tests for fintrack.core.formatting.fmt_account_label — the single helper
 building account-picker dropdown labels: '{Institution} {Name}', degrading to
 just '{Name}' without an institution. The account type is intentionally
 omitted (it read as clutter in the pickers / filter chips).
 """
 
-from fintrack.core.formatting import fmt_account_label
+from fintrack.core.formatting import (
+    fmt_account_label,
+    fmt_change_whole,
+    fmt_money_whole,
+)
 
 
 def test_full_label_with_institution():
@@ -35,3 +43,31 @@ def test_type_is_ignored():
 def test_no_institution_is_just_name():
     account = {"name": "Mystery"}
     assert fmt_account_label(account) == "Mystery"
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        (Decimal("702285.55"), "$702,286"),
+        (Decimal("0.4"), "$0"),
+        (Decimal("-0.4"), "$0"),
+        (Decimal("2.5"), "$3"),  # half up, not banker's rounding
+        (Decimal("-1234.5"), "($1,235)"),
+        (0, "$0"),
+    ],
+)
+def test_fmt_money_whole(value, expected):
+    assert fmt_money_whole(value) == expected
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        (Decimal("118362.91"), "▲ $118,363"),
+        (Decimal("-53.5"), "▼ $54"),
+        (Decimal("0.49"), "No change"),
+        (0, "No change"),
+    ],
+)
+def test_fmt_change_whole(value, expected):
+    assert fmt_change_whole(value) == expected

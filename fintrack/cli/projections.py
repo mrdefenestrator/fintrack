@@ -142,7 +142,7 @@ def _echo_estimate(result: dict) -> None:
             click.echo(f"  {category}: {fmt_money(avg)}")
 
 
-def warning_lines(summary: dict) -> list[str]:
+def _warning_lines(summary: dict) -> list[str]:
     """One line per account that drops below its minimum."""
     lines = []
     for w in summary["warnings"]:
@@ -156,13 +156,13 @@ def warning_lines(summary: dict) -> list[str]:
     return lines
 
 
-def payoff_line(summary: dict) -> str:
+def _payoff_line(summary: dict) -> str:
     paid = ", ".join(f"{p['name']} ({p['month_label']})" for p in summary["payoffs"])
     return f"Paid off: {paid}"
 
 
 def _echo_warnings(summary: dict) -> None:
-    for line in warning_lines(summary):
+    for line in _warning_lines(summary):
         click.echo(f"warning: {line}", err=True)
 
 
@@ -178,5 +178,5 @@ def _echo_summary(summary: dict) -> None:
     low = summary["lowest_liquid"]
     click.echo(f"Lowest liquid: {plain_money(low['amount'])} in {low['month_label']}")
     if summary["payoffs"]:
-        click.echo(payoff_line(summary))
+        click.echo(_payoff_line(summary))
     click.echo()

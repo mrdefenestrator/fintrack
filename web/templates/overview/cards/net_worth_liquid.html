@@ -1,0 +1,15 @@
+{# Net worth and liquid now, and where the projection has them at the end of
+   the Overview horizon. The whole card opens Projections. #}
+{% import "overview/card.html" as ov %}
+{% call ov.card('net_worth_liquid', none, proj_url()) %}
+<div class="grid grid-cols-2 gap-4">
+    {% for name, t, testid in [('Net worth', summary.net_worth, 'net-worth'), ('Liquid', summary.liquid, 'liquid')] %}
+    <div data-figure="{{ testid }}">
+        <h2 class="text-sm font-medium text-gray-500 dark:text-gray-400">{{ name }}</h2>
+        {{ ov.figure(t.start) }}
+        {{ ov.change(t.change) }}
+    </div>
+    {% endfor %}
+</div>
+<p data-horizon class="mt-1 text-xs text-gray-500 dark:text-gray-400">Projected change by {{ summary.end_label }}</p>
+{% endcall %}

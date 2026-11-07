@@ -73,6 +73,8 @@ def _register_filters(app: Flask) -> None:
     )
     app.jinja_env.filters["fmt_money_header"] = _fmt_money_header
     app.jinja_env.filters["fmt_change"] = _fmt_change
+    app.jinja_env.filters["fmt_money_whole"] = formatting.fmt_money_whole
+    app.jinja_env.filters["fmt_change_whole"] = formatting.fmt_change_whole
     app.jinja_env.filters["fmt_qty"] = formatting.fmt_qty
     app.jinja_env.filters["display_is_negative"] = lambda x: _display_is_negative(x)
     app.jinja_env.filters["format_type"] = lambda x: formatting.fmt_type_display(x)

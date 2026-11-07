@@ -9,7 +9,7 @@ def test_overview_reports_the_12_month_projection(conn, snapshot_id):
     _household(conn, snapshot_id)
     overview = build_overview(conn, snapshot_id, today=TODAY)
     assert overview["months"] == OVERVIEW_MONTHS == 12
-    assert overview["cards"] == ["net_worth", "liquid", "projection_warnings"]
+    assert overview["cards"] == ["net_worth_liquid", "projection_warnings"]
     assert overview["has_holdings"] is True
     expected = summarize(project(conn, snapshot_id, months=12, today=TODAY))
     assert overview["summary"] == expected

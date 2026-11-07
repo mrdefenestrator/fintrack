@@ -454,7 +454,7 @@ def test_status_command_exits_zero(tmp_path):
         cli, ["--db", str(db_path), "--snapshot", "test_finances", "status"]
     )
     assert result.exit_code == 0, result.output
-    assert "Net worth: $" in result.output
+    assert result.output.startswith("Net worth  $")
     assert "Projection warnings:" in result.output
 
 

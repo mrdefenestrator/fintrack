@@ -4,7 +4,7 @@ import pytest
 
 pytestmark = pytest.mark.e2e
 
-_CARDS = ("net_worth", "liquid", "projection_warnings")
+_CARDS = ("net_worth_liquid", "projection_warnings")
 
 
 def test_snapshot_root_lands_on_overview(page, flask_server):
@@ -12,9 +12,10 @@ def test_snapshot_root_lands_on_overview(page, flask_server):
     assert "Overview" in page.title()
     for key in _CARDS:
         assert page.locator(f"[data-overview-card='{key}']").is_visible()
-    liquid = page.locator("[data-overview-card='liquid']")
-    assert "$5,000.00" in liquid.locator("[data-headline]").inner_text()
-    assert "projected over the next 12 months" in liquid.inner_text()
+    liquid = page.locator("[data-figure='liquid']")
+    assert liquid.locator("[data-headline]").inner_text().strip() == "$5,000"
+    assert liquid.locator("[data-change]").is_visible()
+    assert "Projected change by " in page.locator("[data-horizon]").inner_text()
 
 
 def test_overview_is_first_in_the_nav(page, flask_server):
@@ -27,10 +28,12 @@ def test_overview_is_first_in_the_nav(page, flask_server):
     assert active.inner_text().strip() == "Overview"
 
 
-@pytest.mark.parametrize("key", ["net_worth", "liquid"])
-def test_trend_cards_link_to_projections(page, flask_server, key):
+def test_net_worth_card_links_to_projections(page, flask_server):
+    """The whole Net worth / Liquid card is the link."""
     page.goto(f"{flask_server}/s/test_finances")
-    page.locator(f"[data-overview-card='{key}'] [data-card-link]").click()
+    page.locator(
+        "[data-overview-card='net_worth_liquid'] [data-figure='liquid']"
+    ).click()
     page.wait_for_url("**/projections?months=12")
     assert page.locator("[data-projection-table]").is_visible()
 
@@ -49,18 +52,22 @@ def test_warnings_open_projections_on_that_month(page, flask_server, _db_path):
     page.goto(f"{flask_server}/s/test_finances")
     card = page.locator("[data-overview-card='projection_warnings']")
     warnings = card.locator("[data-warnings]")
-    assert "drops below its $6,000.00 minimum" in warnings.inner_text()
+    assert (
+        "1 account dips below its minimum" in card.locator("[data-status]").inner_text()
+    )
+    assert "under $6,000 min from" in warnings.inner_text()
     warnings.locator("a").first.click()
     page.wait_for_url("**/projections?months=12&month=*")
     assert page.locator("[data-month-breakdown]").is_visible()
 
 
-def test_lowest_month_link_opens_its_breakdown(page, flask_server):
+def test_low_point_opens_its_month(page, flask_server):
     page.goto(f"{flask_server}/s/test_finances")
     card = page.locator("[data-overview-card='projection_warnings']")
-    assert card.locator("[data-no-warnings]").is_visible()
-    month = card.locator("[data-lowest] a").inner_text().strip()
-    card.locator("[data-card-link]").click()
+    assert card.locator("[data-status]").inner_text().strip() == "All clear"
+    low = card.locator("[data-lowest]")
+    month = low.inner_text().split("·")[-1].strip()
+    low.click()
     page.wait_for_url("**/projections?months=12&month=*")
     assert month in page.locator("[data-month-breakdown]").inner_text()
 
@@ -80,11 +87,11 @@ def test_overview_on_a_phone(page, flask_server):
 def test_overview_on_wide_screens_uses_columns(page, flask_server):
     page.set_viewport_size({"width": 1400, "height": 900})
     page.goto(f"{flask_server}/s/test_finances")
-    xs = {
-        round(page.locator(f"[data-overview-card='{key}']").bounding_box()["x"])
-        for key in _CARDS
-    }
-    assert len(xs) == 3
+    boxes = [
+        page.locator(f"[data-overview-card='{key}']").bounding_box() for key in _CARDS
+    ]
+    assert len({round(b["x"]) for b in boxes}) == 2  # side by side
+    assert len({round(b["y"]) for b in boxes}) == 1
 
 
 def test_overview_of_an_empty_snapshot(page, flask_server):

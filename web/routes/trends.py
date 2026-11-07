@@ -293,9 +293,11 @@ def detail():
     )
 
 
-# "Unusual months" heat map: a month is tinted only when it is worse than the
-# category's usual (median completed month) by more than this share.
-_UNUSUAL = 0.2
+# "Unusual months" heat map: a month is shaded only when it differs from the
+# category's usual (median completed month) by more than this share *and* by
+# at least this many dollars (so $36 -> $38 never flags).
+_UNUSUAL = 0.15
+_UNUSUAL_MIN_DOLLARS = 10.0
 
 
 def _heat_tints(
@@ -306,52 +308,62 @@ def _heat_tints(
     *,
     is_income: bool,
 ) -> list[dict]:
-    """Per-month cell style for the Trends heat map: {bg, title}.
+    """Per-month cell style for the Trends heat map: {cls, title, bar}.
 
-    - "unusual" (default): only months worse than the category's usual (its
-      median completed month) get an amber tint — more spending, or less
-      income — so steady bills like rent stay plain. The median keeps one
-      spike from making every normal month look "below usual".
-    - "size": one calm gray, shaded by the month's size relative to the row's
-      largest month.
+    `cls` is a CSS class defined in trends_table.html (light and dark shades),
+    or "" for a plain cell; `bar` (Size mode) is a bar length in percent.
+
+    - "unusual" (default): months worse than the category's usual (its median
+      completed month) are red, better ones green, in three strengths — more
+      spending or less income is worse. Steady bills like rent stay plain. The
+      median keeps one spike from making every normal month look "below usual".
+    - "size": no shading; a thin bar under each figure, its length the month's
+      share of the row's largest month.
 
     The month in progress is partial, so it is left plain in both modes.
     """
     out = []
     done = sorted(abs(v) for i, v in enumerate(values) if i != in_progress)
     usual = statistics.median(done) if done else 0
-    plain = {"bg": "transparent", "title": ""}
+    plain = {"cls": "", "title": "", "bar": 0}
     for i, v in enumerate(values):
         if i == in_progress:
             out.append(plain)
             continue
         if mode == "size":
-            alpha = 0.03 + heat[i] * 0.30
-            out.append({"bg": f"rgba(100,116,139,{alpha:.2f})", "title": ""})
+            # A bar under the figure, its length the month's share of the
+            # row's largest month (from zero, so equal months read equal).
+            out.append(
+                {"cls": "", "title": "", "bar": round(heat[i] * 100) if v else 0}
+            )
             continue
-        if not usual:
-            # Usually nothing here: any spend at all is a one-off.
-            if v and not is_income:
-                out.append(
-                    {
-                        "bg": "rgba(245,158,11,0.40)",
-                        "title": "One-off: usually nothing in this category",
-                    }
-                )
-            else:
-                out.append(plain)
-            continue
-        dev = (abs(v) - usual) / usual
-        worse = -dev if is_income else dev
-        if worse <= _UNUSUAL:
+        size = abs(v)
+        if abs(size - usual) < _UNUSUAL_MIN_DOLLARS:
             out.append(plain)
             continue
-        alpha = 0.15 + min(worse, 1.5) / 1.5 * 0.35
-        word = "below" if is_income else "above"
+        if not usual:
+            # Usually nothing here: any amount at all is a one-off.
+            good = is_income
+            out.append(
+                {
+                    "cls": f"heat-{'better' if good else 'worse'}-2",
+                    "title": "One-off: usually nothing in this category",
+                    "bar": 0,
+                }
+            )
+            continue
+        dev = (size - usual) / usual
+        if abs(dev) <= _UNUSUAL:
+            out.append(plain)
+            continue
+        worse = (dev < 0) if is_income else (dev > 0)
+        level = 1 if abs(dev) < 0.5 else 2 if abs(dev) < 1 else 3
+        word = "above" if dev > 0 else "below"
         out.append(
             {
-                "bg": f"rgba(245,158,11,{alpha:.2f})",
-                "title": f"{worse * 100:.0f}% {word} usual (${usual:,.0f}/mo)",
+                "cls": f"heat-{'worse' if worse else 'better'}-{level}",
+                "title": f"{abs(dev) * 100:.0f}% {word} usual (${usual:,.0f}/mo)",
+                "bar": 0,
             }
         )
     return out

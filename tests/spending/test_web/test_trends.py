@@ -6,6 +6,7 @@ handling of the `end=YYYY-MM` query param: default-to-latest, malformed
 input, past windows, and forward-paging back to "latest".
 """
 
+import re
 from datetime import date, datetime
 from decimal import Decimal
 
@@ -19,12 +20,12 @@ from fintrack.ledger.repository.imports import (
 )
 from fintrack.snapshots.repository import get_snapshot_id
 from web.routes.trends import (
-    _heat_tints,
     _parse_end_param,
     _period_range,
     _period_stride,
     _resolve_window_end,
     _shift_month,
+    _unusual_tints,
 )
 
 # ---------------------------------------------------------------------------
@@ -412,7 +413,7 @@ def _cls(tints):
 def test_unusual_leaves_steady_rows_plain():
     """Rent at the same amount every month gets no shading at all."""
     values = [-1800.0] * 5
-    tints = _heat_tints("unusual", values, [1.0] * 5, None, is_income=False)
+    tints = _unusual_tints(values, None, is_income=False)
     assert _cls(tints) == [""] * 5
 
 
@@ -420,8 +421,7 @@ def test_unusual_marks_spending_above_usual_red_and_below_green():
     """Against the median ($49): the $568 spike is red at full strength, $113
     red, and the $10 month green. One spike doesn't drag "usual" up."""
     values = [-568.0, -49.0, -113.0, -49.0, -49.0, -10.0]
-    heat = [abs(v) / 568 for v in values]
-    tints = _heat_tints("unusual", values, heat, None, is_income=False)
+    tints = _unusual_tints(values, None, is_income=False)
     assert _cls(tints) == [
         "heat-worse-3",
         "",
@@ -438,21 +438,20 @@ def test_unusual_threshold_is_15_percent():
     """Groceries: usual $336. $391 (+16%) and $408 (+21%) flag; $380 (+13%)
     doesn't."""
     values = [-336.0, -408.0, -336.0, -391.0, -336.0, -380.0, -336.0]
-    tints = _heat_tints("unusual", values, [1.0] * 7, None, is_income=False)
+    tints = _unusual_tints(values, None, is_income=False)
     assert _cls(tints) == ["", "heat-worse-1", "", "heat-worse-1", "", "", ""]
 
 
 def test_unusual_needs_a_ten_dollar_difference():
     """$36 -> $44 is 22% but only $8, so it stays plain; $36 -> $47 flags."""
     values = [-36.0, -36.0, -44.0, -36.0, -47.0]
-    tints = _heat_tints("unusual", values, [1.0] * 5, None, is_income=False)
+    tints = _unusual_tints(values, None, is_income=False)
     assert _cls(tints) == ["", "", "", "", "heat-worse-1"]
 
 
 def test_unusual_income_short_is_red_and_extra_is_green():
     values = [5200.0, 5200.0, 2600.0, 5200.0, 7000.0]
-    heat = [v / 7000 for v in values]
-    tints = _heat_tints("unusual", values, heat, None, is_income=True)
+    tints = _unusual_tints(values, None, is_income=True)
     assert _cls(tints) == ["", "", "heat-worse-2", "", "heat-better-1"]
     assert "below usual" in tints[2]["title"]
 
@@ -460,38 +459,27 @@ def test_unusual_income_short_is_red_and_extra_is_green():
 def test_unusual_skips_the_month_in_progress():
     """The current month is partial: never shaded, and left out of "usual"."""
     values = [-100.0, -100.0, -100.0, -500.0]
-    tints = _heat_tints("unusual", values, [0.2, 0.2, 0.2, 1.0], 3, is_income=False)
+    tints = _unusual_tints(values, 3, is_income=False)
     assert _cls(tints) == [""] * 4
 
 
 def test_unusual_marks_one_offs_in_usually_empty_categories():
     values = [0.0, 0.0, -413.0, 0.0, 0.0]
-    tints = _heat_tints("unusual", values, [0, 0, 1, 0, 0], None, is_income=False)
+    tints = _unusual_tints(values, None, is_income=False)
     assert _cls(tints) == ["", "", "heat-worse-2", "", ""]
     assert "One-off" in tints[2]["title"]
 
 
-def test_size_draws_a_bar_by_share_of_the_largest_month():
-    values = [0.0, -10.0, -50.0, -100.0]
-    tints = _heat_tints("size", values, [0, 0.1, 0.5, 1.0], None, is_income=False)
-    assert [t["bar"] for t in tints] == [0, 10, 50, 100]
-    assert _cls(tints) == [""] * 4  # no shading in Size mode
-
-
-def test_size_leaves_the_month_in_progress_plain():
-    tints = _heat_tints("size", [-10.0, -50.0], [0.2, 1.0], 1, is_income=False)
-    assert [t["bar"] for t in tints] == [20, 0]
-
-
-def test_trends_highlight_toggle_defaults_to_unusual(client):
+def test_trends_highlight_is_on_by_default(client):
     html = client.get("/s/ledger/trends").data.decode()
-    assert "Unusual months" in html and "Size" in html
-    # Only the toggle's own Size pill (its href + hx-get) carries the param;
+    assert "Highlight unusual months" in html
+    # Only the toggle itself (its href + hx-get) links to the off state;
     # period and paging links stay on the default.
-    assert html.count("heat=size") == 2
+    assert html.count("highlight=off") == 2
 
 
-def test_trends_size_mode_is_kept_while_paging(client):
-    html = client.get("/s/ledger/trends?heat=size").data.decode()
-    # Period presets, earlier/latest arrows, and the Size pill all keep it.
-    assert html.count("heat=size") >= 5
+def test_trends_highlight_off_is_kept_while_paging(client):
+    html = client.get("/s/ledger/trends?highlight=off").data.decode()
+    # Period presets and earlier/latest arrows keep it; the toggle turns it on.
+    assert html.count("highlight=off") >= 5
+    assert not re.search(r'class="[^"]*heat-(worse|better)', html)

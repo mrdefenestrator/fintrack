@@ -613,15 +613,14 @@ row/cell-swap routes; rows map cells by column key like the banded sheets.
 Categories' mutations swap the whole `#categories-table` (so the footer count
 stays current), and its actions column exists only in edit mode. Trends keeps
 its own table styling (and `sortable.js`), with the Category column pinned for
-sideways scrolling. Its heat map has two modes, chosen with a Highlight toggle
-(`?heat=size`, kept while paging and switching periods): **Unusual months**
-(default) shades only months that differ from the category's usual — its median
-completed month — by more than 15% and at least $10: red when worse (more
-spending, or less income), green when better, in three strengths. Steady bills
-stay plain, and one-off amounts in a usually-empty category stand out. **Size**
-shades nothing and draws a thin bar under each figure instead, its length the
-month's share of the row's largest month. The month in progress is marked "so
-far", greyed, never highlighted, and left out of "usual".
+sideways scrolling. A **Highlight unusual months** toggle (on by default;
+`?highlight=off`, kept while paging and switching periods) shades only months
+that differ from the category's usual — its median completed month — by more
+than 15% and at least $10: red when worse (more spending, or less income), green
+when better, in three strengths. Steady bills stay plain, and one-off amounts in
+a usually-empty category stand out. Per-month size is left to each row's
+expandable bar chart. The month in progress is marked "so far", greyed, never
+highlighted, and left out of "usual".
 
 The actions column (drag + delete) renders only in edit mode. Edits swap the
 table's whole body (colgroup included), so a row whose edit changes its band

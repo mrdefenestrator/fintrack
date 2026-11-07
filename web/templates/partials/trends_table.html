@@ -3,31 +3,28 @@
     {% set _period_opts = [] %}
     {% for p, label in [("quarterly", "Quarterly"), ("ytd", "Year to Date"), ("trailing12", "Trailing 12 Mo")] %}
     {% set _ = _period_opts.append({
-        'url': "/s/%s/trends?period=%s%s%s" | format(filename, p, end_qs, heat_qs),
+        'url': "/s/%s/trends?period=%s%s%s" | format(filename, p, end_qs, highlight_qs),
         'label': label,
         'active': period == p}) %}
     {% endfor %}
-    {# Highlight: shade only unusual months, red worse / green better (default), or a size bar under every month. #}
-    {% set _heat_opts = [] %}
-    {% for h, label, qs in [("unusual", "Unusual months", ""), ("size", "Size", "&heat=size")] %}
-    {% set _ = _heat_opts.append({
-        'url': "/s/%s/trends?period=%s%s%s" | format(filename, period, end_qs, qs),
-        'label': label,
-        'active': heat_mode == h}) %}
-    {% endfor %}
+    {# Highlight toggle: shade unusual months, red worse / green better (on by
+       default); the pill links to the opposite state. #}
+    {% set _highlight_opt = [{
+        'url': "/s/%s/trends?period=%s%s%s" | format(filename, period, end_qs, '&highlight=off' if highlight else ''),
+        'label': 'Highlight unusual months',
+        'active': highlight}] %}
     <div class="flex flex-wrap items-center gap-3">
         {{ nav.segmented(_period_opts) }}
-        <div class="flex items-center gap-2" title="What the cell shading shows">
-            <span class="text-xs uppercase tracking-wide text-gray-400 dark:text-gray-500">Highlight</span>
-            {{ nav.segmented(_heat_opts) }}
+        <div title="{{ 'Turn off' if highlight else 'Shade months well above or below the category’s usual' }}">
+            {{ nav.segmented(_highlight_opt) }}
         </div>
     </div>
     {{ nav.pager(
-        prev_url="/s/%s/trends?period=%s&end=%s%s" | format(filename, period, prev_end, heat_qs),
-        next_url="/s/%s/trends?period=%s&end=%s%s" | format(filename, period, next_end, heat_qs),
+        prev_url="/s/%s/trends?period=%s&end=%s%s" | format(filename, period, prev_end, highlight_qs),
+        next_url="/s/%s/trends?period=%s&end=%s%s" | format(filename, period, next_end, highlight_qs),
         label=window_label,
         is_latest=is_latest,
-        latest_url="/s/%s/trends?period=%s%s" | format(filename, period, heat_qs),
+        latest_url="/s/%s/trends?period=%s%s" | format(filename, period, highlight_qs),
         label_width='w-48') }}
 </div>
 
@@ -37,7 +34,7 @@
     {% set tint = row.monthly_tints[i] %}
     {% set ym = sorted_months[i] %}
     {% set partial = in_progress is not none and i == in_progress %}
-    <td class="px-3 py-2.5 text-right tabular-nums {{ tint.cls }}{{ ' has-bar' if tint.bar }}"{% if tint.title %} title="{{ tint.title }}"{% endif %}>
+    <td class="px-3 py-2.5 text-right tabular-nums {{ tint.cls }}"{% if tint.title %} title="{{ tint.title }}"{% endif %}>
     {% if val != 0 %}
         <a class="{{ 'text-gray-400 dark:text-gray-500 italic' if partial else 'text-gray-700 dark:text-gray-100' }} hover:underline block"
            href="{{ url_for('transactions.index', year=ym[0], month=ym[1], category=row.category) }}"
@@ -48,7 +45,6 @@
     {% else %}
         <span class="text-gray-300">—</span>
     {% endif %}
-    {% if tint.bar %}<div class="trends-bar" style="width: calc((100% - 1.5rem) * {{ tint.bar / 100 }})" aria-hidden="true"></div>{% endif %}
     </td>
     {% endfor %}
 {% endmacro %}
@@ -104,8 +100,8 @@
     .trends-table tfoot tr:first-child > :first-child { background: #f9fafb; }
     .dark .trends-table tfoot tr:first-child > :first-child { background: #374151; }
 
-    /* Heat map shades (classes from trends._heat_tints). Unusual months: red
-       worse / green better, three strengths. */
+    /* Unusual-month shades (classes from trends._unusual_tints): red worse /
+       green better, three strengths. */
     .trends-table .heat-worse-1 { background: rgba(239,68,68,0.14); }
     .trends-table .heat-worse-2 { background: rgba(239,68,68,0.28); }
     .trends-table .heat-worse-3 { background: rgba(239,68,68,0.45); }
@@ -118,14 +114,6 @@
     .dark .trends-table .heat-better-1 { background: rgba(34,197,94,0.18); }
     .dark .trends-table .heat-better-2 { background: rgba(34,197,94,0.32); }
     .dark .trends-table .heat-better-3 { background: rgba(34,197,94,0.50); }
-    /* Size mode: a thin bar along the bottom of the cell, right-aligned
-       under the figure. */
-    .trends-table td.has-bar { position: relative; }
-    .trends-bar {
-        position: absolute; right: 0.75rem; bottom: 0.3rem; height: 3px;
-        max-width: calc(100% - 1.5rem); border-radius: 2px; background: #3987e5;
-    }
-    .dark .trends-bar { background: #6da7ec; }
 </style>
 <div class="overflow-x-auto">
 {# Client-side column sort (web/static/js/sortable.js) via the `sortable` class +

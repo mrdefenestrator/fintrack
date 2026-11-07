@@ -148,7 +148,7 @@ def index():
 
     # The month still in progress (only when the window ends today): its
     # figures are partial, so it's marked and never tinted as unusual.
-    heat_mode = "size" if request.args.get("heat") == "size" else "unusual"
+    highlight = request.args.get("highlight") != "off"
     current_key = (today.year, today.month)
     in_progress = (
         sorted_months.index(current_key)
@@ -159,12 +159,10 @@ def index():
     trends = []
     for cat, data in sorted(by_category.items(), key=lambda x: x[1]["total"]):
         monthly_values = [data["months"].get(m, 0) for m in sorted_months]
-        abs_values = [abs(v) for v in monthly_values]
-        max_abs = max(abs_values) if any(v > 0 for v in abs_values) else 1
-
-        heat = [v / max_abs for v in abs_values]
-        tints = _heat_tints(
-            heat_mode, monthly_values, heat, in_progress, is_income=data["total"] > 0
+        tints = (
+            _unusual_tints(monthly_values, in_progress, is_income=data["total"] > 0)
+            if highlight
+            else [_PLAIN] * len(monthly_values)
         )
 
         monthly_avg = data["total"] / num_months
@@ -191,7 +189,6 @@ def index():
                 "total": data["total"],
                 "monthly_avg": monthly_avg,
                 "monthly_values": monthly_values,
-                "monthly_heat": heat,
                 "monthly_tints": tints,
                 "pct_change": pct_change,
                 "budget_monthly": bgt_display,
@@ -243,8 +240,8 @@ def index():
         sorted_months=sorted_months,
         monthly_footer_values=monthly_footer_values,
         num_months=num_months,
-        heat_mode=heat_mode,
-        heat_qs="&heat=size" if heat_mode == "size" else "",
+        highlight=highlight,
+        highlight_qs="" if highlight else "&highlight=off",
         in_progress=in_progress,
         footer_pct_change=footer_pct_change,
         footer_budget=footer_budget,
@@ -293,68 +290,50 @@ def detail():
     )
 
 
-# "Unusual months" heat map: a month is shaded only when it differs from the
+# "Unusual months" highlight: a month is shaded only when it differs from the
 # category's usual (median completed month) by more than this share *and* by
 # at least this many dollars (so $36 -> $38 never flags).
 _UNUSUAL = 0.15
 _UNUSUAL_MIN_DOLLARS = 10.0
+_PLAIN = {"cls": "", "title": ""}
 
 
-def _heat_tints(
-    mode: str,
+def _unusual_tints(
     values: list[float],
-    heat: list[float],
     in_progress: int | None,
     *,
     is_income: bool,
 ) -> list[dict]:
-    """Per-month cell style for the Trends heat map: {cls, title, bar}.
+    """Per-month cell style for Trends' unusual-months highlight: {cls, title}.
 
     `cls` is a CSS class defined in trends_table.html (light and dark shades),
-    or "" for a plain cell; `bar` (Size mode) is a bar length in percent.
-
-    - "unusual" (default): months worse than the category's usual (its median
-      completed month) are red, better ones green, in three strengths — more
-      spending or less income is worse. Steady bills like rent stay plain. The
-      median keeps one spike from making every normal month look "below usual".
-    - "size": no shading; a thin bar under each figure, its length the month's
-      share of the row's largest month.
-
-    The month in progress is partial, so it is left plain in both modes.
+    or "" for a plain cell. Months worse than the category's usual (its median
+    completed month) are red, better ones green, in three strengths; more
+    spending or less income is worse. Steady bills like rent stay plain, and
+    the median keeps one spike from making every normal month look "below
+    usual". The month in progress is partial, so it is left plain and out of
+    "usual".
     """
     out = []
     done = sorted(abs(v) for i, v in enumerate(values) if i != in_progress)
     usual = statistics.median(done) if done else 0
-    plain = {"cls": "", "title": "", "bar": 0}
     for i, v in enumerate(values):
-        if i == in_progress:
-            out.append(plain)
-            continue
-        if mode == "size":
-            # A bar under the figure, its length the month's share of the
-            # row's largest month (from zero, so equal months read equal).
-            out.append(
-                {"cls": "", "title": "", "bar": round(heat[i] * 100) if v else 0}
-            )
-            continue
         size = abs(v)
-        if abs(size - usual) < _UNUSUAL_MIN_DOLLARS:
-            out.append(plain)
+        if i == in_progress or abs(size - usual) < _UNUSUAL_MIN_DOLLARS:
+            out.append(_PLAIN)
             continue
         if not usual:
             # Usually nothing here: any amount at all is a one-off.
-            good = is_income
             out.append(
                 {
-                    "cls": f"heat-{'better' if good else 'worse'}-2",
+                    "cls": f"heat-{'better' if is_income else 'worse'}-2",
                     "title": "One-off: usually nothing in this category",
-                    "bar": 0,
                 }
             )
             continue
         dev = (size - usual) / usual
         if abs(dev) <= _UNUSUAL:
-            out.append(plain)
+            out.append(_PLAIN)
             continue
         worse = (dev < 0) if is_income else (dev > 0)
         level = 1 if abs(dev) < 0.5 else 2 if abs(dev) < 1 else 3
@@ -363,7 +342,6 @@ def _heat_tints(
             {
                 "cls": f"heat-{'worse' if worse else 'better'}-{level}",
                 "title": f"{abs(dev) * 100:.0f}% {word} usual (${usual:,.0f}/mo)",
-                "bar": 0,
             }
         )
     return out

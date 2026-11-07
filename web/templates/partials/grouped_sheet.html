@@ -105,7 +105,7 @@ sheet-group-row {{ sheet.row_class() }}
 {# Placeholder row for a band with no rows to show. #}
 {% macro empty_row(span, message) %}
 <tr>
-    <td colspan="{{ span }}" class="px-1.5 py-2 text-center text-gray-500 dark:text-gray-400">{{ message }}</td>
+    <td colspan="{{ span }}" class="px-1.5 py-2 text-gray-500 dark:text-gray-400"><span class="sheet-empty-msg">{{ message }}</span></td>
 </tr>
 {% endmacro %}
 

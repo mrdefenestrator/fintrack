@@ -1,4 +1,5 @@
 import re
+import statistics
 from calendar import monthrange
 from collections import defaultdict
 from datetime import date, datetime
@@ -145,13 +146,24 @@ def index():
     num_months = max((end.year - start.year) * 12 + end.month - start.month + 1, 1)
     month_labels = [date(y, m, 1).strftime("%b") for y, m in sorted_months]
 
+    # The month still in progress (only when the window ends today): its
+    # figures are partial, so it's marked and never tinted as unusual.
+    highlight = request.args.get("highlight") != "off"
+    current_key = (today.year, today.month)
+    in_progress = (
+        sorted_months.index(current_key)
+        if is_latest and current_key in sorted_months
+        else None
+    )
+
     trends = []
     for cat, data in sorted(by_category.items(), key=lambda x: x[1]["total"]):
         monthly_values = [data["months"].get(m, 0) for m in sorted_months]
-        abs_values = [abs(v) for v in monthly_values]
-        max_abs = max(abs_values) if any(v > 0 for v in abs_values) else 1
-
-        heat = [v / max_abs for v in abs_values]
+        tints = (
+            _unusual_tints(monthly_values, in_progress, is_income=data["total"] > 0)
+            if highlight
+            else [_PLAIN] * len(monthly_values)
+        )
 
         monthly_avg = data["total"] / num_months
 
@@ -177,7 +189,7 @@ def index():
                 "total": data["total"],
                 "monthly_avg": monthly_avg,
                 "monthly_values": monthly_values,
-                "monthly_heat": heat,
+                "monthly_tints": tints,
                 "pct_change": pct_change,
                 "budget_monthly": bgt_display,
                 "budget_delta": budget_delta,
@@ -228,6 +240,9 @@ def index():
         sorted_months=sorted_months,
         monthly_footer_values=monthly_footer_values,
         num_months=num_months,
+        highlight=highlight,
+        highlight_qs="" if highlight else "&highlight=off",
+        in_progress=in_progress,
         footer_pct_change=footer_pct_change,
         footer_budget=footer_budget,
         footer_budget_delta=footer_budget_delta,
@@ -273,3 +288,60 @@ def detail():
         values=values,
         max_abs=max_abs,
     )
+
+
+# "Unusual months" highlight: a month is shaded only when it differs from the
+# category's usual (median completed month) by more than this share *and* by
+# at least this many dollars (so $36 -> $38 never flags).
+_UNUSUAL = 0.15
+_UNUSUAL_MIN_DOLLARS = 10.0
+_PLAIN = {"cls": "", "title": ""}
+
+
+def _unusual_tints(
+    values: list[float],
+    in_progress: int | None,
+    *,
+    is_income: bool,
+) -> list[dict]:
+    """Per-month cell style for Trends' unusual-months highlight: {cls, title}.
+
+    `cls` is a CSS class defined in trends_table.html (light and dark shades),
+    or "" for a plain cell. Months worse than the category's usual (its median
+    completed month) are red, better ones green, in three strengths; more
+    spending or less income is worse. Steady bills like rent stay plain, and
+    the median keeps one spike from making every normal month look "below
+    usual". The month in progress is partial, so it is left plain and out of
+    "usual".
+    """
+    out = []
+    done = sorted(abs(v) for i, v in enumerate(values) if i != in_progress)
+    usual = statistics.median(done) if done else 0
+    for i, v in enumerate(values):
+        size = abs(v)
+        if i == in_progress or abs(size - usual) < _UNUSUAL_MIN_DOLLARS:
+            out.append(_PLAIN)
+            continue
+        if not usual:
+            # Usually nothing here: any amount at all is a one-off.
+            out.append(
+                {
+                    "cls": f"heat-{'better' if is_income else 'worse'}-2",
+                    "title": "One-off: usually nothing in this category",
+                }
+            )
+            continue
+        dev = (size - usual) / usual
+        if abs(dev) <= _UNUSUAL:
+            out.append(_PLAIN)
+            continue
+        worse = (dev < 0) if is_income else (dev > 0)
+        level = 1 if abs(dev) < 0.5 else 2 if abs(dev) < 1 else 3
+        word = "above" if dev > 0 else "below"
+        out.append(
+            {
+                "cls": f"heat-{'worse' if worse else 'better'}-{level}",
+                "title": f"{abs(dev) * 100:.0f}% {word} usual (${usual:,.0f}/mo)",
+            }
+        )
+    return out

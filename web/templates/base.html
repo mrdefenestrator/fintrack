@@ -50,7 +50,7 @@
        sizes agree (desktop, iPad). #}
     <script>
         (function() {
-            if (!window.matchMedia('(display-mode: standalone)').matches) return;
+            if (!(window.navigator.standalone || window.matchMedia('(display-mode: standalone)').matches)) return;
             var root = document.documentElement;
             function fit() {
                 root.style.height = '';
@@ -207,13 +207,13 @@
             }
         }
 
-        /* Installed web app only (issue #104). Desktop browsers never match. */
-        @media (display-mode: standalone) {
-            /* An opaque, full-width sticky bar at the top edge is what iOS 26
-               uses as the status bar's color source (instead of its edge blur).
-               The body doesn't scroll, so sticky changes nothing about layout. */
-            #main-header { position: sticky; top: 0; }
-        }
+        /* An opaque, full-width sticky bar at the top edge is what iOS 26
+           uses as the status bar's color source instead of drawing its
+           top-edge blur over the header (issue #104). Not scoped to
+           `display-mode: standalone`: an installed iPhone app can report
+           false there. The body never scrolls, so sticky changes nothing
+           about layout anywhere. */
+        #main-header { position: sticky; top: 0; }
 
         /* Consistent row height for all tables (accounts, budget, assets) */
         table {
@@ -1003,7 +1003,7 @@
                 var hb = document.querySelector('[data-nav-toggle]'), hit = '-';
                 if (hb) { var b = hb.getBoundingClientRect(); var el = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2); hit = el ? (el.tagName + (el.id ? '#' + el.id : '') + (el.hasAttribute && el.closest('[data-nav-toggle]') ? ' (toggle ok)' : '')) : 'null'; }
                 var lines = [
-                    'standalone: ' + matchMedia('(display-mode: standalone)').matches + '  ua: ' + navigator.userAgent.replace(/^.*?(OS [\d_]+).*$/, '$1'),
+                    'standalone mq: ' + matchMedia('(display-mode: standalone)').matches + '  navigator.standalone: ' + navigator.standalone + '  ua: ' + navigator.userAgent.replace(/^.*?(OS [\d_]+).*$/, '$1'),
                     'statusbar meta: ' + (document.querySelector('meta[name=apple-mobile-web-app-status-bar-style]') || {}).content,
                     'screen: ' + screen.width + 'x' + screen.height + '  dpr ' + devicePixelRatio,
                     'inner: ' + innerWidth + 'x' + innerHeight + '  html client: ' + document.documentElement.clientWidth + 'x' + document.documentElement.clientHeight,

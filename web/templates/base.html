@@ -988,46 +988,6 @@
     <script src="{{ url_for('static', filename='js/ledger.js') }}"></script>
     <script src="{{ url_for('static', filename='js/sheet-scroll.js') }}"></script>
     <script src="{{ url_for('static', filename='js/shortcuts.js') }}"></script>
-    {# TEMPORARY device probe for issue #104 — remove before merge. Open any
-       page with ?probe=1 to show viewport/inset measurements; tap to close. #}
-    <script>
-        (function() {
-            if (!/[?&]probe=1/.test(location.search)) return;
-            function show() {
-                var t = document.createElement('div');
-                t.style.cssText = 'position:fixed;top:env(safe-area-inset-top);left:0;right:0;bottom:env(safe-area-inset-bottom);padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right);visibility:hidden;pointer-events:none';
-                document.body.appendChild(t);
-                var cs = getComputedStyle(t), tr = t.getBoundingClientRect();
-                function r(sel) { var e = document.querySelector(sel); if (!e) return '-'; var b = e.getBoundingClientRect(); return Math.round(b.top) + '..' + Math.round(b.bottom) + ' x ' + Math.round(b.left) + '..' + Math.round(b.right); }
-                var vv = window.visualViewport;
-                var hb = document.querySelector('[data-nav-toggle]'), hit = '-';
-                if (hb) { var b = hb.getBoundingClientRect(); var el = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2); hit = el ? (el.tagName + (el.id ? '#' + el.id : '') + (el.hasAttribute && el.closest('[data-nav-toggle]') ? ' (toggle ok)' : '')) : 'null'; }
-                var lines = [
-                    'standalone mq: ' + matchMedia('(display-mode: standalone)').matches + '  navigator.standalone: ' + navigator.standalone + '  ua: ' + navigator.userAgent.replace(/^.*?(OS [\d_]+).*$/, '$1'),
-                    'statusbar meta: ' + (document.querySelector('meta[name=apple-mobile-web-app-status-bar-style]') || {}).content,
-                    'screen: ' + screen.width + 'x' + screen.height + '  dpr ' + devicePixelRatio,
-                    'inner: ' + innerWidth + 'x' + innerHeight + '  html client: ' + document.documentElement.clientWidth + 'x' + document.documentElement.clientHeight,
-                    'html style height: ' + (document.documentElement.style.height || '(none)'),
-                    'visualViewport: ' + (vv ? Math.round(vv.width) + 'x' + Math.round(vv.height) + ' offTop ' + Math.round(vv.offsetTop) : '-'),
-                    'scrollY: ' + scrollY + '  scrollHeight: ' + document.documentElement.scrollHeight,
-                    'insets t/r/b/l: ' + Math.round(tr.top) + '/' + cs.paddingRight + '/' + Math.round(innerHeight - tr.bottom) + '/' + cs.paddingLeft,
-                    'header: ' + r('#main-header') + '  ' + getComputedStyle(document.getElementById('main-header')).position,
-                    'main: ' + r('main'),
-                    'frame: ' + r('.table-scroll-container'),
-                    'nav: ' + r('nav[data-nav-sidebar]'),
-                    'hamburger hit: ' + hit,
-                ];
-                t.remove();
-                var o = document.getElementById('probe-overlay') || document.createElement('pre');
-                o.id = 'probe-overlay';
-                o.style.cssText = 'position:fixed;left:8px;right:8px;top:30%;z-index:9999;background:#000;color:#0f0;font:11px/1.4 monospace;padding:8px;white-space:pre-wrap;border:1px solid #0f0';
-                o.textContent = lines.join('\n') + '\n(tap to close)';
-                o.onclick = function() { o.remove(); };
-                document.body.appendChild(o);
-            }
-            window.addEventListener('load', function() { setTimeout(show, 500); });
-        })();
-    </script>
 </body>
 
 </html>

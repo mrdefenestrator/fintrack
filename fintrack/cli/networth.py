@@ -23,6 +23,7 @@ from fintrack.core.filters import (
 from fintrack.core.formatting import (
     fmt_account_label,
     fmt_change_whole,
+    fmt_money,
     fmt_money_whole,
 )
 from fintrack.core.loader import load_finances_from_db

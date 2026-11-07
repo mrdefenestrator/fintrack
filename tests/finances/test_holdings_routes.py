@@ -398,6 +398,34 @@ def test_holdings_update_asset_value_and_qty(client, db_engine):
     assert entry["quantity"] == 2
 
 
+def test_holdings_loan_and_asset_edits_stamp_client_date(client, db_engine):
+    """Loan and asset value edits date their history point from the browser's
+    X-Local-Date header too (#107)."""
+    from datetime import date
+
+    from fintrack.accounts.balance_history import get_balance_history
+    from fintrack.networth.repository import add_asset_entry
+
+    with db_engine.connect() as conn:
+        add_asset_entry(conn, 1, {"kind": "debt", "name": "Loan", "balance": 1000})
+        aid = add_asset_entry(conn, 1, {"kind": "asset", "name": "Home", "value": 1})
+    loan_id = _asset_by_name(db_engine, "Loan")["id"]
+
+    for ref, field, value in ((loan_id, "balance", "900"), (aid, "value", "5")):
+        resp = client.post(
+            f"/s/finances/holdings/update/asset/{ref}",
+            data={"field": field, "value": value},
+            headers={"X-Local-Date": "2026-03-04"},
+        )
+        assert resp.status_code == 200
+    with db_engine.connect() as conn:
+        loan_points = get_balance_history(conn, loan_id)
+        home_points = get_balance_history(conn, aid)
+    stamped = date(2026, 3, 4)
+    assert [p["balance"] for p in loan_points if p["as_of"] == stamped] == [-900]
+    assert [p["balance"] for p in home_points if p["as_of"] == stamped] == [5]
+
+
 def test_holdings_update_debt_interest(client, db_engine):
     from fintrack.networth.repository import add_asset_entry, get_asset_entries
 

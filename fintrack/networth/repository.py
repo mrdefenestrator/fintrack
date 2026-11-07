@@ -6,16 +6,25 @@ dicts. The dict API keeps the historical positive amount-owed convention for
 a debt's `balance`; the stored loan_details.balance is signed (negative =
 owed) like every other balance, and the sign flips at this boundary.
 
+Every value change is a dated point in balance_history (issue #107): a loan's
+signed balance, or an asset's value (quantity x cached price for a non-USD
+unit, else its manual value). Adds and edits record a 'manual' point; a price
+refresh records a 'price' point for each asset held in that symbol
+(`record_price_points`).
+
 Debts no longer carry unit/quantity (docs/notes-schema-split.md D2): an add
 with a quantity folds it into the balance; on existing rows the fields are
 gone.
 """
 
+from datetime import date, datetime
+from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import Connection
+from sqlalchemy import Connection, insert, select
 from sqlalchemy.exc import IntegrityError
 
+from fintrack.accounts.balance_history import latest_point, record_balance
 from fintrack.core.coerce import to_date
 from fintrack.core.holdings import (
     delete_holding,
@@ -26,7 +35,9 @@ from fintrack.core.holdings import (
     swap_adjacent,
     update_holding,
 )
+from fintrack.core.models import asset_details, balance_history, holdings
 from fintrack.core.types import ASSET_GROUP_TYPES, AssetEntry
+from fintrack.networth.calculations import _entry_subtotal
 
 # Order of the merged asset/debt list behind the sort-order index API. Assets
 # precede loans to match the old single-table insertion order the index-based
@@ -122,6 +133,97 @@ def get_asset_entries(conn: Connection, snapshot_id: int) -> list[AssetEntry]:
     return [_row_to_asset_entry(r) for r in rows]
 
 
+def _holding_value(conn: Connection, row: dict[str, Any]) -> Decimal | None:
+    """The value a holding's history records: a loan's signed balance (None
+    when unset), or an asset's value at the cached price (never fetches)."""
+    if row["group_key"] == "loan":
+        return row.get("balance")
+    from fintrack.networth.prices import cached_rates
+
+    unit = row.get("unit") or "USD"
+    rates = cached_rates(conn, {unit}) if unit != "USD" else {}
+    value = _entry_subtotal(_row_to_asset_entry(row), rates)
+    return value.quantize(Decimal("0.01"))
+
+
+def _record_value(
+    conn: Connection,
+    snapshot_id: int,
+    holding_id: int,
+    *,
+    as_of: date | None,
+    previous: Decimal | None = None,
+) -> None:
+    """Record the holding's current value as a manual point, unless it is
+    unset or unchanged from `previous`."""
+    row = get_holding(conn, snapshot_id, holding_id)
+    value = _holding_value(conn, row) if row is not None else None
+    if value is None or value == previous:
+        return
+    record_balance(
+        conn, account_id=holding_id, balance=value, as_of=as_of, source="manual"
+    )
+
+
+def record_price_points(
+    conn: Connection, prices: dict[str, Decimal], *, today: date | None = None
+) -> None:
+    """Re-value every asset held in a refreshed symbol, in every snapshot (the
+    price cache is global): one 'price' point per holding per day, skipped
+    when the value didn't change."""
+    if not prices:
+        return
+    rows = conn.execute(
+        select(
+            asset_details.c.holding_id,
+            asset_details.c.unit,
+            asset_details.c.quantity,
+        ).where(asset_details.c.unit.in_(list(prices)))
+    ).all()
+    for holding_id, unit, quantity in rows:
+        qty = Decimal(str(quantity)) if quantity is not None else Decimal(1)
+        value = (qty * prices[unit]).quantize(Decimal("0.01"))
+        latest = latest_point(conn, holding_id)
+        if latest is not None and Decimal(str(latest["balance"])) == value:
+            continue
+        record_balance(
+            conn, account_id=holding_id, balance=value, as_of=today, source="price"
+        )
+
+
+def record_baselines(conn: Connection) -> list[int]:
+    """Give every loan and asset with no history a 'baseline' point at its
+    current value, dated its As Of (or today) — the starting point migration
+    e7f8a9b0c1d2 seeds, for holdings that bypass the repository (the legacy
+    and YAML imports). Doesn't commit or re-sync the holding rows: the caller
+    does both (the legacy import runs in one transaction so --dry-run can roll
+    back). Returns the holdings that got a point."""
+    has_history = select(balance_history.c.account_id).distinct()
+    rows = conn.execute(
+        select(holdings.c.id, holdings.c.snapshot_id).where(
+            holdings.c.group_key.in_(_ASSET_GROUPS),
+            holdings.c.id.not_in(has_history),
+        )
+    ).all()
+    today = datetime.now().astimezone().date()
+    recorded: list[int] = []
+    for holding_id, snapshot_id in rows:
+        row = get_holding(conn, snapshot_id, holding_id)
+        value = _holding_value(conn, row)
+        if value is None:
+            continue
+        conn.execute(
+            insert(balance_history).values(
+                account_id=holding_id,
+                as_of=row.get("as_of_date") or today,
+                balance=value,
+                source="baseline",
+            )
+        )
+        recorded.append(holding_id)
+    return recorded
+
+
 def _split_entry(entry: dict[str, Any], group: str) -> tuple[dict, dict]:
     """(spine, detail) column dicts for an insert, from a dict-API entry."""
     spine: dict[str, Any] = {"name": entry.get("name", "")}
@@ -152,13 +254,20 @@ def _split_entry(entry: dict[str, Any], group: str) -> tuple[dict, dict]:
 
 
 def add_asset_entry(
-    conn: Connection, snapshot_id: int, entry: dict[str, Any]
+    conn: Connection,
+    snapshot_id: int,
+    entry: dict[str, Any],
+    *,
+    today: date | None = None,
 ) -> int | None:
+    """Add an asset or debt and record its starting value, dated its As Of
+    or else `today` (the caller's local date; the server's when omitted)."""
     group = "loan" if entry.get("kind") == "debt" else "asset"
     spine, detail = _split_entry(entry, group)
     # IntegrityError propagates, matching the pre-split dict API.
     holding_id = insert_holding(conn, snapshot_id, group, spine, detail)
     conn.commit()
+    _record_value(conn, snapshot_id, holding_id, as_of=spine.get("as_of_date") or today)
     if entry.get("kind") == "asset":
         return holding_id
     return None
@@ -170,7 +279,13 @@ def update_asset_entry(
     holding_id: int,
     updates: dict[str, Any],
     delete_keys: list[str] | None = None,
+    *,
+    today: date | None = None,
 ) -> None:
+    """Update an asset or debt. A change to its value (a loan's balance; an
+    asset's value, quantity or unit) records a manual point dated the edit's
+    As Of, or else `today` (the caller's local date; the server's when
+    omitted)."""
     row = get_holding(conn, snapshot_id, holding_id)
     if row is None or row["group_key"] not in _ASSET_GROUPS:
         raise ValueError(f"Asset/debt id {holding_id} not found")
@@ -208,6 +323,13 @@ def update_asset_entry(
         conn, snapshot_id, holding_id, group, group, spine_updates, detail_values
     )
     conn.commit()
+    _record_value(
+        conn,
+        snapshot_id,
+        holding_id,
+        as_of=spine_updates.get("as_of_date") or today,
+        previous=_holding_value(conn, row),
+    )
 
 
 def delete_asset_entry(conn: Connection, snapshot_id: int, holding_id: int) -> None:

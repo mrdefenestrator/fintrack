@@ -946,7 +946,9 @@ def update(filename: str, source: str, ref: int):
                     conn, snapshot_id, ref, {field: value}, today=_client_today()
                 )
             else:
-                update_asset_entry(conn, snapshot_id, ref, {field: value})
+                update_asset_entry(
+                    conn, snapshot_id, ref, {field: value}, today=_client_today()
+                )
     except ValueError:
         return _render_tbody(snapshot_id, filename, error="Could not save"), 422
 
@@ -1069,10 +1071,15 @@ def add(filename: str, group: str):
             )
         elif group == "loan":
             add_asset_entry(
-                conn, snapshot_id, {"kind": "debt", "type": "loan", "name": "New loan"}
+                conn,
+                snapshot_id,
+                {"kind": "debt", "type": "loan", "name": "New loan"},
+                today=today,
             )
         else:
-            add_asset_entry(conn, snapshot_id, {"kind": "asset", "name": "New asset"})
+            add_asset_entry(
+                conn, snapshot_id, {"kind": "asset", "name": "New asset"}, today=today
+            )
     resp = current_app.make_response("")
     resp.headers["HX-Refresh"] = "true"
     return resp

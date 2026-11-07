@@ -120,6 +120,14 @@ def get_price_meta(conn, units: set[str]) -> dict[str, datetime]:
     }
 
 
+def cached_rates(conn, units: set[str]) -> dict[str, Decimal]:
+    """``{unit: price}`` straight from the cache, fresh or stale. Never
+    fetches (used to value an asset when it is edited)."""
+    if not units:
+        return {}
+    return {unit: price for unit, (price, _) in _read_cache(conn, units).items()}
+
+
 def refresh_units(conn, units: set[str]) -> dict[str, Decimal]:
     """Force-fetch prices for *units*, bypassing the staleness gate, and upsert
     the cache. Returns the freshly fetched ``{unit: price}`` (units whose fetch
@@ -181,6 +189,11 @@ def _write_cache(conn, prices: dict[str, Decimal]) -> None:
             {"unit": unit, "price": float(price), "ts": now},
         )
     conn.commit()
+    # Every fetched price re-values the assets held in it: a dated point in
+    # each one's balance history (issue #107).
+    from fintrack.networth.repository import record_price_points
+
+    record_price_points(conn, prices)
 
 
 # ---------------------------------------------------------------------------

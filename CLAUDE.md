@@ -113,7 +113,10 @@ degrades to a warning without it).
   owed on CCs and loans); it is a denormalized cache of the latest
   balance_history point — always write through `record_balance()`, never
   update the column directly. A credit card's `available` is **computed**
-  (`credit_limit + balance`), never stored.
+  (`credit_limit + balance`), never stored. Loans and assets keep dated
+  values there too (an asset's point is its value; price refreshes add
+  `'price'` points), so `balances_on()` gives any holding's value on a past
+  date — see DESIGN.md "Balance history".
 - A loan is its own group (`loan_details`), unifying what used to be
   account-type loans and debt entries; loans are created only as debt
   entries (`type` fixed to `loan`), never as accounts, and carry the

@@ -24,10 +24,11 @@ It only ever writes these demo snapshots; it never touches other snapshots.
 import hashlib
 import os
 from calendar import monthrange
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
-from fintrack.accounts.repository import add_account
+from fintrack.accounts.balance_history import record_balance
+from fintrack.accounts.repository import add_account, get_accounts
 from fintrack.budget.reconcile import link_transaction
 from fintrack.budget.repository import add_budget_entry, get_budget_entries
 from fintrack.core.db import get_engine, init_db
@@ -558,6 +559,9 @@ def seed_dense(conn) -> bool:
         entry["amount"] = Decimal(entry["amount"])
         add_budget_entry(conn, sid, entry)
 
+    # --- Older balance points (issue #106) ----------------------------------
+    _seed_dense_history(conn, sid, today)
+
     # --- Transactions (several months of realistic spending) ----------------
     _seed_dense_transactions(conn, checking, today)
 
@@ -850,6 +854,27 @@ def _seed_dense_transactions(conn, checking_id: int, today: date) -> None:
         conn, import_id=import_id, account_id=checking_id, transactions_data=all_txns
     )
     confirm_import(conn, import_id)
+
+
+# Balances six weeks back for a few liquid accounts, so Holdings' Liquid footer
+# has a "since last month" change to show. The rest have no point that old and
+# count at today's value (the tooltip says so).
+_DENSE_PAST_BALANCES = {
+    "Everyday Checking": "3180.20",
+    "Emergency Fund": "14500.00",
+    "Travel Rewards Card": "-1210.40",
+}
+
+
+def _seed_dense_history(conn, sid, today: date) -> None:
+    ids = {a["name"]: a["id"] for a in get_accounts(conn, sid)}
+    for name, balance in _DENSE_PAST_BALANCES.items():
+        record_balance(
+            conn,
+            account_id=ids[name],
+            balance=Decimal(balance),
+            as_of=today - timedelta(days=45),
+        )
 
 
 def _link_dense_budget(conn, sid) -> None:

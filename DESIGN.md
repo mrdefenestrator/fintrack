@@ -565,6 +565,12 @@ independently drag-reorderable; debt↔asset equity/LTV pairing
   footer shows **Liquid** and **Net worth** (`calculations.tiered_totals`).
   Liquidity is a cross-cutting property, so it is reported independently of the
   row grouping rather than read off one group's subtotal.
+  Liquid also notes its change since the same day last month (clamped to
+  month-end), from balance history (`balance_history.balances_on`); accounts
+  without a point that old count at today's value, and the tooltip says how many
+  had one. No note when no liquid account has a point that old. It shows in view
+  and edit mode alike. Net worth gets no such note yet: loans and assets have no
+  dated history, so it would only repeat the Liquid change.
 - **Credit-card Available is computed and read-only** = `credit_limit + balance`.
   balance is the canonical input (kept current by statement imports); editing the
   limit or balance recomputes Available and preserves the balance

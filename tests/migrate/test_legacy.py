@@ -328,10 +328,23 @@ def test_apply_full_migration(
         assert assets["Mortgage"]["secured_asset_ref"] == assets["House"]["id"]
         assert assets["Mortgage"]["statement_due_day_of_month"] is None
 
-        # balance_history: 1 statement row + 3 migration rows
+        # balance_history: 1 statement row + 3 migration rows, plus a baseline
+        # value for the loan and the asset (#107)
         history = conn.execute(select(models.balance_history)).mappings().all()
         sources = sorted(h["source"] for h in history)
-        assert sources == ["migration", "migration", "migration", "statement"]
+        assert sources == [
+            "baseline",
+            "baseline",
+            "migration",
+            "migration",
+            "migration",
+            "statement",
+        ]
+        baselines = {
+            h["account_id"]: h["balance"] for h in history if h["source"] == "baseline"
+        }
+        assert set(baselines) == {assets["Mortgage"]["id"], assets["House"]["id"]}
+        assert baselines[assets["Mortgage"]["id"]] == assets["Mortgage"]["balance"]
         stmt_row = next(h for h in history if h["source"] == "statement")
         assert stmt_row["account_id"] == checking["id"]
         assert stmt_row["balance"] == Decimal("987.65")

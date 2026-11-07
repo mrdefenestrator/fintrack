@@ -197,6 +197,13 @@ def import_yaml(conn: Connection, path: Path, name: str | None = None) -> int:
                 .values(secured_asset_ref=asset_id_map[ref])
             )
 
+    # Loans and assets start their value history at their imported value (#107).
+    from fintrack.accounts.balance_history import _sync_account_to_latest
+    from fintrack.networth.repository import record_baselines
+
+    for holding_id in record_baselines(conn):
+        _sync_account_to_latest(conn, holding_id)
+
     conn.commit()
     return snapshot_id
 

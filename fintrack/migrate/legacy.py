@@ -801,6 +801,11 @@ def apply_migration(
             )
             migration_rows += 1
 
+        # Loans and assets start their value history at today's value (#107).
+        from fintrack.networth.repository import record_baselines
+
+        baseline_rows = len(record_baselines(conn))
+
         # --- re-sync holding balances from latest history --------------------
         # Same cache-refresh the repositories use on every write: the holding's
         # detail balance + spine as_of follow its latest balance_history point.
@@ -823,6 +828,7 @@ def apply_migration(
             created_count,
             statement_rows,
             migration_rows,
+            baseline_rows,
             fp_mismatches,
             warnings,
             dry_run,
@@ -853,6 +859,7 @@ def _build_report(
     created_count: int,
     statement_rows: int,
     migration_rows: int,
+    baseline_rows: int,
     fp_mismatches: int,
     warnings: list[str],
     dry_run: bool,
@@ -890,7 +897,8 @@ def _build_report(
         f"  accounts merged: {merged_count}; created from spending: {created_count}"
     )
     lines.append(
-        f"  balance_history: {statement_rows} statement + {migration_rows} migration rows"
+        f"  balance_history: {statement_rows} statement + {migration_rows} migration"
+        f" + {baseline_rows} baseline rows"
     )
     lines.append(
         "  fingerprint self-check: "

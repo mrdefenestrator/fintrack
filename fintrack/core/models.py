@@ -485,8 +485,8 @@ balance_history = Table(
     "balance_history",
     metadata,
     Column("id", Integer, primary_key=True),
-    # Deliberately references any holding (not just importable groups) so
-    # asset value history can land here later.
+    # References any holding: cash and cards (balances), loans (signed
+    # balances) and assets (values) all keep their dated history here.
     Column(
         "account_id",
         Integer,
@@ -496,12 +496,15 @@ balance_history = Table(
     Column("as_of", Date, nullable=False),
     Column("balance", Numeric(14, 2), nullable=False),
     Column("available", Numeric(14, 2), nullable=True),
-    Column("source", String, nullable=False),  # statement | manual | migration
+    # statement | manual | migration | price (a priced asset re-valued by a
+    # price refresh) | baseline (the one-time starting point for loans and
+    # assets, migration e7f8a9b0c1d2)
+    Column("source", String, nullable=False),
     Column("import_id", Integer, ForeignKey("imports.id"), nullable=True),
     Column("note", String, nullable=True),
     Column("created_at", DateTime, default=_utcnow),
     CheckConstraint(
-        "source IN ('statement', 'manual', 'migration')",
+        "source IN ('statement', 'manual', 'migration', 'price', 'baseline')",
         name="ck_balance_history_source",
     ),
     UniqueConstraint("account_id", "as_of", "source", name="uq_balance_history_point"),

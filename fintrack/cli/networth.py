@@ -6,6 +6,7 @@ from datetime import datetime
 import click
 
 from fintrack.accounts import repository as repo_accounts
+from fintrack.accounts.balance_history import get_balance_history
 from fintrack.budget import repository as repo_budget
 from fintrack.cli.helpers import (
     drop_separator_rows,
@@ -22,6 +23,7 @@ from fintrack.core.filters import (
 from fintrack.core.formatting import (
     fmt_account_label,
     fmt_change_whole,
+    fmt_money,
     fmt_money_whole,
 )
 from fintrack.core.loader import load_finances_from_db
@@ -588,6 +590,21 @@ def _indexed_by_kind(all_entries: list, kind: str, index: int, label: str):
     return indexed[index]
 
 
+def _echo_value_history(
+    conn, holding_id: int, limit, label: str, *, owed: bool = False
+) -> None:
+    """Print a loan's or asset's dated values, oldest first. With `owed`, a
+    loan's stored signed balance is shown as the positive amount owed, like
+    the rest of the debts commands."""
+    points = get_balance_history(conn, holding_id, limit=limit)
+    if not points:
+        click.echo("No value history.")
+        return
+    sign = -1 if owed else 1
+    rows = [[p["as_of"], fmt_money(sign * p["balance"]), p["source"]] for p in points]
+    echo_table(rows, ["As of", label, "Source"], ("left", "right", "left"))
+
+
 @assets.command("add")
 @click.option("--name", required=True)
 @click.option("--value", type=float, required=True)
@@ -661,6 +678,18 @@ def assets_delete(cli, index, dry_run):
         except ValueError as e:
             raise click.ClickException(str(e))
     click.echo(f"Deleted asset at index {index}")
+
+
+@assets.command("history")
+@click.argument("index", type=int)
+@click.option("--limit", type=int, default=None)
+@pass_cli
+def assets_history(cli, index, limit):
+    """Show an asset's dated values, oldest first."""
+    with cli.connect() as conn:
+        _, data = _load(cli, conn)
+        _, entry = _indexed_by_kind(data.get("assets") or [], "asset", index, "Asset")
+        _echo_value_history(conn, entry["id"], limit, "Value")
 
 
 @click.group(invoke_without_command=True)
@@ -810,6 +839,18 @@ def debts_delete(cli, index, dry_run):
         except ValueError as e:
             raise click.ClickException(str(e))
     click.echo(f"Deleted debt at index {index}")
+
+
+@debts.command("history")
+@click.argument("index", type=int)
+@click.option("--limit", type=int, default=None)
+@pass_cli
+def debts_history(cli, index, limit):
+    """Show a debt's dated balances (amount owed), oldest first."""
+    with cli.connect() as conn:
+        _, data = _load(cli, conn)
+        _, entry = _indexed_by_kind(data.get("assets") or [], "debt", index, "Debt")
+        _echo_value_history(conn, entry["id"], limit, "Balance", owed=True)
 
 
 # ---------------------------------------------------------------------------

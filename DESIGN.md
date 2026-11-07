@@ -192,9 +192,10 @@ Single `MetaData` in `fintrack/core/models.py`.
   moves through), and a nullable `category` linking to the ledger taxonomy so
   projections don't double-count a budgeted expense against estimated
   category spend.
-- **balance_history** — the time series behind a holding's cached balance;
-  see below. Its `account_id` is a holding id and is not restricted to the
-  importable groups, leaving room for asset value history later.
+- **balance_history** — the dated value of every holding (cash and card
+  balances, signed loan balances, asset values) and the time series behind a
+  holding's cached balance; see below. Its `account_id` is a holding id in
+  any group.
 
 Money columns are `Numeric(14,2)`; date columns are real `Date` types.
 
@@ -329,26 +330,53 @@ fingerprint copies left by a past bug.
 
 ## Balance history
 
-Every balance write is a row in `balance_history`:
+Every value change of every holding is a row in `balance_history`, so any
+holding's value on a past date can be read back (#107):
 `source='statement'` (from a confirmed import carrying a ledger balance),
-`'manual'` (web edit-mode or `balance set`, optionally backdated), or
-`'migration'` (one-time legacy import). All writes go through one
-`record_balance()` helper (`fintrack/accounts/balance_history.py`):
+`'manual'` (web edit-mode, `balance set`, or a loan/asset add or edit,
+optionally backdated by its As Of), `'price'` (a price refresh re-valued a
+priced asset), `'baseline'` (the one-time starting point every loan and asset
+got when this shipped, migration `e7f8a9b0c1d2`, and that `migrate-legacy`
+gives the loans and assets it creates), or `'migration'` (one-time legacy
+import of account balances). All writes go through one `record_balance()`
+helper (`fintrack/accounts/balance_history.py`):
 
+- **What `balance` holds**: the signed balance for cash, cards and loans
+  (negative = owed); for an asset, its value — quantity × the cached price
+  for a non-USD unit, else quantity × the manual per-unit value — the same
+  amount the Holdings sheet shows. `fintrack/networth/repository.py` records a
+  point when a loan's balance or an asset's value, quantity or unit changes
+  (nothing when the value is unchanged). Writing a price into the price cache
+  (`prices._write_cache`, behind both the stale-price refresh on load and the
+  on-demand refresh control) calls `record_price_points()`, which records a
+  `'price'` point for every asset held in that symbol, in every snapshot (the
+  cache is global), skipping unchanged values.
 - **Upsert** on `UNIQUE (account_id, as_of, source)` — two statements covering
   the same as-of date collapse to the latest write; a manual edit and a
-  statement on the same day coexist.
-- **Re-sync**: the holding's detail `balance` and its spine `as_of_date` are a
-  denormalized cache of the latest history point ordered by
-  `(as_of DESC, id DESC)`. The history upsert and cache update are committed
-  together by `record_balance()`.
+  statement on the same day coexist. **Assets keep one point per day**
+  instead: their value has one source of truth, so a second write that day
+  updates the first. A price refresh keeps the day's existing source; a
+  manual edit marks it `'manual'`.
+- **Re-sync**: the holding's detail `balance` (assets have none) and its
+  spine `as_of_date` are a denormalized cache of the latest history point
+  ordered by `(as_of DESC, id DESC)`, ignoring `'price'` points — a price
+  refresh re-values an asset but says nothing about when the user last
+  checked it, so it doesn't move As Of. The history upsert and cache update
+  are committed together by `record_balance()`.
+- **Reading a past value**: `balances_on(conn, holding_ids, on)` returns each
+  holding's latest point dated on or before `on` (holdings with none are left
+  out). Values carry forward between points, so a month-end read is just
+  `balances_on(..., last_day_of_month)`. Loans are flat between edits — their
+  history is what the user recorded, not an amortization estimate.
 - **Reconciliation** (informational, non-blocking): on statement confirm, the
   expected balance (previous point + sum of transactions in between) is
   compared to the statement's; a mismatch beyond a half-cent tolerance is
   stored in `note` and surfaced as a badge in the UI.
 
 Holdings surfaces balance dates and staleness; balance-history inspection is
-also available from the CLI.
+also available from the CLI (`balance history` for accounts, `assets history`
+and `debts history` for assets and loans — debts shown as the positive amount
+owed, like the rest of the debts commands).
 
 ## Projections
 

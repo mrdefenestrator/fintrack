@@ -67,6 +67,15 @@
 .grouped-sheet th:first-child,
 .grouped-sheet td:first-child { padding-left: 0.625rem; }
 
+/* Empty-band message: left-aligned and pinned to the frame's left edge, so it
+   stays in view on a narrow screen where the colspan cell runs far past the
+   viewport (issue #104). Centering it put it off-screen on a phone. */
+.grouped-sheet .sheet-empty-msg {
+    display: inline-block;
+    position: sticky;
+    left: 0.625rem;
+}
+
 /* ---- Sticky actions column ----------------------------------------------------
    Edit mode only. Sticks to the right edge; data scrolls behind it. A uniform
    background (it is chrome, not data) keeps scrolled cells from showing through;

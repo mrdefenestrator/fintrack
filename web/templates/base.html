@@ -3,10 +3,10 @@
 
 <head>
     <meta charset="UTF-8">
-    {# viewport-fit=cover lets the standalone (black-translucent) web view fill
-       the whole screen. Without it iOS letterboxes the layout inside the safe
-       area, leaving a blank band above the app — most visible in landscape
-       (QA #1). The header is then padded past the notch via env() safe-area
+    {# viewport-fit=cover lets the standalone web view fill the whole screen.
+       Without it iOS letterboxes the layout inside the safe area, leaving a
+       blank band beside/above the app — most visible in landscape (QA #1). The
+       header and main are then padded past the notch via env() safe-area
        insets below. #}
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
     <meta name="theme-color" content="#1e40af">
@@ -19,7 +19,12 @@
     <link rel="manifest" href="{{ url_for('static', filename='manifest.webmanifest') }}">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    {# `default`, not `black-translucent` (issue #104): with a translucent status
+       bar, iOS 26 draws its top-edge blur over the header and nothing in CSS
+       turns it off, and the viewport comes out shorter than the screen (a bare
+       strip at the bottom). iOS reads this tag at install time, so an existing
+       home-screen app must be removed and re-added to pick up a change. #}
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="fintrack">
     <title>{% block title %}fintrack{% endblock %}</title>
 
@@ -34,6 +39,31 @@
             if (t === 'dark' || (t === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
                 document.documentElement.classList.add('dark');
             }
+        })();
+    </script>
+
+    {# Installed web app only (issue #104). iOS 26 can make the layout
+       viewport (`height: 100%`) taller than what's actually on screen, so the
+       document scrolls: the header can be pushed off the top and the footer
+       sits too high above the bottom edge. When that happens, pin the shell to
+       the visible height and undo any stray document scroll. No-op when the
+       sizes agree (desktop, iPad). #}
+    <script>
+        (function() {
+            if (!(window.navigator.standalone || window.matchMedia('(display-mode: standalone)').matches)) return;
+            var root = document.documentElement;
+            function fit() {
+                root.style.height = '';
+                var visible = window.innerHeight;
+                if (visible && root.clientHeight > visible) root.style.height = visible + 'px';
+                if (window.scrollY) window.scrollTo(0, 0);
+            }
+            fit();
+            window.addEventListener('resize', fit);
+            window.addEventListener('orientationchange', function() { setTimeout(fit, 300); });
+            document.addEventListener('DOMContentLoaded', fit);
+            window.addEventListener('load', fit);
+            window.addEventListener('scroll', function() { if (window.scrollY) window.scrollTo(0, 0); });
         })();
     </script>
 
@@ -164,25 +194,26 @@
                 padding-left: env(safe-area-inset-left);
                 padding-bottom: env(safe-area-inset-bottom);
             }
+            /* Every side keeps at least the 0.5rem gutter and grows to clear
+               the notch / Dynamic Island (landscape sides) and the home
+               indicator (bottom). There is deliberately no raw-env() override
+               for landscape: iPad has zero insets, so it collapsed the gutter
+               to nothing there (issue #104). */
             main {
                 padding-top: 0.5rem;
-                padding-bottom: 0.5rem;
+                padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
                 padding-left: max(0.5rem, env(safe-area-inset-left));
                 padding-right: max(0.5rem, env(safe-area-inset-right));
             }
-            /* In landscape the Dynamic Island produces a safe-area inset on
-               ONE side only — use the raw env() value (no min-0.5rem wrapper)
-               so the opposite side gets zero padding, not a forced 0.5rem.
-               Scoped to standalone (PWA) so desktop browsers — which are also
-               landscape but have zero insets — keep the max(0.5rem, …) side
-               padding from the block above instead of collapsing it to 0. */
-            @media (orientation: landscape) and (display-mode: standalone) {
-                main {
-                    padding-left: env(safe-area-inset-left);
-                    padding-right: env(safe-area-inset-right);
-                }
-            }
         }
+
+        /* An opaque, full-width sticky bar at the top edge is what iOS 26
+           uses as the status bar's color source instead of drawing its
+           top-edge blur over the header (issue #104). Not scoped to
+           `display-mode: standalone`: an installed iPhone app can report
+           false there. The body never scrolls, so sticky changes nothing
+           about layout anywhere. */
+        #main-header { position: sticky; top: 0; }
 
         /* Consistent row height for all tables (accounts, budget, assets) */
         table {

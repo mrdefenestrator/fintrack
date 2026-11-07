@@ -10,6 +10,7 @@ from tabulate import tabulate
 
 from fintrack.core.config import CATEGORIES_CONFIG
 from fintrack.core.db import get_engine, init_db
+from fintrack.core.formatting import fmt_money
 from fintrack.ledger.repository.categories import seed_categories
 from fintrack.snapshots.repository import get_snapshot_id, list_snapshots
 
@@ -104,3 +105,15 @@ def sort_options(f):
     f = click.option("--sort-dir", type=click.Choice(["asc", "desc"]), default="asc")(f)
     f = click.option("--sort", "sort_key", default=None, help="Field to sort by")(f)
     return f
+
+
+def plain_money(x) -> str:
+    """Money without the table padding: $1,234.00 / ($1,234.00)."""
+    return fmt_money(x).strip()
+
+
+def signed_money(x) -> str:
+    """A change in money: +$1,234.00 / -$1,234.00 / $0.00."""
+    if x == 0:
+        return "$0.00"
+    return f"{'+' if x > 0 else '-'}${abs(x):,.2f}"

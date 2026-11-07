@@ -1,6 +1,7 @@
 """Display formatting for amounts, quantities, labels, dates."""
 
 import calendar
+from decimal import ROUND_HALF_UP, Decimal
 
 
 def fmt_money(x: float) -> str:
@@ -13,6 +14,27 @@ def fmt_money(x: float) -> str:
     neg = f"(${abs(x):,.2f})"
     # Pad positive with trailing spaces to match negative length so right-aligned columns align
     return pos + " " * (len(neg) - len(pos))
+
+
+def _whole(x) -> Decimal:
+    return Decimal(str(x)).quantize(Decimal(1), rounding=ROUND_HALF_UP)
+
+
+def fmt_money_whole(x) -> str:
+    """Whole dollars for at-a-glance figures: $1,235 / ($1,235) / $0."""
+    n = _whole(x)
+    if n == 0:
+        return "$0"
+    return f"(${abs(n):,})" if n < 0 else f"${n:,}"
+
+
+def fmt_change_whole(x) -> str:
+    """A change in whole dollars with a direction arrow: ▲ $1,235 / ▼ $1,235;
+    "No change" when it rounds to zero."""
+    n = _whole(x)
+    if n == 0:
+        return "No change"
+    return f"{'▲' if n > 0 else '▼'} ${abs(n):,}"
 
 
 def fmt_qty(x: float | None) -> str:

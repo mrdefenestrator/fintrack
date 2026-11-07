@@ -1,4 +1,4 @@
-"""Projections page: headline summary plus an accounts × months grid.
+"""Projections page: a one-line summary plus an accounts × months grid.
 
 Finances-style view (explicit filename argument); horizon, estimator, and the
 grid view are query params (?months=N&estimate=1&view=change) so states are

@@ -4,7 +4,7 @@ import pytest
 
 pytestmark = pytest.mark.e2e
 
-_CARDS = ("net_worth_liquid", "projection_warnings")
+_CARDS = ("net_worth_liquid", "cash_flow", "projection_warnings")
 
 
 def test_snapshot_root_lands_on_overview(page, flask_server):
@@ -26,6 +26,18 @@ def test_overview_is_first_in_the_nav(page, flask_server):
     page.wait_for_url("**/s/test_finances")
     active = page.locator("[data-nav-sidebar] a[aria-current='page']")
     assert active.inner_text().strip() == "Overview"
+
+
+def test_cash_flow_card_links_to_trends(page, flask_server):
+    """The Cash flow card (#99) opens Trends on Trailing 12, whose footer
+    has the per-month figures."""
+    page.goto(f"{flask_server}/s/test_finances")
+    card = page.locator("[data-overview-card='cash_flow']")
+    assert "saved in " in card.locator("[data-headline]").inner_text()
+    card.locator("[data-figure='savings-rate']").click()
+    page.wait_for_url("**/trends?period=trailing12")
+    foot = page.locator("table tfoot")
+    assert foot.get_by_text("Savings rate", exact=True).is_visible()
 
 
 def test_net_worth_card_links_to_projections(page, flask_server):
@@ -85,7 +97,8 @@ def test_overview_on_wide_screens_uses_columns(page, flask_server):
     boxes = [
         page.locator(f"[data-overview-card='{key}']").bounding_box() for key in _CARDS
     ]
-    assert len({round(b["x"]) for b in boxes}) == 2  # side by side
+    # Three cards fill the three xl columns, side by side.
+    assert len({round(b["x"]) for b in boxes}) == len(_CARDS)
     assert len({round(b["y"]) for b in boxes}) == 1
 
 

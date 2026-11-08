@@ -11,7 +11,10 @@ from datetime import date, datetime
 from decimal import Decimal
 
 import pytest
+from sqlalchemy import insert
 
+from fintrack.budget.repository import add_budget_entry
+from fintrack.core.models import merchant_cache
 from fintrack.ledger.repository.accounts import add_account
 from fintrack.ledger.repository.imports import (
     confirm_import,
@@ -584,8 +587,8 @@ def partial_history(conn):
 
 
 def _avg_and_change(html):
-    """The Avg/mo and Change cells of the Total footer row."""
-    foot = html.split("<tfoot>")[-1].split("</tr>")[0]
+    """The Avg/mo and Change cells of the Net (kept) footer row."""
+    foot = html.split('data-cash-flow="net"')[-1].split("</tr>")[0]
     cells = re.findall(r"<td[^>]*>(.*?)</td>", foot, re.DOTALL)
     text = [re.sub(r"<[^>]+>|\s+", " ", c).strip() for c in cells]
     return text[-4], text[-1]
@@ -600,3 +603,96 @@ def test_trends_avg_ignores_empty_window_months_and_month_in_progress(
     assert avg == "$1,800"
     assert "0%" in change
     assert "Average over the 3 completed months with data" in html
+
+
+@pytest.fixture
+def cash_flow_history(conn):
+    """Two completed months of income, spending, and a card payment, plus a
+    budget, in the ledger snapshot."""
+    snapshot_id = get_snapshot_id(conn, "ledger")
+    acct_id = add_account(
+        conn,
+        name="Flow Checking",
+        institution="Test Bank",
+        account_type="checking",
+        snapshot_id=snapshot_id,
+    )
+    imp_id = create_import(
+        conn, account_id=acct_id, filename="flow.ofx", file_hash="flowhash"
+    )
+    confirm_import(conn, imp_id)
+    today = datetime.now().astimezone().date()
+    rows = []
+    for back in (2, 1):
+        y, m = today.year, today.month - back
+        if m <= 0:
+            m += 12
+            y -= 1
+        rows += [
+            (date(y, m, 1), "4000.00", "PAYROLL", f"p{back}"),
+            (date(y, m, 3), "-1000.00", "LANDLORD", f"l{back}"),
+            (date(y, m, 20), "-500.00", "CARD AUTOPAY", f"c{back}"),
+        ]
+    insert_transactions(
+        conn,
+        import_id=imp_id,
+        account_id=acct_id,
+        transactions_data=[
+            {
+                "date": d,
+                "amount": Decimal(amt),
+                "raw_description": merchant,
+                "normalized_merchant": merchant,
+                "fingerprint": fp,
+            }
+            for d, amt, merchant, fp in rows
+        ],
+    )
+    conn.execute(
+        insert(merchant_cache),
+        [
+            {"merchant_name": "PAYROLL", "category": "Income", "source": "manual"},
+            {"merchant_name": "LANDLORD", "category": "Housing", "source": "manual"},
+            {
+                "merchant_name": "CARD AUTOPAY",
+                "category": "Transfer",
+                "source": "manual",
+            },
+        ],
+    )
+    conn.commit()
+    add_budget_entry(
+        conn,
+        snapshot_id,
+        {
+            "kind": "income",
+            "description": "Pay",
+            "amount": 3000,
+            "recurrence": "monthly",
+        },
+    )
+
+
+def _footer_row(html, key):
+    row = html.split(f'data-cash-flow="{key}"')[1].split("</tr>")[0]
+    cells = re.findall(r"<td[^>]*>(.*?)</td>", row, re.DOTALL)
+    return [re.sub(r"<[^>]+>|\s+", " ", c).strip() for c in cells]
+
+
+def test_trends_cash_flow_footer_rows(client, cash_flow_history):
+    """Income, Spending, Net (kept), Savings rate, and Budgeted net (#99);
+    the card payment is Transfer, so it isn't spending."""
+    html = client.get("/s/ledger/trends?period=trailing12").data.decode()
+    income = _footer_row(html, "income")
+    spending = _footer_row(html, "spending")
+    rate = _footer_row(html, "rate")
+    planned = _footer_row(html, "budgeted-net")
+    assert income[0] == "Income"
+    assert income[1:3] == ["$4,000", "$4,000"]
+    assert spending[1:3] == ["$1,000", "$1,000"]
+    assert rate[1:3] == ["75%", "75%"]
+    assert planned[1:3] == ["$3,000", "$3,000"]
+    # Avg/mo column follows the months.
+    assert income[3] == "$4,000"
+    assert rate[3] == "75%"
+    assert "Net (kept)" in _footer_row(html, "net")[0]

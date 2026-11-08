@@ -97,6 +97,43 @@
 {{ delta_cell(row.delta_words, row.budget_delta) }}
 {% endmacro %}
 
+{# Cash-flow footer rows (#99, fintrack.insights.cash_flow): one cell per
+   month from cash_flow.months[field]. `money` cells show a dollar amount,
+   otherwise a % (savings rate). `signed` colors by sign (net, rate); plain
+   rows stay gray. The month in progress is gray italic, like the body. #}
+{% macro cash_flow_cells(field, money=true, signed=true) %}
+    {% for m in cash_flow.months %}
+    {% set val = m[field] %}
+    {% set partial = in_progress is not none and loop.index0 == in_progress %}
+    <td class="px-3 py-2 text-right tabular-nums {{ 'text-gray-400 dark:text-gray-500 italic' if partial else ('text-red-600' if signed and val is not none and val < 0 else 'text-green-600' if signed and val is not none and val > 0 else 'text-gray-600 dark:text-gray-300') }}"{% if partial %} title="Month in progress — partial"{% endif %}>
+    {% if val is none or (money and val == 0) %}<span class="text-gray-300 dark:text-gray-600">—</span>
+    {% elif money %}{{ '-' if signed and val < 0 }}${{ val|abs|money(0) }}
+    {% else %}{{ '%.0f'|format(val) }}%
+    {% endif %}
+    </td>
+    {% endfor %}
+{% endmacro %}
+
+{% macro cash_flow_avg(val, money=true, signed=true) %}
+<td class="px-4 py-2 text-right tabular-nums {{ ('text-red-600' if val is not none and val < 0 else 'text-green-600') if signed else 'text-gray-500 dark:text-gray-400' }}">
+    {% if val is none %}<span class="text-gray-300 dark:text-gray-600">—</span>
+    {% elif money %}{{ '-' if signed and val < 0 }}${{ val|abs|money(0) }}
+    {% else %}{{ '%.0f'|format(val) }}%
+    {% endif %}
+</td>
+{% endmacro %}
+
+{% macro blank_cells(n) %}{% for _ in range(n) %}<td class="px-4 py-2 text-right"><span class="text-gray-300 dark:text-gray-600">—</span></td>{% endfor %}{% endmacro %}
+
+{% macro cash_flow_row(key, label, title, field, money=true, signed=true, cls="") %}
+<tr class="cash-flow-row {{ cls }} bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-300" data-cash-flow="{{ key }}">
+    <td class="px-4 py-2 font-medium" title="{{ title }}">{{ label }}</td>
+    {{ cash_flow_cells(field, money, signed) }}
+    {{ cash_flow_avg(cash_flow.average[field], money, signed) }}
+    {{ blank_cells(3) }}
+</tr>
+{% endmacro %}
+
 
 <style>
     /* Pin the Category column so it stays put while months scroll sideways
@@ -107,8 +144,8 @@
         background: #fff; box-shadow: inset -1px 0 0 #e5e7eb;
     }
     .dark .trends-table tr > :first-child:not([colspan]) { background: #1f2937; box-shadow: inset -1px 0 0 #374151; }
-    .trends-table tfoot tr:first-child > :first-child { background: #f9fafb; }
-    .dark .trends-table tfoot tr:first-child > :first-child { background: #374151; }
+    .trends-table tfoot tr.cash-flow-row > :first-child { background: #f9fafb; }
+    .dark .trends-table tfoot tr.cash-flow-row > :first-child { background: #374151; }
 
     /* Unusual-month shades (classes from trends._unusual_tints): red worse /
        green better, three strengths. */
@@ -165,8 +202,12 @@
         {% endfor %}
     </tbody>
     <tfoot>
-        <tr class="font-semibold border-t-2 border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700">
-            <td class="px-4 py-3 text-gray-600 dark:text-gray-300">Total</td>
+        {# Cash flow (#99): income, spending, what was kept, and the share kept.
+           Net (kept) is the sum of every row above, Transfer excluded. #}
+        {{ cash_flow_row('income', 'Income', 'The Income category', 'income', signed=false, cls='border-t-2 border-gray-200 dark:border-gray-600') }}
+        {{ cash_flow_row('spending', 'Spending', 'Every other category except Transfer; refunds count against it', 'spending', signed=false) }}
+        <tr class="cash-flow-row font-semibold bg-gray-50 dark:bg-gray-700" data-cash-flow="net">
+            <td class="px-4 py-3 text-gray-600 dark:text-gray-300" title="Income minus spending: the total of every category above">Net (kept)</td>
             {% for val in monthly_footer_values %}
             <td class="px-3 py-3 text-right tabular-nums {{ 'text-red-600' if val < 0 else 'text-green-600' if val > 0 else 'text-gray-300' }}">
                 {% if val == 0 %}—
@@ -185,6 +226,8 @@
             {{ delta_cell(footer_delta_words, footer_budget_delta, "px-4 py-3") }}
             {{ change_cell(footer_pct_change, grand_total < 0, "px-4 py-3") }}
         </tr>
+        {{ cash_flow_row('rate', 'Savings rate', 'Net ÷ income; blank when there is no income. Avg/mo is average net ÷ average income', 'rate', money=false) }}
+        {{ cash_flow_row('budgeted-net', 'Budgeted net', 'Planned income minus planned expenses in that month, from the Budget sheet (Transfer left out)', 'budgeted_net') }}
         {% if trends_excluded %}
         <tr>
             <td colspan="{{ month_labels|length + 5 }}" class="px-4 pt-5 pb-1 text-xs text-gray-400 dark:text-gray-500 uppercase tracking-wide">

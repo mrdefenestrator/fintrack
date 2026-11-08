@@ -7,6 +7,7 @@ from datetime import date, datetime
 from flask import Blueprint, current_app, g, render_template, request
 
 from fintrack.budget.repository import budgeted_monthly_by_category, get_budget_entries
+from fintrack.insights.cash_flow import compute_cash_flow
 from fintrack.ledger.repository.aggregations import get_monthly_totals_range
 from fintrack.ledger.trends import averaging_months, monthly_average, pct_change
 from web.routes.common import snapshot_scoped
@@ -226,6 +227,14 @@ def index():
         else None
     )
 
+    # Income / Spending / Savings rate / Budgeted net footer rows (#99).
+    cash_flow = compute_cash_flow(
+        monthly_data,
+        sorted_months,
+        current_key if in_progress is not None else None,
+        budget,
+    )
+
     template = (
         "partials/trends_table.html"
         if request.headers.get("HX-Request")
@@ -250,6 +259,7 @@ def index():
         footer_pct_change=footer_pct_change,
         footer_budget=footer_budget,
         footer_budget_delta=footer_budget_delta,
+        cash_flow=cash_flow,
         prev_end=prev_end,
         next_end=next_end,
         anchor_end=anchor_end_param,

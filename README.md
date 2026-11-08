@@ -74,7 +74,7 @@ uv run python fintrack.py balance set "Wallet" 42.50              # manual balan
 uv run python fintrack.py balance history "Chase Checking"
 uv run python fintrack.py merchants list
 uv run python fintrack.py report monthly
-uv run python fintrack.py report trends
+uv run python fintrack.py report trends                           # + monthly cash flow
 uv run python fintrack.py budget
 uv run python fintrack.py assets
 uv run python fintrack.py funding

@@ -173,6 +173,10 @@ degrades to a warning without it).
   the `status` CLI command (its text version); add a card by appending its key
   there plus `web/templates/overview/cards/<key>.html`. Projections keeps only a
   one-line summary above its grid. See DESIGN.md "Overview".
+- Cash flow (income, spending, net kept, savings rate, budgeted net) has one
+  calculation, `fintrack/insights/cash_flow.py`, used by the Trends footer, the
+  Overview card, `report trends`, and `status`. Income is the Income category;
+  spending is every other category except Transfer (refunds lower spending).
 - Core product goals the UI serves: current liquid holdings, net worth,
   budgeting, spending tracking, deviation from budget, and (eventually)
   net-worth projections.

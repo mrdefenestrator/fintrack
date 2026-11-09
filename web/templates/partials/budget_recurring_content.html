@@ -1,0 +1,141 @@
+{# Budget vs Actual's Recurring view (issue #100): every merchant that charges
+   (or pays) on a steady cadence for a steady amount over the last 13 months,
+   and how it sits in the budget — not in budget, not linked to the entry that
+   looks like it, covered by a variable category line, or in budget — plus any
+   recent price change. Detection is local (fintrack/budget/recurring.py).
+   In edit mode each row's actions cell offers + (add a pre-filled budget
+   entry and link the series) or a chain (link it to the entry that looks like
+   it), and × ("not recurring": stop showing it). Actions post to this view's own query
+   string so its filters survive the re-render.
+   An unbanded grouped sheet like the month view; columns come from
+   RECURRING_SHEET (web/routes/budget.py) and cells map by column key. #}
+{% import "partials/sheet.html" as sheet %}
+{% import "partials/grouped_sheet.html" as gs %}
+{% import "partials/filter_controls.html" as fc %}
+{% import "partials/sheet_filter_bar.html" as fb %}
+{% import "partials/budget_actual_views.html" as views %}
+{% set _url = url_for('budget.actual_view', filename=filename) %}
+{% set _badge = {
+    'not_budgeted': 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300',
+    'unlinked': 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300',
+    'covered': 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300',
+    'linked': 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300',
+} %}
+
+{% set kind_opts = [] %}
+{% for k in budget_kinds %}{% set _ = kind_opts.append({'value': k, 'display': k | capitalize, 'checked': k in include_kinds}) %}{% endfor %}
+{% set status_opts = [] %}
+{% for s, label in recurring_statuses.items() %}{% set _ = status_opts.append({'value': s, 'display': label, 'checked': s in include_statuses}) %}{% endfor %}
+{% set _active = (include_kinds | length) + (include_statuses | length) %}
+{% set _reset = "%s?view=recurring%s" | format(_url, '&edit=1' if edit_mode else '') %}
+
+<div class="shrink-0 mb-2 flex flex-wrap items-center gap-1.5 text-xs">
+    {{ views.view_toggle('recurring', filename, edit_mode) }}
+    {% if not_budgeted_count %}<span data-recurring-unbudgeted class="px-1.5 py-0.5 rounded {{ _badge['not_budgeted'] }}">{{ not_budgeted_count }} not in budget</span>{% endif %}
+    {% if price_change_count %}<span data-recurring-changed class="px-1.5 py-0.5 rounded {{ _badge['unlinked'] }}">{{ price_change_count }} price change{{ 's' if price_change_count != 1 }}</span>{% endif %}
+    <span class="text-gray-500 dark:text-gray-400">Last 13 months</span>
+</div>
+
+{% call fb.filter_bar(active_count=_active, reset_url=_reset) %}
+    <input type="hidden" name="view" value="recurring">
+    {% if edit_mode %}<input type="hidden" name="edit" value="1">{% endif %}
+    {{ fc.multi_select('kind', 'Kind', kind_opts, _url) }}
+    {{ fc.multi_select('status', 'Status', status_opts, _url) }}
+{% endcall %}
+
+{% set r_sheet = flat_sheets.recurring %}
+<div class="table-scroll-container rounded-b-lg border-l border-b border-r border-gray-300 dark:border-gray-600 shadow-sm" data-sheet-scroll>
+<table id="recurring-table" class="grouped-sheet w-full text-sm border-collapse bg-white dark:bg-gray-800" style="white-space:nowrap">
+    {{ gs.flat_header(r_sheet, edit_mode) }}
+    <tbody {{ gs.group_attrs(r_sheet) }}>
+        {% for c in recurring %}
+        {% set p = c.pattern %}
+        {% set _vals = {'merchant': c.merchant, 'kind': c.kind} %}
+        <tr class="{{ gs.row_class() }}" data-recurring="{{ c.merchant }}" data-recurring-kind="{{ c.kind }}" data-status="{{ c.status }}">
+            {% for key in r_sheet.col_keys %}
+            {% if key == 'merchant' %}
+            <td class="{{ sheet.cell_class() }}">
+                <a class="hover:underline" href="{{ url_for('transactions.index', filename=filename, search=c.merchant, all_months='true') }}" title="This merchant's transactions">{{ sheet.clip(c.merchant, '16rem') }}</a>
+                {% if c.kind == 'income' %}<span class="ml-1 text-xs text-gray-400 dark:text-gray-500">income</span>{% endif %}
+            </td>
+            {% elif key == 'category' %}
+            <td class="{{ sheet.cell_class(extra='text-gray-500 dark:text-gray-400') }}">{{ c.category or '—' }}</td>
+            {% elif key == 'amount' %}
+            <td class="{{ sheet.cell_class('text-right tabular-nums', sheet.neg(c.amount < 0)) }}" data-sort-value="{{ c.amount }}">{{ '-' if c.amount < 0 }}${{ c.amount | abs | money }}</td>
+            {% elif key == 'every' %}
+            <td class="{{ sheet.cell_class() }}" data-sort-value="{{ '%07.2f' | format(c.cadence.days) }}">{{ recurring_every[c.cadence.key] }}</td>
+            {% elif key == 'count' %}
+            <td class="{{ sheet.cell_class('text-right tabular-nums') }}">{{ p.count }}</td>
+            {% elif key == 'last' %}
+            <td class="{{ sheet.cell_class(extra='tabular-nums') }}">{{ p.last_date }}</td>
+            {% elif key == 'next' %}
+            <td class="{{ sheet.cell_class(extra='tabular-nums text-gray-500 dark:text-gray-400') }}">{{ p.next_date }}</td>
+            {% elif key == 'budget' %}
+            <td class="{{ sheet.cell_class() }}">
+                <span class="px-1.5 py-0.5 rounded text-xs {{ _badge[c.status] }}">{{ recurring_statuses[c.status] }}</span>
+                {% if c.entry_description %}<span class="ml-1 text-gray-500 dark:text-gray-400">{{ sheet.clip(c.entry_description, '12rem') }}</span>{% endif %}
+            </td>
+            {% elif key == 'change' %}
+            <td class="{{ sheet.cell_class('tabular-nums') }}">
+                {% if c.price_changed %}<span data-price-change>${{ p.previous_amount | money }} → ${{ p.amount | money }} <span class="text-gray-500 dark:text-gray-400">since {{ p.price_change_since.strftime('%b %-d') }}</span></span>{% else %}—{% endif %}
+            </td>
+            {% endif %}
+            {% endfor %}
+            {% if edit_mode %}
+            {# Two icons, like the shared actions cell: the row's primary
+               action (+ add to budget, or link to the entry that looks like
+               it; a blank slot otherwise, so × lines up) and × not recurring. #}
+            <td class="table-actions-cell px-1.5 py-0.5 border-r border-gray-100 dark:border-gray-700 text-center align-middle">
+                <span class="table-actions-inner">
+                {% if c.status == 'not_budgeted' %}
+                {% set _t = 'Add to budget: a %s %s of $%s, and link these transactions' | format(c.cadence.recurrence, c.kind, p.amount | money) %}
+                <button type="button" data-recurring-add
+                        hx-post="{{ url_for('budget.recurring_add', filename=filename) }}?{{ self_query }}"
+                        hx-vals='{{ _vals | tojson }}' hx-target="#content"
+                        title="{{ _t }}" aria-label="{{ _t }}"
+                        class="table-action-btn text-blue-600 dark:text-blue-400 shrink-0 hover:bg-blue-50 dark:hover:bg-blue-900/30">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-width="2" d="M12 5v14M5 12h14" /></svg>
+                </button>
+                {% elif c.status == 'unlinked' %}
+                {% set _t = 'Link these transactions to %s' | format(c.entry_description) %}
+                <button type="button" data-recurring-link
+                        hx-post="{{ url_for('budget.recurring_link', filename=filename) }}?{{ self_query }}"
+                        hx-vals='{{ {'merchant': c.merchant, 'kind': c.kind, 'budget_entry_ref': c.entry_ref} | tojson }}' hx-target="#content"
+                        title="{{ _t }}" aria-label="{{ _t }}"
+                        class="table-action-btn text-blue-600 dark:text-blue-400 shrink-0 hover:bg-blue-50 dark:hover:bg-blue-900/30">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14a4 4 0 005.66 0l3-3a4 4 0 00-5.66-5.66l-1 1M14 10a4 4 0 00-5.66 0l-3 3a4 4 0 005.66 5.66l1-1" /></svg>
+                </button>
+                {% else %}
+                <span class="table-action-btn shrink-0" aria-hidden="true"></span>
+                {% endif %}
+                {% set _t = 'Not recurring: stop showing %s' | format(c.merchant) %}
+                <button type="button" data-recurring-dismiss
+                        hx-post="{{ url_for('budget.recurring_dismiss', filename=filename) }}?{{ self_query }}"
+                        hx-vals='{{ _vals | tojson }}' hx-target="#content"
+                        title="{{ _t }}" aria-label="{{ _t }}"
+                        class="table-action-btn text-gray-500 dark:text-gray-400 shrink-0 hover:text-gray-800 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-width="2" d="M6 6l12 12M18 6L6 18" /></svg>
+                </button>
+                </span>
+            </td>
+            {% endif %}
+        </tr>
+        {% else %}
+        <tr>
+            <td colspan="{{ r_sheet.ncols + (1 if edit_mode else 0) }}" class="px-1.5 py-2 text-center text-gray-500 dark:text-gray-400">
+                {{ 'No matching recurring charges.' if _active else 'No recurring charges found in the last 13 months.' }}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+    {% if recurring %}
+    {% set _n = recurring | length %}
+    {% set _amount_at = r_sheet.col_keys.index('amount') %}
+    {{ gs.footer([[
+        {'value': '%s series · per month' | format(_n), 'span': _amount_at, 'title': 'Shown series at their cadence, as a rough monthly total (expenses negative)'},
+        {'value': ('-' if per_month < 0 else '') ~ '$' ~ (per_month | abs | money), 'extra': sheet.neg(per_month < 0)},
+        {'value': '', 'span': r_sheet.ncols - _amount_at - 1},
+    ]], r_sheet.right_align, edit_mode) }}
+    {% endif %}
+</table>
+</div>

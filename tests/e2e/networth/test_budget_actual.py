@@ -162,3 +162,81 @@ def test_suggestion_row_stays_under_its_entry_when_sorted(page, flask_server, _d
             "tr => tr.previousElementSibling.cells[0].textContent"
         )
         assert "Rent" in prev
+
+
+# --- Recurring view (issue #100) ---------------------------------------------
+
+
+def _add_monthly_series(db_path, merchant="StreamCo", amount="-12.99") -> None:
+    """Six monthly charges ending a few days ago, on Main Checking."""
+    from datetime import timedelta
+
+    engine = create_engine(f"sqlite:///{db_path}", future=True)
+    today = datetime.now().astimezone().date()
+    with engine.connect() as conn:
+        acct = conn.execute(
+            select(holdings.c.id)
+            .join(snapshots, holdings.c.snapshot_id == snapshots.c.id)
+            .where(
+                snapshots.c.name == "test_finances",
+                holdings.c.name == "Main Checking",
+            )
+        ).scalar_one()
+        imp = conn.execute(
+            insert(imports).values(
+                account_id=acct,
+                holding_group="cash",
+                filename="e2e-recurring.ofx",
+                file_hash=uuid.uuid4().hex,
+                status="confirmed",
+            )
+        ).inserted_primary_key[0]
+        for i in range(6):
+            conn.execute(
+                insert(transactions).values(
+                    import_id=imp,
+                    account_id=acct,
+                    date=today - timedelta(days=30 * i + 3),
+                    amount=amount,
+                    raw_description=merchant.upper(),
+                    normalized_merchant=merchant,
+                    fingerprint=uuid.uuid4().hex,
+                )
+            )
+        conn.commit()
+    engine.dispose()
+
+
+def _recurring_row(page, merchant="StreamCo", status=None):
+    attr = f"[data-status='{status}']" if status else ""
+    return page.locator(f"#recurring-table tr[data-recurring='{merchant}']{attr}")
+
+
+def test_view_toggle_opens_recurring(page, flask_server, _db_path):
+    _add_monthly_series(_db_path)
+    page.goto(f"{flask_server}{_URL}")
+    page.click("[data-actual-views] a[data-view='recurring']")
+    page.wait_for_url("**view=recurring**")
+    assert _recurring_row(page).get_by_text("Not in budget").is_visible()
+    page.click("[data-actual-views] a[data-view='month']")
+    page.locator("#budget-actual-table").wait_for()
+
+
+def test_add_recurring_to_budget(page, flask_server, _db_path):
+    _add_monthly_series(_db_path)
+    page.goto(f"{flask_server}{_URL}?view=recurring")
+    assert page.locator("[data-recurring-add]").count() == 0
+    enable_edit_mode(page)
+    _recurring_row(page).locator("[data-recurring-add]").click()
+    _recurring_row(page, status="linked").wait_for()
+    assert _recurring_row(page).get_by_text("In budget").is_visible()
+    page.goto(f"{flask_server}/s/test_finances/budget")
+    assert page.locator("tr[data-reorder-index]").get_by_text("StreamCo").is_visible()
+
+
+def test_dismiss_recurring(page, flask_server, _db_path):
+    _add_monthly_series(_db_path)
+    page.goto(f"{flask_server}{_URL}?view=recurring&edit=1")
+    _recurring_row(page).locator("[data-recurring-dismiss]").click()
+    _recurring_row(page).wait_for(state="detached")
+    assert "No recurring charges found" in page.locator("#recurring-table").inner_text()

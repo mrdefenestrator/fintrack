@@ -24,6 +24,7 @@
 {% import "partials/pager.html" as nav %}
 {% import "partials/filter_controls.html" as fc %}
 {% import "partials/sheet_filter_bar.html" as fb %}
+{% import "partials/budget_actual_views.html" as views %}
 {% set _url = url_for('budget.actual_view', filename=filename) %}
 {% set _badge = {
     'good':    'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300',
@@ -52,11 +53,12 @@
 {% set _active = (include_kinds | length) + (include_categories | length) + (include_statuses | length) %}
 {% set _reset = "%s?year=%s&month=%s%s" | format(_url, year, month, '&edit=1' if edit_mode else '') %}
 
-{# Time navigation row above the filter card, as on Transactions: the month's
-   missing/drift summary on the left (where Transactions has its range
+{# Time navigation row above the filter card, as on Transactions: the view
+   toggle (By month / Recurring) and the month's missing/drift summary on the left (where Transactions has its range
    selector), the month pager on the right. #}
 <div class="shrink-0 mb-2 flex flex-wrap items-center justify-between gap-2">
     <div class="flex items-center gap-1.5 text-xs">
+        {{ views.view_toggle('month', filename, edit_mode) }}
         {% if missing_count %}<span data-actuals-missing class="px-1.5 py-0.5 rounded {{ _badge['bad'] }}">{{ missing_count }} missing</span>{% endif %}
         {% if drift_count %}<span data-actuals-drift class="px-1.5 py-0.5 rounded {{ _badge['drift'] }}">{{ drift_count }} drift</span>{% endif %}
         {% if suggestion_count %}

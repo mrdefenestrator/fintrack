@@ -153,6 +153,7 @@ def test_status_smoke(tmp_path):
     assert result.exit_code == 0, result.output
     assert "No holdings yet" in result.output
     assert "Net worth  $0  No change by " in result.output
+    assert "Needs attention: All clear" in result.output
     assert "Projection warnings: All clear" in result.output
 
 
@@ -168,12 +169,16 @@ def test_status_is_the_text_overview(tmp_path):
             "cards": [
                 "net_worth_liquid",
                 "cash_flow",
+                "needs_attention",
                 "spending_alerts",
                 "projection_warnings",
             ],
             "months": 12,
             "has_holdings": True,
             "cash_flow": _CASH_FLOW,
+            "attention": [
+                {"source": "recurring", "text": "Spotify: $11.99/mo, not in budget"}
+            ],
             "spending_alerts": {
                 "items": [{"kind": "new_merchant", "message": "New merchant: X $75"}],
                 "count": 7,
@@ -205,6 +210,8 @@ def test_status_is_the_text_overview(tmp_path):
     lines = result.output.splitlines()
     assert lines[0] == "Net worth  $1,000  ▲ $600 by Oct 2027"
     assert lines[1] == "Liquid       $500  ▼ $120 by Oct 2027"
+    assert "Needs attention: 1 item" in lines
+    assert "  Spotify: $11.99/mo, not in budget" in lines
     assert "Spending alerts: 7 things to look at" in lines
     assert "  New merchant: X $75" in lines
     assert "  +6 more (see `fintrack alerts`)" in lines

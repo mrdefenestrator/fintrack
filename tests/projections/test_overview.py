@@ -12,9 +12,11 @@ def test_overview_reports_the_12_month_projection(conn, snapshot_id):
     assert overview["cards"] == [
         "net_worth_liquid",
         "cash_flow",
+        "needs_attention",
         "spending_alerts",
         "projection_warnings",
     ]
+    assert overview["attention"] == []  # no transactions in this household
     assert overview["has_holdings"] is True
     expected = summarize(project(conn, snapshot_id, months=12, today=TODAY))
     assert overview["summary"] == expected

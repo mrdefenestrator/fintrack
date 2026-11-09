@@ -47,5 +47,13 @@ def overview_view(filename):
             all_months="true",
             status="flagged",
         ),
+        # Needs attention: today it holds recurring-charge findings, so it
+        # opens Budget vs Actual's Recurring view filtered to them.
+        attention_url=url_for(
+            "budget.actual_view",
+            filename=filename,
+            view="recurring",
+            status=["not_budgeted", "price_change"],
+        ),
         **context,
     )

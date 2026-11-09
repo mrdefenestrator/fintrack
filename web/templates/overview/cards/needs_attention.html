@@ -1,0 +1,21 @@
+{# Findings to act on, one short line each (issue #100: recurring charges not
+   in the budget and recurring price changes). Items come from
+   build_overview()'s `attention` list; each feature that reports here adds
+   its own items. The whole card opens the view behind them. #}
+{% import "overview/card.html" as ov %}
+{% set items = overview.attention %}
+{% set n = items | length %}
+{% set shown = 5 %}
+{% call ov.card('needs_attention', 'Needs attention', attention_url) %}
+<div data-status class="text-lg font-semibold {% if n %}text-amber-700 dark:text-amber-300{% else %}text-gray-800 dark:text-gray-100{% endif %}">
+    {% if n %}{{ n }} item{{ 's' if n != 1 }}{% else %}All clear{% endif %}
+</div>
+{% if n %}
+<ul data-attention class="space-y-0.5 text-amber-900 dark:text-amber-200">
+    {% for item in items[:shown] %}
+    <li data-attention-item="{{ item.source }}">{{ item.text }}</li>
+    {% endfor %}
+</ul>
+{% if n > shown %}<div data-attention-more class="text-xs text-gray-500 dark:text-gray-400">+{{ n - shown }} more</div>{% endif %}
+{% endif %}
+{% endcall %}

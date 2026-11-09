@@ -159,10 +159,22 @@ def occurs_in_month(entry: dict[str, Any], year: int, month: int) -> bool:
 
 
 def expected_occurrences(entry: dict[str, Any], year: int, month: int) -> int:
-    """How many occurrences of the entry are scheduled in the month."""
+    """How many occurrences of the entry are scheduled in the month (a
+    weekly entry's 4 or 5 is unknowable without an anchor day: 4)."""
     if not occurs_in_month(entry, year, month):
         return 0
-    return 2 if entry.get("recurrence") == "biweekly" else 1
+    return {"biweekly": 2, "weekly": 4}.get(entry.get("recurrence"), 1)
+
+
+def _occurrence_count_fits(
+    entry: dict[str, Any], count: int, year: int, month: int
+) -> bool:
+    """Whether ``count`` realized charges are a whole month's worth, so the
+    per-charge average is a price (drift) rather than partial activity."""
+    expected = expected_occurrences(entry, year, month)
+    if entry.get("recurrence") == "weekly" and expected:
+        return count in (4, 5)
+    return count == expected
 
 
 def expected_day(entry: dict[str, Any], year: int, month: int) -> int | None:
@@ -176,7 +188,7 @@ def expected_day(entry: dict[str, Any], year: int, month: int) -> int | None:
             return date.fromisoformat(d).day if d else None
         except (TypeError, ValueError):
             return None
-    if rec == "biweekly" or (rec == "monthly" and entry.get("continuous")):
+    if rec in ("weekly", "biweekly") or (rec == "monthly" and entry.get("continuous")):
         return None
     day = entry.get("dayOfMonth")
     if day is None and rec == "annual":
@@ -580,7 +592,7 @@ def budget_actuals(
             # Drift is only meaningful when the realized occurrence count
             # matches what was scheduled (else the delta is partial/extra
             # activity, not a price change).
-            if count and count == expected_occurrences(entry, year, month):
+            if count and _occurrence_count_fits(entry, count, year, month):
                 drift = flow_total / Decimal(count) - money(entry.get("amount"))
         results.append(
             EntryActual(

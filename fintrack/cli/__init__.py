@@ -57,6 +57,7 @@ from fintrack.cli.networth import (
 )
 from fintrack.cli.projections import project
 from fintrack.cli.reconcile import transactions
+from fintrack.cli.recurring import recurring
 
 for command in (
     status,
@@ -79,6 +80,7 @@ for command in (
     funding,
     project,
     transactions,
+    recurring,
     serve,
     migrate_legacy,
 ):

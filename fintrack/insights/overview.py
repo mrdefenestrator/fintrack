@@ -12,6 +12,7 @@ from typing import Any
 
 from sqlalchemy.engine import Connection
 
+from fintrack.budget import recurring
 from fintrack.insights.alerts import get_alerts
 from fintrack.insights.cash_flow import get_cash_flow, trailing_months_start
 from fintrack.ledger.alerts import load_alert_config
@@ -27,13 +28,27 @@ SPENDING_ALERT_LINES = 5
 OVERVIEW_MONTHS = 12
 
 
+def needs_attention(
+    conn: Connection, snapshot_id: int, today: date | None = None
+) -> list[dict[str, Any]]:
+    """The Needs attention card's items, in order: one ``{source, text}`` per
+    finding. Each feature that reports here (recurring charges, #100; spending
+    alerts, #101; …) appends its own items under its own ``source``."""
+    items: list[dict[str, Any]] = []
+    for charge in recurring.attention_items(
+        recurring.find_recurring(conn, snapshot_id, today=today)
+    ):
+        items.append({"source": "recurring", "text": recurring.summary_line(charge)})
+    return items
+
+
 def build_overview(
     conn: Connection, snapshot_id: int, today: date | None = None
 ) -> dict[str, Any]:
     """Current liquid / net worth, where they're projected to be in
-    OVERVIEW_MONTHS, this month's cash flow, spending alerts, and the
-    projection's warnings (lowest liquid month, accounts dipping below their
-    minimum, loan payoffs)."""
+    OVERVIEW_MONTHS, this month's cash flow, what needs attention, spending
+    alerts, and the projection's warnings (lowest liquid month, accounts
+    dipping below their minimum, loan payoffs)."""
     today = today or datetime.now().astimezone().date()
     result = engine.project(conn, snapshot_id, months=OVERVIEW_MONTHS, today=today)
     summary = engine.summarize(result)
@@ -41,6 +56,7 @@ def build_overview(
         "cards": [
             "net_worth_liquid",
             "cash_flow",
+            "needs_attention",
             "spending_alerts",
             "projection_warnings",
         ],
@@ -48,6 +64,7 @@ def build_overview(
         "has_holdings": bool(result["rows"]),
         "summary": summary,
         "cash_flow": _cash_flow_card(conn, snapshot_id, today),
+        "attention": needs_attention(conn, snapshot_id, today=today),
         "spending_alerts": _spending_alerts_card(conn, snapshot_id, today),
     }
 

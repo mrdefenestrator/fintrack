@@ -1,0 +1,21 @@
+{# Things to look at, one short line each (today: spending alerts, issue
+   #101), at most a handful then "+N more". The whole card opens Transactions
+   filtered to Flagged rows, where each alert can be dismissed; running-hot
+   categories clear on their own when the pace drops or the month ends. #}
+{% import "overview/card.html" as ov %}
+{% set na = overview.needs_attention %}
+{% call ov.card('needs_attention', 'Needs attention', flagged_url) %}
+<div data-status class="text-lg font-semibold {% if na.count %}text-amber-700 dark:text-amber-300{% else %}text-gray-800 dark:text-gray-100{% endif %}">
+    {% if na.count %}{{ na.count }} thing{{ 's' if na.count != 1 else '' }} to look at{% else %}All clear{% endif %}
+</div>
+{% if na.count %}
+<ul data-items class="space-y-0.5 text-amber-900 dark:text-amber-200">
+    {% for item in na['items'] %}
+    <li data-item="{{ item.kind }}">{{ item.message }}</li>
+    {% endfor %}
+</ul>
+{% if na.more %}<div data-more class="text-xs text-gray-500 dark:text-gray-400">+{{ na.more }} more</div>{% endif %}
+{% else %}
+<div>No unusual spending in the last {{ na.window_days }} days</div>
+{% endif %}
+{% endcall %}

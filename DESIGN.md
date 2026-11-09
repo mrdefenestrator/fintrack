@@ -183,6 +183,12 @@ Single `MetaData` in `fintrack/core/models.py`.
   corrections — raw rows never change. Both FKs cascade, so rejecting either
   side's import clears the flag. Both rows always share an account, which
   keeps them in one snapshot.
+- **alert_dismissals** — dismissed spending alerts (see "Spending alerts"):
+  `snapshot_id` plus either a `transaction_id` (every alert on that row) or a
+  `category` + `month` (that category's running-hot alert for one month, the
+  month's 1st); a CHECK allows exactly one of the two, and each is unique per
+  snapshot. The alerts themselves are computed, never stored. Both FKs
+  cascade.
 - **link_suggestion_dismissals** — `(transaction_id, budget_entry_ref)` pairs
   the user rejected as link suggestions, unique per pair; both FKs cascade.
   Snapshot consistency is checked in `reconcile`, as for the link itself.
@@ -328,6 +334,58 @@ imports in arrival order, each paired against earlier imports. Rows that
 already carry any flag are left alone, so re-running is idempotent and
 dismissals stick. The older `fintrack dedup` still collapses exact
 fingerprint copies left by a past bug.
+
+## Spending alerts
+
+Issue #101: point out spending that stands out while it still matters. Three
+local checks, pure functions in `fintrack/ledger/alerts.py` over the
+snapshot's confirmed history (`get_alert_history`, built on
+`base_transaction_query`, so hidden duplicates are skipped). **No transaction
+data goes to the Claude API.** Spending categories only: Income and Transfer
+never alert and never count as history.
+
+1. **Large charge** — a charge over 2× the merchant's median earlier charge and
+   at least $50 above it, given 3+ earlier charges; with less merchant history,
+   over 3× the category's median and $100 above it.
+2. **New merchant** — the first-ever charge from a merchant (no earlier row of
+   any sign), $50 or more, once the snapshot has 60+ days of history (so a
+   first import doesn't flag every merchant).
+3. **Running hot** — from the 7th, a category's month so far projects to 1.3×
+   its plan and $100 over. The projection follows the month's usual shape, so
+   lump sums aren't mistaken for a pace: a budgeted category expects its
+   fixed lines in full and its continuous (variable) lines pro rata, as Budget
+   vs Actual does; an unbudgeted one expects what it had spent by the same
+   day, on average, over the last 6 completed months with data (3 needed).
+   Spending so far is scaled by plan ÷ expected-by-now (or, when nothing is
+   usually in by now, the usual month is added on top). Charges that carry
+   their own alert are left out, so one big charge isn't reported twice.
+
+Charge checks look at the last 30 days, so alerts age out on their own; a row
+carries at most one (large charge wins). Every threshold lives in
+`configs/alerts.yaml` (`AlertConfig`; unknown keys are an error).
+
+`fintrack/insights/alerts.py` `get_alerts()` gathers the data, runs the
+checks, and drops dismissed alerts (`alert_dismissals`). One list feeds every
+surface:
+
+- **Overview "Needs attention" card** — one line per alert (five, then "+N
+  more"); the whole card opens Transactions on Status = **Flagged**. Items are
+  plain dicts with at least `kind` and `message`, so other checks (#100, #102)
+  append their own.
+- **Transactions** — a flagged row takes the orange tone and a "⚑ Large charge
+  · usually $50" / "⚑ New merchant" line under its description with
+  **Dismiss** (then Undo until reload), like the duplicate badge. The
+  **Flagged** status filter shows the rows with an open alert; it is computed,
+  so the route passes their ids to `get_transactions(transaction_ids=…)`.
+- **Import confirmation** — "N things to look at in this import" when the
+  just-confirmed rows carry open alerts, linking to Flagged.
+- **CLI** — `fintrack alerts [list] [--all]`, `alerts dismiss <txn> |
+  --category NAME`, `alerts undo …`; `status` prints the card.
+
+Dismissing hides an alert everywhere. A running-hot alert isn't a row, so on
+the web it simply clears when the pace drops or the month ends; the CLI can
+dismiss it for the month. A count next to Overview in the nav (ticket part D)
+waits until the alerts prove few and useful.
 
 ## Balance history
 
@@ -790,6 +848,7 @@ hasn't shipped are simply absent.
 |---|---|---|
 | Net worth / Liquid | both now, and their projected change by the end of the 12 months | Projections (`?months=12`); the whole card is the link |
 | Cash flow | this month's savings rate, income, spending, and net so far; the average rate, net, and income over Trailing 12's completed months | Trends (`?period=trailing12`) |
+| Needs attention | status ("All clear" / how many things to look at), one line per spending alert (five, then "+N more") | Transactions (`?all_months=true&status=flagged`), where each can be dismissed |
 | Projection warnings | status ("All clear" / how many accounts dip below their minimum), the low point, each below-minimum account, loan payoffs | Projections (`?months=12`), where below-minimum cells are marked |
 
 Cards are terse: whole dollars (`fmt_money_whole`), changes as ▲/▼ amounts
@@ -799,8 +858,9 @@ no per-line links or footer links. Opening Projections on a specific month
 (`?month=`) waits on the month breakdown working on phones (#114).
 
 Net worth's "change over the past 12 months" waits on balance history being
-recorded over time (#107, #98). Planned cards: Needs
-attention (#100–#102), Debt and cards (#102). An empty snapshot still renders
+recorded over time (#107, #98). Needs attention holds spending alerts (#101);
+missed charges and stale balances join it (#100, #102). Planned card: Debt
+and cards (#102). An empty snapshot still renders
 every card (zeros) under a pointer to Holdings and Budget.
 
 ### Projections sheet
@@ -827,6 +887,7 @@ balance    set <account> <amount> [--date] | history <account>
 import     <files…> --account NAME
 staging    list | confirm <id> | reject <id>
 duplicates list [--all] | mark <txn> | dismiss <txn> | undo <txn> | scan [--apply]
+alerts     [list] [--all] | dismiss <txn>|--category NAME | undo <txn>|--category NAME
 dedup      [--apply]
 transactions link <txn> <entry> | unlink <txn> | suggest | dismiss <txn> <entry> | undismiss <txn> | budget-actual
 merchants  list | set

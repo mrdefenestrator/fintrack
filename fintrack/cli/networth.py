@@ -91,7 +91,8 @@ def _load(cli, conn):
 @pass_cli
 def status(cli):
     """Overview: net worth and liquid now and where the projection has them,
-    plus projection warnings (the text version of the web Overview page)."""
+    cash flow, what needs attention, and projection warnings (the text
+    version of the web Overview page)."""
     with cli.connect() as conn:
         overview = build_overview(conn, cli.snapshot_id(conn))
     summary = overview["summary"]
@@ -129,6 +130,19 @@ def status(cli):
         )
     else:
         click.echo(f"  No completed months in the past {cf['months']} yet")
+
+    na = overview["needs_attention"]
+    count = na["count"]
+    state = (
+        f"{count} thing{'s' if count != 1 else ''} to look at" if count else "All clear"
+    )
+    click.echo(f"\nNeeds attention: {state}")
+    for item in na["items"]:
+        click.echo(f"  {item['message']}")
+    if na["more"]:
+        click.echo(f"  +{na['more']} more (see `fintrack alerts`)")
+    if not count:
+        click.echo(f"  No unusual spending in the last {na['window_days']} days")
 
     warnings = summary["warnings"]
     n = len(warnings)

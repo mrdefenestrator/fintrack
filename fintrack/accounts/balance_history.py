@@ -14,6 +14,7 @@ inside the same transaction as the write. Read a past value with
 `balances_on()`: the latest point on or before a date.
 """
 
+import calendar
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
@@ -202,6 +203,62 @@ def balances_on(
     for account_id, balance in conn.execute(stmt):
         out[account_id] = Decimal(balance)  # later rows overwrite earlier ones
     return out
+
+
+def month_end_points(
+    conn: Connection, account_ids: list[int], months: list[tuple[int, int]]
+) -> dict[int, list[dict[str, Any] | None]]:
+    """Each holding's value at the end of each (year, month), oldest first:
+    the latest point dated on or before that month's last day, as
+    ``{"balance", "as_of"}`` — ``balances_on`` per month-end, in one query.
+    A month with no point yet is None. ``as_of`` before the month's first day
+    means the value was carried forward from an earlier month."""
+    if not account_ids or not months:
+        return {}
+    ends = [date(y, m, calendar.monthrange(y, m)[1]) for y, m in months]
+    stmt = (
+        select(
+            balance_history.c.account_id,
+            balance_history.c.as_of,
+            balance_history.c.balance,
+        )
+        .where(
+            balance_history.c.account_id.in_(account_ids),
+            balance_history.c.as_of <= max(ends),
+        )
+        .order_by(
+            balance_history.c.account_id,
+            balance_history.c.as_of,
+            balance_history.c.id,
+        )
+    )
+    points: dict[int, list[tuple[date, Decimal]]] = {i: [] for i in account_ids}
+    for account_id, as_of, balance in conn.execute(stmt):
+        points[account_id].append((as_of, Decimal(balance)))
+    out: dict[int, list[dict[str, Any] | None]] = {}
+    for account_id, series in points.items():
+        cells: list[dict[str, Any] | None] = []
+        for end in ends:
+            # Points are ordered, so the last one on or before `end` wins
+            # (same tie-break as balances_on: as_of, then id).
+            latest = None
+            for as_of, balance in series:
+                if as_of > end:
+                    break
+                latest = {"balance": balance, "as_of": as_of}
+            cells.append(latest)
+        out[account_id] = cells
+    return out
+
+
+def earliest_point_date(conn: Connection, account_ids: list[int]) -> date | None:
+    """The oldest history point across these holdings (None if they have none)."""
+    if not account_ids:
+        return None
+    stmt = select(func.min(balance_history.c.as_of)).where(
+        balance_history.c.account_id.in_(account_ids)
+    )
+    return conn.execute(stmt).scalar()
 
 
 def latest_point(conn: Connection, account_id: int) -> dict[str, Any] | None:

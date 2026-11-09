@@ -40,26 +40,36 @@
 {%- endmacro -%}
 
 
-{%- macro pager(prev_url, next_url, label, is_latest=false, latest_url=none, target='#content', label_width='w-28') -%}
+{%- macro pager(prev_url, next_url, label, is_latest=false, latest_url=none, target='#content', label_width='w-28', use_htmx=true, latest_label='Latest', next_disabled=none) -%}
+{# Projections (full-page links) passes use_htmx=false, latest_label='Now', a
+   prev_url of none when there's nothing earlier, and next_disabled at the end
+   of the projection horizon (independent of is_latest, which there only
+   disables the Now button). #}
+{% set _next_off = is_latest if next_disabled is none else next_disabled %}
 {% set _btn = 'h-8 w-8 flex items-center justify-center rounded-md border border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer' %}
 {% set _btn_off = 'h-8 w-8 flex items-center justify-center rounded-md border border-gray-200 dark:border-gray-700 text-gray-300 dark:text-gray-600 cursor-not-allowed' %}
-<div class="flex items-center gap-2">
-    <a href="{{ prev_url }}" hx-get="{{ prev_url }}" hx-target="{{ target }}" hx-push-url="true"
-       title="Earlier" class="{{ _btn }}">&#9664;</a>
-    <span class="h-8 flex items-center justify-center px-2 {{ label_width }} text-center text-sm font-medium text-gray-700 dark:text-gray-200 whitespace-nowrap overflow-hidden">{{ label }}</span>
-    {% if is_latest %}
-    <span title="Already at the latest window" aria-disabled="true" class="{{ _btn_off }}">&#9654;</span>
+{% macro _hx(url) %}{% if use_htmx %} hx-get="{{ url }}" hx-target="{{ target }}" hx-push-url="true"{% endif %}{% endmacro %}
+<div class="flex items-center gap-2" data-pager>
+    {% if prev_url is none %}
+    <span title="Nothing earlier" aria-disabled="true" class="{{ _btn_off }}">&#9664;</span>
     {% else %}
-    <a href="{{ next_url }}" hx-get="{{ next_url }}" hx-target="{{ target }}" hx-push-url="true"
+    <a href="{{ prev_url }}"{{ _hx(prev_url) }}
+       title="Earlier" class="{{ _btn }}">&#9664;</a>
+    {% endif %}
+    <span class="h-8 flex items-center justify-center px-2 {{ label_width }} text-center text-sm font-medium text-gray-700 dark:text-gray-200 whitespace-nowrap overflow-hidden" data-pager-label>{{ label }}</span>
+    {% if _next_off %}
+    <span title="{{ 'Already at the latest window' if next_disabled is none else 'End of the projection' }}" aria-disabled="true" class="{{ _btn_off }}">&#9654;</span>
+    {% else %}
+    <a href="{{ next_url }}"{{ _hx(next_url) }}
        title="Later" class="{{ _btn }}">&#9654;</a>
     {% endif %}
     {% if latest_url is not none %}
     {% if is_latest %}
-    <span aria-disabled="true" title="Already at the latest window"
-       class="px-3 h-8 flex items-center text-sm rounded-md border border-gray-200 dark:border-gray-700 text-gray-300 dark:text-gray-600 cursor-not-allowed">Latest</span>
+    <span aria-disabled="true" title="Already at the {{ 'current' if latest_label == 'Now' else 'latest' }} window"
+       class="px-3 h-8 flex items-center text-sm rounded-md border border-gray-200 dark:border-gray-700 text-gray-300 dark:text-gray-600 cursor-not-allowed">{{ latest_label }}</span>
     {% else %}
-    <a href="{{ latest_url }}" hx-get="{{ latest_url }}" hx-target="{{ target }}" hx-push-url="true"
-       class="px-3 h-8 flex items-center text-sm rounded-md border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer">Latest</a>
+    <a href="{{ latest_url }}"{{ _hx(latest_url) }} data-pager-latest
+       class="px-3 h-8 flex items-center text-sm rounded-md border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer">{{ latest_label }}</a>
     {% endif %}
     {% endif %}
 </div>

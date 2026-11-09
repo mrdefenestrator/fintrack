@@ -1,6 +1,7 @@
 """Projections page e2e tests."""
 
 import re
+from datetime import date, datetime
 
 import pytest
 
@@ -83,6 +84,8 @@ def test_projections_horizon_and_estimate_toggles(page, flask_server):
     page.wait_for_url("**months=24**")
     assert page.locator("[data-projection-table]").is_visible()
 
+    # Estimate lives in the "⋯" menu.
+    page.click("[data-proj-menu] summary")
     page.click("[data-estimate-toggle]")
     page.wait_for_url("**estimate=1**")
     assert page.locator("[data-projection-table]").is_visible()
@@ -125,7 +128,8 @@ def test_projections_month_breakdown(page, flask_server):
     )
     label = second_month.inner_text().strip()
     second_month.locator("[data-header-link]").click()
-    page.wait_for_url("**month=1**")
+    page.wait_for_url(re.compile(r"[?&]month=\d{4}-\d{2}"))
+    first_url = page.url
 
     panel = page.locator("[data-month-breakdown]")
     assert f"What happens in {label}" in panel.inner_text()
@@ -138,8 +142,34 @@ def test_projections_month_breakdown(page, flask_server):
     assert "sort_" not in page.url
 
     panel.locator("a[title='Next month']").click()
-    page.wait_for_url("**month=2**")
+    page.wait_for_url(lambda url: url != first_url and "month=" in url)
 
     panel.locator("[data-breakdown-close]").click()
     page.wait_for_url(lambda url: not re.search(r"[?&]month=", url))
     assert page.locator("[data-month-breakdown]").count() == 0
+
+
+def test_projections_timeline_pager(page, flask_server):
+    """A window in the past shows actual month-ends (no Now column, an
+    "End of" summary); ▶ slides forward and Now returns to the current
+    window. The fixture has no history before today, so ◀ is disabled at
+    the current window."""
+    page.goto(f"{flask_server}/s/test_finances/projections?months=6")
+    window = page.locator("[data-proj-window]")
+    now_label = window.locator("[data-pager-label]").inner_text()
+    assert window.locator("a[title='Earlier']").count() == 0
+
+    today = datetime.now().astimezone().date()
+    past = date(today.year - 1, today.month, 1).strftime("%Y-%m")
+    page.goto(f"{flask_server}/s/test_finances/projections?months=6&from={past}")
+    tbl = page.locator("[data-projection-table]")
+    assert tbl.locator(".sheet-group-header", has_text="Now").count() == 0
+    assert page.locator("[data-summary='line']").inner_text().startswith("End of ")
+    # Nothing recorded a year ago: cells are blank and totals are partial.
+    assert tbl.locator("td[data-missing]").count() > 0
+
+    window.locator("a[title='Later']").click()
+    page.wait_for_url(lambda url: past not in url)
+    window.locator("[data-pager-latest]").click()
+    page.wait_for_url(lambda url: "from=" not in url)
+    assert window.locator("[data-pager-label]").inner_text() == now_label

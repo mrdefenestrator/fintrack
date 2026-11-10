@@ -1,7 +1,7 @@
 {% import "partials/pager.html" as nav %}
 <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
     {% set _period_opts = [] %}
-    {% for p, label in [("quarterly", "Quarterly"), ("ytd", "Year to Date"), ("trailing12", "Trailing 12 Mo")] %}
+    {% for p, label in [("quarterly", "Quarterly"), ("year", "Year"), ("trailing12", "Trailing 12 Mo")] %}
     {% set _ = _period_opts.append({
         'url': "/s/%s/trends?period=%s%s%s" | format(filename, p, end_qs, highlight_qs),
         'label': label,
@@ -53,7 +53,9 @@
 <td class="{{ cell_class }} text-right tabular-nums whitespace-nowrap">
     {% if pct_change is not none %}
         {% set abs_pct = pct_change|abs %}
-        {% if pct_change > 0 %}
+        {% if abs_pct < 0.5 %}
+        <span class="text-gray-400">0%</span>
+        {% elif pct_change > 0 %}
         <span class="{{ 'text-red-500' if is_expense else 'text-green-500' }}">▲ {{ '%.0f'|format(abs_pct) }}%</span>
         {% else %}
         <span class="{{ 'text-green-500' if is_expense else 'text-red-500' }}">▼ {{ '%.0f'|format(abs_pct) }}%</span>
@@ -97,6 +99,31 @@
 {{ delta_cell(row.delta_words, row.budget_delta) }}
 {% endmacro %}
 
+{# Year in review (#102): in the Year period, three columns after the months —
+   the year's total, last year's over the same span, and the change in size. #}
+{% macro year_money(val, signed=false, cell_class="px-4 py-2.5") %}
+<td class="{{ cell_class }} text-right tabular-nums {{ ('text-red-600' if val < 0 else 'text-green-600') if signed and val else 'text-gray-700 dark:text-gray-200' }}">
+    {% if val %}{{ '-' if signed and val < 0 }}${{ val|abs|money(0) }}{% else %}<span class="text-gray-300 dark:text-gray-600">—</span>{% endif %}
+</td>
+{% endmacro %}
+{% macro year_cells(row) %}{% if review %}
+{{ year_money(row.total) }}
+{{ year_money(row.prev_total, cell_class="px-4 py-2.5 text-gray-500 dark:text-gray-400") }}
+{{ change_cell(row.year_change, row.total < 0) }}
+{% endif %}{% endmacro %}
+{% macro year_footer(field, money=true, signed=true, cell_class="px-4 py-2") %}{% if review %}
+{% set now = review.cash_flow[field] %}
+{% set before = review.prev_cash_flow[field] %}
+{% if money %}
+{{ year_money(now, signed, cell_class) }}
+{{ year_money(before, signed, cell_class ~ " text-gray-500 dark:text-gray-400") }}
+<td class="{{ cell_class }} text-right tabular-nums">{% if before %}{% set pct = ((now|abs) - (before|abs)) / (before|abs) * 100 %}{% if pct|abs < 0.5 %}<span class="text-gray-400">0%</span>{% else %}<span class="{{ 'text-green-500' if (pct > 0) != (field == 'spending') else 'text-red-500' }}">{{ '▲' if pct > 0 else '▼' }} {{ '%.0f'|format(pct|abs) }}%</span>{% endif %}{% else %}<span class="text-gray-300 dark:text-gray-600">—</span>{% endif %}</td>
+{% else %}
+{% for val in (now, before) %}<td class="{{ cell_class }} text-right tabular-nums {{ ('text-red-600' if val < 0 else 'text-green-600') if val is not none else '' }}">{% if val is not none %}{{ '%.0f'|format(val) }}%{% else %}<span class="text-gray-300 dark:text-gray-600">—</span>{% endif %}</td>{% endfor %}
+<td class="{{ cell_class }} text-right tabular-nums">{% if now is not none and before is not none %}{% set pts = now - before %}{% if pts|abs < 0.5 %}<span class="text-gray-400">0 pts</span>{% else %}<span class="{{ 'text-green-500' if pts > 0 else 'text-red-500' }}">{{ '▲' if pts > 0 else '▼' }} {{ '%.0f'|format(pts|abs) }} pts</span>{% endif %}{% else %}<span class="text-gray-300 dark:text-gray-600">—</span>{% endif %}</td>
+{% endif %}
+{% endif %}{% endmacro %}
+
 {# Cash-flow footer rows (#99, fintrack.insights.cash_flow): one cell per
    month from cash_flow.months[field]. `money` cells show a dollar amount,
    otherwise a % (savings rate). `signed` colors by sign (net, rate); plain
@@ -125,10 +152,11 @@
 
 {% macro blank_cells(n) %}{% for _ in range(n) %}<td class="px-4 py-2 text-right"><span class="text-gray-300 dark:text-gray-600">—</span></td>{% endfor %}{% endmacro %}
 
-{% macro cash_flow_row(key, label, title, field, money=true, signed=true, cls="") %}
+{% macro cash_flow_row(key, label, title, field, money=true, signed=true, cls="", year=true) %}
 <tr class="cash-flow-row {{ cls }} border-b border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-300" data-cash-flow="{{ key }}">
     <td class="px-4 py-2 font-medium" title="{{ title }}">{{ label }}</td>
     {{ cash_flow_cells(field, money, signed) }}
+    {% if year %}{{ year_footer(field, money, signed) }}{% else %}{{ blank_cells(year_cols) }}{% endif %}
     {{ cash_flow_avg(cash_flow.average[field], money, signed) }}
     {{ blank_cells(3) }}
 </tr>
@@ -166,6 +194,7 @@
     .dark .trends-table .heat-better-2 { background: rgba(34,197,94,0.32); }
     .dark .trends-table .heat-better-3 { background: rgba(34,197,94,0.50); }
 </style>
+{% if review %}{% include "partials/year_review.html" %}{% endif %}
 <div class="overflow-x-auto">
 {# Client-side column sort (web/static/js/sortable.js) via the `sortable` class +
    `sortable-th`/`data-col` header hooks. The <tfoot> (Total + excluded rows) is
@@ -179,10 +208,16 @@
             {% for label in month_labels %}
             <th class="{{ _sortable_th }} px-3 py-3 text-right" data-col="{{ loop.index }}" role="button" tabindex="0" title="{{ 'Month in progress — partial' if in_progress is not none and loop.index0 == in_progress else 'Sort by this column' }}">{{ label }}{% if in_progress is not none and loop.index0 == in_progress %}<span class="block normal-case tracking-normal font-normal text-[10px]">so far</span>{% endif %} <span class="sort-indicator"></span></th>
             {% endfor %}
-            <th class="{{ _sortable_th }} px-4 py-3 text-right" data-col="{{ month_labels | length + 1 }}" role="button" tabindex="0" title="Average over the {{ avg_month_count }} completed month{{ 's' if avg_month_count != 1 }} with data{{ ' (the month in progress is left out)' if in_progress is not none }} — click to sort">Avg/mo <span class="sort-indicator"></span></th>
-            <th class="{{ _sortable_th }} px-4 py-3 text-right" data-col="{{ month_labels | length + 2 }}" role="button" tabindex="0" title="Sort by this column">Budget/mo <span class="sort-indicator"></span></th>
-            <th class="{{ _sortable_th }} px-4 py-3 text-right" data-col="{{ month_labels | length + 3 }}" role="button" tabindex="0" title="Avg/mo vs Budget/mo: spending over/under, income short/ahead — click to sort">Delta <span class="sort-indicator"></span></th>
-            <th class="{{ _sortable_th }} px-4 py-3 text-right" data-col="{{ month_labels | length + 4 }}" role="button" tabindex="0" title="Last completed month vs Avg/mo — click to sort">Change <span class="sort-indicator"></span></th>
+            {% if review %}
+            {% set _span = "%s – %s" | format(review.start.strftime('%b %-d'), review.end.strftime('%b %-d')) %}
+            <th class="{{ _sortable_th }} px-4 py-3 text-right" data-col="{{ month_labels | length + 1 }}" role="button" tabindex="0" title="Total for {{ review.year }}{{ ' so far (' ~ _span ~ ')' if review.partial }} — click to sort">{{ review.year }}{% if review.partial %}<span class="block normal-case tracking-normal font-normal text-[10px]">so far</span>{% endif %} <span class="sort-indicator"></span></th>
+            <th class="{{ _sortable_th }} px-4 py-3 text-right" data-col="{{ month_labels | length + 2 }}" role="button" tabindex="0" title="Total for {{ review.prev_year }}{{ ', same span (' ~ _span ~ ')' if review.partial }} — click to sort">{{ review.prev_year }}{% if review.partial %}<span class="block normal-case tracking-normal font-normal text-[10px]">same span</span>{% endif %} <span class="sort-indicator"></span></th>
+            <th class="{{ _sortable_th }} px-4 py-3 text-right" data-col="{{ month_labels | length + 3 }}" role="button" tabindex="0" title="{{ review.year }} vs {{ review.prev_year }}, by size — click to sort">vs {{ review.prev_year }} <span class="sort-indicator"></span></th>
+            {% endif %}
+            <th class="{{ _sortable_th }} px-4 py-3 text-right" data-col="{{ month_labels | length + 1 + year_cols }}" role="button" tabindex="0" title="Average over the {{ avg_month_count }} completed month{{ 's' if avg_month_count != 1 }} with data{{ ' (the month in progress is left out)' if in_progress is not none }} — click to sort">Avg/mo <span class="sort-indicator"></span></th>
+            <th class="{{ _sortable_th }} px-4 py-3 text-right" data-col="{{ month_labels | length + 2 + year_cols }}" role="button" tabindex="0" title="Sort by this column">Budget/mo <span class="sort-indicator"></span></th>
+            <th class="{{ _sortable_th }} px-4 py-3 text-right" data-col="{{ month_labels | length + 3 + year_cols }}" role="button" tabindex="0" title="Avg/mo vs Budget/mo: spending over/under, income short/ahead — click to sort">Delta <span class="sort-indicator"></span></th>
+            <th class="{{ _sortable_th }} px-4 py-3 text-right" data-col="{{ month_labels | length + 4 + year_cols }}" role="button" tabindex="0" title="Last completed month vs Avg/mo — click to sort">Change <span class="sort-indicator"></span></th>
         </tr>
     </thead>
     <tbody>
@@ -194,12 +229,13 @@
                 <span id="arrow-{{ loop.index }}" class="mr-1.5 text-gray-300 text-xs">▶</span>{{ row.category }}
             </td>
             {{ month_cells(row) }}
+            {{ year_cells(row) }}
             {{ avg_cell(row.monthly_avg) }}
             {{ budget_cells(row) }}
             {{ change_cell(row.pct_change, row.total < 0) }}
         </tr>
         <tr id="trend-detail-{{ loop.index }}" class="hidden" data-detail-row>
-            <td colspan="{{ month_labels|length + 5 }}" class="p-0 bg-gray-50 dark:bg-gray-700 border-b dark:border-gray-600">
+            <td colspan="{{ month_labels|length + 5 + year_cols }}" class="p-0 bg-gray-50 dark:bg-gray-700 border-b dark:border-gray-600">
                 <div class="p-4 text-xs text-gray-400 italic">Loading...</div>
             </td>
         </tr>
@@ -219,6 +255,7 @@
                 {% endif %}
             </td>
             {% endfor %}
+            {{ year_footer('net', cell_class="px-4 py-3") }}
             {{ avg_cell(footer_avg, "px-4 py-3 " ~ ('text-red-600' if footer_avg is not none and footer_avg < 0 else 'text-green-600')) }}
             <td class="px-4 py-3 text-right tabular-nums text-gray-500 dark:text-gray-400">
                 {% if footer_budget is not none %}
@@ -231,10 +268,10 @@
             {{ change_cell(footer_pct_change, grand_total < 0, "px-4 py-3") }}
         </tr>
         {{ cash_flow_row('rate', 'Savings rate', 'Net ÷ income; blank when there is no income. Avg/mo is average net ÷ average income', 'rate', money=false) }}
-        {{ cash_flow_row('budgeted-net', 'Budgeted net', 'Planned income minus planned expenses in that month, from the Budget sheet (Transfer left out)', 'budgeted_net') }}
+        {{ cash_flow_row('budgeted-net', 'Budgeted net', 'Planned income minus planned expenses in that month, from the Budget sheet (Transfer left out)', 'budgeted_net', year=false) }}
         {% if trends_excluded %}
         <tr>
-            <td colspan="{{ month_labels|length + 5 }}" class="px-0 pt-5 pb-1 text-xs text-gray-400 dark:text-gray-500 uppercase tracking-wide">
+            <td colspan="{{ month_labels|length + 5 + year_cols }}" class="px-0 pt-5 pb-1 text-xs text-gray-400 dark:text-gray-500 uppercase tracking-wide">
                 <span class="trends-excluded-label">Not included in total</span>
             </td>
         </tr>
@@ -246,12 +283,13 @@
                 <span id="arrow-ex{{ loop.index }}" class="mr-1.5 text-gray-300 text-xs">▶</span>{{ row.category }}
             </td>
             {{ month_cells(row) }}
+            {{ year_cells(row) }}
             {{ avg_cell(row.monthly_avg) }}
             {{ budget_cells(row) }}
             {{ change_cell(row.pct_change, row.total < 0) }}
         </tr>
         <tr id="trend-detail-ex{{ loop.index }}" class="hidden">
-            <td colspan="{{ month_labels|length + 5 }}" class="p-0 bg-gray-50 dark:bg-gray-700 border-b dark:border-gray-600">
+            <td colspan="{{ month_labels|length + 5 + year_cols }}" class="p-0 bg-gray-50 dark:bg-gray-700 border-b dark:border-gray-600">
                 <div class="p-4 text-xs text-gray-400 italic">Loading...</div>
             </td>
         </tr>

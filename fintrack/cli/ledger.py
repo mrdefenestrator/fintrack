@@ -11,8 +11,9 @@ from fintrack.accounts.balance_history import get_balance_history, record_balanc
 from fintrack.budget.repository import get_budget_entries
 from fintrack.cli.helpers import echo_table, pass_cli
 from fintrack.core.coerce import to_date
-from fintrack.core.formatting import fmt_money
+from fintrack.core.formatting import fmt_change_whole, fmt_money, fmt_money_whole
 from fintrack.insights.cash_flow import compute_cash_flow
+from fintrack.insights.year_review import year_review
 from fintrack.ledger.classifier import classify_and_cache
 from fintrack.ledger.duplicate_scan import scan_for_duplicates
 from fintrack.ledger.importer import run_import
@@ -542,10 +543,22 @@ def report_monthly(cli, year, month):
 
 @report.command("trends")
 @click.option("--months", type=int, default=12, show_default=True)
+@click.option(
+    "--year",
+    type=int,
+    default=None,
+    help="Year in review for this calendar year instead (vs the year before).",
+)
 @pass_cli
-def report_trends(cli, months):
-    """Per-category totals and monthly average over the trailing N months."""
+def report_trends(cli, months, year):
+    """Per-category totals and monthly average over the trailing N months,
+    or with --year, a year in review (the web Trends page's Year period)."""
     today = datetime.now().astimezone().date()
+    if year is not None:
+        with cli.connect() as conn:
+            review = year_review(conn, cli.snapshot_id(conn), year, today)
+        _echo_year_review(review)
+        return
     start_month = today.month - (months - 1)
     start_year = today.year
     while start_month <= 0:
@@ -601,6 +614,83 @@ def report_trends(cli, months):
         ["Month", "Income", "Spending", "Net", "Saved", "Budgeted net"],
         ("left", "right", "right", "right", "right", "right"),
     )
+
+
+def _echo_year_review(r: dict) -> None:
+    """Year in review as text: categories against last year, cash flow and
+    savings rate, net worth start -> end, and the top merchants."""
+    span = f"{r['start']:%b %-d} – {r['end']:%b %-d}"
+    title = f"{r['year']} in review" + (f" (so far: {span})" if r["partial"] else "")
+    click.echo(title)
+    prev = str(r["prev_year"]) + (" same span" if r["partial"] else "")
+    if not r["categories"]:
+        click.echo("No transactions in this year or the one before.")
+    else:
+        rows = [
+            [
+                c["category"],
+                fmt_money(c["total"]),
+                fmt_money(c["prev_total"]) if c["prev_total"] else "-",
+                f"{c['change_pct']:+.0f}%" if c["change_pct"] is not None else "-",
+            ]
+            for c in r["categories"]
+        ]
+        echo_table(
+            rows,
+            ["Category", str(r["year"]), prev, "Change"],
+            ("left", "right", "right", "right"),
+        )
+
+    cf, pf = r["cash_flow"], r["prev_cash_flow"]
+
+    def rate(v):
+        return f"{v:.0f}%" if v is not None else "-"
+
+    click.echo("\nCash flow (Transfer excluded)")
+    echo_table(
+        [
+            [
+                str(r["year"]),
+                *(fmt_money(cf[k]) for k in ("income", "spending", "net")),
+                rate(cf["rate"]),
+            ],
+            [
+                prev,
+                *(fmt_money(pf[k]) for k in ("income", "spending", "net")),
+                rate(pf["rate"]),
+            ],
+        ],
+        ["Year", "Income", "Spending", "Net", "Saved"],
+        ("left", "right", "right", "right", "right"),
+    )
+
+    nw = r["net_worth"]
+    if nw["shows_change"]:
+        click.echo(
+            f"\nNet worth: {fmt_money_whole(nw['start'])} → "
+            f"{fmt_money_whole(nw['end'])} ({fmt_change_whole(nw['change'])})"
+        )
+        if nw["covered"] < nw["holdings"]:
+            click.echo(
+                f"  {nw['holdings'] - nw['covered']} of {nw['holdings']} holdings "
+                f"have no value before {r['year']}; they count at their end value"
+            )
+    elif nw["holdings"]:
+        click.echo(
+            f"\nNet worth: {fmt_money_whole(nw['end'])} (too little balance "
+            f"history before {r['year']} for a change)"
+        )
+
+    if r["top_merchants"]:
+        click.echo("\nTop merchants")
+        echo_table(
+            [
+                [f"{i}. {m['merchant']}", fmt_money(m["spent"]), m["count"]]
+                for i, m in enumerate(r["top_merchants"], 1)
+            ],
+            ["Merchant", "Spent", "Txns"],
+            ("left", "right", "right"),
+        )
 
 
 def _cash_flow_row(label: str, f: dict) -> list[str]:

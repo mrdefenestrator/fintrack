@@ -160,7 +160,7 @@ def test_resolve_window_end_handles_february_leap_year():
     "period,stride",
     [
         ("quarterly", 3),
-        ("ytd", 12),
+        ("year", 12),
         ("trailing12", 12),
         ("unknown", 12),  # defensive default
     ],
@@ -192,16 +192,16 @@ def test_period_range_quarterly_past_is_full_quarter():
     )
 
 
-def test_period_range_ytd_latest_is_year_to_date():
+def test_period_range_year_latest_is_year_to_date():
     today = date(2026, 7, 17)
-    assert _period_range("ytd", today, is_latest=True) == (date(2026, 1, 1), today)
+    assert _period_range("year", today, is_latest=True) == (date(2026, 1, 1), today)
 
 
-def test_period_range_ytd_past_is_full_calendar_year():
-    # Paging YTD back one page lands on the full prior calendar year — this is
+def test_period_range_year_past_is_full_calendar_year():
+    # Paging Year back one page lands on the full prior calendar year — this is
     # what the removed "Last Year" button used to show.
     anchor = date(2025, 7, 31)
-    assert _period_range("ytd", anchor, is_latest=False) == (
+    assert _period_range("year", anchor, is_latest=False) == (
         date(2025, 1, 1),
         date(2025, 12, 31),
     )
@@ -295,10 +295,10 @@ def test_trends_quarterly_pages_back_by_a_quarter(client):
     assert f"end={py:04d}-{pm:02d}" in html
 
 
-def test_trends_ytd_pages_back_by_a_calendar_year(client):
-    """The 'earlier' link steps the YTD window back one calendar year."""
+def test_trends_year_pages_back_by_a_calendar_year(client):
+    """The 'earlier' link steps the Year window back one calendar year."""
     today = datetime.now().astimezone().date()
-    response = client.get("/s/ledger/trends?period=ytd")
+    response = client.get("/s/ledger/trends?period=year")
     html = response.data.decode()
     assert f"end={today.year - 1:04d}-{today.month:02d}" in html
 
@@ -322,10 +322,8 @@ def test_trends_preserves_period_param_while_paging(client):
     )
     assert response.status_code == 200
     html = response.data.decode()
-    assert "Year to Date" in html
-    # The active preset button should still be YTD (blue highlight class
-    # appears alongside the label somewhere in that button's markup).
-    assert "bg-blue-500" in html
+    # The old "ytd" period (links saved before #102) opens Year, still active.
+    assert "data-year-review" in html
 
 
 # ---------------------------------------------------------------------------
@@ -696,3 +694,24 @@ def test_trends_cash_flow_footer_rows(client, cash_flow_history):
     assert income[3] == "$4,000"
     assert rate[3] == "75%"
     assert "Net (kept)" in _footer_row(html, "net")[0]
+
+
+def test_trends_year_adds_last_year_columns_and_the_review(
+    client, seeded_ledger_account
+):
+    today = datetime.now().astimezone().date()
+    html = client.get("/s/ledger/trends?period=year").data.decode()
+    assert "data-year-review" in html
+    assert f"{today.year} in review" in html
+    assert f"vs {today.year - 1}" in html
+    # The other periods have neither.
+    html = client.get("/s/ledger/trends?period=trailing12").data.decode()
+    assert "data-year-review" not in html and f"vs {today.year - 1}" not in html
+
+
+def test_normalize_period_accepts_the_old_ytd():
+    from web.routes.trends import _normalize_period
+
+    assert _normalize_period("ytd", "trailing12") == "year"
+    assert _normalize_period(None, "trailing12") == "trailing12"
+    assert _normalize_period("quarterly", "year") == "quarterly"

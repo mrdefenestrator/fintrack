@@ -284,3 +284,36 @@ def test_filter_box_unticks_when_request_keeps_failing(page, flask_server):
     )
     assert not box.is_checked()
     assert page.locator("span:has(> button[title=Remove])").count() == 0
+
+
+def _fail_recurring_posts(page, action, status, times):
+    left = {"n": times}
+
+    def handle(route):
+        if left["n"] > 0:
+            left["n"] -= 1
+            return route.fulfill(status=status, body="")
+        return route.continue_()
+
+    page.route(f"**/budget/actual/recurring/{action}?*", handle)
+
+
+def test_dropped_action_is_retried(page, flask_server, _db_path):
+    """The PR preview answers overlapping requests with 429: the tap must
+    still land rather than silently doing nothing."""
+    _add_monthly_series(_db_path)
+    page.goto(f"{flask_server}{_URL}?view=recurring&edit=1")
+    _fail_recurring_posts(page, "add", 429, 1)
+    _recurring_row(page).locator("[data-recurring-add]").click()
+    _recurring_row(page, status="linked").wait_for()
+    assert page.locator("#request-error").is_hidden()
+
+
+def test_failed_action_says_so(page, flask_server, _db_path):
+    _add_monthly_series(_db_path)
+    page.goto(f"{flask_server}{_URL}?view=recurring&edit=1")
+    _fail_recurring_posts(page, "dismiss", 500, 99)
+    _recurring_row(page).locator("[data-recurring-dismiss]").click()
+    page.locator("#request-error").wait_for(state="visible")
+    assert "nothing changed" in page.locator("#request-error").inner_text()
+    assert _recurring_row(page).is_visible()

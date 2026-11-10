@@ -2,6 +2,8 @@
 
 import pytest
 
+from tests.e2e.controls import PHONE_WIDTHS, assert_controls_layout
+
 pytestmark = pytest.mark.e2e
 
 _PERIODS = [
@@ -258,17 +260,12 @@ def test_trends_paged_window_still_shows_seeded_data(page, confirmed_server):
     assert page.locator("table tfoot").get_by_text("Net (kept)").is_visible()
 
 
-@pytest.mark.parametrize("width", [360, 390, 430])
+@pytest.mark.parametrize("width", PHONE_WIDTHS)
 def test_trends_controls_fit_one_row_on_phones(page, flask_server, width):
-    """The period pills and Highlight toggle share one row on a phone (short
-    labels below sm) and stay inside the viewport."""
+    """Pager above; the period pills and Highlight toggle share the filter
+    bar's one row on a phone (short labels below sm)."""
     page.set_viewport_size({"width": width, "height": 800})
     page.goto(f"{flask_server}/s/ledger/trends")
-    titles = ["Quarterly", "Year to Date", "Trailing 12 Mo", "Highlight unusual months"]
-    boxes = [
-        page.locator(f"a[aria-label='{t}'], a:text-is('{t}')").first.bounding_box()
-        for t in titles
-    ]
-    assert len({round(b["y"] + b["height"] / 2) for b in boxes}) == 1
-    assert boxes[-1]["x"] + boxes[-1]["width"] <= width - 16
-    assert page.locator("a", has_text="YTD").first.is_visible()
+    assert_controls_layout(page, width)
+    assert page.locator("[data-period-toggle] a", has_text="YTD").is_visible()
+    assert page.locator("[data-highlight-toggle] a", has_text="Highlight").is_visible()

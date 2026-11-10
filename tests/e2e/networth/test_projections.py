@@ -5,6 +5,8 @@ from datetime import date, datetime
 
 import pytest
 
+from tests.e2e.controls import PHONE_WIDTHS, assert_controls_layout
+
 pytestmark = pytest.mark.e2e
 
 
@@ -84,8 +86,7 @@ def test_projections_horizon_and_estimate_toggles(page, flask_server):
     page.wait_for_url("**months=24**")
     assert page.locator("[data-projection-table]").is_visible()
 
-    # Estimate lives in the "⋯" menu.
-    page.click("[data-proj-menu] summary")
+    # Estimate is a toggle in the grid's filter bar.
     page.click("[data-estimate-toggle]")
     page.wait_for_url("**estimate=1**")
     assert page.locator("[data-projection-table]").is_visible()
@@ -175,33 +176,12 @@ def test_projections_timeline_pager(page, flask_server):
     assert window.locator("[data-pager-label]").inner_text() == now_label
 
 
-@pytest.mark.parametrize("width", [320, 390, 430, 700])
-def test_projections_menu_stays_on_screen(page, flask_server, width):
-    """The "⋯" menu opens fully inside the viewport wherever the controls wrap
-    the button to (it was cut off on phones)."""
-    page.set_viewport_size({"width": width, "height": 800})
-    page.goto(f"{flask_server}/s/test_finances/projections?estimate=1")
-    page.click("[data-proj-menu] summary")
-    box = page.locator("[data-proj-menu-panel]").bounding_box()
-    assert box["x"] >= 0
-    assert box["x"] + box["width"] <= width
-    assert page.locator("[data-estimate-toggle]").is_visible()
-
-
-@pytest.mark.parametrize("width", [360, 390, 430])
+@pytest.mark.parametrize("width", PHONE_WIDTHS)
 def test_projections_controls_fit_one_row_on_phones(page, flask_server, width):
-    """Window size, Balances/Changes and the "⋯" menu share one row on a phone
-    (short 6M/1Y/2Y labels below sm) and stay inside the viewport."""
+    """Pager above; window size (6M/1Y/2Y), Balances/Changes and Estimate
+    share the filter bar's one row on a phone."""
     page.set_viewport_size({"width": width, "height": 800})
     page.goto(f"{flask_server}/s/test_finances/projections")
-    boxes = [
-        page.locator(sel).bounding_box()
-        for sel in (
-            "[data-proj-nav]:not([data-view-toggle])",
-            "[data-view-toggle]",
-            "[data-proj-menu] summary",
-        )
-    ]
-    assert len({round(b["y"] + b["height"] / 2) for b in boxes}) == 1
-    assert boxes[-1]["x"] + boxes[-1]["width"] <= width - 16
-    assert page.locator("[data-proj-nav] a", has_text="1Y").is_visible()
+    assert_controls_layout(page, width)
+    assert page.locator("[data-window-size] a", has_text="1Y").is_visible()
+    assert page.locator("[data-estimate-toggle]").is_visible()

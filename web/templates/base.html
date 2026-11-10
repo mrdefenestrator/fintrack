@@ -461,6 +461,14 @@
             box-shadow: inset -1px 0 0 #4b5563;   /* gray-600 */
         }
 
+        /* The closed file picker stays in the DOM (faded out). Nothing inside
+           it may take a tap: the touch rule below forces the row actions to
+           pointer-events: auto, which would otherwise override the closed
+           dropdown's pointer-events: none and leave invisible Delete buttons
+           tappable over the page. */
+        [data-file-picker-dropdown].pointer-events-none,
+        [data-file-picker-dropdown].pointer-events-none * { pointer-events: none !important; }
+
         /* File picker row: reveal action buttons on hover (hover-capable only) */
         .file-row-actions { opacity: 0; pointer-events: none; transition: opacity 0.1s ease; }
         @media (hover: hover) {

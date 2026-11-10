@@ -1,6 +1,7 @@
 """Spending alerts on the web (issue #101): the Overview card, Transactions
 markers + the Flagged filter + Dismiss, and the import confirmation."""
 
+import re
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 
@@ -158,3 +159,55 @@ def test_import_confirmation_counts_its_alerts(client, conn, alerted):
     html = client.post(f"/s/ledger/import/{staged}/confirm").get_data(as_text=True)
     assert "1 thing to look at in this import" in html
     assert "status=flagged" in html
+
+
+@pytest.fixture
+def hot(conn, monkeypatch):
+    """Dining spread at $600/mo for six months, then $420 by Nov 12: running
+    hot. Today is pinned to Nov 12 for the Transactions routes."""
+    import web.routes.transactions as txn_routes
+
+    monkeypatch.setattr(txn_routes, "_today", lambda: date(2026, 11, 12))
+    sid = get_snapshot_id(conn, "ledger")
+    account = add_account(conn, sid, {"name": "Card", "type": "credit_card"})
+    rows = [
+        (date(2026, m, d), Decimal(-200), "BISTRO", "Dining")
+        for m in range(5, 11)
+        for d in (5, 15, 25)
+    ]
+    rows += [
+        (date(2026, 11, 3), Decimal(-210), "BISTRO", "Dining"),
+        (date(2026, 11, 10), Decimal(-210), "BISTRO", "Dining"),
+    ]
+    seed_transactions(conn, account, rows)
+    return [
+        r.id
+        for r in conn.execute(
+            select(transactions.c.id).where(transactions.c.date >= date(2026, 11, 1))
+        )
+    ]
+
+
+def test_flagged_shows_a_hot_categorys_rows_without_the_rail(client, hot):
+    html = client.get("/s/ledger/transactions?all_months=true&status=flagged").get_data(
+        as_text=True
+    )
+    for txn_id in hot:
+        assert f'id="txn-row-{txn_id}"' in html
+    assert html.count('data-alert="running_hot"') == 2
+    assert "Dining running hot this month · $420 of usually $600" in html
+    # The marker line, but no accent rail: a hot category doesn't light up.
+    rows = re.findall(r'<tr id="txn-row-\d+"[^>]*>', html)
+    assert rows and not any("data-tone=" in r for r in rows)
+
+
+def test_dismissing_a_hot_row_hides_the_category_and_reloads(client, hot):
+    url = f"/s/ledger/transactions/{hot[0]}/alert"
+    current = "/s/ledger/transactions?all_months=true&status=flagged"
+    resp = client.post(
+        url, data={"action": "dismiss"}, headers={"HX-Current-URL": current}
+    )
+    assert resp.status_code == 204
+    assert resp.headers["HX-Redirect"] == current
+    html = client.get(current).get_data(as_text=True)
+    assert "data-alert=" not in html

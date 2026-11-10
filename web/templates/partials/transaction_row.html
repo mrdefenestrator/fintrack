@@ -15,10 +15,11 @@
 {% set alert_undo = alert_dismissed | default(false) and not txn_alert %}
 {# Cells follow TRANSACTIONS_SHEET's column keys (web/routes/transactions.py),
    never their position. A flagged possible duplicate takes the amber tone and
-   a spending alert the orange one: the sheet's accent rail marks just that
-   row. #}
+   a charge that stands out the orange one: the sheet's accent rail marks just
+   that row. Rows flagged only because their category is running hot get the
+   marker line but no rail, so a hot category doesn't light up the sheet. #}
 <tr id="{{ row_id }}" class="{{ gs.row_class() }}{{ ' opacity-60' if txn.dup_status == 'duplicate' else '' }}"
-    {% if txn.dup_status == 'flagged' %}data-tone="amber" {% elif txn_alert %}data-tone="orange" {% endif %}{% if txn.dup_status %}data-dup-status="{{ txn.dup_status }}" {% endif %}{% if txn_alert %}data-alert="{{ txn_alert.kind }}"{% endif %}>
+    {% if txn.dup_status == 'flagged' %}data-tone="amber" {% elif txn_alert and txn_alert.kind != 'running_hot' %}data-tone="orange" {% endif %}{% if txn.dup_status %}data-dup-status="{{ txn.dup_status }}" {% endif %}{% if txn_alert %}data-alert="{{ txn_alert.kind }}"{% endif %}>
     {% for key in flat_sheets.transactions.col_keys %}
     {% if key == 'date' %}
     {# Date — raw imported data, immutable #}
@@ -69,7 +70,8 @@
         </div>
         {% endif %}
         {# Spending alert (issue #101): what stands out, with Dismiss (hidden
-           everywhere) — then Undo until the next reload. #}
+           everywhere) — then Undo until the next reload. Dismiss on a
+           running-hot row hides the category for the month and reloads. #}
         {% if txn_alert or alert_undo %}
         {% set alert_url = base ~ "/alert" %}
         {% set alert_vals = ', "edit": "1"' if edit_mode else '' %}
@@ -77,8 +79,10 @@
             {% if txn_alert %}
             {% if txn_alert.kind == 'large_charge' %}
             <span>&#9873; Large charge · {% if txn_alert.basis == 'merchant' %}usually {{ txn_alert.baseline | fmt_money_whole }}{% else %}typical {{ txn_alert.category }} charge {{ txn_alert.baseline | fmt_money_whole }}{% endif %}</span>
-            {% else %}
+            {% elif txn_alert.kind == 'new_merchant' %}
             <span>&#9873; New merchant · first charge here</span>
+            {% else %}
+            <span>&#9873; {{ txn_alert.category }} running hot this month · {{ txn_alert.amount | fmt_money_whole }} of {{ 'budget' if txn_alert.basis == 'budget' else 'usually' }} {{ txn_alert.baseline | fmt_money_whole }}</span>
             {% endif %}
             <button hx-post="{{ alert_url }}" hx-vals='{"action": "dismiss"{{ alert_vals }}}'
                     hx-target="#{{ row_id }}" hx-swap="outerHTML"

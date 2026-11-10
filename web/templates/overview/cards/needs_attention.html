@@ -1,7 +1,7 @@
 {# Things to look at, one short line each (today: spending alerts, issue
    #101), at most a handful then "+N more". The whole card opens Transactions
-   filtered to Flagged rows, where each alert can be dismissed; running-hot
-   categories clear on their own when the pace drops or the month ends. #}
+   filtered to Flagged: the flagged charges plus this month's rows in each
+   hot category, so every line here has rows there. Each can be dismissed. #}
 {% import "overview/card.html" as ov %}
 {% set na = overview.needs_attention %}
 {% call ov.card('needs_attention', 'Needs attention', flagged_url) %}

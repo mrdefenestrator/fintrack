@@ -372,19 +372,25 @@ surface:
   more"); the whole card opens Transactions on Status = **Flagged**. Items are
   plain dicts with at least `kind` and `message`, so other checks (#100, #102)
   append their own.
-- **Transactions** — a flagged row takes the orange tone and a "⚑ Large charge
-  · usually $50" / "⚑ New merchant" line under its description with
-  **Dismiss** (then Undo until reload), like the duplicate badge. The
-  **Flagged** status filter shows the rows with an open alert; it is computed,
-  so the route passes their ids to `get_transactions(transaction_ids=…)`.
+- **Transactions** — the **Flagged** status filter shows the rows behind
+  every open alert (`alerts_by_transaction()`): a large or new-merchant
+  charge's own row, and this month's rows in a category running hot, so the
+  card's one link never opens an empty view. It is computed, so the route
+  passes the ids to `get_transactions(transaction_ids=…)`. A flagged charge
+  takes the orange tone and a "⚑ Large charge · usually $50" / "⚑ New
+  merchant" line under its description with **Dismiss** (then Undo until
+  reload), like the duplicate badge. A row flagged by its category gets a "⚑
+  Dining running hot this month · $420 of usually $600" line but no tone, so
+  a hot category doesn't light up the sheet; its Dismiss hides the category
+  for the month and reloads the view, clearing all its rows at once (undo
+  with `fintrack alerts undo --category`).
 - **Import confirmation** — "N things to look at in this import" when the
   just-confirmed rows carry open alerts, linking to Flagged.
 - **CLI** — `fintrack alerts [list] [--all]`, `alerts dismiss <txn> |
   --category NAME`, `alerts undo …`; `status` prints the card.
 
-Dismissing hides an alert everywhere. A running-hot alert isn't a row, so on
-the web it simply clears when the pace drops or the month ends; the CLI can
-dismiss it for the month. A count next to Overview in the nav (ticket part D)
+Dismissing hides an alert everywhere. A running-hot alert is otherwise
+cleared by the pace dropping or the month ending. A count next to Overview in the nav (ticket part D)
 waits until the alerts prove few and useful.
 
 ## Balance history
@@ -848,7 +854,7 @@ hasn't shipped are simply absent.
 |---|---|---|
 | Net worth / Liquid | both now, and their projected change by the end of the 12 months | Projections (`?months=12`); the whole card is the link |
 | Cash flow | this month's savings rate, income, spending, and net so far; the average rate, net, and income over Trailing 12's completed months | Trends (`?period=trailing12`) |
-| Needs attention | status ("All clear" / how many things to look at), one line per spending alert (five, then "+N more") | Transactions (`?all_months=true&status=flagged`), where each can be dismissed |
+| Needs attention | status ("All clear" / how many things to look at), one line per spending alert (five, then "+N more") | Transactions (`?all_months=true&status=flagged`): the flagged charges and this month's rows in hot categories, each dismissable |
 | Projection warnings | status ("All clear" / how many accounts dip below their minimum), the low point, each below-minimum account, loan payoffs | Projections (`?months=12`), where below-minimum cells are marked |
 
 Cards are terse: whole dollars (`fmt_money_whole`), changes as ▲/▼ amounts

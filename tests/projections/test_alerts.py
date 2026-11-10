@@ -12,7 +12,11 @@ from fintrack.accounts.repository import add_account
 from fintrack.budget.repository import add_budget_entry
 from fintrack.cli import cli
 from fintrack.core.models import transactions
-from fintrack.insights.alerts import get_alerts, get_import_alerts
+from fintrack.insights.alerts import (
+    alerts_by_transaction,
+    get_alerts,
+    get_import_alerts,
+)
 from fintrack.insights.overview import build_overview
 from fintrack.ledger.repository.alerts import (
     dismiss_category_alert,
@@ -189,3 +193,30 @@ def test_cli_alerts_and_status(tmp_path):
     assert _invoke(db, "alerts", "undo", "--category", "Dining").exit_code == 0
     bad = CliRunner().invoke(cli, ["--db", str(db), "alerts", "dismiss"])
     assert bad.exit_code != 0
+
+
+def test_flagged_rows_include_a_hot_categorys_month(conn, snapshot_id):
+    """Flagged lists the rows behind every alert: the big charge itself, and
+    this month's rows in a category running hot."""
+    _seed(conn, snapshot_id)
+    flagged = alerts_by_transaction(conn, snapshot_id, TODAY)
+    rows = {
+        r.id: r
+        for r in conn.execute(
+            select(transactions.c.id, transactions.c.date, transactions.c.amount)
+        )
+    }
+    by_kind = {}
+    for txn_id, alert in flagged.items():
+        by_kind.setdefault(alert["kind"], []).append(rows[txn_id])
+    assert [r.amount for r in by_kind["large_charge"]] == [-300]
+    hot = by_kind["running_hot"]
+    assert len(hot) == 2  # the two November Dining charges, not the history
+    assert all(r.date.month == 11 and r.amount == -210 for r in hot)
+
+    # Dismissing the category for the month unflags its rows.
+    dismiss_category_alert(conn, snapshot_id, "Dining", TODAY)
+    kinds = {
+        a["kind"] for a in alerts_by_transaction(conn, snapshot_id, TODAY).values()
+    }
+    assert kinds == {"large_charge"}

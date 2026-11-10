@@ -995,9 +995,30 @@ blue tint, and a 2px rule marks the divider on the Now column (or, in the
 Changes view, the current month) when the window holds past months. Both are
 drawn per column position with `background-image` from a small `<style>` in
 the template, so they layer over every row's own background and never touch the
-box-shadows sticky rows draw their edges with. Controls sit in a row above the
-grid: ◀ window ▶ + Now, the 6 / 12 / 24 window size, Balances / Changes, and a
-"⋯" menu holding the Estimate toggle.
+box-shadows sticky rows draw their edges with. The ◀ window ▶ + Now pager
+and the summary line share the pager row above the grid; the 6 / 12 / 24
+window size (6M / 1Y / 2Y on phones), Balances / Changes and an Estimate
+toggle lead the grid's filter bar (see "Page controls").
+
+## Page controls
+
+Every sheet page puts its controls in the same two places, with one look:
+
+- **Pager row** (`nav.pager_row`): the time pager (◀ label ▶ Latest/Now)
+  alone on a row above the sheet, left-aligned, followed only by status for
+  that window (Budget vs Actual's badges, Projections' summary). A view
+  without a pager keeps the row (Transactions' All time names itself; the
+  Recurring view says "Last 13 months") so the sheet doesn't jump. The pager
+  never goes in the filter bar.
+- **Filter bar** (`sheet_filter_bar.filter_bar`), fused to the sheet's top:
+  the page's view toggles first as its `lead` (`nav.segmented`: Month / Year /
+  All time, By month / Recurring, Trends' period + Highlight, Projections'
+  window + Balances / Changes + Estimate), then the filter dropdowns and
+  search, then Reset. Everything is the same compact text-xs control. On a
+  phone it stays one row — lead toggles (with `short` labels where needed),
+  a "Filters" button that drops the dropdowns into a panel below, and Reset —
+  so view toggles never hide behind the Filters button. Trends and
+  Projections have lead-only bars (`filters=false`).
 
 ## CLI
 

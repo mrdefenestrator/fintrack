@@ -8,6 +8,8 @@ Amount) are display-only.
 
 import pytest
 
+from tests.e2e.controls import PHONE_WIDTHS, assert_controls_layout
+
 pytestmark = pytest.mark.e2e
 
 
@@ -407,3 +409,14 @@ def test_edit_mode_merchant_click_still_opens_editor(page, confirmed_server):
     inp = row.locator("input.table-cell-input")
     inp.wait_for()
     assert inp.input_value()
+
+
+@pytest.mark.parametrize("query", ["", "?all_months=year", "?all_months=true"])
+@pytest.mark.parametrize("width", PHONE_WIDTHS)
+def test_transactions_controls_layout_on_phones(page, flask_server, width, query):
+    """Pager row above (it just names All time); Month / Year / All time, the
+    Filters trigger and Reset share the filter bar's one row on a phone."""
+    page.set_viewport_size({"width": width, "height": 800})
+    page.goto(f"{flask_server}/s/ledger/transactions{query}")
+    assert_controls_layout(page, width)
+    assert page.locator("[data-range-toggle]").is_visible()

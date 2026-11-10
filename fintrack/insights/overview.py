@@ -31,8 +31,9 @@ def build_overview(
     conn: Connection, snapshot_id: int, today: date | None = None
 ) -> dict[str, Any]:
     """Current liquid / net worth, where they're projected to be in
-    OVERVIEW_MONTHS, this month's cash flow, spending alerts, and the projection's warnings (lowest liquid month, accounts
-    dipping below their minimum, loan payoffs)."""
+    OVERVIEW_MONTHS, this month's cash flow, spending alerts, and the
+    projection's warnings (lowest liquid month, accounts dipping below their
+    minimum, loan payoffs)."""
     today = today or datetime.now().astimezone().date()
     result = engine.project(conn, snapshot_id, months=OVERVIEW_MONTHS, today=today)
     summary = engine.summarize(result)

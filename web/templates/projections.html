@@ -5,15 +5,22 @@
 {% import "partials/pager.html" as nav %}
 
 {% import "partials/grouped_sheet.html" as gs %}
+{% import "partials/sheet_filter_bar.html" as fb %}
 
-{# Non-scrolling top band: a one-line summary (where liquid and net worth
-   end up; the full cards and warnings live on Overview) and the (opt-in)
-   estimate breakdown. The window / view / estimate controls sit in a row
-   above the grid; the accounts×months grid is the flex-filling sheet (its
-   own scroll viewport), matching Holdings/Budget/Transactions. #}
-<div class="shrink-0 mb-2 space-y-2" data-projection-summary>
-
-<p data-summary="line" class="flex flex-wrap gap-x-5 gap-y-1 px-1 text-sm text-gray-600 dark:text-gray-300">
+{# Pager row (nav.pager_row, as on every page with a pager): the ◀ window ▶ +
+   Now pager, then a one-line summary of where liquid and net worth end up
+   (the full cards and warnings live on Overview). Below it, the (opt-in)
+   estimate breakdown and the month breakdown; then the window size, Balances
+   / Changes and Estimate toggles lead a filter bar fused to the accounts ×
+   months grid (the flex-filling sheet, its own scroll viewport), matching
+   Holdings/Budget/Transactions. #}
+{% call nav.pager_row() %}
+    <div data-proj-window>
+    {{ nav.pager(prev_url, next_url, tl.label, is_latest=at_now, latest_url=now_url,
+        label_width='w-44', use_htmx=false, latest_label='Now',
+        next_disabled=not tl.can_go_forward) }}
+    </div>
+    <p data-summary="line" class="flex flex-wrap gap-x-5 gap-y-1 px-1 text-sm text-gray-600 dark:text-gray-300">
     {# Liquid and net worth at the end of the window: projected (change from
        now) or, for a window ending in the past, actual (and the change since). #}
     <span>{% if summary.past %}End of {{ summary.end_label }}:{% else %}By {{ summary.end_label }}:{% endif %}</span>
@@ -23,6 +30,10 @@
         <span class="tabular-nums {% if t.change < 0 %}text-red-600 dark:text-red-400{% elif t.change > 0 %}text-emerald-600 dark:text-emerald-400{% endif %}">({{ t.change | fmt_change }}{% if summary.past %} since{% endif %})</span></span>
     {% endfor %}
 </p>
+{% endcall %}
+
+{% if result.estimate is not none or breakdown %}
+<div class="shrink-0 mb-2 space-y-2" data-projection-summary>
 
 {% if result.estimate is not none %}
 <details data-summary="estimate" class="px-3 py-1.5 rounded-lg text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600">
@@ -85,48 +96,31 @@
 {% endif %}
 
 </div><!-- end top band -->
+{% endif %}
 
-{# Controls row above the grid: the ◀ window ▶ + Now pager (shared with
-   Trends), the window size, Balances / Changes, and a "⋯" menu holding the
-   rarely-changed Estimate toggle. #}
-<div class="shrink-0 mb-2 flex flex-wrap items-center gap-x-4 gap-y-2" data-proj-controls>
-    <div data-proj-window>
-    {{ nav.pager(prev_url, next_url, tl.label, is_latest=at_now, latest_url=now_url,
-        label_width='w-44', use_htmx=false, latest_label='Now',
-        next_disabled=not tl.can_go_forward) }}
-    </div>
-    <div class="flex items-center gap-2" data-proj-nav>
-        {% set _month_opts = [] %}
-        {% for choice in month_choices %}
-        {% set _ = _month_opts.append({'url': proj_url(months=choice, month=none), 'label': choice ~ ' mo', 'active': months == choice}) %}
-        {% endfor %}
-        {{ nav.segmented(_month_opts, use_htmx=false) }}
-    </div>
-    <div class="flex items-center gap-2" data-proj-nav data-view-toggle>
-        {{ nav.segmented([
-            {'url': proj_url(view=none), 'label': 'Balances', 'active': view == 'balances'},
-            {'url': proj_url(view='change'), 'label': 'Changes', 'active': view == 'change'},
-        ], use_htmx=false) }}
-    </div>
-    {# The menu opens under its button, nudged sideways to stay on screen
-       wherever the controls wrap (the button can land at either edge). #}
-    <details class="relative" data-proj-menu
-        ontoggle="if (this.open) { const p = this.querySelector('[data-proj-menu-panel]'); p.style.left = '0px'; const r = p.getBoundingClientRect(), vw = document.documentElement.clientWidth, g = 16; let dx = Math.min(0, vw - g - r.right); if (r.left + dx < g) dx = g - r.left; p.style.left = dx + 'px'; }">
-        <summary title="More options" aria-label="More options"
-            class="list-none [&::-webkit-details-marker]:hidden h-8 w-8 flex items-center justify-center rounded-md border border-gray-300 dark:border-gray-600 cursor-pointer select-none hover:bg-gray-100 dark:hover:bg-gray-700 {% if estimate %}text-blue-600 dark:text-blue-400{% else %}text-gray-500 dark:text-gray-400{% endif %}">
-            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.75"/><circle cx="12" cy="12" r="1.75"/><circle cx="19" cy="12" r="1.75"/></svg>
-        </summary>
-        <div data-proj-menu-panel class="absolute left-0 z-30 mt-1 w-72 max-w-[calc(100vw-2rem)] rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 shadow-lg p-1 text-sm">
-            <a href="{{ proj_url(estimate=none if estimate else 1) }}"
-                data-estimate-toggle role="menuitemcheckbox" aria-checked="{{ 'true' if estimate else 'false' }}"
-                class="flex items-start gap-2 px-2 py-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200">
-                <span class="mt-0.5 w-4 h-4 shrink-0 flex items-center justify-center rounded border {% if estimate %}bg-blue-500 border-blue-500 text-white{% else %}border-gray-400 dark:border-gray-500{% endif %}">{% if estimate %}&#10003;{% endif %}</span>
-                <span>Estimate unscheduled spend
-                    <span class="block text-xs text-gray-500 dark:text-gray-400">Adds last 3 months' spending in categories the budget doesn't cover</span></span>
-            </a>
-        </div>
-    </details>
-</div>
+{# The grid's view controls lead its filter bar (no filters here): window
+   size (6M / 1Y / 2Y on phones), Balances / Changes, and the opt-in estimate
+   of unscheduled spend. #}
+{% set _month_opts = [] %}
+{% for choice in month_choices %}
+{% set _ = _month_opts.append({'url': proj_url(months=choice, month=none), 'label': choice ~ ' mo',
+    'short': (choice ~ 'M') if choice % 12 else ((choice // 12) ~ 'Y'), 'active': months == choice}) %}
+{% endfor %}
+{% set _lead %}
+    {{ nav.segmented(_month_opts, use_htmx=false, attrs='data-window-size') }}
+    {{ nav.segmented([
+        {'url': proj_url(view=none), 'label': 'Balances', 'active': view == 'balances'},
+        {'url': proj_url(view='change'), 'label': 'Changes', 'active': view == 'change'},
+    ], use_htmx=false, attrs='data-view-toggle') }}
+    {{ nav.segmented([{
+        'url': proj_url(estimate=none if estimate else 1),
+        'label': 'Estimate unscheduled spend', 'short': 'Estimate',
+        'title': "Turn off" if estimate else "Add last 3 months' spending in categories the budget doesn't cover",
+        'active': estimate,
+        'attrs': 'data-estimate-toggle aria-pressed="%s"' | format('true' if estimate else 'false')}],
+        use_htmx=false) }}
+{% endset %}
+{{ fb.filter_bar(lead=_lead, filters=false) }}
 
 {# Accounts × months grid: a grouped sheet (partials/grouped_sheet.html, shared
    with Holdings/Budget) — one always-open band per holding group with its own
@@ -178,7 +172,7 @@
 #projections-table tr > :nth-child({{ _divider }}) { background-image: linear-gradient(to right, var(--tl-rule) 2px, transparent 2px){% if _divider >= (_first_future or 999) %}, linear-gradient(var(--tl-tint), var(--tl-tint)){% endif %}; }
 {% endif %}
 </style>
-<div class="table-scroll-container rounded-lg border border-gray-300 dark:border-gray-600 shadow-sm" data-sheet-scroll>
+<div class="table-scroll-container rounded-b-lg border-l border-b border-r border-gray-300 dark:border-gray-600 shadow-sm" data-sheet-scroll>
 <table id="projections-table" data-projection-table data-view="{{ view }}" class="grouped-sheet w-full text-sm border-collapse bg-white dark:bg-gray-800" style="white-space:nowrap">
     {% for group in groups %}
     <tbody {{ gs.group_attrs(group) }}>

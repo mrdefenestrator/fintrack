@@ -12,6 +12,7 @@
 {% import "partials/sheet.html" as sheet %}
 {% import "partials/grouped_sheet.html" as gs %}
 {% import "partials/filter_controls.html" as fc %}
+{% import "partials/pager.html" as nav %}
 {% import "partials/sheet_filter_bar.html" as fb %}
 {% import "partials/budget_actual_views.html" as views %}
 {% set _url = url_for('budget.actual_view', filename=filename) %}
@@ -29,14 +30,20 @@
 {% set _active = (include_kinds | length) + (include_statuses | length) %}
 {% set _reset = "%s?view=recurring%s" | format(_url, '&edit=1' if edit_mode else '') %}
 
-<div class="shrink-0 mb-2 flex flex-wrap items-center gap-1.5 text-xs">
-    {{ views.view_toggle('recurring', filename, edit_mode) }}
-    {% if not_budgeted_count %}<span data-recurring-unbudgeted class="px-1.5 py-0.5 rounded {{ _badge['not_budgeted'] }}">{{ not_budgeted_count }} not in budget</span>{% endif %}
-    {% if price_change_count %}<span data-recurring-changed class="px-1.5 py-0.5 rounded {{ _badge['unlinked'] }}">{{ price_change_count }} price change{{ 's' if price_change_count != 1 }}</span>{% endif %}
-    <span class="text-gray-500 dark:text-gray-400">Last 13 months</span>
-</div>
+{# No pager in this view, but the same pager row keeps the sheet where the
+   By month view has it: the window it covers and its badges. #}
+{% call nav.pager_row() %}
+    <span class="px-1 text-sm font-medium text-gray-700 dark:text-gray-200">Last 13 months</span>
+    {% if not_budgeted_count or price_change_count %}
+    <div class="flex flex-wrap items-center gap-1.5 text-xs">
+        {% if not_budgeted_count %}<span data-recurring-unbudgeted class="px-1.5 py-0.5 rounded {{ _badge['not_budgeted'] }}">{{ not_budgeted_count }} not in budget</span>{% endif %}
+        {% if price_change_count %}<span data-recurring-changed class="px-1.5 py-0.5 rounded {{ _badge['unlinked'] }}">{{ price_change_count }} price change{{ 's' if price_change_count != 1 }}</span>{% endif %}
+    </div>
+    {% endif %}
+{% endcall %}
 
-{% call fb.filter_bar(active_count=_active, reset_url=_reset) %}
+{% set _lead %}{{ views.view_toggle('recurring', filename, edit_mode) }}{% endset %}
+{% call fb.filter_bar(active_count=_active, reset_url=_reset, lead=_lead) %}
     <input type="hidden" name="view" value="recurring">
     {% if edit_mode %}<input type="hidden" name="edit" value="1">{% endif %}
     {{ fc.multi_select('kind', 'Kind', kind_opts, _url) }}

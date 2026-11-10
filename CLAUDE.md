@@ -174,6 +174,11 @@ degrades to a warning without it).
   `sheet-group--flat` body, `gs.footer`) — build any new plain sheet the same
   way rather than on bare `sortable.js` tables (Trends alone keeps its own
   styling). See DESIGN.md "Holdings sheet" / "Budget sheet".
+- **Page controls** (DESIGN.md "Page controls"): the time pager sits alone on
+  the pager row above a sheet (`nav.pager_row`), never in the filter bar;
+  every other control (view toggles via `nav.segmented`, filters, Reset) goes
+  in the sheet's filter bar — toggles as its always-visible `lead`. On a phone
+  the bar is one row (`tests/e2e/controls.py` checks it).
 - **Overview is the landing page** (`/s/<snapshot>`, first nav item): a
   plain responsive stack of read-only cards, the one page that isn't a
   spreadsheet. Summary numbers go here, not on top of a sheet.

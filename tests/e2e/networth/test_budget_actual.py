@@ -11,6 +11,7 @@ import pytest
 from sqlalchemy import create_engine, insert, select
 
 from fintrack.core.models import holdings, imports, snapshots, transactions
+from tests.e2e.controls import PHONE_WIDTHS, assert_controls_layout
 from tests.e2e.networth.conftest import enable_edit_mode
 
 pytestmark = pytest.mark.e2e
@@ -317,3 +318,14 @@ def test_failed_action_says_so(page, flask_server, _db_path):
     page.locator("#request-error").wait_for(state="visible")
     assert "nothing changed" in page.locator("#request-error").inner_text()
     assert _recurring_row(page).is_visible()
+
+
+@pytest.mark.parametrize("query", ["", "?view=recurring"])
+@pytest.mark.parametrize("width", PHONE_WIDTHS)
+def test_budget_actual_controls_layout_on_phones(page, flask_server, width, query):
+    """Pager row above (Recurring keeps the row, without a pager); the By month
+    / Recurring toggle, Filters trigger and Reset share the bar's one row."""
+    page.set_viewport_size({"width": width, "height": 800})
+    page.goto(f"{flask_server}/s/test_finances/budget/actual{query}")
+    assert_controls_layout(page, width)
+    assert page.locator("[data-actual-views]").is_visible()

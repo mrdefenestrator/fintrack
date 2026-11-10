@@ -126,7 +126,7 @@
 {% macro blank_cells(n) %}{% for _ in range(n) %}<td class="px-4 py-2 text-right"><span class="text-gray-300 dark:text-gray-600">—</span></td>{% endfor %}{% endmacro %}
 
 {% macro cash_flow_row(key, label, title, field, money=true, signed=true, cls="") %}
-<tr class="cash-flow-row {{ cls }} bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-300" data-cash-flow="{{ key }}">
+<tr class="cash-flow-row {{ cls }} border-b border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-300" data-cash-flow="{{ key }}">
     <td class="px-4 py-2 font-medium" title="{{ title }}">{{ label }}</td>
     {{ cash_flow_cells(field, money, signed) }}
     {{ cash_flow_avg(cash_flow.average[field], money, signed) }}
@@ -145,7 +145,11 @@
     }
     .dark .trends-table tr > :first-child:not([colspan]) { background: #1f2937; box-shadow: inset -1px 0 0 #374151; }
     .trends-table tfoot tr.cash-flow-row > :first-child { background: #f9fafb; }
-    .dark .trends-table tfoot tr.cash-flow-row > :first-child { background: #374151; }
+    .dark .trends-table tfoot tr.cash-flow-row > :first-child { background: #374151; box-shadow: inset -1px 0 0 #4b5563; }
+
+    /* The "Not included in total" label spans the whole row, so pin the text
+       itself to the left edge or it scrolls away with the months. */
+    .trends-table .trends-excluded-label { position: sticky; left: 0; display: inline-block; padding: 0 1rem; }
 
     /* Unusual-month shades (classes from trends._unusual_tints): red worse /
        green better, three strengths. */
@@ -206,7 +210,7 @@
            Net (kept) is the sum of every row above, Transfer excluded. #}
         {{ cash_flow_row('income', 'Income', 'The Income category', 'income', signed=false, cls='border-t-2 border-gray-200 dark:border-gray-600') }}
         {{ cash_flow_row('spending', 'Spending', 'Every other category except Transfer; refunds count against it', 'spending', signed=false) }}
-        <tr class="cash-flow-row font-semibold bg-gray-50 dark:bg-gray-700" data-cash-flow="net">
+        <tr class="cash-flow-row font-semibold border-b border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700" data-cash-flow="net">
             <td class="px-4 py-3 text-gray-600 dark:text-gray-300" title="Income minus spending: the total of every category above">Net (kept)</td>
             {% for val in monthly_footer_values %}
             <td class="px-3 py-3 text-right tabular-nums {{ 'text-red-600' if val < 0 else 'text-green-600' if val > 0 else 'text-gray-300' }}">
@@ -230,8 +234,8 @@
         {{ cash_flow_row('budgeted-net', 'Budgeted net', 'Planned income minus planned expenses in that month, from the Budget sheet (Transfer left out)', 'budgeted_net') }}
         {% if trends_excluded %}
         <tr>
-            <td colspan="{{ month_labels|length + 5 }}" class="px-4 pt-5 pb-1 text-xs text-gray-400 dark:text-gray-500 uppercase tracking-wide">
-                Not included in total
+            <td colspan="{{ month_labels|length + 5 }}" class="px-0 pt-5 pb-1 text-xs text-gray-400 dark:text-gray-500 uppercase tracking-wide">
+                <span class="trends-excluded-label">Not included in total</span>
             </td>
         </tr>
         {% for row in trends_excluded %}

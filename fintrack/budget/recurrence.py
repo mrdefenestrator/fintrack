@@ -8,7 +8,9 @@ current-month key numbers share one implementation.
 
 The biweekly approximation is kept from finances: biweekly entries count as
 exactly 2 pay periods per month (26/year), so months with a third payday are
-understated and the annual total is slightly conservative.
+understated and the annual total is slightly conservative. Weekly entries
+(issue #100) use the exact average instead, 52/12 occurrences per month, and
+prorate the current month by days remaining.
 """
 
 import calendar
@@ -18,6 +20,8 @@ from decimal import Decimal
 from typing import Any
 
 _ZERO = Decimal(0)
+# Average weekly occurrences per month (52 weeks / 12 months).
+WEEKS_PER_MONTH = Decimal(52) / Decimal(12)
 
 
 def money(x: Any) -> Decimal:
@@ -104,6 +108,8 @@ def budget_entry_in_month(
         return _ZERO
     if rec == "biweekly":
         return amount * 2  # approx 2 pay periods per month
+    if rec == "weekly":
+        return amount * WEEKS_PER_MONTH
     return _ZERO
 
 
@@ -115,6 +121,8 @@ def amount_annual(entry: dict[str, Any]) -> Decimal:
         return amount * 12
     if rec == "biweekly":
         return amount * 26  # ~26 pay periods per year
+    if rec == "weekly":
+        return amount * 52
     if rec == "annual":
         return amount
     if rec == "quarterly":
@@ -192,6 +200,12 @@ def subtotal_remainder_of_month(
         return amount if day < dom else _ZERO
     if rec == "biweekly":
         return amount * 2  # approx 2 pay periods for remainder of month
+    if rec == "weekly":
+        days_in_month = calendar.monthrange(year, month)[1]
+        days_remaining = (
+            max(0, days_in_month - day_effective) if day > 0 else days_in_month
+        )
+        return amount * WEEKS_PER_MONTH * Decimal(days_remaining) / days_in_month
     return _ZERO
 
 

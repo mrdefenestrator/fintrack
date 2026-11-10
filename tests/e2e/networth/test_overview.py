@@ -4,7 +4,13 @@ import pytest
 
 pytestmark = pytest.mark.e2e
 
-_CARDS = ("net_worth_liquid", "cash_flow", "spending_alerts", "projection_warnings")
+_CARDS = (
+    "net_worth_liquid",
+    "cash_flow",
+    "needs_attention",
+    "spending_alerts",
+    "projection_warnings",
+)
 
 
 def test_snapshot_root_lands_on_overview(page, flask_server):
@@ -97,9 +103,10 @@ def test_overview_on_wide_screens_uses_columns(page, flask_server):
     boxes = [
         page.locator(f"[data-overview-card='{key}']").bounding_box() for key in _CARDS
     ]
-    # Four cards fill the three xl columns: three side by side, one below.
+    # Five cards on the three xl columns: a row of three, then two.
     assert len({round(b["x"]) for b in boxes}) == 3
     assert len({round(b["y"]) for b in boxes[:3]}) == 1
+    assert len({round(b["y"]) for b in boxes[3:]}) == 1
     assert boxes[3]["y"] > boxes[0]["y"]
 
 
@@ -115,3 +122,24 @@ def test_overview_of_an_empty_snapshot(page, flask_server):
         page.wait_for_url("**/s/blank/holdings")
     finally:
         page.request.post(f"{flask_server}/files/delete", form={"name": "blank"})
+
+
+def test_needs_attention_card_opens_recurring(page, flask_server, _db_path):
+    """A recurring charge not in the budget gets one line; the whole card
+    opens Budget vs Actual's Recurring view filtered to what needs attention."""
+    from tests.e2e.networth.test_budget_actual import _add_monthly_series
+
+    page.goto(f"{flask_server}/s/test_finances")
+    card = page.locator("[data-overview-card='needs_attention']")
+    assert card.locator("[data-status]").inner_text().strip() == "All clear"
+
+    _add_monthly_series(_db_path)
+    page.reload()
+    assert "1 item" in card.locator("[data-status]").inner_text()
+    assert (
+        card.locator("[data-attention]").inner_text().strip()
+        == "StreamCo: $12.99/mo, not in budget"
+    )
+    card.click()
+    page.wait_for_url("**view=recurring&status=not_budgeted&status=price_change")
+    assert page.locator("#recurring-table tr[data-recurring='StreamCo']").is_visible()

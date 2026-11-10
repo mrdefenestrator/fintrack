@@ -59,6 +59,7 @@ BUDGET_KINDS_CLI = ["income", "expense"]
 RECURRENCE_OPTIONS_CLI = [
     "one_time",
     "monthly",
+    "weekly",
     "biweekly",
     "quarterly",
     "semiannual",

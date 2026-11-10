@@ -23,7 +23,7 @@ from decimal import Decimal
 
 from flask import Blueprint, abort, current_app, render_template, request
 
-from fintrack.budget import reconcile
+from fintrack.budget import reconcile, recurring
 from fintrack.budget import repository as repo_budget
 from fintrack.core import filters, tables
 from fintrack.core.formatting import fmt_money
@@ -101,6 +101,49 @@ ACTUAL_SHEET = flat_sheet(
         "last_seen": "Date of the most recent linked transaction (any month)",
     },
 )
+# Budget vs Actual's Recurring view (issue #100, read-only apart from the
+# edit-mode actions): one row per recurring merchant series.
+RECURRING_SHEET = flat_sheet(
+    "recurring",
+    [
+        ("merchant", "Merchant", False, 1),
+        ("category", "Category", False, 1),
+        ("amount", "Typical", True, 1),
+        ("every", "Every", False, 1),
+        ("count", "N", True, 1),
+        ("last", "Last", False, 1),
+        ("next", "Next", False, 1),
+        ("budget", "Budget", False, 1),
+        ("change", "Price change", False, 1),
+    ],
+    {
+        "merchant": "Merchant (expenses negative, income positive)",
+        "category": "The merchant's category",
+        "amount": "Typical charge at the current price",
+        "every": "How often it charges",
+        "count": "Charges in the last 13 months",
+        "last": "Most recent charge",
+        "next": "When the next charge is expected",
+        "budget": "In budget (linked) / not linked to its entry / covered by a variable category line / not in budget",
+        "change": "A recent change from the usual amount",
+    },
+)
+# Recurring view Status filter, in display order. "price_change" is a flag,
+# not a budget status; it matches any series with a recent price change.
+RECURRING_STATUSES = {
+    "not_budgeted": "Not in budget",
+    "price_change": "Price change",
+    "unlinked": "Not linked",
+    "covered": "By category",
+    "linked": "In budget",
+}
+RECURRING_EVERY = {
+    "weekly": "Week",
+    "biweekly": "2 weeks",
+    "monthly": "Month",
+    "annual": "Year",
+}
+
 # The heading label spans Category..When; the Remaining / This month / Per month /
 # Annual subtotals sit under their columns.
 _LABEL_SPAN = 5
@@ -352,10 +395,103 @@ def actual_dismiss(filename: str):
     return _suggestion_action(filename, reconcile.dismiss_suggestion)
 
 
+def _recurring_action(filename: str, action):
+    """Run a Recurring-view action on the posted merchant series, then
+    re-render the view for the query string the buttons post to."""
+    snapshot_id = validate_snapshot(filename)
+    merchant = request.form.get("merchant", "")
+    kind = request.form.get("kind", "expense")
+    if not merchant or kind not in BUDGET_KINDS:
+        return "", 422
+    with current_app.config["engine"].connect() as conn:
+        try:
+            action(conn, snapshot_id, merchant, kind)
+        except ValueError:  # NotRecurring, SnapshotMismatch, bad entry_ref
+            return "", 422
+    return _render_actual(filename, snapshot_id)
+
+
+@budget_bp.route("/<filename>/budget/actual/recurring/add", methods=["POST"])
+def recurring_add(filename: str):
+    """Add a recurring series to the budget and link its transactions."""
+    return _recurring_action(
+        filename, lambda c, s, m, k: recurring.add_to_budget(c, s, m, k)
+    )
+
+
+@budget_bp.route("/<filename>/budget/actual/recurring/link", methods=["POST"])
+def recurring_link(filename: str):
+    """Link a series to the existing entry that looks like it."""
+    try:
+        entry_ref = int(request.form["budget_entry_ref"])
+    except (KeyError, ValueError):
+        return "", 422
+    return _recurring_action(
+        filename,
+        lambda c, s, m, k: recurring.link_to_entry(c, s, m, entry_ref, k),
+    )
+
+
+@budget_bp.route("/<filename>/budget/actual/recurring/dismiss", methods=["POST"])
+def recurring_dismiss(filename: str):
+    """Mark a merchant "not recurring"."""
+    return _recurring_action(filename, lambda c, s, m, k: recurring.dismiss(c, s, m))
+
+
+def _render_recurring(filename: str, snapshot_id: int, ctx: dict):
+    """Budget vs Actual's Recurring view (``?view=recurring``, issue #100):
+    every recurring merchant series of the last 13 months and how it sits in
+    the budget, with Add to budget / Link / Not recurring in edit mode."""
+    with current_app.config["engine"].connect() as conn:
+        charges = recurring.find_recurring(conn, snapshot_id)
+    include_kinds = [k for k in BUDGET_KINDS if k in request.args.getlist("kind")]
+    include_statuses = [
+        s for s in RECURRING_STATUSES if s in request.args.getlist("status")
+    ]
+
+    def _matches(c) -> bool:
+        if include_kinds and c.kind not in include_kinds:
+            return False
+        if not include_statuses:
+            return True
+        return c.status in include_statuses or (
+            "price_change" in include_statuses and c.price_changed
+        )
+
+    shown = [c for c in charges if _matches(c)]
+    # A rough monthly figure for the footer: each series at its cadence.
+    per_month = sum(
+        (c.amount * Decimal(str(30.44 / c.cadence.days)) for c in shown),
+        Decimal(0),
+    ).quantize(Decimal("0.01"))
+    ctx.update(
+        view="recurring",
+        recurring=shown,
+        recurring_total=len(charges),
+        not_budgeted_count=sum(c.status == "not_budgeted" for c in charges),
+        price_change_count=sum(c.price_changed for c in charges),
+        per_month=per_month,
+        recurring_every=RECURRING_EVERY,
+        recurring_statuses=RECURRING_STATUSES,
+        budget_kinds=BUDGET_KINDS,
+        include_kinds=include_kinds,
+        include_statuses=include_statuses,
+        self_query=request.query_string.decode(),
+    )
+    template = (
+        "partials/budget_recurring_content.html"
+        if request.headers.get("HX-Request")
+        else "budget_actual.html"
+    )
+    return render_template(template, **ctx)
+
+
 def _render_actual(filename: str, snapshot_id: int):
     edit_mode = request.args.get("edit") == "1"
     ctx = get_common_context(snapshot_id, filename, edit_mode)
     ctx["active_tab"] = "budget_actual"
+    if request.args.get("view") == "recurring":
+        return _render_recurring(filename, snapshot_id, ctx)
     current = date(ctx["year"], ctx["month"], 1)
     viewed = _valid_month(
         request.args.get("year", current.year, type=int),
@@ -408,6 +544,7 @@ def _render_actual(filename: str, snapshot_id: int):
     prev = date(viewed.year - (viewed.month == 1), (viewed.month - 2) % 12 + 1, 1)
     nxt = date(viewed.year + (viewed.month == 12), viewed.month % 12 + 1, 1)
     ctx.update(
+        view="month",
         budget_actuals=shown,
         missing_count=sum(a.status == "missing" for a in active),
         drift_count=sum(bool(a.drift_amount) for a in active),

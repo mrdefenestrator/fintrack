@@ -130,6 +130,14 @@ def status(cli):
         )
     else:
         click.echo(f"  No completed months in the past {cf['months']} yet")
+    attention = overview["attention"]
+    click.echo(
+        f"\nNeeds attention: {len(attention)} item{'s' if len(attention) != 1 else ''}"
+        if attention
+        else "\nNeeds attention: All clear"
+    )
+    for item in attention:
+        click.echo(f"  {item['text']}")
 
     na = overview["spending_alerts"]
     count = na["count"]

@@ -99,6 +99,14 @@ degrades to a warning without it).
   correction.category, merchant_cache.category, 'Uncategorized')`), so the
   Category and Budget columns can't contradict; the Transactions sheet shows
   that category read-only while linked.
+- Recurring charges (`fintrack/budget/recurring.py`, DESIGN.md "Recurring
+  charges") detect steady merchant series locally and match them to the
+  budget; findings show on Budget vs Actual's Recurring view
+  (`?view=recurring`), the Overview "Needs attention" card, and `fintrack
+  recurring`. Same rule: **never send transaction data to the Claude API**.
+  Needs attention is a list (`overview.needs_attention()`) that other findings
+  opening the same kind of view (e.g. #102's) can append `{source, text}`
+  items to; Spending alerts (#101) keep their own card.
 - Imports stage until confirmed; new merchants are classified at import time,
   and confirming records statement balances into balance_history.
 - Holdings are a supertype/subtype split: one slim `holdings` spine
@@ -227,7 +235,10 @@ degrades to a warning without it).
   before debugging app code: if the breakage moves around, it's this. So never
   put styling a sheet depends on in a new static file (inline it from a
   template, like `partials/grouped_sheet.css`), and reproduce locally by having
-  Playwright fulfil `**/static/**` with status 429.
+  Playwright fulfil `**/static/**` with status 429. htmx requests that get a 429
+  are retried (`base.html`); if one still fails (or the server errors), a
+  filter checkbox reverts to what the server rendered and a short "Couldn't
+  reach the server" notice shows.
 - **Use the dense seed for visual checks.** The e2e fixture is too small to
   scroll. `FINTRACK_DB=x.db uv run python scripts/seed_example.py` seeds
   **Dense Household** (overflows every sheet; what the preview shows), plus

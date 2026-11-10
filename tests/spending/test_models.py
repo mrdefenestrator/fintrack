@@ -16,6 +16,7 @@ def test_all_tables_created(engine):
         "merchant_cache",
         "transaction_corrections",
         "link_suggestion_dismissals",
+        "recurring_dismissals",
         "transaction_duplicates",
         "alert_dismissals",
         "categories",

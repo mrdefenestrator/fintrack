@@ -10,6 +10,9 @@
    - target_url: htmx GET url (the content route)
    - hx_target:  htmx target selector (default #content)
 
+   autocomplete="off" stops Safari/Firefox restoring a stale tick state on
+   Back or reload, so the boxes always start from what the server rendered.
+
    Chip removal calls removeFilter(name, value) (web/static/js/ledger.js), which
    unchecks the matching box and dispatches a native change event.
 
@@ -31,7 +34,7 @@
         class="absolute z-10 mt-1 w-56 max-h-[min(16rem,60vh)] overflow-y-auto bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-2 left-0">
         {% for o in options %}
         <label class="flex items-center px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer">
-            <input type="checkbox" name="{{ name }}" value="{{ o.value }}" {% if o.checked %}checked{% endif %}
+            <input type="checkbox" name="{{ name }}" value="{{ o.value }}" autocomplete="off" {% if o.checked %}checked{% endif %}
                 {% if form_id %}onchange="document.getElementById('{{ form_id }}').submit()"{% else %}hx-get="{{ target_url }}" hx-target="{{ hx_target }}" hx-include="[name]" hx-push-url="true" hx-trigger="change"{% endif %}
                 class="mr-2 rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500">
             <span class="text-sm">{{ o.display }}</span>
@@ -73,14 +76,14 @@
     <div x-show="open" style="display:none" @click.outside="open = false"
         class="absolute z-10 mt-1 w-56 max-h-[min(16rem,60vh)] overflow-y-auto bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-2 left-0">
         <label class="flex items-center px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer">
-            <input type="radio" name="{{ name }}" value="" {% if not selected %}checked{% endif %}
+            <input type="radio" autocomplete="off" name="{{ name }}" value="" {% if not selected %}checked{% endif %}
                 hx-get="{{ target_url }}" hx-target="{{ hx_target }}" hx-include="[name]" hx-push-url="true" hx-trigger="change"
                 class="mr-2 border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500">
             <span class="text-sm text-gray-500 dark:text-gray-400">{{ any_label }}</span>
         </label>
         {% for o in options %}
         <label class="flex items-center px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer">
-            <input type="radio" name="{{ name }}" value="{{ o.value }}" {% if o.value == selected %}checked{% endif %}
+            <input type="radio" autocomplete="off" name="{{ name }}" value="{{ o.value }}" {% if o.value == selected %}checked{% endif %}
                 hx-get="{{ target_url }}" hx-target="{{ hx_target }}" hx-include="[name]" hx-push-url="true" hx-trigger="change"
                 class="mr-2 border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500">
             <span class="text-sm">{{ o.display }}</span>

@@ -386,6 +386,25 @@ link_suggestion_dismissals = Table(
     ),
 )
 
+# A merchant the user marked "not recurring" (issue #100): the recurring-charge
+# detector (fintrack.budget.recurring) stops reporting it in this snapshot.
+# Keyed by the resolved merchant name, since a recurring series is a merchant's
+# transactions, not one row; merchants are global, so the snapshot scopes it.
+recurring_dismissals = Table(
+    "recurring_dismissals",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column(
+        "snapshot_id",
+        Integer,
+        ForeignKey("snapshots.id", ondelete="CASCADE"),
+        nullable=False,
+    ),
+    Column("merchant", String, nullable=False),
+    Column("created_at", DateTime, default=_utcnow),
+    UniqueConstraint("snapshot_id", "merchant", name="uq_recurring_dismissal"),
+)
+
 # A possible duplicate (issue #82): one row per transaction flagged as a likely
 # copy of `duplicate_of_id`, found at import or by a scan. The user resolves it:
 # 'duplicate' hides the row from every confirmed-transaction read (see
@@ -499,8 +518,8 @@ budget_entries = Table(
     Column("sort_order", Integer, nullable=False, default=0),
     CheckConstraint("kind IN ('income', 'expense')", name="ck_budget_kind"),
     CheckConstraint(
-        "recurrence IN ('one_time', 'monthly', 'biweekly', 'quarterly',"
-        " 'semiannual', 'annual')",
+        "recurrence IN ('one_time', 'monthly', 'weekly', 'biweekly',"
+        " 'quarterly', 'semiannual', 'annual')",
         name="ck_budget_recurrence",
     ),
     # The deposit/payment holding must live in the same snapshot (untyped on

@@ -192,9 +192,15 @@ Single `MetaData` in `fintrack/core/models.py`.
 - **link_suggestion_dismissals** — `(transaction_id, budget_entry_ref)` pairs
   the user rejected as link suggestions, unique per pair; both FKs cascade.
   Snapshot consistency is checked in `reconcile`, as for the link itself.
+- **recurring_dismissals** — merchants the user marked "not recurring" (see
+  "Recurring charges"), unique per `(snapshot_id, merchant)`; keyed by the
+  resolved merchant name, since merchants are global. Cascades with the
+  snapshot.
 - **categories** — the shared taxonomy, seeded from `configs/categories.yaml`.
 - **budget_entries** — scheduled income/expenses: `kind`, `amount`,
-  `recurrence` plus its parameters (`date`, `day_of_month`, `month`,
+  `recurrence` (`one_time|monthly|weekly|biweekly|quarterly|semiannual|annual`;
+  weekly counts 52/12 times a month, biweekly keeps the legacy 2) plus its
+  parameters (`date`, `day_of_month`, `month`,
   `day_of_year`, `continuous`), `auto_account_ref` (which account the money
   moves through), and a nullable `category` linking to the ledger taxonomy so
   projections don't double-count a budgeted expense against estimated
@@ -594,6 +600,45 @@ funds. The Transactions sheet renders the Category cell read-only (inherited)
 while a categorized link is in place; unlink to edit it directly. An entry with
 no category doesn't clobber the merchant classification.
 
+### Recurring charges
+
+`fintrack/budget/recurring.py` (issue #100) finds subscriptions and bills the
+budget doesn't cover, and recurring prices that changed. Like the suggester it
+is purely local — no transaction data goes to the Claude API.
+
+- **Detection.** Over the last 400 days (so a yearly charge shows twice), a
+  merchant's charges — and separately its deposits, reported as income — are
+  *recurring* when the gaps between them fit one cadence (weekly 5–9 days,
+  biweekly 11–17, monthly 25–36, yearly 340–390; at most one gap in five off,
+  none shorter), at least 3 times (2 for yearly), for a steady price (within
+  10%), and the last charge is recent (within ~1.5 intervals; older series
+  look cancelled). Amounts may step to a new price: the series splits into
+  runs of same-price charges, and up to three runs are allowed when the middle
+  ones have at least two charges each. Transfers are excluded. Reads go through
+  `get_transactions`, so hidden duplicates and unconfirmed imports never count.
+- **Against the budget.** Each series is `linked` (its transactions link to an
+  entry), `unlinked` (an entry names the merchant, or shares its category,
+  recurrence and price, but nothing is linked), `covered` (a variable line
+  measured by category total claims its category), or `not_budgeted`.
+- **Price change.** When the latest run is a new price that started within
+  ~3 months (two intervals for longer cadences), the series reports
+  previous → current "since" that date, budgeted or not — the unlinked
+  complement to Budget vs Actual's per-entry drift.
+- **Actions.** *Add to budget* creates an entry from the series (current price,
+  cadence → recurrence, day of month / month from the last charge, category,
+  usual account) and links every charge in it; *Link* links them to the
+  `unlinked` match; *Not recurring* stores the merchant in
+  `recurring_dismissals` and hides it.
+
+Surfaced as Budget vs Actual's **Recurring** view (`?view=recurring`, a
+By month / Recurring toggle above the sheet): a flat grouped sheet of every
+series — Merchant · Category · Typical · Every · N · Last · Next · Budget ·
+Price change — with Kind and Status filters (Status includes a "Price change"
+flag) and a rough per-month footer; in edit mode the actions cell offers
++ (add) or a chain (link), and × (not recurring). The Overview's Needs
+attention card and `fintrack recurring` show the same findings. Whether
+recurrence should also feed `suggest_links` is a follow-up.
+
 ## Web UI
 
 Single Flask app (`web/app.py`), port 5003 (`FINTRACK_PORT`), database from
@@ -854,6 +899,7 @@ hasn't shipped are simply absent.
 |---|---|---|
 | Net worth / Liquid | both now, and their projected change by the end of the 12 months | Projections (`?months=12`); the whole card is the link |
 | Cash flow | this month's savings rate, income, spending, and net so far; the average rate, net, and income over Trailing 12's completed months | Trends (`?period=trailing12`) |
+| Needs attention | how many findings ("All clear" when none), then one line each, first five: recurring charges not in the budget ("Spotify: $11.99/mo, not in budget") and recurring price changes ("Netflix: $15.49 → $17.99 since Oct") | Budget vs Actual's Recurring view filtered to those (`?view=recurring&status=not_budgeted&status=price_change`) |
 | Spending alerts | status ("All clear" / how many things to look at), one line per spending alert (five, then "+N more") | Transactions (`?all_months=true&status=flagged`): the flagged charges and this month's rows in hot categories, each dismissable |
 | Projection warnings | status ("All clear" / how many accounts dip below their minimum), the low point, each below-minimum account, loan payoffs | Projections (`?months=12`), where below-minimum cells are marked |
 
@@ -863,11 +909,16 @@ the sheets they link to. Each card is one link (the whole card) to one view;
 no per-line links or footer links. Opening Projections on a specific month
 (`?month=`) waits on the month breakdown working on phones (#114).
 
+Needs attention is fed by `needs_attention()` in `overview.py`: a list of
+`{source, text}` items that each feature appends to (recurring charges today;
+missed charges and stale balances are planned, #102). Spending alerts (#101)
+keep their own card, since they open a different view. Its one link follows
+what it holds.
+
 Net worth's "change over the past 12 months" waits on balance history being
-recorded over time (#107, #98). Planned cards: Needs attention (recurring
-charges, missed charges, stale balances; #100, #102), Debt and cards (#102).
-An empty snapshot still renders
-every card (zeros) under a pointer to Holdings and Budget.
+recorded over time (#107, #98). Planned cards: Debt and cards (#102). An empty
+snapshot still renders every card (zeros) under a pointer to Holdings and
+Budget.
 
 ### Projections sheet
 
@@ -896,6 +947,7 @@ duplicates list [--all] | mark <txn> | dismiss <txn> | undo <txn> | scan [--appl
 alerts     [list] [--all] | dismiss <txn>|--category NAME | undo <txn>|--category NAME
 dedup      [--apply]
 transactions link <txn> <entry> | unlink <txn> | suggest | dismiss <txn> <entry> | undismiss <txn> | budget-actual
+recurring  [list] [--all] [--dismissed] | add <merchant> | link <merchant> <entry> | dismiss <merchant> | undismiss <merchant>
 merchants  list | set
 categories list|add|edit|delete
 report     monthly | trends

@@ -215,6 +215,6 @@ def test_breakdown_uses_month_keys_and_ignores_past_months(client):
 
 def test_estimate_lives_in_the_menu(client):
     body = _get(client)
-    menu = body.split("data-proj-menu")[1].split("</details>")[0]
+    menu = body.split("<div data-proj-menu-panel")[1].split("</details>")[0]
     assert "data-estimate-toggle" in menu
     assert "estimate=1" in menu

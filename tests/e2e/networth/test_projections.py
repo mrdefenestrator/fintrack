@@ -173,3 +173,16 @@ def test_projections_timeline_pager(page, flask_server):
     window.locator("[data-pager-latest]").click()
     page.wait_for_url(lambda url: "from=" not in url)
     assert window.locator("[data-pager-label]").inner_text() == now_label
+
+
+@pytest.mark.parametrize("width", [320, 390, 430, 700])
+def test_projections_menu_stays_on_screen(page, flask_server, width):
+    """The "⋯" menu opens fully inside the viewport wherever the controls wrap
+    the button to (it was cut off on phones)."""
+    page.set_viewport_size({"width": width, "height": 800})
+    page.goto(f"{flask_server}/s/test_finances/projections?estimate=1")
+    page.click("[data-proj-menu] summary")
+    box = page.locator("[data-proj-menu-panel]").bounding_box()
+    assert box["x"] >= 0
+    assert box["x"] + box["width"] <= width
+    assert page.locator("[data-estimate-toggle]").is_visible()

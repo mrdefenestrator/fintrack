@@ -108,12 +108,15 @@
             {'url': proj_url(view='change'), 'label': 'Changes', 'active': view == 'change'},
         ], use_htmx=false) }}
     </div>
-    <details class="relative" data-proj-menu>
+    {# The menu opens under its button, nudged sideways to stay on screen
+       wherever the controls wrap (the button can land at either edge). #}
+    <details class="relative" data-proj-menu
+        ontoggle="if (this.open) { const p = this.querySelector('[data-proj-menu-panel]'); p.style.left = '0px'; const r = p.getBoundingClientRect(), vw = document.documentElement.clientWidth, g = 16; let dx = Math.min(0, vw - g - r.right); if (r.left + dx < g) dx = g - r.left; p.style.left = dx + 'px'; }">
         <summary title="More options" aria-label="More options"
             class="list-none [&::-webkit-details-marker]:hidden h-8 w-8 flex items-center justify-center rounded-md border border-gray-300 dark:border-gray-600 cursor-pointer select-none hover:bg-gray-100 dark:hover:bg-gray-700 {% if estimate %}text-blue-600 dark:text-blue-400{% else %}text-gray-500 dark:text-gray-400{% endif %}">
             <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.75"/><circle cx="12" cy="12" r="1.75"/><circle cx="19" cy="12" r="1.75"/></svg>
         </summary>
-        <div class="absolute left-1/2 -translate-x-1/2 z-30 mt-1 w-64 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 shadow-lg p-1 text-sm">
+        <div data-proj-menu-panel class="absolute left-0 z-30 mt-1 w-72 max-w-[calc(100vw-2rem)] rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 shadow-lg p-1 text-sm">
             <a href="{{ proj_url(estimate=none if estimate else 1) }}"
                 data-estimate-toggle role="menuitemcheckbox" aria-checked="{{ 'true' if estimate else 'false' }}"
                 class="flex items-start gap-2 px-2 py-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200">

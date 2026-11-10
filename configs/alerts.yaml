@@ -1,0 +1,34 @@
+# Spending alert thresholds (issue #101). All checks run locally over the
+# snapshot's confirmed transactions; nothing is sent to the Claude API.
+# Keep it quiet: raise a bar if alerts become noise. Missing keys use the
+# defaults in fintrack/ledger/alerts.py (AlertConfig).
+
+# Only charges dated within this many days (today included) can alert.
+window_days: 30
+
+# Spending categories only: these never alert and never count as history.
+excluded_categories: [Income, Transfer]
+
+# Unusually large charge, against the merchant's earlier charges ...
+large_min_history: 3          # earlier charges needed to compare against
+large_merchant_multiple: 2.0  # over this × the merchant's median charge
+large_merchant_min_over: 50   # ... and at least this many dollars above it
+# ... or, with less merchant history, against the category's earlier charges.
+large_category_multiple: 3.0
+large_category_min_over: 100
+
+# New merchant: the first-ever charge from a merchant, at least this much,
+# once the snapshot has this many days of history (so a first import doesn't
+# flag every merchant).
+new_merchant_min_amount: 50
+new_merchant_min_history_days: 60
+
+# Category running hot: from this day of the month, month-to-date spending is
+# on pace (spent so far / days elapsed × days in month) for this multiple of
+# the category's budget for the month, or its average over the last N
+# completed months when it has no budget, and at least this many dollars over.
+hot_start_day: 7
+hot_pace_multiple: 1.3
+hot_min_over: 100
+hot_average_months: 6
+hot_min_average_months: 3     # completed months needed for an average

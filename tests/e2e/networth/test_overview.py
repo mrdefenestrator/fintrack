@@ -4,7 +4,7 @@ import pytest
 
 pytestmark = pytest.mark.e2e
 
-_CARDS = ("net_worth_liquid", "cash_flow", "projection_warnings")
+_CARDS = ("net_worth_liquid", "cash_flow", "spending_alerts", "projection_warnings")
 
 
 def test_snapshot_root_lands_on_overview(page, flask_server):
@@ -97,9 +97,10 @@ def test_overview_on_wide_screens_uses_columns(page, flask_server):
     boxes = [
         page.locator(f"[data-overview-card='{key}']").bounding_box() for key in _CARDS
     ]
-    # Three cards fill the three xl columns, side by side.
-    assert len({round(b["x"]) for b in boxes}) == len(_CARDS)
-    assert len({round(b["y"]) for b in boxes}) == 1
+    # Four cards fill the three xl columns: three side by side, one below.
+    assert len({round(b["x"]) for b in boxes}) == 3
+    assert len({round(b["y"]) for b in boxes[:3]}) == 1
+    assert boxes[3]["y"] > boxes[0]["y"]
 
 
 def test_overview_of_an_empty_snapshot(page, flask_server):

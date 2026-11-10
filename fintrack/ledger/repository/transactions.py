@@ -1,4 +1,5 @@
 from calendar import monthrange
+from collections.abc import Collection
 from datetime import date
 
 from sqlalchemy import Connection, and_, func, not_, or_, select
@@ -49,6 +50,7 @@ def get_transactions(
     status: str | None = None,
     amount: str | None = None,
     import_id: int | None = None,
+    transaction_ids: Collection[int] | None = None,
     snapshot_id: int | None = None,
 ) -> list[dict]:
     """Get transactions with resolved category and merchant.
@@ -60,7 +62,8 @@ def get_transactions(
     (e.g. "12.34", "-12.34", "10-20", ">50"); invalid amount text is ignored.
     `status` is one of corrected / uncategorized / categorized, or
     possible_duplicate (open flags) / duplicate (rows marked duplicate — the
-    only view that includes them; issue #82).
+    only view that includes them; issue #82). `transaction_ids` limits the
+    rows to those ids (the "Flagged" view passes the alerted ids, issue #101).
     """
     from fintrack.core.models import transactions
 
@@ -89,6 +92,9 @@ def get_transactions(
 
     if import_id:
         subq = subq.where(transactions.c.import_id == import_id)
+
+    if transaction_ids is not None:
+        subq = subq.where(transactions.c.id.in_(list(transaction_ids)))
 
     subq = subq.subquery()
 

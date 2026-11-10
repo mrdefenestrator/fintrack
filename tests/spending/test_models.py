@@ -17,6 +17,7 @@ def test_all_tables_created(engine):
         "transaction_corrections",
         "link_suggestion_dismissals",
         "transaction_duplicates",
+        "alert_dismissals",
         "categories",
         "budget_entries",
         "balance_history",

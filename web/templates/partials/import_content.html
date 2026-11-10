@@ -1,3 +1,10 @@
+{# After a confirm: spending alerts on the rows just imported (issue #101). #}
+{% if import_alert_count %}
+<p id="import-alerts" class="mb-4 text-sm text-orange-700 dark:text-orange-300">
+    {{ import_alert_count }} thing{{ 's' if import_alert_count != 1 else '' }} to look at in this import.
+    <a class="underline" href="/s/{{ filename }}/transactions?all_months=true&status=flagged">Review them in Transactions</a>
+</p>
+{% endif %}
 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
     <!-- Upload zone -->
     <div>

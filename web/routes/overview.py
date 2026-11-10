@@ -40,5 +40,12 @@ def overview_view(filename):
         ),
         # Cash flow card: Trends' Trailing 12, the window its average covers.
         trends_url=url_for("trends.index", filename=filename, period="trailing12"),
+        # Spending alerts card: every flagged transaction, any month.
+        flagged_url=url_for(
+            "transactions.index",
+            filename=filename,
+            all_months="true",
+            status="flagged",
+        ),
         **context,
     )

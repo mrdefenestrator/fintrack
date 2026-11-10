@@ -52,12 +52,12 @@ degrades to a warning without it).
 ## Project Structure
 
 - `fintrack/core/` — engine/FK pragma, unified models (single MetaData), the holdings supertype/subtype CRUD helper (`holdings.py`), config paths, formatting
-- `fintrack/ledger/` — statement importer (OFX/CSV, normalization, dedup, near-duplicate matching), duplicate scan, classifier, ledger repositories
+- `fintrack/ledger/` — statement importer (OFX/CSV, normalization, dedup, near-duplicate matching), duplicate scan, spending-alert checks, classifier, ledger repositories
 - `fintrack/accounts/` — unified accounts repository, balance_history, OFX account matching
 - `fintrack/budget/` — budget entries, recurrence/proration engine
 - `fintrack/networth/` — assets/debts, key-number and funding calculations, liquidity-tier totals + equity pairs
 - `fintrack/projections/` — multi-month balance projection engine + estimators
-- `fintrack/insights/` — Overview numbers (web landing page + `status`)
+- `fintrack/insights/` — Overview numbers (web landing page + `status`), cash flow, spending alerts
 - `fintrack/snapshots/`, `fintrack/migrate/` (legacy one-time import), `fintrack/cli/` (one module per command group)
 - `web/` — Flask app, routes/, Jinja2/Tailwind/HTMX templates
 - `tests/` — unit tests by domain; `tests/e2e/` Playwright (marker `e2e`)
@@ -189,6 +189,13 @@ degrades to a warning without it).
   `not_hidden_duplicate()` — apply it in any new query over confirmed
   transactions (or build on `base_transaction_query`). Matching is local;
   never send transaction data to the Claude API for it.
+- Spending alerts (DESIGN.md "Spending alerts") — large charge, new merchant,
+  category running hot — are pure, local checks in `fintrack/ledger/alerts.py`
+  with thresholds in `configs/alerts.yaml`; `fintrack/insights/alerts.py`
+  `get_alerts()` feeds the Overview "Spending alerts" card, the Transactions
+  markers + "Flagged" filter, the import confirmation, `fintrack alerts`, and
+  `status`. Only dismissals are stored (`alert_dismissals`). Never send
+  transaction data to the Claude API for them.
 - SQLite runs with `foreign_keys=ON`; snapshot FKs cascade, ownership refs
   (payment_account_ref, auto_account_ref, secured_asset_ref) do not. Those
   refs are composite (`(ref, snapshot_id)`), so they can't cross snapshots.

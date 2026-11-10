@@ -8,8 +8,14 @@ from fintrack.budget import reconcile
 from fintrack.budget.repository import get_budget_entries
 from fintrack.core.coerce import parse_amount_filter
 from fintrack.core.models import transactions as txn_table
+from fintrack.insights.alerts import alerts_by_transaction
 from fintrack.ledger.repository.accounts import list_accounts
 from fintrack.ledger.repository.aggregations import base_transaction_query
+from fintrack.ledger.repository.alerts import (
+    dismiss_category_alert,
+    dismiss_transaction_alert,
+    undismiss_transaction_alert,
+)
 from fintrack.ledger.repository.categories import get_category_names
 from fintrack.ledger.repository.corrections import apply_transaction_correction
 from fintrack.ledger.repository.duplicates import (
@@ -91,11 +97,25 @@ def _budget_choices(conn, snapshot_id):
     return options, labels
 
 
-def _render_row(conn, txn_id, *, editing_field=None, edit_mode=True):
+def _today():
+    return datetime.now().astimezone().date()
+
+
+def _txn_alerts(conn, snapshot_id):
+    """The open spending alert behind each flagged row (issue #101), for the
+    row markers and the Flagged filter. Rows in a category running hot this
+    month carry that category's alert."""
+    return alerts_by_transaction(conn, snapshot_id, _today())
+
+
+def _render_row(
+    conn, txn_id, *, editing_field=None, edit_mode=True, alert_dismissed=False
+):
     """Render one edit-mode transaction row, or a 404 when it doesn't exist.
 
     Shared by the cell/row/update/link routes, which all swap a single row back
-    into the Transactions sheet. ``editing_field`` opens that cell's editor."""
+    into the Transactions sheet. ``editing_field`` opens that cell's editor.
+    ``alert_dismissed`` shows the just-dismissed alert's Undo."""
     txn = _load_txn(conn, txn_id)
     if not txn:
         return "", 404
@@ -112,6 +132,8 @@ def _render_row(conn, txn_id, *, editing_field=None, edit_mode=True):
         edit_mode=edit_mode,
         budget_options=budget_options,
         budget_labels=budget_labels,
+        txn_alerts=_txn_alerts(conn, g.snapshot_id),
+        alert_dismissed=alert_dismissed,
         **kwargs,
     )
 
@@ -119,7 +141,7 @@ def _render_row(conn, txn_id, *, editing_field=None, edit_mode=True):
 @bp.route("/transactions")
 def index():
     edit_mode = request.args.get("edit") == "1"
-    today = datetime.now().astimezone().date()
+    today = _today()
     year = request.args.get("year", today.year, type=int)
     month = request.args.get("month", today.month, type=int)
     # Account and Category are multi-select: repeated ?account_id=/?category=
@@ -151,6 +173,10 @@ def index():
 
     engine = current_app.config["engine"]
     with engine.connect() as conn:
+        txn_alerts = _txn_alerts(conn, g.snapshot_id)
+        # "Flagged" (issue #101) is computed, not stored: the rows with an
+        # open spending alert.
+        flagged = status == "flagged"
         txns = get_transactions(
             conn,
             year=None if all_months else year,
@@ -159,7 +185,8 @@ def index():
             account_ids=selected_accounts or None,
             search=search,
             amount=amount,
-            status=status,
+            status=None if flagged else status,
+            transaction_ids=txn_alerts.keys() if flagged else None,
             snapshot_id=g.snapshot_id,
         )
         accounts = list_accounts(conn, g.snapshot_id)
@@ -215,6 +242,7 @@ def index():
         edit_mode=edit_mode,
         budget_options=budget_options,
         budget_labels=budget_labels,
+        txn_alerts=txn_alerts,
     )
 
 
@@ -304,3 +332,42 @@ def duplicate(txn_id):
         except LookupError:
             abort(404)
         return _render_row(conn, txn_id, edit_mode=request.form.get("edit") == "1")
+
+
+@bp.route("/transactions/<int:txn_id>/alert", methods=["POST"])
+def alert(txn_id):
+    """Dismiss (or undo dismissing) a row's spending alert (issue #101). A
+    dismissed alert is hidden everywhere: the marker, Flagged, Overview, and
+    `fintrack alerts`. Works in view and edit mode, like the duplicate
+    actions.
+
+    On a row flagged because its category is running hot, Dismiss hides that
+    category's alert for the month, which unflags all its rows at once, so
+    the view reloads (keeping its URL) instead of swapping one row."""
+    action = request.form.get("action", "")
+    if action not in ("dismiss", "undo"):
+        abort(400)
+    engine = current_app.config["engine"]
+    with engine.connect() as conn:
+        row_alert = _txn_alerts(conn, g.snapshot_id).get(txn_id)
+        try:
+            if action == "dismiss" and row_alert and row_alert["kind"] == "running_hot":
+                dismiss_category_alert(
+                    conn, g.snapshot_id, row_alert["category"], row_alert["date"]
+                )
+                current_url = request.headers.get(
+                    "HX-Current-URL", f"/s/{g.filename}/transactions"
+                )
+                return "", 204, {"HX-Redirect": current_url}
+            if action == "dismiss":
+                dismiss_transaction_alert(conn, g.snapshot_id, txn_id)
+            else:
+                undismiss_transaction_alert(conn, g.snapshot_id, txn_id)
+        except LookupError:
+            abort(404)
+        return _render_row(
+            conn,
+            txn_id,
+            edit_mode=request.form.get("edit") == "1",
+            alert_dismissed=action == "dismiss",
+        )

@@ -427,6 +427,46 @@ transaction_duplicates = Table(
     Index("ix_transaction_duplicates_of", "duplicate_of_id"),
 )
 
+# A dismissed spending alert (issue #101). Alerts are computed on the fly from
+# transaction history (fintrack.ledger.alerts); this overlay only remembers
+# which ones the user dismissed, so they stay hidden everywhere (Overview,
+# the Transactions marker and Flagged filter, `fintrack alerts`). A row is
+# either one transaction (every alert on it: large charge, new merchant) or
+# one category's "running hot" alert for one month (month = its 1st).
+# Snapshot-scoped and cascading on both the snapshot and the transaction.
+alert_dismissals = Table(
+    "alert_dismissals",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column(
+        "snapshot_id",
+        Integer,
+        ForeignKey("snapshots.id", ondelete="CASCADE"),
+        nullable=False,
+    ),
+    Column(
+        "transaction_id",
+        Integer,
+        ForeignKey("transactions.id", ondelete="CASCADE"),
+        nullable=True,
+    ),
+    Column("category", String, nullable=True),
+    Column("month", Date, nullable=True),
+    Column("created_at", DateTime, default=_utcnow),
+    CheckConstraint(
+        "(transaction_id IS NOT NULL AND category IS NULL AND month IS NULL)"
+        " OR (transaction_id IS NULL AND category IS NOT NULL"
+        " AND month IS NOT NULL)",
+        name="ck_alert_dismissal_target",
+    ),
+    UniqueConstraint(
+        "snapshot_id", "transaction_id", name="uq_alert_dismissal_transaction"
+    ),
+    UniqueConstraint(
+        "snapshot_id", "category", "month", name="uq_alert_dismissal_category"
+    ),
+)
+
 categories = Table(
     "categories",
     metadata,

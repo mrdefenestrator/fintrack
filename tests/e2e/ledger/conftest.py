@@ -501,6 +501,53 @@ def duplicates_server(tmp_path_factory):
     _stop_server(proc)
 
 
+@pytest.fixture(scope="module")
+def alerts_server(tmp_path_factory):
+    """Spending alerts (issue #101): a confirmed history of three $50
+    HARDWARE charges 2-4 months back, then a staged import with a $200
+    HARDWARE charge (large) and a first $80 STRANGER charge (new merchant)
+    from the last few days. Yields (base_url, staged import id)."""
+    from datetime import timedelta
+
+    port = _free_port()
+    db_path = tmp_path_factory.mktemp("alerts_db") / "test.db"
+    proc = _start_server(port, db_path)
+    base_url = f"http://127.0.0.1:{port}"
+    _create_ledger_snapshot(base_url)
+    html = _form_post(
+        f"{base_url}/s/ledger/import/accounts",
+        {"acct_name": "Card", "acct_institution": "Bank", "acct_type": "credit_card"},
+    )
+    account_id = re.search(r'<option value="(\d+)"', html).group(1)
+    today = datetime.now().astimezone().date()
+
+    def day(n):
+        return (today - timedelta(days=n)).strftime("%Y%m%d")
+
+    def upload(name, rows):
+        _multipart_post(
+            f"{base_url}/s/ledger/import/upload",
+            {"account_id": account_id},
+            {"files": (name, _ofx(rows))},
+        )
+        return re.findall(r'id="batch-(\d+)"', _get(f"{base_url}/s/ledger/import"))
+
+    [history_id] = upload(
+        "history.qfx",
+        [(f"H{n}", day(n), "-50.00", "HARDWARE") for n in (120, 90, 60)],
+    )
+    _form_post(f"{base_url}/s/ledger/import/{history_id}/confirm")
+    [recent_id] = upload(
+        "recent.qfx",
+        [
+            ("R1", day(2), "-200.00", "HARDWARE"),
+            ("R2", day(1), "-80.00", "STRANGER"),
+        ],
+    )
+    yield base_url, recent_id
+    _stop_server(proc)
+
+
 # ---------------------------------------------------------------------------
 # File fixtures for upload tests
 # ---------------------------------------------------------------------------

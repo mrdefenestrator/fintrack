@@ -88,6 +88,39 @@
                 evt.detail.isError = false;
             }
         });
+        // The PR preview answers overlapping requests with 429 instead of
+        // queueing them (see CLAUDE.md). A dropped htmx GET used to leave the
+        // page half-changed: a filter checkbox ticked with no matching pill or
+        // rows. Re-fire the same trigger a few times with a growing pause (a
+        // GET is safe to repeat), and if it still fails, put checkboxes and
+        // radios back to the state the server last rendered (defaultChecked).
+        (function() {
+            const MAX_RETRIES = 3;
+            const tries = new WeakMap();
+            function restore(elt) {
+                if (elt.matches && elt.matches('input[type=checkbox], input[type=radio]')) {
+                    elt.checked = elt.defaultChecked;
+                }
+            }
+            function failed(evt, status) {
+                const elt = evt.detail.elt;
+                const cfg = evt.detail.requestConfig || {};
+                const trigger = cfg.triggeringEvent && cfg.triggeringEvent.type;
+                const n = tries.get(elt) || 0;
+                if (status === 429 && cfg.verb === 'get' && trigger && n < MAX_RETRIES && elt.isConnected) {
+                    tries.set(elt, n + 1);
+                    setTimeout(() => htmx.trigger(elt, trigger), 400 * (n + 1));
+                    return;
+                }
+                tries.delete(elt);
+                restore(elt);
+            }
+            document.addEventListener('htmx:responseError', (evt) => failed(evt, evt.detail.xhr.status));
+            document.addEventListener('htmx:sendError', (evt) => failed(evt, 0));
+            document.addEventListener('htmx:afterRequest', (evt) => {
+                if (evt.detail.successful) tries.delete(evt.detail.elt);
+            });
+        })();
         // Stamp every htmx request with the browser's LOCAL date so server-side
         // "today" (e.g. the As Of on a manual balance edit) matches the user's
         // day, not the server's timezone (QA #6). The header is read by the

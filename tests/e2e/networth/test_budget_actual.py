@@ -240,3 +240,47 @@ def test_dismiss_recurring(page, flask_server, _db_path):
     _recurring_row(page).locator("[data-recurring-dismiss]").click()
     _recurring_row(page).wait_for(state="detached")
     assert "No recurring charges found" in page.locator("#recurring-table").inner_text()
+
+
+# --- Dropped filter requests (PR preview 429s) --------------------------------
+
+
+def _status_filter(page, value):
+    page.click("button.filter-dropdown-trigger:has-text('Status')")
+    page.locator(f"input[name=status][value={value}]").check()
+
+
+def _drop_filter_requests(page, times):
+    """Answer the next ``times`` filter requests with 429, as the PR preview
+    does for overlapping requests."""
+    left = {"n": times}
+
+    def handle(route):
+        if left["n"] > 0:
+            left["n"] -= 1
+            return route.fulfill(status=429, body="Too Many Requests")
+        return route.continue_()
+
+    page.route("**/budget/actual?*status=*", handle)
+
+
+def test_dropped_filter_request_is_retried(page, flask_server):
+    page.goto(f"{flask_server}{_URL}?year=2026&month=4")
+    _drop_filter_requests(page, 1)
+    _status_filter(page, "unlinked")
+    page.wait_for_url("**status=unlinked**")
+    chip = page.locator("span:has(> button[title=Remove])", has_text="Not linked")
+    chip.wait_for()
+    assert page.locator("input[name=status][value=unlinked]").is_checked()
+
+
+def test_filter_box_unticks_when_request_keeps_failing(page, flask_server):
+    page.goto(f"{flask_server}{_URL}?year=2026&month=4")
+    _drop_filter_requests(page, 99)
+    _status_filter(page, "unlinked")
+    box = page.locator("input[name=status][value=unlinked]")
+    page.wait_for_function(
+        "!document.querySelector('input[name=status][value=unlinked]').checked"
+    )
+    assert not box.is_checked()
+    assert page.locator("span:has(> button[title=Remove])").count() == 0

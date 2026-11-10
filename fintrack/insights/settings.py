@@ -27,6 +27,8 @@ class InsightsConfig:
     very_stale_days: Mapping[str, int] = _per_group(95, 95, 180, 180)
     # Days since an account's last confirmed import before a reminder.
     import_stale_days: int = 35
+    # Credit card usage (owed ÷ limit) above this percent is highlighted.
+    card_usage_high_pct: float = 30
 
 
 _PER_GROUP_KEYS = ("stale_days", "very_stale_days")

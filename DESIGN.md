@@ -730,11 +730,16 @@ independently drag-reorderable; debt↔asset equity/LTV pairing
   cells; shorter groups pad with a filler `<td colspan>` to the widest group's
   column count so the HTML table grid stays consistent.
   Cash: Reserve·Funding·As Of. Credit Cards:
-  Limit·Available·Rewards·Statement·Due·Linked·As Of. Loans:
-  Interest·Equity·LTV·Original·Term·Originated·P&I·Paid·Due·Linked·As Of. Assets:
+  Limit·Available·Used·Rewards·Statement·Due·Linked·As Of. Loans:
+  Interest·Mo. Interest·Equity·LTV·Original·Term·Originated·P&I·Paid·Payoff·Due·Linked·As Of. Assets:
   Unit Price·Qty·Source·Est. Return·Mo. Contrib. Equity and LTV show on the
   **loan** row (the debt side of a secured pair). Original, Term, and Originated
   capture loan origination inputs; P&I and Paid are derived amortization values.
+  Mo. Interest (owed × rate ÷ 12) and Payoff (when the current balance reaches
+  zero at P&I) come from `fintrack/insights/debt.py`, as does a card's Used
+  (owed ÷ limit, amber past `card_usage_high_pct`, 30%, in
+  `configs/insights.yaml`) — issue #102. Each band's `<tbody>` carries
+  `id="holdings-<key>"` so the Overview can link to it.
   Due is a recurring day of month, clamped to month-end when needed.
 - **Row accent by group, not sign.** Cash, Credit Cards, Loans, and Assets have
   distinct green, rose, amber, and blue accents. A credit card therefore reads
@@ -936,6 +941,7 @@ hasn't shipped are simply absent.
 |---|---|---|
 | Net worth / Liquid | both now, and their projected change by the end of the 12 months | Projections (`?months=12`); the whole card is the link |
 | Cash flow | this month's savings rate, income, spending, and net so far; the average rate, net, and income over Trailing 12's completed months | Trends (`?period=trailing12`) |
+| Debt and cards | total owed on loans, interest this month and total scheduled payments, the next payoff; total card usage (owed ÷ limit, amber past 30%) and owed of limit | Holdings at the Loans band (`#holdings-loan`), or the Credit Cards band without loans |
 | Needs attention | how many findings ("All clear" when none), then one line each, first five: recurring charges not in the budget ("Spotify: $11.99/mo, not in budget"), recurring price changes ("Netflix: $15.49 → $17.99 since Oct"), stale balances ("Chase Checking: last updated 41 days ago"), and accounts overdue for a statement ("Chase Checking: no statement imported in 51 days") | what the card leads with: Budget vs Actual's Recurring view filtered to those (`?view=recurring&status=not_budgeted&status=price_change`), or Holdings for stale data |
 | Spending alerts | status ("All clear" / how many things to look at), one line per spending alert (five, then "+N more") | Transactions (`?all_months=true&status=flagged`): the flagged charges and this month's rows in hot categories, each dismissable |
 | Projection warnings | status ("All clear" / how many accounts dip below their minimum), the low point, each below-minimum account, loan payoffs | Projections (`?months=12`), where below-minimum cells are marked |
@@ -959,8 +965,15 @@ imports but none in `import_stale_days` (35). A holding already reported for a
 stale balance isn't reported again for its imports. `status` prints the same
 lines.
 
+Debt and cards (`fintrack/insights/debt.py` `debt_and_cards()`) summarizes each
+loan — owed, rate, scheduled payment (from the origination fields, as
+Projections uses), this month's interest (owed × rate ÷ 12), and the payoff date
+at that payment (`amortization.projected_payoff_date`) — plus each card's usage.
+A loan without origination fields still counts toward owed and interest but has
+no payment or payoff. `status` prints the card as text after Cash flow.
+
 Net worth's "change over the past 12 months" waits on balance history being
-recorded over time (#107, #98). Planned cards: Debt and cards (#102). An empty
+recorded over time (#107, #98). An empty
 snapshot still renders every card (zeros) under a pointer to Holdings and
 Budget.
 

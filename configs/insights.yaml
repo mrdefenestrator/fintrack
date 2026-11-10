@@ -20,3 +20,7 @@ very_stale_days:
 # An account that has had statement imports, but none confirmed in this many
 # days, gets a reminder to download a new statement.
 import_stale_days: 35
+
+# Credit card usage (balance ÷ limit, per card and in total) above this
+# percent is highlighted: the common credit-score rule of thumb.
+card_usage_high_pct: 30

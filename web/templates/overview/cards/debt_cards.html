@@ -1,0 +1,23 @@
+{# What's owed on loans, this month's interest and payments, the next payoff,
+   then credit card usage (owed ÷ limit; amber past configs/insights.yaml's
+   card_usage_high_pct). The whole card opens Holdings at the Loans band, or
+   the Credit Cards band when there are no loans. #}
+{% import "overview/card.html" as ov %}
+{% set d = overview.debt_cards %}
+{% set n = d.loans | length %}
+{% call ov.card('debt_cards', 'Debt and cards', debt_url) %}
+{% if n %}
+<div data-figure="loan-owed">
+    <div data-headline class="text-2xl font-semibold tabular-nums text-gray-800 dark:text-gray-100">{{ d.loan_owed | fmt_money_whole }} <span class="text-sm font-normal text-gray-500 dark:text-gray-400">owed on {{ n }} loan{{ 's' if n != 1 }}</span></div>
+</div>
+<div data-interest class="tabular-nums"><span class="whitespace-nowrap">Interest this month {{ d.loan_interest | fmt_money_whole }}</span>{% if d.loan_payment %} · <span class="whitespace-nowrap">Payments {{ d.loan_payment | fmt_money_whole }}/mo</span>{% endif %}</div>
+{% if d.next_payoff %}
+<div data-next-payoff>Next payoff: <span class="font-medium">{{ d.next_payoff.name }}</span> · {{ d.next_payoff.payoff.strftime('%b %Y') }}</div>
+{% endif %}
+{% else %}
+<div data-headline class="text-lg font-semibold text-gray-800 dark:text-gray-100">No loans</div>
+{% endif %}
+{% if d.card_usage is not none %}
+<div data-card-usage class="tabular-nums">Card usage <span class="font-medium {% if d.card_usage_high %}text-amber-700 dark:text-amber-300{% endif %}">{{ '%.0f' | format(d.card_usage * 100) }}%</span> · <span class="whitespace-nowrap">{{ d.card_owed | fmt_money_whole }} of {{ d.card_limit | fmt_money_whole }}</span></div>
+{% endif %}
+{% endcall %}

@@ -159,3 +159,24 @@ def test_status_lists_stale_balances(tmp_path):
     output = _invoke(db, "status").output
     assert "Needs attention: 1 item" in output
     assert "  Chase Checking: last updated 41 days ago" in output
+
+
+def test_status_shows_debt_and_cards(tmp_path):
+    db = tmp_path / "t.db"
+    assert _invoke(db, "snapshots", "add", "main").exit_code == 0
+    _invoke(
+        db,
+        "accounts",
+        "add",
+        "--name",
+        "Visa",
+        "--type",
+        "credit_card",
+        "--limit",
+        "1000",
+        "--available",
+        "600",
+    )
+    output = _invoke(db, "status").output
+    assert "Debt and cards: No loans" in output
+    assert "  Card usage 40% (over 30%) · $400 of $1,000" in output

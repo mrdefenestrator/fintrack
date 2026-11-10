@@ -1,3 +1,4 @@
+from datetime import date
 from decimal import Decimal
 from unittest.mock import patch
 
@@ -169,6 +170,7 @@ def test_status_is_the_text_overview(tmp_path):
             "cards": [
                 "net_worth_liquid",
                 "cash_flow",
+                "debt_cards",
                 "needs_attention",
                 "spending_alerts",
                 "projection_warnings",
@@ -176,6 +178,7 @@ def test_status_is_the_text_overview(tmp_path):
             "months": 12,
             "has_holdings": True,
             "cash_flow": _CASH_FLOW,
+            "debt_cards": _DEBT_CARDS,
             "attention": [
                 {"source": "recurring", "text": "Spotify: $11.99/mo, not in budget"}
             ],
@@ -222,7 +225,24 @@ def test_status_is_the_text_overview(tmp_path):
     assert "Cash flow: 25% saved in November so far" in lines
     assert "  Income $4,000 · Spending $3,000 · Net $1,000" in lines
     assert "  12-month average: 20% saved · $1,000/mo kept on $5,000 income" in lines
+    assert "Debt and cards: $9,000 owed on 1 loan" in lines
+    assert "  Interest this month $45 · Payments $300/mo" in lines
+    assert "  Next payoff: Car loan · Mar 2027" in lines
+    assert "  Card usage 35% (over 30%) · $350 of $1,000" in lines
 
+
+_DEBT_CARDS = {
+    "loans": [{"name": "Car loan"}],
+    "loan_owed": 9000,
+    "loan_interest": 45,
+    "loan_payment": 300,
+    "next_payoff": {"name": "Car loan", "payoff": date(2027, 3, 15)},
+    "card_usage": 0.35,
+    "card_usage_high": True,
+    "card_usage_high_pct": 30,
+    "card_owed": 350,
+    "card_limit": 1000,
+}
 
 _CASH_FLOW = {
     "month_label": "November",

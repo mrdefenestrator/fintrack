@@ -12,6 +12,7 @@ def test_overview_reports_the_12_month_projection(conn, snapshot_id):
     assert overview["cards"] == [
         "net_worth_liquid",
         "cash_flow",
+        "debt_cards",
         "needs_attention",
         "spending_alerts",
         "projection_warnings",

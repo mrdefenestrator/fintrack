@@ -31,7 +31,7 @@
 </tbody>
 {% endif %}
 {% for group in groups %}
-<tbody {{ gs.group_attrs(group, url_for('holdings.reorder', filename=filename, group=group.key) if edit_mode and group.reorderable else none) }}>
+<tbody id="holdings-{{ group.key }}" {{ gs.group_attrs(group, url_for('holdings.reorder', filename=filename, group=group.key) if edit_mode and group.reorderable else none) }}>
     {% call gs.heading(group.label, 3, edit_mode) %}
         {{ gs.subtotal_cell(group.total) }}
         {% if group.refreshable_units %}

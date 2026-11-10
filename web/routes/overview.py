@@ -47,6 +47,9 @@ def overview_view(filename):
             all_months="true",
             status="flagged",
         ),
+        # Debt and cards: Holdings at the Loans band (Credit Cards without loans).
+        debt_url=url_for("holdings.holdings_view", filename=filename)
+        + ("#holdings-loan" if overview["debt_cards"]["loans"] else "#holdings-credit"),
         # Needs attention: one link, following what the card leads with —
         # Holdings for stale data, else Budget vs Actual's Recurring view
         # filtered to the recurring-charge findings.

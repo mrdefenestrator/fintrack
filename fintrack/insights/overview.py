@@ -13,7 +13,7 @@ from typing import Any
 from sqlalchemy.engine import Connection
 
 from fintrack.budget import recurring
-from fintrack.insights import stale
+from fintrack.insights import debt, stale
 from fintrack.insights.alerts import get_alerts
 from fintrack.insights.cash_flow import get_cash_flow, trailing_months_start
 from fintrack.ledger.alerts import load_alert_config
@@ -50,7 +50,8 @@ def build_overview(
     conn: Connection, snapshot_id: int, today: date | None = None
 ) -> dict[str, Any]:
     """Current liquid / net worth, where they're projected to be in
-    OVERVIEW_MONTHS, this month's cash flow, what needs attention, spending
+    OVERVIEW_MONTHS, this month's cash flow, debt and card usage, what needs
+    attention, spending
     alerts, and the projection's warnings (lowest liquid month, accounts
     dipping below their minimum, loan payoffs)."""
     today = today or datetime.now().astimezone().date()
@@ -60,6 +61,7 @@ def build_overview(
         "cards": [
             "net_worth_liquid",
             "cash_flow",
+            "debt_cards",
             "needs_attention",
             "spending_alerts",
             "projection_warnings",
@@ -68,6 +70,7 @@ def build_overview(
         "has_holdings": bool(result["rows"]),
         "summary": summary,
         "cash_flow": _cash_flow_card(conn, snapshot_id, today),
+        "debt_cards": debt.debt_and_cards(conn, snapshot_id, today),
         "attention": needs_attention(conn, snapshot_id, today=today),
         "spending_alerts": _spending_alerts_card(conn, snapshot_id, today),
     }

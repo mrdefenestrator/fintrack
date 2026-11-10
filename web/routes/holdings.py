@@ -48,6 +48,8 @@ from fintrack.core.types import (
     HOLDING_TYPE_OPTIONS,
     HOLDING_TYPE_VALUES,
 )
+from fintrack.insights import stale
+from fintrack.insights.settings import load_insights_config
 from fintrack.networth import calculations
 from fintrack.networth.amortization import payoff_progress, scheduled_payment
 from fintrack.networth.prices import STALENESS_THRESHOLD, refresh_units
@@ -279,9 +281,19 @@ def _asset_col_fields(e: dict) -> dict:
     return m
 
 
-# As-of staleness thresholds (days) and colors, matching the accounts sparkline.
-_STALE_AMBER_DAYS = 35
-_STALE_RED_DAYS = 95
+# As-of staleness colors; the per-group thresholds are in configs/insights.yaml.
+_STALENESS_CLASSES = {
+    "stale": "text-amber-600 dark:text-amber-400",
+    "very_stale": "text-red-600 dark:text-red-400",
+}
+
+# Holdings band key -> holding group (the config's keys).
+_BAND_GROUP = {
+    "cash": "cash",
+    "credit": "credit_card",
+    "loan": "loan",
+    "asset": "asset",
+}
 
 # Blank-cell marker (plain dash, as the Accounts/Assets tables use) and the
 # muted color that de-emphasizes it so populated cells stand out.
@@ -387,19 +399,13 @@ def _money_dec(x) -> Decimal:
     return Decimal(str(x)) if x is not None else Decimal(0)
 
 
-def _staleness_class(as_of_iso: str | None, today: date) -> str:
-    """Color the As-of cell by age: amber past 35 days, red past 95, else none."""
-    if not as_of_iso:
-        return ""
-    try:
-        age = (today - date.fromisoformat(as_of_iso)).days
-    except ValueError:
-        return ""
-    if age > _STALE_RED_DAYS:
-        return "text-red-600 dark:text-red-400"
-    if age > _STALE_AMBER_DAYS:
-        return "text-amber-600 dark:text-amber-400"
-    return ""
+def _staleness_class(as_of_iso: str | None, group_key: str, today: date) -> str:
+    """Color the As-of cell by age for its band: amber once stale, red once
+    very stale (thresholds per group in configs/insights.yaml), else none."""
+    level = stale.staleness(
+        as_of_iso, _BAND_GROUP[group_key], today, load_insights_config()
+    )
+    return _STALENESS_CLASSES.get(level, "") if level else ""
 
 
 def _raw(v) -> str:
@@ -429,7 +435,7 @@ def _make_row(
     """
     keys = [k for k, _, _, _ in cols]
     cells = [values.get(k, _BLANK) for k in keys]
-    staleness = _staleness_class(values.get("as_of_iso"), today)
+    staleness = values.get("as_of_class", "")
     cell_classes = []
     for i, k in enumerate(keys):
         v = cells[i]
@@ -478,6 +484,7 @@ def _account_row(a: dict, funding_by_id: dict, account_display: dict, today: dat
         "funding": fmt_money(funding) if funding else _BLANK,  # None/0 -> blank
         "as_of": a.get("asOfDate") or _BLANK,
         "as_of_iso": a.get("asOfDate"),
+        "as_of_class": _staleness_class(a.get("asOfDate"), group_key, today),
     }
     edit_raw = {
         "institution": a.get("institution") or "",
@@ -566,6 +573,7 @@ def _asset_row(
         "contribution": _money(e.get("monthlyContribution")) if not is_debt else _BLANK,
         "as_of": e.get("asOfDate") or _BLANK,
         "as_of_iso": e.get("asOfDate"),
+        "as_of_class": _staleness_class(e.get("asOfDate"), group_key, today),
     }
     if pair is not None:
         values["equity"] = fmt_money(pair["equity"])

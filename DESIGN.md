@@ -754,6 +754,11 @@ independently drag-reorderable; debt↔asset equity/LTV pairing
   its holdings (more than half) have a point that old, so right after loans
   and assets start their history it doesn't just repeat the Liquid change.
   Both notes show in view and edit mode alike.
+- **Stale As Of.** The As Of cell turns amber once a holding's balance is
+  older than its group's `stale_days` and red past `very_stale_days`
+  (`configs/insights.yaml`: 35 / 95 days for cash and cards, 90 / 180 for loans
+  and assets), via `fintrack/insights/stale.py` `staleness()` — the same check
+  that puts "last updated N days ago" lines on the Overview (issue #102).
 - **Credit-card Available is computed and read-only** = `credit_limit + balance`.
   balance is the canonical input (kept current by statement imports); editing the
   limit or balance recomputes Available and preserves the balance
@@ -931,7 +936,7 @@ hasn't shipped are simply absent.
 |---|---|---|
 | Net worth / Liquid | both now, and their projected change by the end of the 12 months | Projections (`?months=12`); the whole card is the link |
 | Cash flow | this month's savings rate, income, spending, and net so far; the average rate, net, and income over Trailing 12's completed months | Trends (`?period=trailing12`) |
-| Needs attention | how many findings ("All clear" when none), then one line each, first five: recurring charges not in the budget ("Spotify: $11.99/mo, not in budget") and recurring price changes ("Netflix: $15.49 → $17.99 since Oct") | Budget vs Actual's Recurring view filtered to those (`?view=recurring&status=not_budgeted&status=price_change`) |
+| Needs attention | how many findings ("All clear" when none), then one line each, first five: recurring charges not in the budget ("Spotify: $11.99/mo, not in budget"), recurring price changes ("Netflix: $15.49 → $17.99 since Oct"), stale balances ("Chase Checking: last updated 41 days ago"), and accounts overdue for a statement ("Chase Checking: no statement imported in 51 days") | what the card leads with: Budget vs Actual's Recurring view filtered to those (`?view=recurring&status=not_budgeted&status=price_change`), or Holdings for stale data |
 | Spending alerts | status ("All clear" / how many things to look at), one line per spending alert (five, then "+N more") | Transactions (`?all_months=true&status=flagged`): the flagged charges and this month's rows in hot categories, each dismissable |
 | Projection warnings | status ("All clear" / how many accounts dip below their minimum), the low point, each below-minimum account, loan payoffs | Projections (`?months=12`), where below-minimum cells are marked |
 
@@ -942,10 +947,17 @@ no per-line links or footer links. Opening Projections on a specific month
 (`?month=`) waits on the month breakdown working on phones (#114).
 
 Needs attention is fed by `needs_attention()` in `overview.py`: a list of
-`{source, text}` items that each feature appends to (recurring charges today;
-missed charges and stale balances are planned, #102). Spending alerts (#101)
-keep their own card, since they open a different view. Its one link follows
-what it holds.
+`{source, text}` items that each feature appends to: recurring charges
+(`source="recurring"`, #100), then stale data (`source="stale"`, #102). Spending
+alerts (#101) keep their own card, since they open a different view. Its one
+link follows the first item's source.
+
+Stale data (`fintrack/insights/stale.py`, thresholds in
+`configs/insights.yaml`) reports, oldest first, each holding whose As Of is past
+its group's `stale_days`, then each account that has had confirmed statement
+imports but none in `import_stale_days` (35). A holding already reported for a
+stale balance isn't reported again for its imports. `status` prints the same
+lines.
 
 Net worth's "change over the past 12 months" waits on balance history being
 recorded over time (#107, #98). Planned cards: Debt and cards (#102). An empty

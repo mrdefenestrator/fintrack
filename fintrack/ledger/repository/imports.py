@@ -298,3 +298,19 @@ def reject_import(conn: Connection, import_id: int) -> None:
         update(imports).where(imports.c.id == import_id).values(status="rejected")
     )
     conn.commit()
+
+
+def last_import_dates(conn: Connection, snapshot_id: int) -> dict[int, date]:
+    """``{account_id: date of its latest confirmed import}`` for the
+    snapshot's accounts that have one (stale-data reminders, issue #102)."""
+    stmt = (
+        select(imports.c.account_id, func.max(imports.c.imported_at).label("last"))
+        .select_from(imports.join(holdings, imports.c.account_id == holdings.c.id))
+        .where(holdings.c.snapshot_id == snapshot_id, imports.c.status == "confirmed")
+        .group_by(imports.c.account_id)
+    )
+    return {
+        row.account_id: row.last.date()
+        for row in conn.execute(stmt)
+        if row.last is not None
+    }

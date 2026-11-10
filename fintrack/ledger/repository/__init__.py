@@ -36,6 +36,7 @@ from fintrack.ledger.repository.imports import (
     get_existing_fingerprints,
     get_staging_imports,
     insert_transactions,
+    last_import_dates,
     reject_import,
     remove_duplicate_transactions,
 )
@@ -79,6 +80,7 @@ __all__ = [
     "get_transactions",
     "get_uncached_merchants",
     "insert_transactions",
+    "last_import_dates",
     "list_accounts",
     "list_categories",
     "list_merchants",

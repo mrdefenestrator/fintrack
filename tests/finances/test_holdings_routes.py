@@ -936,3 +936,50 @@ def test_net_worth_footer_waits_until_most_holdings_have_history(client, db_engi
         )
     body = client.get("/s/finances/holdings").get_data(as_text=True)
     assert _CHANGE_NOTE.findall(body) == ["▲ $500.00"]
+
+
+def _row_html(body: str, row_id: str) -> str:
+    start = body.index(f'id="{row_id}"')
+    return body[start : body.index("</tr>", start)]
+
+
+def test_as_of_cell_is_amber_past_its_groups_stale_days(client, db_engine):
+    """Fifty days old: stale for cash (35 days), not yet for assets (90);
+    over 95 days a cash balance is red (configs/insights.yaml)."""
+    today = datetime.now().astimezone().date()
+    with db_engine.connect() as conn:
+        old = add_account(
+            conn,
+            1,
+            {
+                "name": "Old Savings",
+                "type": "savings",
+                "balance": 5,
+                "asOfDate": (today - timedelta(days=50)).isoformat(),
+            },
+        )
+        ancient = add_account(
+            conn,
+            1,
+            {
+                "name": "Ancient Savings",
+                "type": "savings",
+                "balance": 5,
+                "asOfDate": (today - timedelta(days=100)).isoformat(),
+            },
+        )
+        house = add_asset_entry(
+            conn,
+            1,
+            {
+                "kind": "asset",
+                "name": "House",
+                "value": Decimal(1),
+                "asOfDate": (today - timedelta(days=50)).isoformat(),
+            },
+        )
+    body = client.get("/s/finances/holdings").get_data(as_text=True)
+    assert "text-amber-600" in _row_html(body, f"holding-row-account-{old}")
+    assert "text-red-600" in _row_html(body, f"holding-row-account-{ancient}")
+    house_row = _row_html(body, f"holding-row-asset-{house}")
+    assert "text-amber-600" not in house_row and "text-red-600" not in house_row

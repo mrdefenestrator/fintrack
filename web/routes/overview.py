@@ -47,13 +47,20 @@ def overview_view(filename):
             all_months="true",
             status="flagged",
         ),
-        # Needs attention: today it holds recurring-charge findings, so it
-        # opens Budget vs Actual's Recurring view filtered to them.
-        attention_url=url_for(
-            "budget.actual_view",
-            filename=filename,
-            view="recurring",
-            status=["not_budgeted", "price_change"],
-        ),
+        # Needs attention: one link, following what the card leads with —
+        # Holdings for stale data, else Budget vs Actual's Recurring view
+        # filtered to the recurring-charge findings.
+        attention_url=_attention_url(filename, overview["attention"]),
         **context,
+    )
+
+
+def _attention_url(filename: str, items: list[dict]) -> str:
+    if items and items[0]["source"] == "stale":
+        return url_for("holdings.holdings_view", filename=filename)
+    return url_for(
+        "budget.actual_view",
+        filename=filename,
+        view="recurring",
+        status=["not_budgeted", "price_change"],
     )

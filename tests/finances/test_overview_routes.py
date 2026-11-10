@@ -147,3 +147,24 @@ def test_cash_flow_card_links_to_trailing_12_trends(client):
     assert "saved in " in card
     assert "No transactions yet this month" in card
     assert "No completed months in the past 12 yet" in card
+
+
+def test_needs_attention_opens_holdings_when_it_leads_with_stale_data(client):
+    from datetime import datetime, timedelta
+
+    engine = client.application.config["engine"]
+    today = datetime.now().astimezone().date()
+    with engine.connect() as conn:
+        add_account(
+            conn,
+            1,
+            {
+                "name": "Old Savings",
+                "type": "savings",
+                "balance": 5,
+                "asOfDate": (today - timedelta(days=41)).isoformat(),
+            },
+        )
+    card = _card(client.get("/s/home").get_data(as_text=True), "needs_attention")
+    assert "Old Savings: last updated 41 days ago" in card
+    assert 'href="/s/home/holdings"' in card

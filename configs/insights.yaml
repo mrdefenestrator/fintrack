@@ -1,0 +1,22 @@
+# Overview insight thresholds (issue #102). All checks are local; nothing is
+# sent to the Claude API. Missing keys use the defaults in
+# fintrack/insights/settings.py (InsightsConfig).
+
+# Stale data: a holding whose balance (As Of) is more than this many days old
+# shows on Overview > Needs attention and gets an amber As Of cell on Holdings.
+stale_days:
+  cash: 35
+  credit_card: 35
+  loan: 90
+  asset: 90
+
+# Past this many days the As Of cell turns red.
+very_stale_days:
+  cash: 95
+  credit_card: 95
+  loan: 180
+  asset: 180
+
+# An account that has had statement imports, but none confirmed in this many
+# days, gets a reminder to download a new statement.
+import_stale_days: 35

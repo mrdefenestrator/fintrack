@@ -88,6 +88,54 @@
                 evt.detail.isError = false;
             }
         });
+        // The PR preview answers overlapping requests with 429 instead of
+        // queueing them (see CLAUDE.md), and a failed htmx request used to do
+        // nothing visible: a filter box stayed ticked with no pill, a tapped
+        // action button just didn't respond. A 429 there means the app never
+        // saw the request, so re-fire the same trigger a few times with a
+        // growing pause (safe for any verb). If it still fails, or the network
+        // or server errors, put filter checkboxes/radios back to what the
+        // server last rendered (defaultChecked) and say so in a short notice.
+        // Deliberate 4xx answers (e.g. an empty 422 for a refused move) are
+        // left as they were.
+        (function() {
+            const MAX_RETRIES = 3;
+            const tries = new WeakMap();
+            let hideTimer;
+            function notify() {
+                const box = document.getElementById('request-error');
+                if (!box) return;
+                box.hidden = false;
+                clearTimeout(hideTimer);
+                hideTimer = setTimeout(() => { box.hidden = true; }, 5000);
+            }
+            function restore(elt) {
+                if (elt.matches && elt.matches('input[type=checkbox], input[type=radio]')) {
+                    elt.checked = elt.defaultChecked;
+                }
+            }
+            function failed(evt, status) {
+                const elt = evt.detail.elt;
+                const cfg = evt.detail.requestConfig || {};
+                const trigger = cfg.triggeringEvent && cfg.triggeringEvent.type;
+                const n = tries.get(elt) || 0;
+                if (status === 429 && trigger && n < MAX_RETRIES && elt.isConnected) {
+                    tries.set(elt, n + 1);
+                    setTimeout(() => htmx.trigger(elt, trigger), 400 * (n + 1));
+                    return;
+                }
+                tries.delete(elt);
+                if (status === 0 || status === 429 || status >= 500) {
+                    restore(elt);
+                    notify();
+                }
+            }
+            document.addEventListener('htmx:responseError', (evt) => failed(evt, evt.detail.xhr.status));
+            document.addEventListener('htmx:sendError', (evt) => failed(evt, 0));
+            document.addEventListener('htmx:afterRequest', (evt) => {
+                if (evt.detail.successful) tries.delete(evt.detail.elt);
+            });
+        })();
         // Stamp every htmx request with the browser's LOCAL date so server-side
         // "today" (e.g. the As Of on a manual balance edit) matches the user's
         // day, not the server's timezone (QA #6). The header is read by the
@@ -461,6 +509,14 @@
             box-shadow: inset -1px 0 0 #4b5563;   /* gray-600 */
         }
 
+        /* The closed file picker stays in the DOM (faded out). Nothing inside
+           it may take a tap: the touch rule below forces the row actions to
+           pointer-events: auto, which would otherwise override the closed
+           dropdown's pointer-events: none and leave invisible Delete buttons
+           tappable over the page. */
+        [data-file-picker-dropdown].pointer-events-none,
+        [data-file-picker-dropdown].pointer-events-none * { pointer-events: none !important; }
+
         /* File picker row: reveal action buttons on hover (hover-capable only) */
         .file-row-actions { opacity: 0; pointer-events: none; transition: opacity 0.1s ease; }
         @media (hover: hover) {
@@ -707,6 +763,13 @@
 </head>
 
 <body x-data="{ navOpen: window.matchMedia('(min-width: 1024px)').matches, init() { this._narrow = window.matchMedia('(max-width: 1023px)').matches; window.addEventListener('resize', () => { const n = window.matchMedia('(max-width: 1023px)').matches; if (n !== this._narrow) { this._narrow = n; this.navOpen = !n; } }); } }" class="h-full flex flex-col overflow-hidden bg-gray-50 dark:bg-gray-900 dark:text-gray-100">
+    {# Shown by the htmx failure handler above when a request fails for good.
+       Inline style, not Tailwind classes: it must show even when the preview has
+       dropped the stylesheet. #}
+    <div id="request-error" role="alert" hidden
+        style="position:fixed;left:50%;bottom:calc(1rem + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:100;width:max-content;max-width:calc(100% - 2rem);border-radius:0.5rem;background:#b91c1c;color:#fff;font-size:0.875rem;line-height:1.25rem;padding:0.5rem 1rem;box-shadow:0 10px 15px -3px rgb(0 0 0 / 0.2)">
+        Couldn't reach the server, so nothing changed. Try again.
+    </div>
     <header id="main-header" class="bg-blue-800 text-white shadow z-50 shrink-0">
         {# Single-row top bar. Primary navigation lives in the collapsible sidebar
            below (grouped outline) — docked on wide screens, a hamburger drawer

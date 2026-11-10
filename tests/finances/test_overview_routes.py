@@ -135,3 +135,15 @@ def test_projections_keeps_a_one_line_summary(client):
     assert 'data-summary="net-worth"' in html
     assert 'data-summary="warnings"' not in html
     assert 'data-summary="lowest"' not in html
+
+
+def test_cash_flow_card_links_to_trailing_12_trends(client):
+    """The Cash flow card (#99) opens Trends on the window its average covers;
+    with no transactions it says so instead of showing a rate."""
+    html = client.get("/s/home").get_data(as_text=True)
+    card = _card(html, "cash_flow")
+    assert card.startswith('<a href="/s/home/trends?period=trailing12"')
+    assert "Cash flow" in card
+    assert "saved in " in card
+    assert "No transactions yet this month" in card
+    assert "No completed months in the past 12 yet" in card

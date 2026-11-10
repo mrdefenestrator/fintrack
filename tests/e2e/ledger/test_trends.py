@@ -77,9 +77,12 @@ def test_trends_table_has_category_column(page, flask_server):
 
 
 def test_trends_table_has_grand_total_footer(page, flask_server):
-    """Trends table always has a Total row in tfoot."""
+    """Trends table always has the cash-flow rows in tfoot (#99), with
+    Net (kept) as the total of every category above."""
     page.goto(f"{flask_server}/s/ledger/trends")
-    assert page.locator("table tfoot").get_by_text("Total").is_visible()
+    foot = page.locator("table tfoot")
+    for label in ("Income", "Spending", "Net (kept)", "Savings rate", "Budgeted net"):
+        assert foot.get_by_text(label, exact=True).is_visible()
 
 
 def test_trends_empty_db_has_no_data_rows(page, flask_server):
@@ -252,4 +255,4 @@ def test_trends_paged_window_still_shows_seeded_data(page, confirmed_server):
     # Either the data is still visible (window still covers April 2026) or
     # the table renders gracefully empty — both are valid; the page must not
     # error out.
-    assert page.locator("table tfoot").get_by_text("Total").is_visible()
+    assert page.locator("table tfoot").get_by_text("Net (kept)").is_visible()

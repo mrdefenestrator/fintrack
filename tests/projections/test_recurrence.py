@@ -149,3 +149,16 @@ def test_calculations_aliases_still_exported():
 
     assert calculations._budget_entry_in_month is budget_entry_in_month
     assert calculations._subtotal_remainder_of_month is subtotal_remainder_of_month
+
+
+def test_weekly_is_52_over_12_per_month():
+    # Issue #100: a weekly entry averages 52/12 occurrences a month, 52 a
+    # year, and prorates the current month by the days left.
+    from fintrack.budget.recurrence import amount_annual
+
+    entry = {"kind": "expense", "recurrence": "weekly", "amount": 12}
+    assert budget_entry_in_month(entry, 2026, 11) == Decimal(52)
+    assert amount_annual(entry) == Decimal(624)
+    # Nov has 30 days; from the 16th, 14 remain: 52 * 14 / 30.
+    assert subtotal_remainder_of_month(entry, 2026, 11, 16) == Decimal(52) * 14 / 30
+    assert subtotal_remainder_of_month(entry, 2026, 11, 0) == Decimal(52)

@@ -81,7 +81,8 @@ fintrack/
   budget/       repository.py, recurrence.py (occurrence + proration engine)
   networth/     repository.py (assets/debts), calculations.py (key numbers, funding)
   projections/  engine.py, estimators.py
-  insights/     overview.py (Overview page + `status` numbers)
+  insights/     overview.py (Overview page + `status` numbers), cash_flow.py
+                (monthly income/spending/savings rate: Trends, Overview, CLI)
   snapshots/    repository.py
   migrate/      legacy.py and yaml_import.py (one-time import adapters)
   cli/          Click command groups and shared CLI helpers
@@ -182,12 +183,24 @@ Single `MetaData` in `fintrack/core/models.py`.
   corrections — raw rows never change. Both FKs cascade, so rejecting either
   side's import clears the flag. Both rows always share an account, which
   keeps them in one snapshot.
+- **alert_dismissals** — dismissed spending alerts (see "Spending alerts"):
+  `snapshot_id` plus either a `transaction_id` (every alert on that row) or a
+  `category` + `month` (that category's running-hot alert for one month, the
+  month's 1st); a CHECK allows exactly one of the two, and each is unique per
+  snapshot. The alerts themselves are computed, never stored. Both FKs
+  cascade.
 - **link_suggestion_dismissals** — `(transaction_id, budget_entry_ref)` pairs
   the user rejected as link suggestions, unique per pair; both FKs cascade.
   Snapshot consistency is checked in `reconcile`, as for the link itself.
+- **recurring_dismissals** — merchants the user marked "not recurring" (see
+  "Recurring charges"), unique per `(snapshot_id, merchant)`; keyed by the
+  resolved merchant name, since merchants are global. Cascades with the
+  snapshot.
 - **categories** — the shared taxonomy, seeded from `configs/categories.yaml`.
 - **budget_entries** — scheduled income/expenses: `kind`, `amount`,
-  `recurrence` plus its parameters (`date`, `day_of_month`, `month`,
+  `recurrence` (`one_time|monthly|weekly|biweekly|quarterly|semiannual|annual`;
+  weekly counts 52/12 times a month, biweekly keeps the legacy 2) plus its
+  parameters (`date`, `day_of_month`, `month`,
   `day_of_year`, `continuous`), `auto_account_ref` (which account the money
   moves through), and a nullable `category` linking to the ledger taxonomy so
   projections don't double-count a budgeted expense against estimated
@@ -327,6 +340,64 @@ imports in arrival order, each paired against earlier imports. Rows that
 already carry any flag are left alone, so re-running is idempotent and
 dismissals stick. The older `fintrack dedup` still collapses exact
 fingerprint copies left by a past bug.
+
+## Spending alerts
+
+Issue #101: point out spending that stands out while it still matters. Three
+local checks, pure functions in `fintrack/ledger/alerts.py` over the
+snapshot's confirmed history (`get_alert_history`, built on
+`base_transaction_query`, so hidden duplicates are skipped). **No transaction
+data goes to the Claude API.** Spending categories only: Income and Transfer
+never alert and never count as history.
+
+1. **Large charge** — a charge over 2× the merchant's median earlier charge and
+   at least $50 above it, given 3+ earlier charges; with less merchant history,
+   over 3× the category's median and $100 above it.
+2. **New merchant** — the first-ever charge from a merchant (no earlier row of
+   any sign), $50 or more, once the snapshot has 60+ days of history (so a
+   first import doesn't flag every merchant).
+3. **Running hot** — from the 7th, a category's month so far projects to 1.3×
+   its plan and $100 over. The projection follows the month's usual shape, so
+   lump sums aren't mistaken for a pace: a budgeted category expects its
+   fixed lines in full and its continuous (variable) lines pro rata, as Budget
+   vs Actual does; an unbudgeted one expects what it had spent by the same
+   day, on average, over the last 6 completed months with data (3 needed).
+   Spending so far is scaled by plan ÷ expected-by-now (or, when nothing is
+   usually in by now, the usual month is added on top). Charges that carry
+   their own alert are left out, so one big charge isn't reported twice.
+
+Charge checks look at the last 30 days, so alerts age out on their own; a row
+carries at most one (large charge wins). Every threshold lives in
+`configs/alerts.yaml` (`AlertConfig`; unknown keys are an error).
+
+`fintrack/insights/alerts.py` `get_alerts()` gathers the data, runs the
+checks, and drops dismissed alerts (`alert_dismissals`). One list feeds every
+surface:
+
+- **Overview "Spending alerts" card** — one line per alert (five, then "+N
+  more"); the whole card opens Transactions on Status = **Flagged**. It is its
+  own card rather than part of Needs attention (#100, #102), because a card
+  is one link to one view and these alerts live on a different view.
+- **Transactions** — the **Flagged** status filter shows the rows behind
+  every open alert (`alerts_by_transaction()`): a large or new-merchant
+  charge's own row, and this month's rows in a category running hot, so the
+  card's one link never opens an empty view. It is computed, so the route
+  passes the ids to `get_transactions(transaction_ids=…)`. A flagged charge
+  takes the orange tone and a "⚑ Large charge · usually $50" / "⚑ New
+  merchant" line under its description with **Dismiss** (then Undo until
+  reload), like the duplicate badge. A row flagged by its category gets a "⚑
+  Dining running hot this month · $420 of usually $600" line but no tone, so
+  a hot category doesn't light up the sheet; its button reads "Dismiss for
+  Dining" and hides the category for the month, reloading the view, clearing all its rows at once (undo
+  with `fintrack alerts undo --category`).
+- **Import confirmation** — "N things to look at in this import" when the
+  just-confirmed rows carry open alerts, linking to Flagged.
+- **CLI** — `fintrack alerts [list] [--all]`, `alerts dismiss <txn> |
+  --category NAME`, `alerts undo …`; `status` prints the card.
+
+Dismissing hides an alert everywhere. A running-hot alert is otherwise
+cleared by the pace dropping or the month ending. A count next to Overview in the nav (ticket part D)
+waits until the alerts prove few and useful.
 
 ## Balance history
 
@@ -510,7 +581,7 @@ Three things build on the link:
   suggestion) and `transactions dismiss` / `undismiss`.
 - **Budget-vs-actual per entry** (`budget_actuals`) — for a month, each entry's
   scheduled amount is compared to its actual and classified matched / over /
-  under / missing / upcoming / unlinked / inactive. Discrete entries (bills,
+  under / on pace / missing / upcoming / unlinked / inactive. Discrete entries (bills,
   paychecks) are measured by their linked transactions, exposing price drift (a
   linked charge that differs from the budgeted amount). A variable, continuous
   entry that alone claims its category is measured by that category's month
@@ -519,7 +590,16 @@ Three things build on the link:
   up; an entry that has never been linked is **unlinked**, because absent links
   say nothing about whether the money moved. Each result carries a tone
   (good / bad / neutral) so over/under read correctly for both kinds: earning
-  over budget is good, spending over it is bad. Surfaced on its own
+  over budget is good, spending over it is bad. In the month in progress a
+  category-measured variable line is judged against its **pace** — expected ×
+  the share of the month gone (days elapsed, today included) — rather than the
+  full month: within 10% of pace it is **on pace**, further ahead **over**
+  (also once past the month's full amount), further behind **under**; the
+  page shows the pace next to the status. Past months and linked bills use the
+  full expected amount. Figures are **signed** like the Budget sheet (income
+  +, expenses −), and so is Delta (actual − expected, signed), so a + Delta
+  beats the budget and the Net footer is the sum of the rows (#103). Surfaced
+  on its own
   Budget vs Actual page (`/s/<snapshot>/budget/actual`, read-only apart from
   the edit-mode link suggestions, in the
   Spending nav group; month pager, Kind/Category/Status filters, and a net
@@ -551,6 +631,45 @@ the category, and Trends/estimator counts a linked transaction under the line it
 funds. The Transactions sheet renders the Category cell read-only (inherited)
 while a categorized link is in place; unlink to edit it directly. An entry with
 no category doesn't clobber the merchant classification.
+
+### Recurring charges
+
+`fintrack/budget/recurring.py` (issue #100) finds subscriptions and bills the
+budget doesn't cover, and recurring prices that changed. Like the suggester it
+is purely local — no transaction data goes to the Claude API.
+
+- **Detection.** Over the last 400 days (so a yearly charge shows twice), a
+  merchant's charges — and separately its deposits, reported as income — are
+  *recurring* when the gaps between them fit one cadence (weekly 5–9 days,
+  biweekly 11–17, monthly 25–36, yearly 340–390; at most one gap in five off,
+  none shorter), at least 3 times (2 for yearly), for a steady price (within
+  10%), and the last charge is recent (within ~1.5 intervals; older series
+  look cancelled). Amounts may step to a new price: the series splits into
+  runs of same-price charges, and up to three runs are allowed when the middle
+  ones have at least two charges each. Transfers are excluded. Reads go through
+  `get_transactions`, so hidden duplicates and unconfirmed imports never count.
+- **Against the budget.** Each series is `linked` (its transactions link to an
+  entry), `unlinked` (an entry names the merchant, or shares its category,
+  recurrence and price, but nothing is linked), `covered` (a variable line
+  measured by category total claims its category), or `not_budgeted`.
+- **Price change.** When the latest run is a new price that started within
+  ~3 months (two intervals for longer cadences), the series reports
+  previous → current "since" that date, budgeted or not — the unlinked
+  complement to Budget vs Actual's per-entry drift.
+- **Actions.** *Add to budget* creates an entry from the series (current price,
+  cadence → recurrence, day of month / month from the last charge, category,
+  usual account) and links every charge in it; *Link* links them to the
+  `unlinked` match; *Not recurring* stores the merchant in
+  `recurring_dismissals` and hides it.
+
+Surfaced as Budget vs Actual's **Recurring** view (`?view=recurring`, a
+By month / Recurring toggle above the sheet): a flat grouped sheet of every
+series — Merchant · Category · Typical · Every · N · Last · Next · Budget ·
+Price change — with Kind and Status filters (Status includes a "Price change"
+flag) and a rough per-month footer; in edit mode the actions cell offers
++ (add) or a chain (link), and × (not recurring). The Overview's Needs
+attention card and `fintrack recurring` show the same findings. Whether
+recurrence should also feed `suggest_links` is a follow-up.
 
 ## Web UI
 
@@ -628,9 +747,13 @@ independently drag-reorderable; debt↔asset equity/LTV pairing
   Liquid also notes its change since the same day last month (clamped to
   month-end), from balance history (`balance_history.balances_on`); accounts
   without a point that old count at today's value, and the tooltip says how many
-  had one. No note when no liquid account has a point that old. It shows in view
-  and edit mode alike. Net worth gets no such note yet: loans and assets have no
-  dated history, so it would only repeat the Liquid change.
+  had one. No note when no liquid account has a point that old. Net worth gets
+  the same note (#107) from every holding's history — loans and assets
+  included, a loan's signed point flipped back to the amount owed and an
+  asset's point standing in for its whole value — but only once **most** of
+  its holdings (more than half) have a point that old, so right after loans
+  and assets start their history it doesn't just repeat the Liquid change.
+  Both notes show in view and edit mode alike.
 - **Credit-card Available is computed and read-only** = `credit_limit + balance`.
   balance is the canonical input (kept current by statement imports); editing the
   limit or balance recomputes Available and preserves the balance
@@ -694,6 +817,33 @@ a usually-empty category stand out. Per-month size is left to each row's
 expandable bar chart. The month in progress is marked "so far", greyed, never
 highlighted, and left out of "usual".
 
+The summary columns follow the same rule (#103, `fintrack/ledger/trends.py`,
+shared with `report trends`). **Avg/mo** divides by the *completed months with
+data* — months where the snapshot has any transactions in the window, minus the
+month in progress — not every calendar month in the window, so a short history
+isn't understated and a partial month doesn't drag it down (no completed month
+→ "—"). **Change** compares the last completed month to that average.
+**Delta** (Avg/mo − Budget/mo, where Budget/mo is annual ÷ 12) is worded by the
+row's kind: spending reads "$X over" / "$X under", income and the Net (kept)
+row read "$X short" / "$X ahead"; color is green when the result beats the
+budget, red when it doesn't.
+
+The footer is the month's **cash flow** (#99, `fintrack/insights/cash_flow.py`
+`compute_cash_flow()`, shared with the Overview card, `report trends`, and
+`status`): **Income** (the Income category), **Spending** (every other category
+except Transfer, as a positive outflow; refunds sit in the category they
+reverse, so they lower spending rather than count as income), **Net (kept)**
+(income − spending: the sum of every category row, and the row that carries
+Budget/mo, Delta, and Change), **Savings rate** (net ÷ income; "—" when income
+is zero or negative), and **Budgeted net** (budget income − budget expenses
+falling in that month per `budget_entry_in_month`, so an annual bill shows in
+its own month; Transfer-category entries left out). Transfer is left out
+because both legs of moving money between your own accounts — a card payment
+out of checking and onto the card — are Transfer, so only the card purchases
+count. Avg/mo for these rows follows the rule above; the average savings rate
+is average net ÷ average income, not a mean of monthly rates. The month in
+progress shows its figures so far, greyed like the body.
+
 The actions column (drag + delete) renders only in edit mode. Edits swap the
 table's whole body (colgroup included), so a row whose edit changes its band
 simply re-renders in the new band.
@@ -734,15 +884,18 @@ Budget is a grouped sheet with **one band per category** (issue #51). Bands
 follow the category taxonomy's `sort_order`; categories an entry uses but the
 taxonomy lacks follow alphabetically, and entries with no category close the
 sheet as **Uncategorized**. Every band shares one column set —
-Category·Description·Amount·Recurrence·When·Remaining·Monthly·Annual·Auto
-account — so there is no ragged edge. Category stays a column, always shown (as
+Category·Description·Amount·Recurrence·When·Remaining·This month·Per month·
+Annual·Auto account — so there is no ragged edge. **This month** is what's
+scheduled in the current calendar month (an annual bill due in another month is
+$0); **Per month** is the annual amount ÷ 12, the same figure as Trends'
+Budget/mo (#103). Category stays a column, always shown (as
 Holdings keeps Type), because editing it is how an entry moves between bands.
 There is **no Kind column**: kind isn't editable on the sheet (the add buttons
 set it) and the amount's sign already shows it (expenses are negative). The
 CLI's `budget` table keeps its Kind column.
 
 - **Totals.** Each band heading carries its signed (income +, expense −)
-  Remaining / Monthly / Annual subtotals under those columns; the pinned footer
+  Remaining / This month / Per month / Annual subtotals under those columns; the pinned footer
   is a single **Net** row over every shown entry.
 - **Color by category.** Each category gets its own band hue, cycling the
   shared 12-hue palette (`_CATEGORY_TONES`) in category order — the taxonomy,
@@ -777,6 +930,9 @@ hasn't shipped are simply absent.
 | Card | Shows | Links to |
 |---|---|---|
 | Net worth / Liquid | both now, and their projected change by the end of the 12 months | Projections (`?months=12`); the whole card is the link |
+| Cash flow | this month's savings rate, income, spending, and net so far; the average rate, net, and income over Trailing 12's completed months | Trends (`?period=trailing12`) |
+| Needs attention | how many findings ("All clear" when none), then one line each, first five: recurring charges not in the budget ("Spotify: $11.99/mo, not in budget") and recurring price changes ("Netflix: $15.49 → $17.99 since Oct") | Budget vs Actual's Recurring view filtered to those (`?view=recurring&status=not_budgeted&status=price_change`) |
+| Spending alerts | status ("All clear" / how many things to look at), one line per spending alert (five, then "+N more") | Transactions (`?all_months=true&status=flagged`): the flagged charges and this month's rows in hot categories, each dismissable |
 | Projection warnings | status ("All clear" / how many accounts dip below their minimum), the low point, each below-minimum account, loan payoffs | Projections (`?months=12`), where below-minimum cells are marked |
 
 Cards are terse: whole dollars (`fmt_money_whole`), changes as ▲/▼ amounts
@@ -785,10 +941,16 @@ the sheets they link to. Each card is one link (the whole card) to one view;
 no per-line links or footer links. Opening Projections on a specific month
 (`?month=`) waits on the month breakdown working on phones (#114).
 
+Needs attention is fed by `needs_attention()` in `overview.py`: a list of
+`{source, text}` items that each feature appends to (recurring charges today;
+missed charges and stale balances are planned, #102). Spending alerts (#101)
+keep their own card, since they open a different view. Its one link follows
+what it holds.
+
 Net worth's "change over the past 12 months" waits on balance history being
-recorded over time (#107, #98). Planned cards: Cash flow (#99), Needs
-attention (#100–#102), Debt and cards (#102). An empty snapshot still renders
-every card (zeros) under a pointer to Holdings and Budget.
+recorded over time (#107, #98). Planned cards: Debt and cards (#102). An empty
+snapshot still renders every card (zeros) under a pointer to Holdings and
+Budget.
 
 ### Projections sheet
 
@@ -824,8 +986,10 @@ balance    set <account> <amount> [--date] | history <account>
 import     <files…> --account NAME
 staging    list | confirm <id> | reject <id>
 duplicates list [--all] | mark <txn> | dismiss <txn> | undo <txn> | scan [--apply]
+alerts     [list] [--all] | dismiss <txn>|--category NAME | undo <txn>|--category NAME
 dedup      [--apply]
 transactions link <txn> <entry> | unlink <txn> | suggest | dismiss <txn> <entry> | undismiss <txn> | budget-actual
+recurring  [list] [--all] [--dismissed] | add <merchant> | link <merchant> <entry> | dismiss <merchant> | undismiss <merchant>
 merchants  list | set
 categories list|add|edit|delete
 report     monthly | trends

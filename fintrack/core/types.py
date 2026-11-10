@@ -190,7 +190,7 @@ ExpenseType = Literal[
 
 # Recurrence types enum
 Recurrence = Literal[
-    "one_time", "monthly", "biweekly", "quarterly", "semiannual", "annual"
+    "one_time", "monthly", "weekly", "biweekly", "quarterly", "semiannual", "annual"
 ]
 
 

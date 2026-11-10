@@ -52,12 +52,12 @@ degrades to a warning without it).
 ## Project Structure
 
 - `fintrack/core/` — engine/FK pragma, unified models (single MetaData), the holdings supertype/subtype CRUD helper (`holdings.py`), config paths, formatting
-- `fintrack/ledger/` — statement importer (OFX/CSV, normalization, dedup, near-duplicate matching), duplicate scan, classifier, ledger repositories
+- `fintrack/ledger/` — statement importer (OFX/CSV, normalization, dedup, near-duplicate matching), duplicate scan, spending-alert checks, classifier, ledger repositories
 - `fintrack/accounts/` — unified accounts repository, balance_history, OFX account matching
 - `fintrack/budget/` — budget entries, recurrence/proration engine
 - `fintrack/networth/` — assets/debts, key-number and funding calculations, liquidity-tier totals + equity pairs
 - `fintrack/projections/` — multi-month balance projection engine + estimators
-- `fintrack/insights/` — Overview numbers (web landing page + `status`)
+- `fintrack/insights/` — Overview numbers (web landing page + `status`), cash flow, spending alerts
 - `fintrack/snapshots/`, `fintrack/migrate/` (legacy one-time import), `fintrack/cli/` (one module per command group)
 - `web/` — Flask app, routes/, Jinja2/Tailwind/HTMX templates
 - `tests/` — unit tests by domain; `tests/e2e/` Playwright (marker `e2e`)
@@ -99,6 +99,14 @@ degrades to a warning without it).
   correction.category, merchant_cache.category, 'Uncategorized')`), so the
   Category and Budget columns can't contradict; the Transactions sheet shows
   that category read-only while linked.
+- Recurring charges (`fintrack/budget/recurring.py`, DESIGN.md "Recurring
+  charges") detect steady merchant series locally and match them to the
+  budget; findings show on Budget vs Actual's Recurring view
+  (`?view=recurring`), the Overview "Needs attention" card, and `fintrack
+  recurring`. Same rule: **never send transaction data to the Claude API**.
+  Needs attention is a list (`overview.needs_attention()`) that other findings
+  opening the same kind of view (e.g. #102's) can append `{source, text}`
+  items to; Spending alerts (#101) keep their own card.
 - Imports stage until confirmed; new merchants are classified at import time,
   and confirming records statement balances into balance_history.
 - Holdings are a supertype/subtype split: one slim `holdings` spine
@@ -149,7 +157,7 @@ degrades to a warning without it).
   and the Python CLI (which keeps separate `accounts`/`assets`/`debts` commands)
   are both first-class; keep them at parity.
 - **Grouped sheets.** Holdings, Budget (one band per category, colored per
-  category, with Remaining/Monthly/Annual subtotals and a Net footer; no Kind
+  category, with Remaining/This month/Per month/Annual subtotals and a Net footer; no Kind
   column — the sign shows it), and the read-only Projections grid (Holdings'
   bands + an Unassigned band) share one grouped-sheet layer —
   `partials/grouped_sheet.html` macros, `partials/grouped_sheet.css` (inlined
@@ -173,6 +181,10 @@ degrades to a warning without it).
   the `status` CLI command (its text version); add a card by appending its key
   there plus `web/templates/overview/cards/<key>.html`. Projections keeps only a
   one-line summary above its grid. See DESIGN.md "Overview".
+- Cash flow (income, spending, net kept, savings rate, budgeted net) has one
+  calculation, `fintrack/insights/cash_flow.py`, used by the Trends footer, the
+  Overview card, `report trends`, and `status`. Income is the Income category;
+  spending is every other category except Transfer (refunds lower spending).
 - Core product goals the UI serves: current liquid holdings, net worth,
   budgeting, spending tracking, deviation from budget, and (eventually)
   net-worth projections.
@@ -185,6 +197,13 @@ degrades to a warning without it).
   `not_hidden_duplicate()` — apply it in any new query over confirmed
   transactions (or build on `base_transaction_query`). Matching is local;
   never send transaction data to the Claude API for it.
+- Spending alerts (DESIGN.md "Spending alerts") — large charge, new merchant,
+  category running hot — are pure, local checks in `fintrack/ledger/alerts.py`
+  with thresholds in `configs/alerts.yaml`; `fintrack/insights/alerts.py`
+  `get_alerts()` feeds the Overview "Spending alerts" card, the Transactions
+  markers + "Flagged" filter, the import confirmation, `fintrack alerts`, and
+  `status`. Only dismissals are stored (`alert_dismissals`). Never send
+  transaction data to the Claude API for them.
 - SQLite runs with `foreign_keys=ON`; snapshot FKs cascade, ownership refs
   (payment_account_ref, auto_account_ref, secured_asset_ref) do not. Those
   refs are composite (`(ref, snapshot_id)`), so they can't cross snapshots.
@@ -216,7 +235,10 @@ degrades to a warning without it).
   before debugging app code: if the breakage moves around, it's this. So never
   put styling a sheet depends on in a new static file (inline it from a
   template, like `partials/grouped_sheet.css`), and reproduce locally by having
-  Playwright fulfil `**/static/**` with status 429.
+  Playwright fulfil `**/static/**` with status 429. htmx requests that get a 429
+  are retried (`base.html`); if one still fails (or the server errors), a
+  filter checkbox reverts to what the server rendered and a short "Couldn't
+  reach the server" notice shows.
 - **Use the dense seed for visual checks.** The e2e fixture is too small to
   scroll. `FINTRACK_DB=x.db uv run python scripts/seed_example.py` seeds
   **Dense Household** (overflows every sheet; what the preview shows), plus

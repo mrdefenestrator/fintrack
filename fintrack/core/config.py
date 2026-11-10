@@ -10,4 +10,5 @@ CONFIGS_DIR = PROJECT_ROOT / "configs"
 
 CATEGORIES_CONFIG = CONFIGS_DIR / "categories.yaml"
 NORMALIZATION_CONFIG = CONFIGS_DIR / "normalization.yaml"
+ALERTS_CONFIG = CONFIGS_DIR / "alerts.yaml"
 INSTITUTIONS_DIR = CONFIGS_DIR / "institutions"

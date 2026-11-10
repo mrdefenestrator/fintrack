@@ -31,6 +31,7 @@ def cli(ctx, db_path, snapshot_name):
     ctx.obj = CliContext(db_path=db_path, snapshot_name=snapshot_name)
 
 
+from fintrack.cli.alerts import alerts
 from fintrack.cli.ledger import (
     balance,
     categories,
@@ -56,9 +57,11 @@ from fintrack.cli.networth import (
 )
 from fintrack.cli.projections import project
 from fintrack.cli.reconcile import transactions
+from fintrack.cli.recurring import recurring
 
 for command in (
     status,
+    alerts,
     snapshots,
     accounts,
     balance,
@@ -77,6 +80,7 @@ for command in (
     funding,
     project,
     transactions,
+    recurring,
     serve,
     migrate_legacy,
 ):

@@ -800,7 +800,7 @@ def test_balances_on_takes_latest_point_on_or_before_the_day(client, db_engine):
 def test_liquid_footer_shows_change_since_last_month(client, db_engine):
     """Checking was 500 forty days ago and is 1000 now; the Visa has no point
     that old, so it counts at today's value. Liquid rose by 500. Net worth gets
-    no note (loans and assets have no history)."""
+    no note: only 1 of its 2 holdings has a point that old."""
     from fintrack.accounts.balance_history import record_balance
 
     today = datetime.now().astimezone().date()
@@ -842,3 +842,97 @@ def test_liquid_footer_shows_a_drop_in_red_in_edit_mode_too(client, db_engine):
         body = client.get(url).get_data(as_text=True)
         assert _CHANGE_NOTE.findall(body) == ["▼ $250.00"]
         assert "text-red-600" in body
+
+
+# ---------------------------------------------------------------------------
+# Footer: Net worth change since the same day last month (issue #107)
+# ---------------------------------------------------------------------------
+
+
+def _add_loan_and_house(db_engine, as_of):
+    """A $5,000 loan and a $20,000 house, both added (and so first recorded)
+    on `as_of`. Returns (loan_id, house_id)."""
+    from fintrack.networth.repository import add_asset_entry
+
+    with db_engine.connect() as conn:
+        add_asset_entry(
+            conn,
+            1,
+            {"kind": "debt", "name": "Car", "balance": Decimal(5000)},
+            today=as_of,
+        )
+        house = add_asset_entry(
+            conn,
+            1,
+            {"kind": "asset", "name": "House", "value": Decimal(20000)},
+            today=as_of,
+        )
+    return _asset_by_name(db_engine, "Car")["id"], house
+
+
+def test_net_worth_footer_shows_change_since_last_month(client, db_engine):
+    """Forty days ago: checking 500, Visa -400, loan 5,000 owed, house 20,000
+    (net worth 15,100). Now: checking 1,000, Visa -400, loan 4,000, house
+    21,000 (net worth 17,600). Net worth rose 2,500; Liquid rose 500."""
+    from fintrack.accounts.balance_history import record_balance
+    from fintrack.networth.repository import update_asset_entry
+
+    today = datetime.now().astimezone().date()
+    then = today - timedelta(days=40)
+    with db_engine.connect() as conn:
+        for name, balance in (("Checking", 500), ("Visa", -400)):
+            acct = _account_by_name(db_engine, name)["id"]
+            record_balance(conn, account_id=acct, balance=Decimal(balance), as_of=then)
+    loan, house = _add_loan_and_house(db_engine, then)
+    with db_engine.connect() as conn:
+        update_asset_entry(conn, 1, loan, {"balance": Decimal(4000)}, today=today)
+        update_asset_entry(conn, 1, house, {"value": Decimal(21000)}, today=today)
+
+    body = client.get("/s/finances/holdings").get_data(as_text=True)
+    assert _CHANGE_NOTE.findall(body) == ["▲ $500.00", "▲ $2,500.00"]
+    assert "of 4 holdings" not in body  # every holding had a point
+
+
+def test_net_worth_footer_counts_new_holdings_at_todays_value(client, db_engine):
+    """Three of four holdings have a point forty days old; the house was added
+    today, so it counts at today's value on both sides and adds no change."""
+    from fintrack.accounts.balance_history import record_balance
+    from fintrack.networth.repository import add_asset_entry
+
+    today = datetime.now().astimezone().date()
+    then = today - timedelta(days=40)
+    with db_engine.connect() as conn:
+        for name, balance in (("Checking", 500), ("Visa", -400)):
+            acct = _account_by_name(db_engine, name)["id"]
+            record_balance(conn, account_id=acct, balance=Decimal(balance), as_of=then)
+        add_asset_entry(
+            conn,
+            1,
+            {"kind": "debt", "name": "Car", "balance": Decimal(5000)},
+            today=then,
+        )
+        add_asset_entry(
+            conn, 1, {"kind": "asset", "name": "House", "value": 1}, today=today
+        )
+
+    body = client.get("/s/finances/holdings").get_data(as_text=True)
+    assert _CHANGE_NOTE.findall(body) == ["▲ $500.00", "▲ $500.00"]
+    assert "for 3 of 4 holdings" in body
+
+
+def test_net_worth_footer_waits_until_most_holdings_have_history(client, db_engine):
+    """Only Checking has a point that old (1 of 4 holdings): Liquid gets its
+    note, Net worth doesn't."""
+    from fintrack.accounts.balance_history import record_balance
+
+    today = datetime.now().astimezone().date()
+    _add_loan_and_house(db_engine, today)
+    with db_engine.connect() as conn:
+        record_balance(
+            conn,
+            account_id=_checking_id(db_engine),
+            balance=Decimal(500),
+            as_of=today - timedelta(days=40),
+        )
+    body = client.get("/s/finances/holdings").get_data(as_text=True)
+    assert _CHANGE_NOTE.findall(body) == ["▲ $500.00"]

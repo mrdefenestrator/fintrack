@@ -153,6 +153,7 @@ def test_status_smoke(tmp_path):
     assert result.exit_code == 0, result.output
     assert "No holdings yet" in result.output
     assert "Net worth  $0  No change by " in result.output
+    assert "Needs attention: All clear" in result.output
     assert "Projection warnings: All clear" in result.output
 
 
@@ -165,9 +166,25 @@ def test_status_is_the_text_overview(tmp_path):
     _add_account(runner, db, name="Checking")
     with patch("fintrack.cli.networth.build_overview") as build:
         build.return_value = {
-            "cards": ["net_worth_liquid", "projection_warnings"],
+            "cards": [
+                "net_worth_liquid",
+                "cash_flow",
+                "needs_attention",
+                "spending_alerts",
+                "projection_warnings",
+            ],
             "months": 12,
             "has_holdings": True,
+            "cash_flow": _CASH_FLOW,
+            "attention": [
+                {"source": "recurring", "text": "Spotify: $11.99/mo, not in budget"}
+            ],
+            "spending_alerts": {
+                "items": [{"kind": "new_merchant", "message": "New merchant: X $75"}],
+                "count": 7,
+                "more": 6,
+                "window_days": 30,
+            },
             "summary": {
                 "net_worth": _trend(Decimal("1000.40"), Decimal("1600.60")),
                 "liquid": _trend(Decimal(500), Decimal(380)),
@@ -193,10 +210,34 @@ def test_status_is_the_text_overview(tmp_path):
     lines = result.output.splitlines()
     assert lines[0] == "Net worth  $1,000  ▲ $600 by Oct 2027"
     assert lines[1] == "Liquid       $500  ▼ $120 by Oct 2027"
+    assert "Needs attention: 1 item" in lines
+    assert "  Spotify: $11.99/mo, not in budget" in lines
+    assert "Spending alerts: 7 things to look at" in lines
+    assert "  New merchant: X $75" in lines
+    assert "  +6 more (see `fintrack alerts`)" in lines
     assert "Projection warnings: 1 account dips below its minimum" in lines
     assert "  Low point $200 · Feb 2027" in lines
     assert "  Chase Checking: under $400 min from Jan 2027" in lines
     assert "  Paid off: Car loan · Mar 2027" in lines
+    assert "Cash flow: 25% saved in November so far" in lines
+    assert "  Income $4,000 · Spending $3,000 · Net $1,000" in lines
+    assert "  12-month average: 20% saved · $1,000/mo kept on $5,000 income" in lines
+
+
+_CASH_FLOW = {
+    "month_label": "November",
+    "this_month": {"income": 4000.0, "spending": 3000.0, "net": 1000.0, "rate": 25.0},
+    "has_this_month": True,
+    "average": {
+        "income": 5000.0,
+        "spending": 4000.0,
+        "net": 1000.0,
+        "rate": 20.0,
+        "budgeted_net": None,
+    },
+    "avg_month_count": 10,
+    "months": 12,
+}
 
 
 def _trend(start, end):
@@ -206,3 +247,41 @@ def _trend(start, end):
         "change": end - start,
         "per_month": (end - start) / 12,
     }
+
+
+def test_report_trends_prints_cash_flow(tmp_path):
+    """`report trends` ends with the Trends cash-flow footer (#99): one line
+    per month, the month in progress marked, and the completed-month average."""
+    from datetime import date, datetime
+
+    db = tmp_path / "test.db"
+    runner = CliRunner()
+    _add_snapshot(runner, db)
+    today = datetime.now().astimezone().date()
+    prev = (today.year, today.month - 1) if today.month > 1 else (today.year - 1, 12)
+    rows = [
+        {"year": prev[0], "month": prev[1], "category": "Income", "total": 4000},
+        {"year": prev[0], "month": prev[1], "category": "Housing", "total": -1000},
+        {"year": prev[0], "month": prev[1], "category": "Transfer", "total": -500},
+        {"year": today.year, "month": today.month, "category": "Income", "total": 100},
+    ]
+    with patch("fintrack.cli.ledger.get_monthly_totals_range", return_value=rows):
+        result = runner.invoke(cli, ["--db", str(db), "report", "trends"])
+    assert result.exit_code == 0, result.output
+    out = result.output
+    assert "Cash flow (Transfer excluded)" in out
+    prev_line = next(
+        line
+        for line in out.splitlines()
+        if line.startswith(date(prev[0], prev[1], 1).strftime("%b %Y "))
+    )
+    assert prev_line.split()[2:] == [
+        "$4,000.00",
+        "$1,000.00",
+        "$3,000.00",
+        "75%",
+        "$0.00",
+    ]
+    assert f"{today:%b %Y} (so far)" in out
+    avg = out.splitlines()[-1]
+    assert avg.split()[1:] == ["$4,000.00", "$1,000.00", "$3,000.00", "75%", "$0.00"]

@@ -9,11 +9,17 @@
 {% set merchant_max = '14rem' %}
 {% set desc_max = '22rem' %}
 {% set dup_open = txn.dup_status in ('flagged', 'duplicate') %}
+{# An open spending alert on this row (issue #101), or the Undo line right
+   after dismissing one. #}
+{% set txn_alert = (txn_alerts | default({})).get(txn.id) %}
+{% set alert_undo = alert_dismissed | default(false) and not txn_alert %}
 {# Cells follow TRANSACTIONS_SHEET's column keys (web/routes/transactions.py),
-   never their position. A flagged possible duplicate takes the amber tone: the
-   sheet's accent rail marks just that row. #}
+   never their position. A flagged possible duplicate takes the amber tone and
+   a charge that stands out the orange one: the sheet's accent rail marks just
+   that row. Rows flagged only because their category is running hot get the
+   marker line but no rail, so a hot category doesn't light up the sheet. #}
 <tr id="{{ row_id }}" class="{{ gs.row_class() }}{{ ' opacity-60' if txn.dup_status == 'duplicate' else '' }}"
-    {% if txn.dup_status == 'flagged' %}data-tone="amber" {% endif %}{% if txn.dup_status %}data-dup-status="{{ txn.dup_status }}"{% endif %}>
+    {% if txn.dup_status == 'flagged' %}data-tone="amber" {% elif txn_alert and txn_alert.kind != 'running_hot' %}data-tone="orange" {% endif %}{% if txn.dup_status %}data-dup-status="{{ txn.dup_status }}" {% endif %}{% if txn_alert %}data-alert="{{ txn_alert.kind }}"{% endif %}>
     {% for key in flat_sheets.transactions.col_keys %}
     {% if key == 'date' %}
     {# Date — raw imported data, immutable #}
@@ -37,9 +43,10 @@
     {# Description — raw imported data, immutable. A possible duplicate (issue
        #82) adds a line naming the row it resembles, with Duplicate / Not
        duplicate actions (Undo once marked); the actions re-render this row. #}
-    {% if dup_open %}
+    {% if dup_open or txn_alert or alert_undo %}
     <td class="{{ sheet.cell_class('', 'text-gray-400 dark:text-gray-500' if edit_mode else '') }}">
         {{ sheet.clip(txn.raw_description, desc_max) }}
+        {% if dup_open %}
         <div class="dup-badge mt-0.5 flex flex-wrap items-center gap-1 text-xs text-amber-700 dark:text-amber-300"
              title="{{ txn.dup_reason }}">
             <span>{{ '&#9888; Possible duplicate of'|safe if txn.dup_status == 'flagged' else 'Duplicate of' }}
@@ -61,6 +68,34 @@
             {% endif %}
             </span>
         </div>
+        {% endif %}
+        {# Spending alert (issue #101): what stands out, with Dismiss (hidden
+           everywhere) — then Undo until the next reload. On a running-hot row
+           the button reads "Dismiss for <category>": it hides the category
+           for the month (all its rows) and reloads. #}
+        {% if txn_alert or alert_undo %}
+        {% set alert_url = base ~ "/alert" %}
+        {% set alert_vals = ', "edit": "1"' if edit_mode else '' %}
+        <div class="alert-badge mt-0.5 flex flex-wrap items-center gap-1 text-xs text-orange-700 dark:text-orange-300">
+            {% if txn_alert %}
+            {% if txn_alert.kind == 'large_charge' %}
+            <span>&#9873; Large charge · {% if txn_alert.basis == 'merchant' %}usually {{ txn_alert.baseline | fmt_money_whole }}{% else %}typical {{ txn_alert.category }} charge {{ txn_alert.baseline | fmt_money_whole }}{% endif %}</span>
+            {% elif txn_alert.kind == 'new_merchant' %}
+            <span>&#9873; New merchant · first charge here</span>
+            {% else %}
+            <span>&#9873; {{ txn_alert.category }} running hot this month · {{ txn_alert.amount | fmt_money_whole }} of {{ 'budget' if txn_alert.basis == 'budget' else 'usually' }} {{ txn_alert.baseline | fmt_money_whole }}</span>
+            {% endif %}
+            <button hx-post="{{ alert_url }}" hx-vals='{"action": "dismiss"{{ alert_vals }}}'
+                    hx-target="#{{ row_id }}" hx-swap="outerHTML"
+                    {% if txn_alert.kind == 'running_hot' %}title="Hides {{ txn_alert.category }} running hot for this month: all its rows clear" {% endif %}class="alert-action px-1.5 rounded border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300">{% if txn_alert.kind == 'running_hot' %}Dismiss for {{ txn_alert.category }}{% else %}Dismiss{% endif %}</button>
+            {% else %}
+            <span class="text-gray-500 dark:text-gray-400">Alert dismissed</span>
+            <button hx-post="{{ alert_url }}" hx-vals='{"action": "undo"{{ alert_vals }}}'
+                    hx-target="#{{ row_id }}" hx-swap="outerHTML"
+                    class="alert-action px-1.5 rounded border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300">Undo</button>
+            {% endif %}
+        </div>
+        {% endif %}
     </td>
     {% elif edit_mode %}
     {{ cell_non_editable(sheet.clip(txn.raw_description, desc_max), false, false) }}

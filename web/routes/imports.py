@@ -1,11 +1,13 @@
 import os
 import tempfile
+from datetime import datetime
 from pathlib import Path
 
 from flask import Blueprint, abort, current_app, g, render_template, request
 from sqlalchemy.exc import IntegrityError
 
 from fintrack.core.types import ACCOUNT_TYPE_VALUES
+from fintrack.insights.alerts import get_import_alerts
 from fintrack.ledger.classifier import classify_and_cache
 from fintrack.ledger.duplicate_scan import scan_for_duplicates
 from fintrack.ledger.importer import run_import
@@ -270,6 +272,10 @@ def confirm(import_id):
     engine = current_app.config["engine"]
     with engine.connect() as conn:
         confirm_import(conn, import_id)
+        # Spending alerts on the rows just confirmed (issue #101).
+        import_alerts = get_import_alerts(
+            conn, g.snapshot_id, import_id, datetime.now().astimezone().date()
+        )
         staging = get_staging_imports(conn, g.snapshot_id)
         accounts = list_accounts(conn, g.snapshot_id)
     return render_template(
@@ -277,6 +283,7 @@ def confirm(import_id):
         active_tab="import",
         staging=staging,
         accounts=accounts,
+        import_alert_count=len(import_alerts),
     )
 
 

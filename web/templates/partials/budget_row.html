@@ -13,7 +13,7 @@
 {% set kind = row.kind %}
 {% set row_cells = row.cells %}
 {% set col_keys = group.col_keys %}
-{% set _rec_sort = {'One Time': 1, 'Biweekly': 2, 'Monthly': 3, 'Quarterly': 4, 'Semiannual': 5, 'Annual': 6} %}
+{% set _rec_sort = {'One Time': 1, 'Weekly': 2, 'Biweekly': 3, 'Monthly': 4, 'Quarterly': 5, 'Semiannual': 6, 'Annual': 7} %}
 <tr class="{{ gs.row_class() }}" id="budget-row-{{ index }}" data-kind="{{ kind }}" data-reorder-index="{{ reorder_index }}">
     {% if not edit_mode %}
     {% for cell in row_cells %}
@@ -23,7 +23,7 @@
     {% set recurrence_display = row_cells[col_keys.index('recurrence')] %}
     {% if recurrence_display == 'One Time' %}
         {% set when_field = 'date' %}
-    {% elif recurrence_display == 'Biweekly' %}
+    {% elif recurrence_display in ('Weekly', 'Biweekly') %}
         {% set when_field = None %}
     {% else %}
         {% set when_field = 'when' %}

@@ -7,7 +7,9 @@ from datetime import date, datetime
 from flask import Blueprint, current_app, g, render_template, request
 
 from fintrack.budget.repository import budgeted_monthly_by_category, get_budget_entries
+from fintrack.insights.cash_flow import compute_cash_flow
 from fintrack.ledger.repository.aggregations import get_monthly_totals_range
+from fintrack.ledger.trends import averaging_months, monthly_average, pct_change
 from web.routes.common import snapshot_scoped
 
 bp = snapshot_scoped(Blueprint("trends", __name__, url_prefix="/s/<filename>"))
@@ -143,11 +145,11 @@ def index():
         by_category[row["category"]]["months"][key] = float(row["total"])
 
     sorted_months = sorted(all_months)
-    num_months = max((end.year - start.year) * 12 + end.month - start.month + 1, 1)
     month_labels = [date(y, m, 1).strftime("%b") for y, m in sorted_months]
 
     # The month still in progress (only when the window ends today): its
-    # figures are partial, so it's marked and never tinted as unusual.
+    # figures are partial, so it's marked, never tinted as unusual, and left
+    # out of Avg/mo and Change.
     highlight = request.args.get("highlight") != "off"
     current_key = (today.year, today.month)
     in_progress = (
@@ -155,6 +157,13 @@ def index():
         if is_latest and current_key in sorted_months
         else None
     )
+    # Avg/mo divides by the completed months that have data, not every
+    # calendar month in the window (#103); Change compares the last completed
+    # month against that average.
+    avg_months = averaging_months(
+        sorted_months, current_key if in_progress is not None else None
+    )
+    last_done = avg_months[-1] if avg_months else None
 
     trends = []
     for cat, data in sorted(by_category.items(), key=lambda x: x[1]["total"]):
@@ -164,21 +173,16 @@ def index():
             if highlight
             else [_PLAIN] * len(monthly_values)
         )
-
-        monthly_avg = data["total"] / num_months
-
-        # Change: last month in period vs period average (empty months count as 0)
-        last_val = monthly_values[-1] if monthly_values else None
-        if last_val is not None and monthly_avg != 0:
-            pct_change = (abs(last_val) - abs(monthly_avg)) / abs(monthly_avg) * 100
-        else:
-            pct_change = None
+        monthly_avg = monthly_average(data["months"], avg_months)
+        last_val = data["months"].get(last_done, 0) if last_done else None
 
         bgt = budgeted.get(cat)
         kind = budget_kinds.get(cat)
         if bgt is not None:
             bgt_display = float(-bgt if kind == "expense" else bgt)
-            budget_delta = monthly_avg - bgt_display
+            budget_delta = (
+                monthly_avg - bgt_display if monthly_avg is not None else None
+            )
         else:
             bgt_display = None
             budget_delta = None
@@ -190,9 +194,10 @@ def index():
                 "monthly_avg": monthly_avg,
                 "monthly_values": monthly_values,
                 "monthly_tints": tints,
-                "pct_change": pct_change,
+                "pct_change": pct_change(last_val, monthly_avg),
                 "budget_monthly": bgt_display,
                 "budget_delta": budget_delta,
+                "delta_words": _delta_words(budget_delta, kind or "expense"),
             }
         )
 
@@ -207,22 +212,28 @@ def index():
             monthly_footer[(row["year"], row["month"])] += float(row["total"])
     monthly_footer_values = [monthly_footer.get(m, 0) for m in sorted_months]
 
-    footer_avg = grand_total / num_months
-    last_val_footer = monthly_footer_values[-1] if monthly_footer_values else None
-    if last_val_footer is not None and footer_avg != 0:
-        footer_pct_change: float | None = (
-            (abs(last_val_footer) - abs(footer_avg)) / abs(footer_avg) * 100
-        )
-    else:
-        footer_pct_change = None
+    footer_avg = monthly_average(monthly_footer, avg_months)
+    footer_pct_change = pct_change(
+        monthly_footer.get(last_done, 0) if last_done else None, footer_avg
+    )
 
     budgeted_rows = [t for t in trends_main if t["budget_monthly"] is not None]
-    if budgeted_rows:
-        footer_budget: float | None = sum(t["budget_monthly"] for t in budgeted_rows)
-        footer_budget_delta: float | None = footer_avg - footer_budget
-    else:
-        footer_budget = None
-        footer_budget_delta = None
+    footer_budget = (
+        sum(t["budget_monthly"] for t in budgeted_rows) if budgeted_rows else None
+    )
+    footer_budget_delta = (
+        footer_avg - footer_budget
+        if footer_avg is not None and footer_budget is not None
+        else None
+    )
+
+    # Income / Spending / Savings rate / Budgeted net footer rows (#99).
+    cash_flow = compute_cash_flow(
+        monthly_data,
+        sorted_months,
+        current_key if in_progress is not None else None,
+        budget,
+    )
 
     template = (
         "partials/trends_table.html"
@@ -239,13 +250,16 @@ def index():
         month_labels=month_labels,
         sorted_months=sorted_months,
         monthly_footer_values=monthly_footer_values,
-        num_months=num_months,
+        footer_avg=footer_avg,
+        footer_delta_words=_delta_words(footer_budget_delta, "net"),
+        avg_month_count=len(avg_months),
         highlight=highlight,
         highlight_qs="" if highlight else "&highlight=off",
         in_progress=in_progress,
         footer_pct_change=footer_pct_change,
         footer_budget=footer_budget,
         footer_budget_delta=footer_budget_delta,
+        cash_flow=cash_flow,
         prev_end=prev_end,
         next_end=next_end,
         anchor_end=anchor_end_param,
@@ -345,3 +359,19 @@ def _unusual_tints(
             }
         )
     return out
+
+
+def _delta_words(delta: float | None, kind: str) -> dict | None:
+    """Wording and tone for Trends' Delta (average minus budget), by row kind
+    (#103): spending reads "over"/"under", income and the net footer read
+    "short"/"ahead". The tone is whether that's good or bad."""
+    if delta is None:
+        return None
+    if abs(delta) <= 0.5:
+        return {"word": "on budget", "tone": "neutral"}
+    good = delta > 0  # less spent, more earned, or a bigger net surplus
+    if kind == "expense":
+        word = "under" if good else "over"
+    else:
+        word = "ahead" if good else "short"
+    return {"word": word, "tone": "good" if good else "bad"}

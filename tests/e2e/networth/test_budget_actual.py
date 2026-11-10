@@ -162,3 +162,158 @@ def test_suggestion_row_stays_under_its_entry_when_sorted(page, flask_server, _d
             "tr => tr.previousElementSibling.cells[0].textContent"
         )
         assert "Rent" in prev
+
+
+# --- Recurring view (issue #100) ---------------------------------------------
+
+
+def _add_monthly_series(db_path, merchant="StreamCo", amount="-12.99") -> None:
+    """Six monthly charges ending a few days ago, on Main Checking."""
+    from datetime import timedelta
+
+    engine = create_engine(f"sqlite:///{db_path}", future=True)
+    today = datetime.now().astimezone().date()
+    with engine.connect() as conn:
+        acct = conn.execute(
+            select(holdings.c.id)
+            .join(snapshots, holdings.c.snapshot_id == snapshots.c.id)
+            .where(
+                snapshots.c.name == "test_finances",
+                holdings.c.name == "Main Checking",
+            )
+        ).scalar_one()
+        imp = conn.execute(
+            insert(imports).values(
+                account_id=acct,
+                holding_group="cash",
+                filename="e2e-recurring.ofx",
+                file_hash=uuid.uuid4().hex,
+                status="confirmed",
+            )
+        ).inserted_primary_key[0]
+        for i in range(6):
+            conn.execute(
+                insert(transactions).values(
+                    import_id=imp,
+                    account_id=acct,
+                    date=today - timedelta(days=30 * i + 3),
+                    amount=amount,
+                    raw_description=merchant.upper(),
+                    normalized_merchant=merchant,
+                    fingerprint=uuid.uuid4().hex,
+                )
+            )
+        conn.commit()
+    engine.dispose()
+
+
+def _recurring_row(page, merchant="StreamCo", status=None):
+    attr = f"[data-status='{status}']" if status else ""
+    return page.locator(f"#recurring-table tr[data-recurring='{merchant}']{attr}")
+
+
+def test_view_toggle_opens_recurring(page, flask_server, _db_path):
+    _add_monthly_series(_db_path)
+    page.goto(f"{flask_server}{_URL}")
+    page.click("[data-actual-views] a[data-view='recurring']")
+    page.wait_for_url("**view=recurring**")
+    assert _recurring_row(page).get_by_text("Not in budget").is_visible()
+    page.click("[data-actual-views] a[data-view='month']")
+    page.locator("#budget-actual-table").wait_for()
+
+
+def test_add_recurring_to_budget(page, flask_server, _db_path):
+    _add_monthly_series(_db_path)
+    page.goto(f"{flask_server}{_URL}?view=recurring")
+    assert page.locator("[data-recurring-add]").count() == 0
+    enable_edit_mode(page)
+    _recurring_row(page).locator("[data-recurring-add]").click()
+    _recurring_row(page, status="linked").wait_for()
+    assert _recurring_row(page).get_by_text("In budget").is_visible()
+    page.goto(f"{flask_server}/s/test_finances/budget")
+    assert page.locator("tr[data-reorder-index]").get_by_text("StreamCo").is_visible()
+
+
+def test_dismiss_recurring(page, flask_server, _db_path):
+    _add_monthly_series(_db_path)
+    page.goto(f"{flask_server}{_URL}?view=recurring&edit=1")
+    _recurring_row(page).locator("[data-recurring-dismiss]").click()
+    _recurring_row(page).wait_for(state="detached")
+    assert "No recurring charges found" in page.locator("#recurring-table").inner_text()
+
+
+# --- Dropped filter requests (PR preview 429s) --------------------------------
+
+
+def _status_filter(page, value):
+    page.click("button.filter-dropdown-trigger:has-text('Status')")
+    page.locator(f"input[name=status][value={value}]").check()
+
+
+def _drop_filter_requests(page, times):
+    """Answer the next ``times`` filter requests with 429, as the PR preview
+    does for overlapping requests."""
+    left = {"n": times}
+
+    def handle(route):
+        if left["n"] > 0:
+            left["n"] -= 1
+            return route.fulfill(status=429, body="Too Many Requests")
+        return route.continue_()
+
+    page.route("**/budget/actual?*status=*", handle)
+
+
+def test_dropped_filter_request_is_retried(page, flask_server):
+    page.goto(f"{flask_server}{_URL}?year=2026&month=4")
+    _drop_filter_requests(page, 1)
+    _status_filter(page, "unlinked")
+    page.wait_for_url("**status=unlinked**")
+    chip = page.locator("span:has(> button[title=Remove])", has_text="Not linked")
+    chip.wait_for()
+    assert page.locator("input[name=status][value=unlinked]").is_checked()
+
+
+def test_filter_box_unticks_when_request_keeps_failing(page, flask_server):
+    page.goto(f"{flask_server}{_URL}?year=2026&month=4")
+    _drop_filter_requests(page, 99)
+    _status_filter(page, "unlinked")
+    box = page.locator("input[name=status][value=unlinked]")
+    page.wait_for_function(
+        "!document.querySelector('input[name=status][value=unlinked]').checked"
+    )
+    assert not box.is_checked()
+    assert page.locator("span:has(> button[title=Remove])").count() == 0
+
+
+def _fail_recurring_posts(page, action, status, times):
+    left = {"n": times}
+
+    def handle(route):
+        if left["n"] > 0:
+            left["n"] -= 1
+            return route.fulfill(status=status, body="")
+        return route.continue_()
+
+    page.route(f"**/budget/actual/recurring/{action}?*", handle)
+
+
+def test_dropped_action_is_retried(page, flask_server, _db_path):
+    """The PR preview answers overlapping requests with 429: the tap must
+    still land rather than silently doing nothing."""
+    _add_monthly_series(_db_path)
+    page.goto(f"{flask_server}{_URL}?view=recurring&edit=1")
+    _fail_recurring_posts(page, "add", 429, 1)
+    _recurring_row(page).locator("[data-recurring-add]").click()
+    _recurring_row(page, status="linked").wait_for()
+    assert page.locator("#request-error").is_hidden()
+
+
+def test_failed_action_says_so(page, flask_server, _db_path):
+    _add_monthly_series(_db_path)
+    page.goto(f"{flask_server}{_URL}?view=recurring&edit=1")
+    _fail_recurring_posts(page, "dismiss", 500, 99)
+    _recurring_row(page).locator("[data-recurring-dismiss]").click()
+    page.locator("#request-error").wait_for(state="visible")
+    assert "nothing changed" in page.locator("#request-error").inner_text()
+    assert _recurring_row(page).is_visible()

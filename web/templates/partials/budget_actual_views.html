@@ -1,0 +1,14 @@
+{# Budget vs Actual's two views (issue #100): the month table ("By month",
+   the default) and the Recurring list (?view=recurring). A small segmented
+   toggle at the left of the page's top row; edit mode carries across. #}
+{% macro view_toggle(view, filename, edit_mode) %}
+{% set _url = url_for('budget.actual_view', filename=filename) %}
+{% set _edit = '&edit=1' if edit_mode else '' %}
+<div data-actual-views role="tablist" class="inline-flex rounded border border-gray-300 dark:border-gray-600 overflow-hidden text-xs">
+    {% for key, label, href in [('month', 'By month', _url ~ ('?edit=1' if edit_mode else '')), ('recurring', 'Recurring', _url ~ '?view=recurring' ~ _edit)] %}
+    <a role="tab" data-view="{{ key }}" href="{{ href }}" hx-get="{{ href }}" hx-target="#content" hx-push-url="true"
+       aria-selected="{{ 'true' if view == key else 'false' }}"
+       class="px-2 py-1 {% if view == key %}bg-blue-600 text-white{% else %}bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700{% endif %}">{{ label }}</a>
+    {% endfor %}
+</div>
+{% endmacro %}

@@ -38,5 +38,22 @@ def overview_view(filename):
             filename=filename,
             months=overview["months"],
         ),
+        # Cash flow card: Trends' Trailing 12, the window its average covers.
+        trends_url=url_for("trends.index", filename=filename, period="trailing12"),
+        # Spending alerts card: every flagged transaction, any month.
+        flagged_url=url_for(
+            "transactions.index",
+            filename=filename,
+            all_months="true",
+            status="flagged",
+        ),
+        # Needs attention: today it holds recurring-charge findings, so it
+        # opens Budget vs Actual's Recurring view filtered to them.
+        attention_url=url_for(
+            "budget.actual_view",
+            filename=filename,
+            view="recurring",
+            status=["not_budgeted", "price_change"],
+        ),
         **context,
     )

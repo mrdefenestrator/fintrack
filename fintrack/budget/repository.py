@@ -7,7 +7,7 @@ from sqlalchemy import Connection, delete, func, insert, select, update
 
 from fintrack.budget.recurrence import amount_annual
 from fintrack.core.coerce import to_date
-from fintrack.core.models import budget_entries
+from fintrack.core.models import budget_entries, recurring_dismissals
 from fintrack.core.ordering import reorder_by_positions
 from fintrack.core.types import BudgetEntry
 from fintrack.ledger.repository.corrections import purge_link_only_corrections
@@ -103,11 +103,13 @@ def _next_sort_order(conn: Connection, snapshot_id: int) -> int:
     return (row or 0) + 1
 
 
-def add_budget_entry(conn: Connection, snapshot_id: int, entry: dict[str, Any]) -> None:
+def add_budget_entry(conn: Connection, snapshot_id: int, entry: dict[str, Any]) -> int:
+    """Append an entry to the snapshot's budget; returns its row id."""
     sort_order = _next_sort_order(conn, snapshot_id)
     row = _entry_dict_to_row(entry, snapshot_id, sort_order)
-    conn.execute(insert(budget_entries).values(**row))
+    db_id = conn.execute(insert(budget_entries).values(**row)).inserted_primary_key[0]
     conn.commit()
+    return db_id
 
 
 def update_budget_entry(
@@ -246,3 +248,49 @@ def _entry_dict_to_row(
         if val is not None:
             row[col] = to_date(val) if col == "date" else val
     return row
+
+
+# ---------------------------------------------------------------------------
+# Recurring-charge dismissals (issue #100)
+# ---------------------------------------------------------------------------
+
+
+def add_recurring_dismissal(conn: Connection, snapshot_id: int, merchant: str) -> None:
+    """Mark ``merchant`` "not recurring" in the snapshot. Idempotent."""
+    exists = conn.execute(
+        select(recurring_dismissals.c.id).where(
+            recurring_dismissals.c.snapshot_id == snapshot_id,
+            recurring_dismissals.c.merchant == merchant,
+        )
+    ).first()
+    if exists is None:
+        conn.execute(
+            insert(recurring_dismissals).values(
+                snapshot_id=snapshot_id, merchant=merchant
+            )
+        )
+    conn.commit()
+
+
+def remove_recurring_dismissal(
+    conn: Connection, snapshot_id: int, merchant: str
+) -> bool:
+    """Forget a "not recurring" mark; False when there wasn't one."""
+    result = conn.execute(
+        delete(recurring_dismissals).where(
+            recurring_dismissals.c.snapshot_id == snapshot_id,
+            recurring_dismissals.c.merchant == merchant,
+        )
+    )
+    conn.commit()
+    return result.rowcount > 0
+
+
+def get_recurring_dismissals(conn: Connection, snapshot_id: int) -> set[str]:
+    """Merchants marked "not recurring" in the snapshot."""
+    rows = conn.execute(
+        select(recurring_dismissals.c.merchant).where(
+            recurring_dismissals.c.snapshot_id == snapshot_id
+        )
+    )
+    return {row[0] for row in rows}

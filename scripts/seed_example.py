@@ -861,6 +861,10 @@ def _seed_dense_transactions(conn, checking_id: int, today: date) -> None:
 # Balances six weeks back for a few liquid accounts, so Holdings' Liquid footer
 # has a "since last month" change to show. The rest have no point that old and
 # count at today's value (the tooltip says so).
+#
+# Every loan and asset also gets a value six weeks back (#107): loans owed a bit
+# more, assets worth a bit less. That gives most holdings a point that old, so
+# the Net worth footer note shows too (it waits until more than half do).
 _DENSE_PAST_BALANCES = {
     "Everyday Checking": "3180.20",
     "Emergency Fund": "14500.00",
@@ -875,6 +879,18 @@ def _seed_dense_history(conn, sid, today: date) -> None:
             conn,
             account_id=ids[name],
             balance=Decimal(balance),
+            as_of=today - timedelta(days=45),
+        )
+    for entry in get_asset_entries(conn, sid):
+        now = latest_point(conn, entry["id"])
+        if now is None:
+            continue
+        # Stored signed: a loan's point is negative, so * 1.02 owes more.
+        factor = Decimal("1.02") if entry["kind"] == "debt" else Decimal("0.97")
+        record_balance(
+            conn,
+            account_id=entry["id"],
+            balance=(Decimal(now["balance"]) * factor).quantize(Decimal("0.01")),
             as_of=today - timedelta(days=45),
         )
 

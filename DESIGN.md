@@ -484,21 +484,53 @@ liquid and net worth now → end of horizon (change and per-month average), the
 lowest liquid month, loans paid off within the horizon, and minimum-balance
 warnings collapsed to one line per account.
 
-Surfaced at `/s/<snapshot>/projections` (horizon and estimator as query
-params) and `fintrack project --months N [--estimate]`. The web page leads with
-a one-line summary (liquid and net worth at the end of the window) — the full
-summary and the warnings live on [Overview](#overview) — then the grid with a
-"Now" column ahead of the months and, with the estimate on, its per-category
-breakdown. The CLI leads with the full summary and prints the warnings to
-stderr.
+Surfaced at `/s/<snapshot>/projections` and `fintrack project`, as one
+**timeline** of actual past and projected future months (#98) — see
+[Timeline](#timeline) below. The web page leads with a one-line summary
+(liquid and net worth at the end of the window) — the full summary and the
+warnings live on [Overview](#overview) — then the grid and, with the estimate
+on, its per-category breakdown. The CLI leads with the full summary and prints
+the warnings to stderr.
 A Balances / Changes toggle (`?view=change`, CLI `--changes`) swaps the grid's
-month-end balances for each month's change (`changes()`: month 0 against
-"now", then month against month), so lumpy months stand out; below-minimum
-cells stay marked by balance in either view. The web grid is a grouped sheet
-like Holdings (see [Projections sheet](#projections-sheet)). An icon in each month's header
-(`?month=I`, CLI `--month YYYY-MM`) opens that month's breakdown above the
-grid: its flows by account (`month_breakdown()`), with money in, money out,
-card autopay, and asset/loan totals.
+month-end balances for each month's change, so lumpy months stand out;
+below-minimum cells stay marked by balance in either view. The web grid is a
+grouped sheet like Holdings (see [Projections sheet](#projections-sheet)). An
+icon in each projected month's header (`?month=YYYY-MM`, CLI `--month
+YYYY-MM`) opens that month's breakdown above the grid: its flows by account
+(`month_breakdown()`), with money in, money out, card autopay, and asset/loan
+totals. Past months have no breakdown yet (listing their actual transactions
+per account is a possible follow-up).
+
+### Timeline
+
+`fintrack/projections/timeline.py` `build_timeline()` fills a window of 6 / 12
+/ 24 months (`?months=`, CLI `--months`; default 12) starting at `?from=YYYY-MM`
+(CLI `--from`; default the current month):
+
+- **Past months** (before the current one) show actual month-end values: each
+  holding's latest `balance_history` point on or before the month's last day
+  (`month_end_points()`, the batched form of `balances_on()`). A holding with
+  no point yet is **blank**, not zero, and that month's band subtotal and
+  totals carry a `*` (CLI: `*`) saying how many holdings are missing. A value
+  whose point is from an earlier month is **carried forward** and shows dimmed
+  with "last recorded <date>" (CLI: `~`). Past totals use the engine's
+  formulas: liquid = `liquid_total`, net worth = `liquid_minus_cc` + asset
+  values + (negative) loan balances. Unassigned has no history, so it's blank
+  in the past.
+- **The current month on** is the projection, run from now through the
+  window's end (the window is pulled back so it ends within the 60-month
+  horizon). A **Now** column (current balances) sits just before the current
+  month when the window spans today.
+- **Changes**: a month's change is its value minus the previous month's; the
+  current month is measured from Now (what's still to come, as before), and a
+  missing value or partial total on either side shows no change.
+- **Summary line**: a window ending in the future shows the projection's end
+  values and change from now ("By May 2027"); one ending in the past shows the
+  actual values then and the change since ("End of Jun 2026 … (+$X since)").
+- **Paging**: ◀ / ▶ move by one window (`nav.pager`, shared with Trends); ◀
+  stops once the window reaches the earliest recorded point, ▶ at the horizon;
+  **Now** returns to the window starting this month.
+
 There is deliberately no chart: one shared axis made the small, meaningful
 movements (cash, cards) unreadable next to houses and mortgages (#54).
 
@@ -925,12 +957,22 @@ Budget.
 The Projections accounts×months grid is a read-only grouped sheet (issue #52):
 the same four Cash · Credit Cards · Loans · Assets bands and tones as Holdings,
 always open (no collapse), each with its own sticky heading carrying the band's
-"Now" and per-month subtotals and its own column header (Account · Now ·
-months; no Now in the Changes view). Sorting is per band (`group-sort.js`, URL
-`sort_<group>_*`). Every band header repeats the month-breakdown icons
-(`sheet.header_link`). Budget flows with no `auto_account_ref` get a trailing
-slate **Unassigned** band with one "(no account)" row; the pinned footer holds
-Liquid total / Net worth (or their changes).
+per-month subtotals (and Now) and its own column header (Account · months, with
+Now before the current month in the Balances view). Sorting is per band
+(`group-sort.js`, URL `sort_<group>_*`). Every band header repeats the
+projected months' breakdown icons (`sheet.header_link`). Budget flows with no
+`auto_account_ref` get a trailing slate **Unassigned** band with one "(no
+account)" row; the pinned footer holds Liquid total / Net worth (or their
+changes).
+
+Past and future read differently (#98): projected columns are italic on a faint
+blue tint, and a 2px rule marks the divider on the Now column (or, in the
+Changes view, the current month) when the window holds past months. Both are
+drawn per column position with `background-image` from a small `<style>` in
+the template, so they layer over every row's own background and never touch the
+box-shadows sticky rows draw their edges with. Controls sit in a row above the
+grid: ◀ window ▶ + Now, the 6 / 12 / 24 window size, Balances / Changes, and a
+"⋯" menu holding the Estimate toggle.
 
 ## CLI
 
@@ -952,7 +994,7 @@ merchants  list | set
 categories list|add|edit|delete
 report     monthly | trends
 status | budget | income | expenses | assets | debts | funding   # status = text Overview
-project    [--months N] [--estimate]
+project    [--from YYYY-MM] [--months N] [--estimate] [--changes] [--month YYYY-MM]
 migrate-legacy …
 serve      [--port]
 ```

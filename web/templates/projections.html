@@ -2,24 +2,25 @@
 {% block title %}Projections — fintrack{% endblock %}
 {% block content %}
 {% import "partials/sheet.html" as sheet %}
-{% import "partials/sheet_filter_bar.html" as fb %}
 {% import "partials/pager.html" as nav %}
 
 {% import "partials/grouped_sheet.html" as gs %}
 
 {# Non-scrolling top band: a one-line summary (where liquid and net worth
    end up; the full cards and warnings live on Overview) and the (opt-in)
-   estimate breakdown. The horizon/estimate controls live in a filter bar
-   fused to the table below; the accounts×months grid is the flex-filling
-   sheet (its own scroll viewport), matching Holdings/Budget/Transactions. #}
+   estimate breakdown. The window / view / estimate controls sit in a row
+   above the grid; the accounts×months grid is the flex-filling sheet (its
+   own scroll viewport), matching Holdings/Budget/Transactions. #}
 <div class="shrink-0 mb-2 space-y-2" data-projection-summary>
 
 <p data-summary="line" class="flex flex-wrap gap-x-5 gap-y-1 px-1 text-sm text-gray-600 dark:text-gray-300">
-    <span>By {{ summary.end_label }}:</span>
+    {# Liquid and net worth at the end of the window: projected (change from
+       now) or, for a window ending in the past, actual (and the change since). #}
+    <span>{% if summary.past %}End of {{ summary.end_label }}:{% else %}By {{ summary.end_label }}:{% endif %}</span>
     {% for name, t, testid in [('Liquid', summary.liquid, 'liquid'), ('Net worth', summary.net_worth, 'net-worth')] %}
     <span data-summary="{{ testid }}">{{ name }}
-        <span class="font-medium tabular-nums {% if t.end < 0 %}text-red-600 dark:text-red-400{% else %}text-gray-800 dark:text-gray-100{% endif %}">{{ t.end | fmt_money_header }}</span>
-        <span class="tabular-nums {% if t.change < 0 %}text-red-600 dark:text-red-400{% elif t.change > 0 %}text-emerald-600 dark:text-emerald-400{% endif %}">({{ t.change | fmt_change }})</span></span>
+        <span class="font-medium tabular-nums {% if t.end < 0 %}text-red-600 dark:text-red-400{% else %}text-gray-800 dark:text-gray-100{% endif %}">{{ t.end | fmt_money_header }}</span>{% if t.partial %}<span title="Partial: some holdings have no value recorded yet" class="text-gray-400">*</span>{% endif %}
+        <span class="tabular-nums {% if t.change < 0 %}text-red-600 dark:text-red-400{% elif t.change > 0 %}text-emerald-600 dark:text-emerald-400{% endif %}">({{ t.change | fmt_change }}{% if summary.past %} since{% endif %})</span></span>
     {% endfor %}
 </p>
 
@@ -49,9 +50,9 @@
     <div class="flex flex-wrap items-center gap-x-5 gap-y-1 px-3 py-1.5 border-b border-gray-200 dark:border-gray-700">
         <div class="flex items-center gap-1.5" data-proj-nav>
             {% set _arrow = 'w-6 h-6 flex items-center justify-center rounded text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700' %}
-            {% if month_index > 0 %}<a href="{{ proj_url(month=month_index - 1) }}" title="Previous month" class="{{ _arrow }}">&#9664;</a>{% else %}<span class="{{ _arrow }} opacity-30">&#9664;</span>{% endif %}
+            {% if breakdown_prev %}<a href="{{ proj_url(month=breakdown_prev) }}" title="Previous month" class="{{ _arrow }}">&#9664;</a>{% else %}<span class="{{ _arrow }} opacity-30">&#9664;</span>{% endif %}
             <span class="font-semibold text-gray-800 dark:text-gray-100">What happens in {{ breakdown.label }}</span>
-            {% if month_index < (result.months | length) - 1 %}<a href="{{ proj_url(month=month_index + 1) }}" title="Next month" class="{{ _arrow }}">&#9654;</a>{% else %}<span class="{{ _arrow }} opacity-30">&#9654;</span>{% endif %}
+            {% if breakdown_next %}<a href="{{ proj_url(month=breakdown_next) }}" title="Next month" class="{{ _arrow }}">&#9654;</a>{% else %}<span class="{{ _arrow }} opacity-30">&#9654;</span>{% endif %}
         </div>
         <div class="flex flex-wrap gap-x-4 text-gray-600 dark:text-gray-300" data-breakdown-totals>
             <span>Money in {{ signed(breakdown.money_in) }}</span>
@@ -85,61 +86,107 @@
 
 </div><!-- end top band -->
 
-{% call fb.filter_bar(active_count=0,
-    reset_url=proj_url(months=none, estimate=none, view=none, month=none),
-    use_htmx=false, label='Options',
-    icon='M10.5 6h9.75M10.5 6a1.5 1.5 0 1 1-3 0m3 0a1.5 1.5 0 1 0-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-9.75 0h9.75') %}
+{# Controls row above the grid: the ◀ window ▶ + Now pager (shared with
+   Trends), the window size, Balances / Changes, and a "⋯" menu holding the
+   rarely-changed Estimate toggle. #}
+<div class="shrink-0 mb-2 flex flex-wrap items-center gap-x-4 gap-y-2" data-proj-controls>
+    <div data-proj-window>
+    {{ nav.pager(prev_url, next_url, tl.label, is_latest=at_now, latest_url=now_url,
+        label_width='w-44', use_htmx=false, latest_label='Now',
+        next_disabled=not tl.can_go_forward) }}
+    </div>
     <div class="flex items-center gap-2" data-proj-nav>
-        <span class="text-gray-500 dark:text-gray-400">Months:</span>
         {% set _month_opts = [] %}
         {% for choice in month_choices %}
-        {% set _ = _month_opts.append({'url': proj_url(months=choice), 'label': choice, 'active': months == choice}) %}
+        {% set _ = _month_opts.append({'url': proj_url(months=choice, month=none), 'label': choice ~ ' mo', 'active': months == choice}) %}
         {% endfor %}
-        {{ nav.segmented(_month_opts, use_htmx=false, size='sm') }}
+        {{ nav.segmented(_month_opts, use_htmx=false) }}
     </div>
     <div class="flex items-center gap-2" data-proj-nav data-view-toggle>
-        <span class="text-gray-500 dark:text-gray-400">Show:</span>
         {{ nav.segmented([
             {'url': proj_url(view=none), 'label': 'Balances', 'active': view == 'balances'},
             {'url': proj_url(view='change'), 'label': 'Changes', 'active': view == 'change'},
-        ], use_htmx=false, size='sm') }}
+        ], use_htmx=false) }}
     </div>
-    <a href="{{ proj_url(estimate=none if estimate else 1) }}"
-        data-estimate-toggle role="button" aria-pressed="{{ 'true' if estimate else 'false' }}"
-        class="px-2.5 py-1 rounded text-sm transition-colors border border-gray-300 dark:border-gray-600 {% if estimate %}bg-blue-500 text-white border-blue-500{% else %}bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600{% endif %}">
-        Estimate unscheduled spend
-    </a>
-{% endcall %}
+    {# The menu opens under its button, nudged sideways to stay on screen
+       wherever the controls wrap (the button can land at either edge). #}
+    <details class="relative" data-proj-menu
+        ontoggle="if (this.open) { const p = this.querySelector('[data-proj-menu-panel]'); p.style.left = '0px'; const r = p.getBoundingClientRect(), vw = document.documentElement.clientWidth, g = 16; let dx = Math.min(0, vw - g - r.right); if (r.left + dx < g) dx = g - r.left; p.style.left = dx + 'px'; }">
+        <summary title="More options" aria-label="More options"
+            class="list-none [&::-webkit-details-marker]:hidden h-8 w-8 flex items-center justify-center rounded-md border border-gray-300 dark:border-gray-600 cursor-pointer select-none hover:bg-gray-100 dark:hover:bg-gray-700 {% if estimate %}text-blue-600 dark:text-blue-400{% else %}text-gray-500 dark:text-gray-400{% endif %}">
+            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.75"/><circle cx="12" cy="12" r="1.75"/><circle cx="19" cy="12" r="1.75"/></svg>
+        </summary>
+        <div data-proj-menu-panel class="absolute left-0 z-30 mt-1 w-72 max-w-[calc(100vw-2rem)] rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 shadow-lg p-1 text-sm">
+            <a href="{{ proj_url(estimate=none if estimate else 1) }}"
+                data-estimate-toggle role="menuitemcheckbox" aria-checked="{{ 'true' if estimate else 'false' }}"
+                class="flex items-start gap-2 px-2 py-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200">
+                <span class="mt-0.5 w-4 h-4 shrink-0 flex items-center justify-center rounded border {% if estimate %}bg-blue-500 border-blue-500 text-white{% else %}border-gray-400 dark:border-gray-500{% endif %}">{% if estimate %}&#10003;{% endif %}</span>
+                <span>Estimate unscheduled spend
+                    <span class="block text-xs text-gray-500 dark:text-gray-400">Adds last 3 months' spending in categories the budget doesn't cover</span></span>
+            </a>
+        </div>
+    </details>
+</div>
 
 {# Accounts × months grid: a grouped sheet (partials/grouped_sheet.html, shared
    with Holdings/Budget) — one always-open band per holding group with its own
    sticky heading (subtotals) and sortable column header, then the pinned
-   Liquid / Net worth footer. Columns are Account, "Now" (Balances view only),
-   then one per month: month-end balances, or (view=change) each month's
-   change. The filter bar above supplies the card's top edge + rounding, so
-   the frame carries only the sides/bottom. #}
+   Liquid / Net worth footer. Columns are Account, then one per month in the
+   window: actual month-ends for past months, the projection from the current
+   month on (tinted, italic), with "Now" (Balances view only) at the divider.
+   view=change shows each month's change instead.
+
+   Cells: blank = no value recorded yet; dimmed = carried forward from an
+   earlier month's point; a "*" on a subtotal/total = partial (some holdings
+   have no value that month). #}
 {% set changes = view == 'change' %}
 {% set num = 'text-right tabular-nums whitespace-nowrap' %}
 {# In the Changes view a month with no movement shows a faint dash, so the
    months that do move stand out. #}
-{% macro amount(v) %}{% if changes and v == 0 %}<span class="text-gray-300 dark:text-gray-600">&ndash;</span>{% else %}{{ v | fmt_money }}{% endif %}{% endmacro %}
-{% set lead = [] if changes else [none] %}
-{% set _month_links = lead + [none] %}
-{% for m in result.months %}
-{% set _open = month_index == loop.index0 %}
+{% macro amount(v) %}{% if v is none %}{% elif changes and v == 0 %}<span class="text-gray-300 dark:text-gray-600">&ndash;</span>{% else %}{{ v | fmt_money }}{% endif %}{% endmacro %}
+{% macro partial_mark(c) %}{% if c.missing %}<sup class="text-gray-400 font-normal">*</sup>{% endif %}{% endmacro %}
+{% macro partial_title(c) %}{% if c.missing %}Partial: {{ c.missing }} holding{{ 's' if c.missing != 1 }} with no value recorded yet{% endif %}{% endmacro %}
+{% set _month_links = [none] %}
+{% for m in tl.months %}
+{% if m.current and not changes %}{% set _ = _month_links.append(none) %}{% endif %}
+{% if m.index is not none %}
+{% set _open = open_month and open_month.key == m.key %}
 {% set _ = _month_links.append({
-    'url': proj_url(month=none if _open else loop.index0),
+    'url': proj_url(month=none if _open else m.key),
     'title': ('Close ' ~ m.label ~ ' breakdown') if _open else ('What happens in ' ~ m.label),
     'active': _open}) %}
+{% else %}
+{% set _ = _month_links.append(none) %}
+{% endif %}
 {% endfor %}
-{% set max_cols = groups[0].ncols if groups else (result.months | length) + (1 if changes else 2) %}
-<div class="table-scroll-container rounded-b-lg border-l border-b border-r border-gray-300 dark:border-gray-600 shadow-sm" data-sheet-scroll>
+{% set max_cols = groups[0].ncols if groups else (col_kinds | length) + 1 %}
+{# Past / future styling by column position (child 1 is Account): future
+   columns get a faint tint and italics; the column after the divider
+   (Now, or the current month in the Changes view) gets a 2px rule on its left.
+   Drawn with background-image so it layers over each row's own background
+   (band tints, sticky header/footer, below-minimum red) and never touches the
+   box-shadows the sticky rows draw their edges with. #}
+{% set _first_future = (col_kinds.index('future') + 2) if 'future' in col_kinds else none %}
+{% set _divider = (col_kinds.index('now') + 2) if 'now' in col_kinds else _first_future %}
+<style>
+#projections-table { --tl-tint: rgb(59 130 246 / 0.06); --tl-rule: rgb(59 130 246 / 0.55); }
+.dark #projections-table { --tl-tint: rgb(96 165 250 / 0.13); --tl-rule: rgb(96 165 250 / 0.6); }
+{% if _first_future %}
+#projections-table tr > :nth-child(n+{{ _first_future }}) { font-style: italic; background-image: linear-gradient(var(--tl-tint), var(--tl-tint)); }
+{% endif %}
+{% if tl.has_past and _divider %}
+#projections-table tr > :nth-child({{ _divider }}) { background-image: linear-gradient(to right, var(--tl-rule) 2px, transparent 2px){% if _divider >= (_first_future or 999) %}, linear-gradient(var(--tl-tint), var(--tl-tint)){% endif %}; }
+{% endif %}
+</style>
+<div class="table-scroll-container rounded-lg border border-gray-300 dark:border-gray-600 shadow-sm" data-sheet-scroll>
 <table id="projections-table" data-projection-table data-view="{{ view }}" class="grouped-sheet w-full text-sm border-collapse bg-white dark:bg-gray-800" style="white-space:nowrap">
     {% for group in groups %}
     <tbody {{ gs.group_attrs(group) }}>
         {% call gs.heading(group.label, 1) %}
-            {% if not changes %}{{ gs.subtotal_cell(amount(group.start)) }}{% endif %}
-            {% for v in group.cells %}{{ gs.subtotal_cell(amount(v)) }}{% endfor %}
+            {% for c in group.cells %}
+            {%- set _sub -%}{{ amount(c.value) }}{{ partial_mark(c) }}{%- endset -%}
+            {{ gs.subtotal_cell(_sub) }}
+            {% endfor %}
         {% endcall %}
         {{ gs.header_row(group, max_cols, false, _month_links) }}
         {% for row in group.rows %}
@@ -149,21 +196,31 @@
             {% else %}
             <td class="{{ sheet.cell_class('', 'italic text-gray-600 dark:text-gray-300') }}" title="Budget entries with no account set">(no account)</td>
             {% endif %}
-            {% if not changes %}<td class="{{ sheet.cell_class(num, sheet.neg(row.start < 0)) }}">{{ amount(row.start) }}</td>{% endif %}
-            {% for v in row.cells %}
-            {# Below-minimum is about the balance, so it marks the cell in either view. #}
-            <td class="{{ sheet.cell_class(num,
-                'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 font-medium' if row.below[loop.index0]
-                else sheet.neg(v < 0)) }}"{% if row.below[loop.index0] %} title="Below the {{ row.account.minimum_balance | fmt_money_header }} minimum"{% endif %}{% if changes and v == 0 %} data-sort-value="0"{% endif %}>{{ amount(v) }}</td>
+            {% for c in row.cells %}
+            {% set v = c.value %}
+            {# Below-minimum is about the balance, so it marks the cell in either
+               view; carried-forward values are dimmed (last recorded earlier). #}
+            {% if c.below %}
+            {% set _extra = 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 font-medium' %}
+            {% elif c.carried %}
+            {% set _extra = 'text-gray-400 dark:text-gray-500' %}
+            {% else %}
+            {% set _extra = sheet.neg(v is not none and v < 0) %}
+            {% endif %}
+            <td class="{{ sheet.cell_class(num, _extra) }}"
+                {%- if c.below %} title="Below the {{ row.account.minimum_balance | fmt_money_header }} minimum"
+                {%- elif c.carried %} title="Carried forward: last recorded {{ c.as_of.strftime('%b %-d, %Y') }}" data-carried
+                {%- elif v is none and row.account and not c.future %} title="No value recorded yet" data-missing{% endif %}
+                {%- if v is none %} data-sort-value=""{% elif changes and v == 0 %} data-sort-value="0"{% endif %}>{{ amount(v) }}</td>
             {% endfor %}
         </tr>
         {% endfor %}
     </tbody>
     {% endfor %}
-    {% set _liquid = ['Liquid change' if changes else 'Liquid total'] + ([] if changes else [amount(result.start_liquid)]) %}
-    {% set _net = ['Net worth change' if changes else 'Net worth'] + ([] if changes else [amount(result.start_net_worth)]) %}
-    {% for v in footer.liquid %}{% set _ = _liquid.append(amount(v)) %}{% endfor %}
-    {% for v in footer.net_worth %}{% set _ = _net.append(amount(v)) %}{% endfor %}
+    {% set _liquid = ['Liquid change' if changes else 'Liquid total'] %}
+    {% set _net = ['Net worth change' if changes else 'Net worth'] %}
+    {% for c in footer.liquid %}{% set _ = _liquid.append({'value': amount(c.value) ~ partial_mark(c), 'title': partial_title(c) | trim}) %}{% endfor %}
+    {% for c in footer.net_worth %}{% set _ = _net.append({'value': amount(c.value) ~ partial_mark(c), 'title': partial_title(c) | trim}) %}{% endfor %}
     {{ gs.footer([_liquid, _net], range(1, max_cols) | list, false) }}
 </table>
 </div>

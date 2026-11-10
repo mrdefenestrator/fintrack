@@ -93,4 +93,45 @@ def test_project_month_breakdown(tmp_path):
 
     outside = _invoke(db, "project", "--months", "3", "--month", "1999-01")
     assert outside.exit_code != 0
-    assert "outside the projection" in outside.output
+    assert "outside the window" in outside.output
+
+
+def test_project_from_past_month(tmp_path):
+    """--from in the past: actual month-ends (blank before any history), Now,
+    then the projection; --month on a past month is refused."""
+    from datetime import datetime
+
+    from fintrack.projections.timeline import month_key, shift_month
+
+    db = tmp_path / "t.db"
+    assert _invoke(db, "snapshots", "add", "main").exit_code == 0
+    assert (
+        _invoke(
+            db,
+            "accounts",
+            "add",
+            "--name",
+            "Checking",
+            "--type",
+            "checking",
+            "--balance",
+            "1000",
+        ).exit_code
+        == 0
+    )
+    today = datetime.now().astimezone().date()
+    current = (today.year, today.month)
+    start = month_key(shift_month(current, -2))
+    result = _invoke(db, "project", "--from", start, "--months", "4")
+    assert result.exit_code == 0
+    header = result.output.split("\n\n")[1].splitlines()[0]
+    assert header.split().count("Now") == 1
+    assert "Past months are actual month-end balances" in result.output
+    assert "*" in result.output  # partial totals before any history
+
+    past = _invoke(db, "project", "--from", start, "--month", start)
+    assert past.exit_code != 0
+    assert "in the past" in past.output
+
+    bad = _invoke(db, "project", "--from", "2026-13")
+    assert bad.exit_code != 0

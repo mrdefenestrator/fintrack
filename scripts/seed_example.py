@@ -561,6 +561,8 @@ def seed_dense(conn) -> bool:
 
     # --- Older balance points (issue #106) ----------------------------------
     _seed_dense_history(conn, sid, today)
+    # --- A year of month-end history for the Projections timeline (#98) -----
+    _seed_dense_timeline(conn, sid, today)
 
     # --- Transactions (several months of realistic spending) ----------------
     _seed_dense_transactions(conn, checking, today)
@@ -891,6 +893,44 @@ def _seed_dense_history(conn, sid, today: date) -> None:
             balance=(Decimal(now["balance"]) * factor).quantize(Decimal("0.01")),
             as_of=today - timedelta(days=45),
         )
+
+
+# Timeline history (#98): most holdings get a point on the 10th of each of the
+# 12 months before last month, drifting toward today's value. A few show the
+# timeline's edge cases: points only every third month (carried forward),
+# history that starts later (blank, partial totals), and no history at all.
+_TIMELINE_EVERY_THIRD = {"Vacation Savings", "Rental Property", "Student Loan"}
+_TIMELINE_STARTS = {"Home Down Payment": 5, "Personal Loan": 7, "Amazon Gift Card": 4}
+_TIMELINE_NONE = {"Cash on Hand"}
+
+
+def _seed_dense_timeline(conn, sid, today: date) -> None:
+    holdings = [(a["id"], a["name"]) for a in get_accounts(conn, sid)] + [
+        (e["id"], e["name"]) for e in get_asset_entries(conn, sid)
+    ]
+    for holding_id, name in holdings:
+        point = latest_point(conn, holding_id)
+        if point is None or name in _TIMELINE_NONE:
+            continue
+        now = Decimal(point["balance"])
+        for back in range(2, 14):
+            if back > _TIMELINE_STARTS.get(name, 13):
+                continue
+            if name in _TIMELINE_EVERY_THIRD and back % 3:
+                continue
+            total = today.year * 12 + today.month - 1 - back
+            when = date(total // 12, total % 12 + 1, 10)
+            # Owned values were smaller, owed balances larger, with a little
+            # month-to-month wobble so the Changes view has something to show.
+            wobble = Decimal((holding_id * 7 + back * 13) % 9 - 4) / 400
+            drift = Decimal("0.012") * back
+            factor = 1 - drift + wobble if now >= 0 else 1 + drift / 2 + wobble
+            record_balance(
+                conn,
+                account_id=holding_id,
+                balance=(now * factor).quantize(Decimal("0.01")),
+                as_of=when,
+            )
 
 
 def _link_dense_budget(conn, sid) -> None:

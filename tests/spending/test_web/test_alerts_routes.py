@@ -56,7 +56,7 @@ def alerted(conn):
 
 
 def _card(html: str) -> str:
-    at = html.index('data-overview-card="needs_attention"')
+    at = html.index('data-overview-card="spending_alerts"')
     start = html.rfind("<a", 0, at)
     return html[start : html.index("</a>", at)]
 

@@ -1,5 +1,5 @@
 """E2E: unusual spending alerts (issue #101) — the import summary, the
-Overview "Needs attention" card, Transactions markers, the Flagged filter,
+Overview "Spending alerts" card, Transactions markers, the Flagged filter,
 and Dismiss / Undo.
 
 Shares one module-scoped ``alerts_server``; tests run in order.
@@ -22,7 +22,7 @@ def test_confirming_an_import_says_what_to_look_at(page, alerts_server):
 def test_overview_card_opens_the_flagged_rows(page, alerts_server):
     base, _ = alerts_server
     page.goto(f"{base}/s/ledger")
-    card = page.locator("[data-overview-card='needs_attention']")
+    card = page.locator("[data-overview-card='spending_alerts']")
     text = card.inner_text()
     assert "Large charge: HARDWARE $200" in text
     assert "New merchant: STRANGER $80" in text
@@ -52,6 +52,6 @@ def test_dismiss_then_undo_on_the_sheet(page, alerts_server):
     assert page.locator(f"#{row_id}").count() == 0  # gone from Flagged
 
     page.goto(f"{base}/s/ledger")
-    text = page.locator("[data-overview-card='needs_attention']").inner_text()
+    text = page.locator("[data-overview-card='spending_alerts']").inner_text()
     assert "HARDWARE" not in text
     assert "STRANGER" in text

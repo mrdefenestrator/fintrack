@@ -192,7 +192,7 @@ degrades to a warning without it).
 - Spending alerts (DESIGN.md "Spending alerts") — large charge, new merchant,
   category running hot — are pure, local checks in `fintrack/ledger/alerts.py`
   with thresholds in `configs/alerts.yaml`; `fintrack/insights/alerts.py`
-  `get_alerts()` feeds the Overview "Needs attention" card, the Transactions
+  `get_alerts()` feeds the Overview "Spending alerts" card, the Transactions
   markers + "Flagged" filter, the import confirmation, `fintrack alerts`, and
   `status`. Only dismissals are stored (`alert_dismissals`). Never send
   transaction data to the Claude API for them.

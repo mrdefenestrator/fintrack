@@ -4,7 +4,7 @@ import pytest
 
 pytestmark = pytest.mark.e2e
 
-_CARDS = ("net_worth_liquid", "cash_flow", "needs_attention", "projection_warnings")
+_CARDS = ("net_worth_liquid", "cash_flow", "spending_alerts", "projection_warnings")
 
 
 def test_snapshot_root_lands_on_overview(page, flask_server):

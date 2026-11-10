@@ -136,9 +136,9 @@ def test_import_alerts_cover_just_that_import(conn, snapshot_id):
     assert alert["kind"] == "new_merchant"
 
 
-def test_overview_needs_attention_card(conn, snapshot_id):
+def test_overview_spending_alerts_card(conn, snapshot_id):
     _seed(conn, snapshot_id)
-    card = build_overview(conn, snapshot_id, today=TODAY)["needs_attention"]
+    card = build_overview(conn, snapshot_id, today=TODAY)["spending_alerts"]
     assert card["count"] == 2
     assert [i["kind"] for i in card["items"]] == ["running_hot", "large_charge"]
     assert card["more"] == 0
@@ -156,7 +156,7 @@ def test_cli_alerts_and_status(tmp_path):
     assert _invoke(db, "snapshots", "add", "main").exit_code == 0
     assert "Nothing unusual." in _invoke(db, "alerts").output
     status = _invoke(db, "status").output
-    assert "Needs attention: All clear" in status
+    assert "Spending alerts: All clear" in status
 
     from fintrack.core.db import get_engine
     from fintrack.snapshots.repository import get_snapshot_id
@@ -181,7 +181,7 @@ def test_cli_alerts_and_status(tmp_path):
 
     out = _invoke(db, "alerts").output
     assert "New merchant: STRANGER $75" in out
-    assert "Needs attention: 1 thing to look at" in _invoke(db, "status").output
+    assert "Spending alerts: 1 thing to look at" in _invoke(db, "status").output
 
     assert _invoke(db, "alerts", "dismiss", str(txn)).exit_code == 0
     assert "Nothing unusual." in _invoke(db, "alerts").output

@@ -1,7 +1,7 @@
 """Spending alerts for a snapshot (issue #101): gathers the data the pure
 checks in fintrack.ledger.alerts need and drops dismissed alerts.
 
-Shared by the Overview "Needs attention" card, the Transactions sheet's
+Shared by the Overview "Spending alerts" card, the Transactions sheet's
 markers and Flagged filter, the import confirmation, `fintrack alerts`, and
 `status`. Local only: no transaction data leaves the machine.
 """

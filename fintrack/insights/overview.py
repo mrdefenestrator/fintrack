@@ -20,8 +20,8 @@ from fintrack.projections import engine
 # Cash flow card's average window: Trends' Trailing 12.
 CASH_FLOW_MONTHS = 12
 
-# Needs attention card: lines shown before "+N more".
-NEEDS_ATTENTION_LINES = 5
+# Spending alerts card: lines shown before "+N more".
+SPENDING_ALERT_LINES = 5
 
 # Projection horizon the Overview reports on ("over the next 12 months").
 OVERVIEW_MONTHS = 12
@@ -31,8 +31,7 @@ def build_overview(
     conn: Connection, snapshot_id: int, today: date | None = None
 ) -> dict[str, Any]:
     """Current liquid / net worth, where they're projected to be in
-    OVERVIEW_MONTHS, this month's cash flow, what needs attention (spending
-    alerts), and the projection's warnings (lowest liquid month, accounts
+    OVERVIEW_MONTHS, this month's cash flow, spending alerts, and the projection's warnings (lowest liquid month, accounts
     dipping below their minimum, loan payoffs)."""
     today = today or datetime.now().astimezone().date()
     result = engine.project(conn, snapshot_id, months=OVERVIEW_MONTHS, today=today)
@@ -41,31 +40,31 @@ def build_overview(
         "cards": [
             "net_worth_liquid",
             "cash_flow",
-            "needs_attention",
+            "spending_alerts",
             "projection_warnings",
         ],
         "months": OVERVIEW_MONTHS,
         "has_holdings": bool(result["rows"]),
         "summary": summary,
         "cash_flow": _cash_flow_card(conn, snapshot_id, today),
-        "needs_attention": _needs_attention_card(conn, snapshot_id, today),
+        "spending_alerts": _spending_alerts_card(conn, snapshot_id, today),
     }
 
 
-def _needs_attention_card(
+def _spending_alerts_card(
     conn: Connection, snapshot_id: int, today: date
 ) -> dict[str, Any]:
-    """Things to look at, one line each. Every item is a dict with at least
-    ``kind`` and ``message``; other checks (missed charges, stale balances)
-    append their own items here. Today: open spending alerts (issue #101)."""
+    """Open spending alerts (issue #101), one line each. Their own card, so the
+    whole card can open the one view behind them (Transactions > Flagged);
+    other findings (#100, #102) go on Needs attention."""
     config = load_alert_config()
     alerts = get_alerts(conn, snapshot_id, today, config=config)
     items: list[dict[str, Any]] = [dict(a) for a in alerts]
     return {
         "window_days": config.window_days,
-        "items": items[:NEEDS_ATTENTION_LINES],
+        "items": items[:SPENDING_ALERT_LINES],
         "count": len(items),
-        "more": max(0, len(items) - NEEDS_ATTENTION_LINES),
+        "more": max(0, len(items) - SPENDING_ALERT_LINES),
     }
 
 

@@ -168,13 +168,13 @@ def test_status_is_the_text_overview(tmp_path):
             "cards": [
                 "net_worth_liquid",
                 "cash_flow",
-                "needs_attention",
+                "spending_alerts",
                 "projection_warnings",
             ],
             "months": 12,
             "has_holdings": True,
             "cash_flow": _CASH_FLOW,
-            "needs_attention": {
+            "spending_alerts": {
                 "items": [{"kind": "new_merchant", "message": "New merchant: X $75"}],
                 "count": 7,
                 "more": 6,
@@ -205,7 +205,7 @@ def test_status_is_the_text_overview(tmp_path):
     lines = result.output.splitlines()
     assert lines[0] == "Net worth  $1,000  ▲ $600 by Oct 2027"
     assert lines[1] == "Liquid       $500  ▼ $120 by Oct 2027"
-    assert "Needs attention: 7 things to look at" in lines
+    assert "Spending alerts: 7 things to look at" in lines
     assert "  New merchant: X $75" in lines
     assert "  +6 more (see `fintrack alerts`)" in lines
     assert "Projection warnings: 1 account dips below its minimum" in lines

@@ -368,10 +368,10 @@ carries at most one (large charge wins). Every threshold lives in
 checks, and drops dismissed alerts (`alert_dismissals`). One list feeds every
 surface:
 
-- **Overview "Needs attention" card** — one line per alert (five, then "+N
-  more"); the whole card opens Transactions on Status = **Flagged**. Items are
-  plain dicts with at least `kind` and `message`, so other checks (#100, #102)
-  append their own.
+- **Overview "Spending alerts" card** — one line per alert (five, then "+N
+  more"); the whole card opens Transactions on Status = **Flagged**. It is its
+  own card rather than part of Needs attention (#100, #102), because a card
+  is one link to one view and these alerts live on a different view.
 - **Transactions** — the **Flagged** status filter shows the rows behind
   every open alert (`alerts_by_transaction()`): a large or new-merchant
   charge's own row, and this month's rows in a category running hot, so the
@@ -854,7 +854,7 @@ hasn't shipped are simply absent.
 |---|---|---|
 | Net worth / Liquid | both now, and their projected change by the end of the 12 months | Projections (`?months=12`); the whole card is the link |
 | Cash flow | this month's savings rate, income, spending, and net so far; the average rate, net, and income over Trailing 12's completed months | Trends (`?period=trailing12`) |
-| Needs attention | status ("All clear" / how many things to look at), one line per spending alert (five, then "+N more") | Transactions (`?all_months=true&status=flagged`): the flagged charges and this month's rows in hot categories, each dismissable |
+| Spending alerts | status ("All clear" / how many things to look at), one line per spending alert (five, then "+N more") | Transactions (`?all_months=true&status=flagged`): the flagged charges and this month's rows in hot categories, each dismissable |
 | Projection warnings | status ("All clear" / how many accounts dip below their minimum), the low point, each below-minimum account, loan payoffs | Projections (`?months=12`), where below-minimum cells are marked |
 
 Cards are terse: whole dollars (`fmt_money_whole`), changes as ▲/▼ amounts
@@ -864,9 +864,9 @@ no per-line links or footer links. Opening Projections on a specific month
 (`?month=`) waits on the month breakdown working on phones (#114).
 
 Net worth's "change over the past 12 months" waits on balance history being
-recorded over time (#107, #98). Needs attention holds spending alerts (#101);
-missed charges and stale balances join it (#100, #102). Planned card: Debt
-and cards (#102). An empty snapshot still renders
+recorded over time (#107, #98). Planned cards: Needs attention (recurring
+charges, missed charges, stale balances; #100, #102), Debt and cards (#102).
+An empty snapshot still renders
 every card (zeros) under a pointer to Holdings and Budget.
 
 ### Projections sheet

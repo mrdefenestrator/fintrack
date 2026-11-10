@@ -1,5 +1,5 @@
 """`fintrack alerts`: unusual spending alerts (issue #101), the CLI side of
-the Overview "Needs attention" card and the Transactions "Flagged" filter."""
+the Overview "Spending alerts" card and the Transactions "Flagged" filter."""
 
 from datetime import date, datetime
 

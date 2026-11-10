@@ -1,32 +1,35 @@
 {% import "partials/pager.html" as nav %}
-<div class="flex flex-wrap items-center justify-between gap-3 mb-6">
-    {% set _period_opts = [] %}
-    {% for p, label in [("quarterly", "Quarterly"), ("ytd", "Year to Date"), ("trailing12", "Trailing 12 Mo")] %}
-    {% set _ = _period_opts.append({
-        'url': "/s/%s/trends?period=%s%s%s" | format(filename, p, end_qs, highlight_qs),
-        'label': label,
-        'active': period == p}) %}
-    {% endfor %}
-    {# Highlight toggle: shade unusual months, red worse / green better (on by
-       default); the pill links to the opposite state. #}
-    {% set _highlight_opt = [{
-        'url': "/s/%s/trends?period=%s%s%s" | format(filename, period, end_qs, '&highlight=off' if highlight else ''),
-        'label': 'Highlight unusual months',
-        'active': highlight}] %}
-    <div class="flex flex-wrap items-center gap-3">
-        {{ nav.segmented(_period_opts) }}
-        <div title="{{ 'Turn off' if highlight else 'Shade months well above or below the category’s usual' }}">
-            {{ nav.segmented(_highlight_opt) }}
-        </div>
-    </div>
+{% import "partials/sheet_filter_bar.html" as fb %}
+{# Pager row (nav.pager_row, as on every page with a pager) above the table;
+   the period and Highlight toggles lead a filter bar fused to the table. #}
+{% call nav.pager_row() %}
     {{ nav.pager(
         prev_url="/s/%s/trends?period=%s&end=%s%s" | format(filename, period, prev_end, highlight_qs),
         next_url="/s/%s/trends?period=%s&end=%s%s" | format(filename, period, next_end, highlight_qs),
         label=window_label,
         is_latest=is_latest,
         latest_url="/s/%s/trends?period=%s%s" | format(filename, period, highlight_qs),
-        label_width='w-48') }}
-</div>
+        label_width='w-44') }}
+{% endcall %}
+{% set _period_opts = [] %}
+{% for p, label, short in [("quarterly", "Quarterly", none), ("ytd", "Year to Date", "YTD"), ("trailing12", "Trailing 12 Mo", "12 Mo")] %}
+{% set _ = _period_opts.append({
+    'url': "/s/%s/trends?period=%s%s%s" | format(filename, p, end_qs, highlight_qs),
+    'label': label,
+    'short': short,
+    'active': period == p}) %}
+{% endfor %}
+{# Highlight toggle: shade unusual months, red worse / green better (on by
+   default); the pill links to the opposite state. #}
+{% set _lead %}
+    {{ nav.segmented(_period_opts, attrs='data-period-toggle') }}
+    {{ nav.segmented([{
+        'url': "/s/%s/trends?period=%s%s%s" | format(filename, period, end_qs, '&highlight=off' if highlight else ''),
+        'label': 'Highlight unusual months',
+        'short': 'Highlight',
+        'title': 'Turn off' if highlight else 'Shade months well above or below the category’s usual',
+        'active': highlight}], attrs='data-highlight-toggle') }}
+{% endset %}
 
 {% macro month_cells(row) %}
     {% for i in range(month_labels|length) %}
@@ -166,12 +169,13 @@
     .dark .trends-table .heat-better-2 { background: rgba(34,197,94,0.32); }
     .dark .trends-table .heat-better-3 { background: rgba(34,197,94,0.50); }
 </style>
-<div class="overflow-x-auto">
+{{ fb.filter_bar(lead=_lead, filters=false) }}
+<div class="overflow-x-auto rounded-b-lg border-x border-b border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 shadow-sm">
 {# Client-side column sort (web/static/js/sortable.js) via the `sortable` class +
    `sortable-th`/`data-col` header hooks. The <tfoot> (Total + excluded rows) is
    outside <tbody>, so the sorter never touches it; each category row keeps its
    following `data-detail-row` expander glued to it through a sort. #}
-<table class="trends-table sortable w-full bg-white dark:bg-gray-800 rounded-lg shadow-sm text-sm" style="white-space:nowrap">
+<table class="trends-table sortable w-full bg-white dark:bg-gray-800 rounded-b-lg text-sm" style="white-space:nowrap">
     {% set _sortable_th = 'sortable-th cursor-pointer select-none hover:text-gray-600 dark:hover:text-gray-300' %}
     <thead>
         <tr class="border-b dark:border-gray-700 text-left text-xs text-gray-400 dark:text-gray-500 uppercase tracking-wide">

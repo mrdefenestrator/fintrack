@@ -20,51 +20,53 @@
    - reset_url:    href/hx-get URL that clears the filters
    - use_htmx:     True (default) for htmx partial-swap pages; False for the
                    form-submit Finances sheets (Reset becomes a plain link)
-   - label / icon: the mobile trigger label + leading icon path. Default to the
-                   "Filters" funnel; override for a bar that fuses the same card
-                   to a table but holds non-filter view controls (e.g. the
-                   Projections Months / Estimate toggles). #}
-{%- macro filter_bar(active_count=0, reset_url='', hx_target='#content', use_htmx=true, label='Filters', icon='M4 6h16M7 12h10M10 18h4') -%}
-<div class="shrink-0 relative z-20" x-data="{ open: false }">
-    <div class="bg-white dark:bg-gray-800 rounded-t-lg border border-gray-300 dark:border-gray-600 text-sm text-gray-600 dark:text-gray-300">
-        {# Mobile: compact trigger row #}
-        <div class="sm:hidden flex items-center">
-            <button type="button" @click="open = !open"
-                class="flex-1 flex items-center gap-2 px-2 py-2 text-left min-w-0">
-                <svg class="w-4 h-4 shrink-0 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="{{ icon }}" />
-                </svg>
-                <span class="font-medium text-gray-700 dark:text-gray-200">{{ label }}</span>
-                {% if active_count %}<span class="bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 text-xs font-medium rounded-full px-1.5 py-0.5 tabular-nums">{{ active_count }}</span>{% endif %}
-                <svg class="w-4 h-4 ml-auto shrink-0 transition-transform duration-150 text-gray-400 dark:text-gray-500"
-                    :class="{ 'rotate-180': open }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-                </svg>
-            </button>
-            {% if reset_url %}
-            <a href="{{ reset_url }}" {% if use_htmx %}hx-get="{{ reset_url }}" hx-target="{{ hx_target }}" hx-push-url="true"{% endif %}
-                class="shrink-0 px-2 py-2 border-l border-gray-200 dark:border-gray-700 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">Reset</a>
-            {% endif %}
-        </div>
+   - label / icon: the mobile trigger label + leading icon path (the
+                   "Filters" funnel by default)
+   - lead:         the page's view controls (nav.segmented toggles, never the
+                   time pager — that sits on its own row above, nav.pager_row),
+                   rendered first and always visible, phones included. Build it
+                   with {% set _lead %}…{% endset %}.
+   - filters:      False for a bar with only `lead` (no {% call %} body, no
+                   trigger) — Trends and Projections.
 
-        {# Controls: always shown on sm+, collapsible on mobile (one shared set) #}
-        {# sm+: always a flex-wrap row. Below sm: hidden until `open`, then flex
-           (so the expanded panel wraps like the desktop bar rather than stacking
-           as block). #}
-        <div class="sm:flex flex-wrap items-center gap-1.5 p-2 border-t border-gray-200 dark:border-gray-700 sm:border-t-0"
+   One row of compact text-xs controls on every screen: lead, then (sm+) the
+   filters inline or (phones) a "Filters" button that drops them into a
+   full-width panel below, then Reset at the far right. #}
+{%- macro filter_bar(active_count=0, reset_url='', hx_target='#content', use_htmx=true, label='Filters', icon='M4 6h16M7 12h10M10 18h4', lead=none, filters=true) -%}
+{% set _btn = 'inline-flex items-center gap-1 bg-gray-50 dark:bg-gray-700 px-2 py-1 rounded border border-gray-200 dark:border-gray-600 text-xs text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600' %}
+<div class="shrink-0 relative z-20" x-data="{ open: false }" data-filter-bar>
+    <div class="flex flex-wrap items-center gap-1.5 p-2 bg-white dark:bg-gray-800 rounded-t-lg border border-gray-300 dark:border-gray-600 text-sm text-gray-600 dark:text-gray-300">
+        {% if lead %}<div class="flex items-center gap-1.5" data-bar-lead>{{ lead }}</div>{% endif %}
+        {% if filters %}
+        {# Phones: the trigger, with the active-filter count. #}
+        <button type="button" @click="open = !open" :aria-expanded="open" data-filter-toggle
+            class="sm:hidden {{ _btn }}">
+            <svg class="w-3.5 h-3.5 shrink-0 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="{{ icon }}" />
+            </svg>
+            {{ label }}
+            {% if active_count %}<span data-filter-count class="bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 font-medium rounded-full px-1.5 tabular-nums">{{ active_count }}</span>{% endif %}
+            <svg class="w-3.5 h-3.5 shrink-0 transition-transform duration-150 text-gray-400 dark:text-gray-500"
+                :class="{ 'rotate-180': open }" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+            </svg>
+        </button>
+        {# The one control set: inline in the row on sm+ (`contents` lets its
+           children flow as the row's own items); on phones hidden until
+           `open`, then a full-width wrapped panel under the row. #}
+        <div data-filter-panel class="order-last basis-full flex-wrap items-center gap-1.5 -mx-2 mt-0.5 px-2 pt-2 border-t border-gray-200 dark:border-gray-700 sm:contents"
             :class="{ 'hidden': !open, 'flex': open }">
+            {% if lead %}<span class="hidden sm:block w-px h-5 mx-1 bg-gray-200 dark:bg-gray-700" aria-hidden="true"></span>{% endif %}
             <svg class="hidden sm:block w-4 h-4 shrink-0 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" role="img" aria-label="{{ label }}">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="{{ icon }}" />
             </svg>
             {{ caller() }}
-            {# Reset: shown in the bar on sm+ (desktop); on mobile it lives in the
-               always-visible trigger row above instead. Always shown (Accounts
-               behavior) rather than only when filters are active. #}
-            {% if reset_url %}
-            <a href="{{ reset_url }}" {% if use_htmx %}hx-get="{{ reset_url }}" hx-target="{{ hx_target }}" hx-push-url="true"{% endif %}
-                class="hidden sm:block ml-auto px-2 py-1 rounded border border-gray-200 dark:border-gray-600 text-xs bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 cursor-pointer">Reset</a>
-            {% endif %}
         </div>
+        {% endif %}
+        {% if reset_url %}
+        <a href="{{ reset_url }}" {% if use_htmx %}hx-get="{{ reset_url }}" hx-target="{{ hx_target }}" hx-push-url="true"{% endif %}
+            class="ml-auto {{ _btn }} cursor-pointer">Reset</a>
+        {% endif %}
     </div>
 </div>
 {%- endmacro -%}

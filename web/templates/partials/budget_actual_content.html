@@ -2,7 +2,7 @@
    vs realized for one month — from each entry's linked transactions, or from
    its category total for a variable line that alone claims that category.
    Read-only insight that complements the editable Budget sheet. Layout mirrors
-   the Transactions sheet: a time-nav row (month pager) above a filter card
+   the Transactions sheet: the pager row (nav.pager_row) above a filter card
    fused to the table, htmx partial swaps into #content, sticky total row.
    Figures are signed like the Budget sheet (income +, expenses −; issue #103),
    so a + Delta beats the budget and the Net footer sums the rows. Colors
@@ -53,12 +53,19 @@
 {% set _active = (include_kinds | length) + (include_categories | length) + (include_statuses | length) %}
 {% set _reset = "%s?year=%s&month=%s%s" | format(_url, year, month, '&edit=1' if edit_mode else '') %}
 
-{# Time navigation row above the filter card, as on Transactions: the view
-   toggle (By month / Recurring) and the month's missing/drift summary on the left (where Transactions has its range
-   selector), the month pager on the right. #}
-<div class="shrink-0 mb-2 flex flex-wrap items-center justify-between gap-2">
-    <div class="flex items-center gap-1.5 text-xs">
-        {{ views.view_toggle('month', filename, edit_mode) }}
+{# Pager row (nav.pager_row, as on every page with a pager): the month pager,
+   then that month's missing / drift / suggested-link badges. The By month /
+   Recurring toggle leads the filter bar. #}
+{% call nav.pager_row() %}
+    {{ nav.pager(
+        prev_url="%s?year=%s&month=%s%s" | format(_url, prev_year, prev_month, filter_qs),
+        next_url="%s?year=%s&month=%s%s" | format(_url, next_year, next_month, filter_qs),
+        label=month_label,
+        is_latest=is_latest,
+        latest_url="%s?year=%s&month=%s%s" | format(_url, latest_year, latest_month, filter_qs),
+        label_width='w-24') }}
+    {% if missing_count or drift_count or suggestion_count %}
+    <div class="flex flex-wrap items-center gap-1.5 text-xs">
         {% if missing_count %}<span data-actuals-missing class="px-1.5 py-0.5 rounded {{ _badge['bad'] }}">{{ missing_count }} missing</span>{% endif %}
         {% if drift_count %}<span data-actuals-drift class="px-1.5 py-0.5 rounded {{ _badge['drift'] }}">{{ drift_count }} drift</span>{% endif %}
         {% if suggestion_count %}
@@ -71,16 +78,11 @@
         {% endif %}
         {% endif %}
     </div>
-    {{ nav.pager(
-        prev_url="%s?year=%s&month=%s%s" | format(_url, prev_year, prev_month, filter_qs),
-        next_url="%s?year=%s&month=%s%s" | format(_url, next_year, next_month, filter_qs),
-        label=month_label,
-        is_latest=is_latest,
-        latest_url="%s?year=%s&month=%s%s" | format(_url, latest_year, latest_month, filter_qs),
-        label_width='w-24') }}
-</div>
+    {% endif %}
+{% endcall %}
 
-{% call fb.filter_bar(active_count=_active, reset_url=_reset) %}
+{% set _lead %}{{ views.view_toggle('month', filename, edit_mode) }}{% endset %}
+{% call fb.filter_bar(active_count=_active, reset_url=_reset, lead=_lead) %}
     {% if edit_mode %}<input type="hidden" name="edit" value="1">{% endif %}
     {{ fc.multi_select('kind', 'Kind', kind_opts, _url) }}
     {{ fc.multi_select('category', 'Category', cat_opts, _url) }}

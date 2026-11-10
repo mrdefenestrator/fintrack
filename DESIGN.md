@@ -381,8 +381,8 @@ surface:
   merchant" line under its description with **Dismiss** (then Undo until
   reload), like the duplicate badge. A row flagged by its category gets a "⚑
   Dining running hot this month · $420 of usually $600" line but no tone, so
-  a hot category doesn't light up the sheet; its Dismiss hides the category
-  for the month and reloads the view, clearing all its rows at once (undo
+  a hot category doesn't light up the sheet; its button reads "Dismiss for
+  Dining" and hides the category for the month, reloading the view, clearing all its rows at once (undo
   with `fintrack alerts undo --category`).
 - **Import confirmation** — "N things to look at in this import" when the
   just-confirmed rows carry open alerts, linking to Flagged.

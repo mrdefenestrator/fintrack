@@ -84,6 +84,7 @@ def test_transactions_marks_flagged_rows(client, alerted):
     assert html.count('data-alert="large_charge"') == 1
     assert html.count('data-alert="new_merchant"') == 1
     assert "Large charge · usually $50" in html
+    assert ">Dismiss</button>" in html
     assert "New merchant · first charge here" in html
 
 
@@ -196,6 +197,8 @@ def test_flagged_shows_a_hot_categorys_rows_without_the_rail(client, hot):
         assert f'id="txn-row-{txn_id}"' in html
     assert html.count('data-alert="running_hot"') == 2
     assert "Dining running hot this month · $420 of usually $600" in html
+    # The button says it clears the whole category, not just this row.
+    assert html.count(">Dismiss for Dining</button>") == 2
     # The marker line, but no accent rail: a hot category doesn't light up.
     rows = re.findall(r'<tr id="txn-row-\d+"[^>]*>', html)
     assert rows and not any("data-tone=" in r for r in rows)

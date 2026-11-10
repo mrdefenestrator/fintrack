@@ -70,8 +70,9 @@
         </div>
         {% endif %}
         {# Spending alert (issue #101): what stands out, with Dismiss (hidden
-           everywhere) — then Undo until the next reload. Dismiss on a
-           running-hot row hides the category for the month and reloads. #}
+           everywhere) — then Undo until the next reload. On a running-hot row
+           the button reads "Dismiss for <category>": it hides the category
+           for the month (all its rows) and reloads. #}
         {% if txn_alert or alert_undo %}
         {% set alert_url = base ~ "/alert" %}
         {% set alert_vals = ', "edit": "1"' if edit_mode else '' %}
@@ -86,7 +87,7 @@
             {% endif %}
             <button hx-post="{{ alert_url }}" hx-vals='{"action": "dismiss"{{ alert_vals }}}'
                     hx-target="#{{ row_id }}" hx-swap="outerHTML"
-                    class="alert-action px-1.5 rounded border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300">Dismiss</button>
+                    {% if txn_alert.kind == 'running_hot' %}title="Hides {{ txn_alert.category }} running hot for this month: all its rows clear" {% endif %}class="alert-action px-1.5 rounded border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300">{% if txn_alert.kind == 'running_hot' %}Dismiss for {{ txn_alert.category }}{% else %}Dismiss{% endif %}</button>
             {% else %}
             <span class="text-gray-500 dark:text-gray-400">Alert dismissed</span>
             <button hx-post="{{ alert_url }}" hx-vals='{"action": "undo"{{ alert_vals }}}'

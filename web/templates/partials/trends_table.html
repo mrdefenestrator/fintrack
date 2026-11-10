@@ -1,10 +1,11 @@
 {% import "partials/pager.html" as nav %}
 <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
     {% set _period_opts = [] %}
-    {% for p, label in [("quarterly", "Quarterly"), ("ytd", "Year to Date"), ("trailing12", "Trailing 12 Mo")] %}
+    {% for p, label, short in [("quarterly", "Quarterly", "Quarterly"), ("ytd", "Year to Date", "YTD"), ("trailing12", "Trailing 12 Mo", "12 Mo")] %}
     {% set _ = _period_opts.append({
         'url': "/s/%s/trends?period=%s%s%s" | format(filename, p, end_qs, highlight_qs),
         'label': label,
+        'short': short if short != label else none,
         'active': period == p}) %}
     {% endfor %}
     {# Highlight toggle: shade unusual months, red worse / green better (on by
@@ -12,8 +13,10 @@
     {% set _highlight_opt = [{
         'url': "/s/%s/trends?period=%s%s%s" | format(filename, period, end_qs, '&highlight=off' if highlight else ''),
         'label': 'Highlight unusual months',
+        'short': 'Highlight',
         'active': highlight}] %}
-    <div class="flex flex-wrap items-center gap-3">
+    {# One row on a phone too: short labels below sm (see segmented). #}
+    <div class="flex items-center gap-2 sm:gap-3">
         {{ nav.segmented(_period_opts) }}
         <div title="{{ 'Turn off' if highlight else 'Shade months well above or below the category’s usual' }}">
             {{ nav.segmented(_highlight_opt) }}

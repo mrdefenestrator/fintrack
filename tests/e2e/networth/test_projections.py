@@ -186,3 +186,22 @@ def test_projections_menu_stays_on_screen(page, flask_server, width):
     assert box["x"] >= 0
     assert box["x"] + box["width"] <= width
     assert page.locator("[data-estimate-toggle]").is_visible()
+
+
+@pytest.mark.parametrize("width", [360, 390, 430])
+def test_projections_controls_fit_one_row_on_phones(page, flask_server, width):
+    """Window size, Balances/Changes and the "⋯" menu share one row on a phone
+    (short 6M/1Y/2Y labels below sm) and stay inside the viewport."""
+    page.set_viewport_size({"width": width, "height": 800})
+    page.goto(f"{flask_server}/s/test_finances/projections")
+    boxes = [
+        page.locator(sel).bounding_box()
+        for sel in (
+            "[data-proj-nav]:not([data-view-toggle])",
+            "[data-view-toggle]",
+            "[data-proj-menu] summary",
+        )
+    ]
+    assert len({round(b["y"] + b["height"] / 2) for b in boxes}) == 1
+    assert boxes[-1]["x"] + boxes[-1]["width"] <= width - 16
+    assert page.locator("[data-proj-nav] a", has_text="1Y").is_visible()

@@ -256,3 +256,19 @@ def test_trends_paged_window_still_shows_seeded_data(page, confirmed_server):
     # the table renders gracefully empty — both are valid; the page must not
     # error out.
     assert page.locator("table tfoot").get_by_text("Net (kept)").is_visible()
+
+
+@pytest.mark.parametrize("width", [360, 390, 430])
+def test_trends_controls_fit_one_row_on_phones(page, flask_server, width):
+    """The period pills and Highlight toggle share one row on a phone (short
+    labels below sm) and stay inside the viewport."""
+    page.set_viewport_size({"width": width, "height": 800})
+    page.goto(f"{flask_server}/s/ledger/trends")
+    titles = ["Quarterly", "Year to Date", "Trailing 12 Mo", "Highlight unusual months"]
+    boxes = [
+        page.locator(f"a[aria-label='{t}'], a:text-is('{t}')").first.bounding_box()
+        for t in titles
+    ]
+    assert len({round(b["y"] + b["height"] / 2) for b in boxes}) == 1
+    assert boxes[-1]["x"] + boxes[-1]["width"] <= width - 16
+    assert page.locator("a", has_text="YTD").first.is_visible()

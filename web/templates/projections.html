@@ -95,10 +95,14 @@
         label_width='w-44', use_htmx=false, latest_label='Now',
         next_disabled=not tl.can_go_forward) }}
     </div>
+    {# Window size, view and menu stay together on one row, even on a phone
+       (short labels below sm: 6M / 1Y / 2Y). #}
+    <div class="flex items-center gap-2 sm:gap-4">
     <div class="flex items-center gap-2" data-proj-nav>
         {% set _month_opts = [] %}
         {% for choice in month_choices %}
-        {% set _ = _month_opts.append({'url': proj_url(months=choice, month=none), 'label': choice ~ ' mo', 'active': months == choice}) %}
+        {% set _ = _month_opts.append({'url': proj_url(months=choice, month=none), 'label': choice ~ ' mo',
+            'short': (choice ~ 'M') if choice % 12 else ((choice // 12) ~ 'Y'), 'active': months == choice}) %}
         {% endfor %}
         {{ nav.segmented(_month_opts, use_htmx=false) }}
     </div>
@@ -126,6 +130,7 @@
             </a>
         </div>
     </details>
+    </div>
 </div>
 
 {# Accounts × months grid: a grouped sheet (partials/grouped_sheet.html, shared

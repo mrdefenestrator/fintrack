@@ -213,8 +213,13 @@ def test_breakdown_uses_month_keys_and_ignores_past_months(client):
     assert "data-month-breakdown" not in body
 
 
-def test_estimate_lives_in_the_menu(client):
+def test_view_controls_lead_the_filter_bar(client):
+    # Window size, Balances / Changes and Estimate lead the grid's filter bar;
+    # the pager sits on its own row above it.
     body = _get(client)
-    menu = body.split("<div data-proj-menu-panel")[1].split("</details>")[0]
-    assert "data-estimate-toggle" in menu
-    assert "estimate=1" in menu
+    assert body.index("data-pager-row") < body.index("data-filter-bar")
+    lead = body.split("data-bar-lead")[1].split("data-sheet-scroll")[0]
+    for hook in ("data-window-size", "data-view-toggle", "data-estimate-toggle"):
+        assert hook in lead
+    assert "estimate=1" in lead
+    assert "data-pager" not in lead

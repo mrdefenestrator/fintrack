@@ -2,6 +2,8 @@
 
 import pytest
 
+from tests.e2e.controls import PHONE_WIDTHS, assert_controls_layout
+
 pytestmark = pytest.mark.e2e
 
 _PERIODS = [
@@ -24,7 +26,7 @@ def test_trends_all_period_buttons_visible(page, flask_server):
 
 
 def test_trends_no_last_year_button(page, flask_server):
-    """The 'Last Year' preset is gone — paging YTD back one page covers it."""
+    """The 'Last Year' preset is gone — paging Year back one page covers it."""
     page.goto(f"{flask_server}/s/ledger/trends")
     assert page.locator("a:has-text('Last Year')").count() == 0
 
@@ -256,3 +258,18 @@ def test_trends_paged_window_still_shows_seeded_data(page, confirmed_server):
     # the table renders gracefully empty — both are valid; the page must not
     # error out.
     assert page.locator("table tfoot").get_by_text("Net (kept)").is_visible()
+
+
+@pytest.mark.parametrize("width", PHONE_WIDTHS)
+def test_trends_controls_fit_one_row_on_phones(page, flask_server, width):
+    """Pager above; the period pills and Highlight toggle share the filter
+    bar's one row on a phone (short labels below sm)."""
+    page.set_viewport_size({"width": width, "height": 800})
+    page.goto(f"{flask_server}/s/ledger/trends")
+    assert_controls_layout(page, width)
+    assert (
+        page.locator("[data-period-toggle]")
+        .get_by_role("link", name="Year", exact=True)
+        .is_visible()
+    )
+    assert page.locator("[data-highlight-toggle] a", has_text="Highlight").is_visible()

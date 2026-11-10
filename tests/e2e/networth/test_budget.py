@@ -196,10 +196,14 @@ def test_budget_filter_by_kind(page, flask_server):
     page.goto(f"{flask_server}/s/test_finances/budget")
 
     # Open Kind filter
-    page.locator(".sm\\:flex button.filter-dropdown-trigger:has-text('Kind')").click()
+    page.locator(
+        "[data-filter-panel] button.filter-dropdown-trigger:has-text('Kind')"
+    ).click()
 
     # Check income only
-    page.locator(".sm\\:flex input[name='include_kind'][value='income']").click()
+    page.locator(
+        "[data-filter-panel] input[name='include_kind'][value='income']"
+    ).click()
     page.wait_for_url("**/budget**include_kind**")
 
     tbody = page.locator("#budget-table")
@@ -214,13 +218,13 @@ def test_budget_filter_by_kind_mobile(page, flask_server):
     page.set_viewport_size({"width": 375, "height": 812})
     page.goto(f"{flask_server}/s/test_finances/budget")
 
-    # Desktop bar is hidden; mobile trigger row is visible
-    assert page.locator(".sm\\:hidden").first.is_visible()
-    assert not page.locator(".sm\\:flex").first.is_visible()
+    # The filters are collapsed behind the mobile trigger
+    assert page.locator("[data-filter-toggle]").is_visible()
+    assert not page.locator("[data-filter-panel]").is_visible()
 
     # Expand the mobile filter panel (shared bar: one control set, revealed
     # below sm when the Filters trigger is tapped)
-    page.locator(".sm\\:hidden > button[type=button]").click()
+    page.locator("[data-filter-toggle]").click()
 
     # The control set is now visible — open the Kind dropdown in it
     page.locator("button.filter-dropdown-trigger:has-text('Kind')").click()
@@ -230,7 +234,7 @@ def test_budget_filter_by_kind_mobile(page, flask_server):
     page.wait_for_url("**/budget**include_kind**")
 
     # Active count badge should appear in the mobile trigger row
-    assert page.locator(".sm\\:hidden .tabular-nums").is_visible()
+    assert page.locator("[data-filter-toggle] [data-filter-count]").is_visible()
 
     # Correct rows shown
     tbody = page.locator("#budget-table")

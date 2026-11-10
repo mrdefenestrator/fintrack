@@ -12,30 +12,50 @@
    shown (Trends) — disabled at the latest window rather than removed, so the
    controls don't shift when you page away from latest (QA item 20). is_latest
    disables the next arrow too. #}
-{# Shared segmented control: a row of joined pills where exactly one is active,
-   used for the mutually-exclusive time-range selectors on Transactions
-   (This month / All time) and Trends (Quarterly / Year / Trailing 12 Mo)
-   so both pages share one look and one implementation (issue #1).
+{# Shared segmented control: a row of joined pills where exactly one is active
+   (or a single on/off pill), used for every view toggle that isn't the time
+   pager — Transactions (Month / Year / All time), Budget vs Actual (By month /
+   Recurring), Trends (period, Highlight), Projections (window, Balances /
+   Changes, Estimate). These live in the sheet's filter bar as its `lead`
+   (partials/sheet_filter_bar.html), so they share the bar's compact text-xs
+   look with the filter dropdowns.
 
-   options: list of {url, label, active}. The first pill has no left border;
-   each subsequent pill draws a divider, so they read as one contiguous form.
-
+   options: list of {url, label, active, short?, attrs?}. The first pill has no
+   left border; each later pill draws a divider, so they read as one control.
+   - short: replaces `label` below the sm breakpoint so a bar's controls fit
+     one row on a phone (the full label stays as the title/accessible name).
+   - attrs: extra raw attributes for that pill (data hooks, role/aria).
+   - title: tooltip (defaults to the full label when there's a short label).
    - target/use_htmx: htmx partial-swap pages pass use_htmx=true (default) and a
-     hx-target; pages that navigate full-page (e.g. Projections) pass
-     use_htmx=false for plain <a> links.
-   - size: 'md' (default) for the standalone top control clusters (Trends /
-     Transactions); 'sm' for a compact control that sits inline in a filter bar
-     (Projections Months). #}
-{%- macro segmented(options, target='#content', use_htmx=true, size='md') -%}
-{% set _pad = 'px-3 h-8' if size == 'md' else 'px-2.5 py-1' %}
-{% set _seg = '%s flex items-center text-sm transition-colors whitespace-nowrap' | format(_pad) %}
+     hx-target; full-page pages (Projections) pass use_htmx=false.
+   - attrs (macro arg): extra raw attributes for the wrapper. #}
+{%- macro segmented(options, target='#content', use_htmx=true, attrs='') -%}
+{% set _seg = 'px-2 py-1 flex items-center transition-colors whitespace-nowrap' %}
 {% set _seg_on = 'bg-blue-500 text-white' %}
-{% set _seg_off = 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600' %}
-<div class="inline-flex {{ 'h-8' if size == 'md' else '' }} rounded-md border border-gray-300 dark:border-gray-600 overflow-hidden">
+{% set _seg_off = 'bg-gray-50 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600' %}
+<div class="inline-flex shrink-0 rounded border border-gray-200 dark:border-gray-600 overflow-hidden text-xs" {{ attrs | safe }}>
     {% for o in options %}
-    <a href="{{ o.url }}" {% if use_htmx %}hx-get="{{ o.url }}" hx-target="{{ target }}" hx-push-url="true"{% endif %}
-       class="{{ _seg }} {{ '' if loop.first else 'border-l border-gray-300 dark:border-gray-600' }} {{ _seg_on if o.active else _seg_off }}">{{ o.label }}</a>
+    {% set _title = o.title or (o.label if o.short else none) %}
+    <a {{ o.attrs | default('') | safe }} href="{{ o.url }}" {% if use_htmx %}hx-get="{{ o.url }}" hx-target="{{ target }}" hx-push-url="true"{% endif %}
+       class="{{ _seg }} {{ '' if loop.first else 'border-l border-gray-200 dark:border-gray-600' }} {{ _seg_on if o.active else _seg_off }}"
+       {%- if _title %} title="{{ _title }}"{% endif %}
+       {%- if o.short %} aria-label="{{ o.label }}">
+       <span class="sm:hidden">{{ o.short }}</span><span class="hidden sm:inline">{{ o.label }}</span>
+       {%- else %}>{{ o.label }}{% endif %}</a>
     {% endfor %}
+</div>
+{%- endmacro -%}
+
+
+{# The row that holds a page's time pager, directly above its sheet: the pager
+   first (left), then anything about that window (Budget vs Actual's missing /
+   drift badges, Projections' end-of-window summary). Every page with a pager
+   uses it so the pager sits in the same spot everywhere; min-h-8 keeps the
+   sheet from jumping on a view with no pager (Transactions' All time, Budget
+   vs Actual's Recurring). Use with {% call nav.pager_row() %}. #}
+{%- macro pager_row(attrs='') -%}
+<div class="shrink-0 mb-2 min-h-8 flex flex-wrap items-center gap-x-4 gap-y-2" data-pager-row {{ attrs | safe }}>
+    {{ caller() }}
 </div>
 {%- endmacro -%}
 

@@ -188,7 +188,8 @@ def seed_dense(conn) -> bool:
         ("Travel Rewards Card", "Big Card Co", "-842.17", "8000.00", 15),
         ("Cashback Everyday", "Big Card Co", "-312.90", "12000.00", 3),
         ("Grocery Rewards", "Anytown Bank", "-128.45", "5000.00", 20),
-        ("Warehouse Store Card", "Warehouse Club", "-450.00", "3500.00", 10),
+        # Over 30% of its limit: the card-usage highlight (#102).
+        ("Warehouse Store Card", "Warehouse Club", "-1400.00", "3500.00", 10),
         ("Airline Miles Card", "Sky Bank", "-1580.22", "15000.00", 25),
     ]
     for name, institution, balance, limit, due in credit_cards:
@@ -577,6 +578,9 @@ def seed_dense(conn) -> bool:
     # --- A statement import gone stale (issue #102) -------------------------
     _seed_dense_overdue_import(conn, sid, today)
 
+    # --- The same months a year earlier, for Trends' year in review (#102) ---
+    _seed_dense_last_year(conn, sid, checking, today)
+
     print(f"Seeded example snapshot {DENSE_SNAPSHOT!r} (id={sid}).")
     return True
 
@@ -879,6 +883,57 @@ _DENSE_STALE_DAYS = {
 # An account whose last confirmed statement import is this old, though its
 # balance is current: the "no statement imported" reminder (past 35 days).
 _DENSE_OVERDUE_IMPORT = ("Joint Checking", 50)
+
+
+# Year in review (#102) compares a year with the one before, so the dense
+# snapshot gets last year's copy of the same months, scaled per category so
+# the comparison has a story: a raise since last year, groceries and shopping
+# up, dining and travel down, fixed bills unchanged. A little per-transaction
+# jitter keeps it from looking copied.
+_LAST_YEAR_FACTORS = {
+    "Income": Decimal("0.92"),
+    "Groceries": Decimal("0.85"),
+    "Shopping": Decimal("0.70"),
+    "Dining": Decimal("1.35"),
+    "Travel": Decimal("1.60"),
+    "Transport": Decimal("1.10"),
+}
+_LAST_YEAR_FIXED = {"Housing", "Income", "Subscriptions", "Utilities"}
+
+
+def _seed_dense_last_year(conn, sid, checking_id: int, today: date) -> None:
+    rows = []
+    for txn in get_transactions(conn, snapshot_id=sid):
+        when = txn["date"]
+        try:
+            earlier = when.replace(year=when.year - 1)
+        except ValueError:  # Feb 29
+            earlier = date(when.year - 1, 2, 28)
+        factor = _LAST_YEAR_FACTORS.get(txn["category"], Decimal(1))
+        if txn["category"] not in _LAST_YEAR_FIXED:
+            step = int(hashlib.sha256(str(txn["id"]).encode()).hexdigest(), 16) % 11
+            factor *= Decimal("0.95") + Decimal(step) / 100  # ±5%
+        amount = (Decimal(txn["amount"]) * factor).quantize(Decimal("0.01"))
+        desc = txn["raw_description"]
+        rows.append(
+            {
+                "date": earlier,
+                "amount": amount,
+                "raw_description": desc,
+                "normalized_merchant": txn["merchant"],
+                "fingerprint": _fingerprint(checking_id, earlier, str(amount), desc),
+            }
+        )
+    import_id = create_import(
+        conn,
+        account_id=checking_id,
+        filename="seed_dense_last_year.ofx",
+        file_hash=hashlib.sha256(b"seed-dense-last-year").hexdigest(),
+    )
+    insert_transactions(
+        conn, import_id=import_id, account_id=checking_id, transactions_data=rows
+    )
+    confirm_import(conn, import_id)
 
 
 def _as_of(name: str, today: date) -> str:

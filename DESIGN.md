@@ -854,6 +854,21 @@ count. Avg/mo for these rows follows the rule above; the average savings rate
 is average net ÷ average income, not a mean of monthly rates. The month in
 progress shows its figures so far, greyed like the body.
 
+Trends' periods are **Quarterly · Year · Trailing 12 Mo**. **Year** (#102,
+replacing Year to Date; old `?period=ytd` links still open it) is the current
+year so far, or a full calendar year when paged back, and doubles as the **year
+in review** (`fintrack/insights/year_review.py`, shared with `report trends
+--year YYYY`). It adds three columns after the months — the year's total, last
+year's over the same span, and the change in size (a year in progress is
+compared with the same dates last year, Jan 1 – today) — with the cash-flow
+footer rows filled in the same way (savings rate compares in points). Above the
+table, a panel shows the year's savings rate against last year's, income ·
+spending · net, net worth from the start of the year to its end (or today) from
+balance history, and the top ten merchants by spending (Income and Transfer left
+out; each links to its transactions). Net worth follows the Holdings footer's
+rule: a holding with no value before the year counts at its end value, and the
+change only shows once most holdings have a starting value.
+
 The actions column (drag + delete) renders only in edit mode. Edits swap the
 table's whole body (colgroup included), so a row whose edit changes its band
 simply re-renders in the new band.
@@ -1038,7 +1053,7 @@ transactions link <txn> <entry> | unlink <txn> | suggest | dismiss <txn> <entry>
 recurring  [list] [--all] [--dismissed] | add <merchant> | link <merchant> <entry> | dismiss <merchant> | undismiss <merchant>
 merchants  list | set
 categories list|add|edit|delete
-report     monthly | trends
+report     monthly | trends [--months N] [--year YYYY]
 status | budget | income | expenses | assets | debts | funding   # status = text Overview
 project    [--from YYYY-MM] [--months N] [--estimate] [--changes] [--month YYYY-MM]
 migrate-legacy …

@@ -8,6 +8,7 @@ from flask import Blueprint, current_app, g, render_template, request
 
 from fintrack.budget.repository import budgeted_monthly_by_category, get_budget_entries
 from fintrack.insights.cash_flow import compute_cash_flow
+from fintrack.insights.year_review import year_review
 from fintrack.ledger.repository.aggregations import get_monthly_totals_range
 from fintrack.ledger.trends import averaging_months, monthly_average, pct_change
 from web.routes.common import snapshot_scoped
@@ -19,9 +20,15 @@ _END_PARAM_RE = re.compile(r"^(\d{4})-(\d{2})$")
 
 # Paging stride per period, in months: each "prev/next" click moves the
 # window by one whole page rather than a single month (QA: trends paging).
-# Quarterly steps a quarter, YTD steps a calendar year, trailing-12 steps a
+# Quarterly steps a quarter, Year steps a calendar year, trailing-12 steps a
 # year so the 12-month window slides back/forward intact.
-_PERIOD_STRIDE = {"quarterly": 3, "ytd": 12, "trailing12": 12}
+_PERIOD_STRIDE = {"quarterly": 3, "year": 12, "trailing12": 12}
+
+
+def _normalize_period(period: str | None, default: str) -> str:
+    """The period param, with the old "ytd" (now "year", #102) still accepted."""
+    period = period or default
+    return "year" if period == "ytd" else period
 
 
 def _period_stride(period: str) -> int:
@@ -32,7 +39,7 @@ def _period_range(period: str, anchor_end: date, is_latest: bool) -> tuple[date,
     """The [start, end] date span for a period window anchored at `anchor_end`.
 
     The *latest* window is period-to-date (ends at `anchor_end`, i.e. today):
-    the current partial quarter or the current year so far. A paged-back
+    the current partial quarter or the current year so far (Year). A paged-back
     window is the *full* period containing the anchor month — the full quarter
     or the full calendar year — so stepping back lands on complete periods.
     Trailing-12 is a fixed 12-month window ending at the anchor either way.
@@ -45,7 +52,7 @@ def _period_range(period: str, anchor_end: date, is_latest: bool) -> tuple[date,
         quarter_end_month = quarter_start_month + 2
         _, last_day = monthrange(anchor_end.year, quarter_end_month)
         return start, date(anchor_end.year, quarter_end_month, last_day)
-    elif period == "ytd":
+    elif period == "year":
         start = date(anchor_end.year, 1, 1)
         if is_latest:
             return start, anchor_end
@@ -109,7 +116,7 @@ def _resolve_window_end(
 @bp.route("/trends")
 def index():
     today = datetime.now().astimezone().date()
-    period = request.args.get("period", "trailing12")
+    period = _normalize_period(request.args.get("period"), "trailing12")
     anchor_end, anchor_year, anchor_month, is_latest = _resolve_window_end(
         request.args.get("end"), today
     )
@@ -133,6 +140,14 @@ def index():
             conn, start_date=start, end_date=end, snapshot_id=g.snapshot_id
         )
         budget = get_budget_entries(conn, g.snapshot_id)
+        # Year in review (#102): this year against the same span last year,
+        # top merchants, and net worth start -> end.
+        review = (
+            year_review(conn, g.snapshot_id, anchor_year, today)
+            if period == "year"
+            else None
+        )
+    prev_totals = {c["category"]: c for c in review["categories"]} if review else {}
 
     budgeted, budget_kinds = budgeted_monthly_by_category(budget)
 
@@ -198,6 +213,8 @@ def index():
                 "budget_monthly": bgt_display,
                 "budget_delta": budget_delta,
                 "delta_words": _delta_words(budget_delta, kind or "expense"),
+                "prev_total": prev_totals.get(cat, {}).get("prev_total"),
+                "year_change": prev_totals.get(cat, {}).get("change_pct"),
             }
         )
 
@@ -266,13 +283,16 @@ def index():
         end_qs=end_qs,
         is_latest=is_latest,
         window_label=window_label,
+        review=review,
+        # Extra columns the Year period adds after the months.
+        year_cols=3 if review else 0,
     )
 
 
 @bp.route("/trends/detail")
 def detail():
     today = datetime.now().astimezone().date()
-    period = request.args.get("period", "ytd")
+    period = _normalize_period(request.args.get("period"), "year")
     category = request.args.get("category", "")
     anchor_end, _, _, is_latest = _resolve_window_end(request.args.get("end"), today)
     start, end = _period_range(period, anchor_end, is_latest)

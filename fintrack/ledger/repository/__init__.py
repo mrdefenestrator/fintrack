@@ -8,6 +8,7 @@ from fintrack.ledger.repository.accounts import (
 )
 from fintrack.ledger.repository.aggregations import (
     base_transaction_query,
+    get_merchant_totals,
     get_monthly_category_totals,
     get_monthly_totals_range,
     get_rolling_average,
@@ -72,6 +73,7 @@ __all__ = [
     "get_correction",
     "get_existing_fingerprints",
     "get_merchant_by_id",
+    "get_merchant_totals",
     "get_merchant_with_stats_by_id",
     "get_monthly_category_totals",
     "get_monthly_totals_range",

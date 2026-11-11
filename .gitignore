@@ -21,3 +21,7 @@ docker-compose.yml
 issues.md
 notes-category-design.md
 notes-holdings-design.md
+
+# Debug output
+*.log
+.playwright-mcp/

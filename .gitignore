@@ -22,5 +22,6 @@ issues.md
 notes-category-design.md
 notes-holdings-design.md
 
-# Playwright MCP debug snapshots
+# Debug output
+*.log
 .playwright-mcp/

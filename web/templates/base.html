@@ -67,6 +67,31 @@
         })();
     </script>
 
+    {# iPadOS 26 windowed web app (issue #126). In a resized window iPadOS
+       draws its close/minimize/full-screen buttons over the page's top-left
+       corner, right on the menu button, and no env() inset reports them. So
+       flag an installed app on iPad whose window is narrower than the screen
+       (either orientation: iOS keeps screen.width/height in portrait), and
+       let CSS make room. Full screen, iPhone, desktop and Safari tabs are
+       untouched. #}
+    <script>
+        (function() {
+            if (!(window.navigator.standalone || window.matchMedia('(display-mode: standalone)').matches)) return;
+            var ua = navigator.userAgent;
+            var iPad = /iPad/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+            if (!iPad) return;
+            var root = document.documentElement;
+            function check() {
+                var w = window.innerWidth;
+                var full = Math.abs(w - screen.width) <= 1 || Math.abs(w - screen.height) <= 1;
+                if (full) root.removeAttribute('data-window-controls');
+                else root.setAttribute('data-window-controls', '');
+            }
+            check();
+            window.addEventListener('resize', check);
+        })();
+    </script>
+
     <!-- Alpine.js -->
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 
@@ -262,6 +287,11 @@
            false there. The body never scrolls, so sticky changes nothing
            about layout anywhere. */
         #main-header { position: sticky; top: 0; }
+
+        /* Clear iPadOS 26's window buttons in a resized window (issue #126;
+           flag set in <head>). They take ~70px at the top-left; 5rem keeps
+           the menu button past them. Out-ranks the safe-area padding above. */
+        html[data-window-controls] #main-header { padding-left: 5rem; }
 
         /* Consistent row height for all tables (accounts, budget, assets) */
         table {

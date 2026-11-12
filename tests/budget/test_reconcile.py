@@ -141,10 +141,10 @@ def test_suggest_exact_match_is_high_confidence(conn, snapshot_id, seeder):
 
 def test_suggest_flags_price_drift(conn, snapshot_id, seeder):
     make_expense_entry(conn, snapshot_id, amount=15.49, category="Subscriptions")
-    seeder.add(date(2026, 5, 3), "-17.99", "Streamco", "Subscriptions")
+    seeder.add(date(2026, 5, 3), "-15.99", "Streamco", "Subscriptions")
     (s,) = suggest_links(conn, snapshot_id)
     assert "price drift" in s.reasons
-    assert s.drift_amount == Decimal("2.50")
+    assert s.drift_amount == Decimal("0.50")
 
 
 def test_suggest_excludes_wrong_sign(conn, snapshot_id, seeder):
@@ -178,14 +178,66 @@ def test_dismissed_suggestion_is_not_proposed_again(conn, snapshot_id, seeder):
     assert get_correction(conn, txn_id)["budget_entry_ref"] == entry
 
 
-def test_dismissal_falls_back_to_next_best_entry(conn, snapshot_id, seeder):
+def test_dismissal_does_not_jump_to_next_best_entry(conn, snapshot_id, seeder):
+    # Issue #90: rejecting the best guess means "not this one", not "try the
+    # runner-up" — the transaction gets no more suggestions.
     rent = make_rent_entry(conn, snapshot_id)
-    other = make_expense_entry(conn, snapshot_id, amount=1900)
+    make_expense_entry(conn, snapshot_id, amount=1900, category="Housing")
     txn_id = seeder.add(date(2026, 5, 1), "-2000.00", "Landlord", "Housing")
     assert suggest_links(conn, snapshot_id)[0].entry_ref == rent
     dismiss_suggestion(conn, snapshot_id, txn_id, rent)
+    assert suggest_links(conn, snapshot_id) == []
+    # Undismissing brings the best guess back.
+    undismiss_suggestions(conn, txn_id)
+    assert [s.entry_ref for s in suggest_links(conn, snapshot_id)] == [rent]
+
+
+def test_weak_amount_only_match_is_not_suggested(conn, snapshot_id, seeder):
+    # Issue #90: an amount alone (other category, no account or due date) is
+    # a low-confidence guess, and those were almost never right.
+    make_expense_entry(conn, snapshot_id, amount=15.99, category="Subscriptions")
+    seeder.add(date(2026, 5, 4), "-15.99", "Corner Store", "Shopping")
+    assert suggest_links(conn, snapshot_id) == []
+    (s,) = suggest_links(conn, snapshot_id, min_score=0)
+    assert s.confidence == "low"
+
+
+def test_ambiguous_match_between_lookalikes_is_not_suggested(conn, snapshot_id, seeder):
+    # Issue #90: two entries that fit equally well make any pick a coin flip.
+    make_expense_entry(conn, snapshot_id, amount=11.99, category="Entertainment")
+    make_expense_entry(conn, snapshot_id, amount=11.99, category="Entertainment")
+    seeder.add(date(2026, 5, 4), "-11.99", "Streamco", "Entertainment")
+    assert suggest_links(conn, snapshot_id) == []
+
+
+def test_monthly_entry_gets_one_suggestion_per_month(conn, snapshot_id, seeder):
+    # Issue #90: a monthly bill is one charge, so only the best of several
+    # similar charges that month is proposed — and none once one is linked.
+    entry = make_expense_entry(
+        conn, snapshot_id, amount=60, category="Utilities", day_of_month=12
+    )
+    best = seeder.add(date(2026, 5, 12), "-60.00", "Power Co", "Utilities")
+    seeder.add(date(2026, 5, 20), "-58.00", "Water Co", "Utilities")
+    seeder.add(date(2026, 5, 27), "-62.00", "Gas Co", "Utilities")
     (s,) = suggest_links(conn, snapshot_id)
-    assert s.entry_ref == other
+    assert s.transaction["id"] == best
+    link_transaction(conn, snapshot_id, best, entry)
+    assert suggest_links(conn, snapshot_id) == []
+
+
+def test_weekly_entry_can_take_a_fifth_charge(conn, snapshot_id, seeder):
+    from tests.budget.conftest import make_entry
+
+    make_entry(
+        conn,
+        snapshot_id,
+        amount=20,
+        recurrence="weekly",
+        category="Childcare",
+    )
+    for day in (1, 8, 15, 22, 29, 30):
+        seeder.add(date(2026, 5, day), "-20.00", "Sitter", "Childcare")
+    assert len(suggest_links(conn, snapshot_id)) == 5
 
 
 def test_dismiss_is_idempotent_and_undismiss_restores(conn, snapshot_id, seeder):
@@ -762,7 +814,8 @@ def test_newest_charge_of_unlinked_series_is_nudged(conn, snapshot_id, seeder):
     )
     ids = _monthly_charges(seeder, "Netflix", ["15.49"] * 6, "Entertainment")
     by_txn = {
-        s.transaction["id"]: s for s in suggest_links(conn, snapshot_id, today=NOV)
+        s.transaction["id"]: s
+        for s in suggest_links(conn, snapshot_id, today=NOV, min_score=0)
     }
     newest = by_txn[ids[-1]]
     assert newest.entry_ref == entry
@@ -785,27 +838,33 @@ def _amazon(seeder):
 def test_irregular_merchant_scores_lower_against_recurring_bill(
     conn, snapshot_id, seeder
 ):
-    make_expense_entry(conn, snapshot_id, amount=15.99, category="Subscriptions")
-    # A merchant seen once is unknown, not irregular: still suggested.
-    seeder.add(date(2026, 10, 4), "-15.99", "Newco", "Shopping")
-    _amazon(seeder)
-    suggestions = suggest_links(conn, snapshot_id, today=NOV)
-    assert [s.transaction["merchant"] for s in suggestions] == ["Newco"]
+    make_expense_entry(conn, snapshot_id, amount=15.99, category="Shopping")
+    # A merchant seen once is unknown, not irregular: not penalized.
+    newco = seeder.add(date(2026, 10, 4), "-15.99", "Newco", "Shopping")
+    (s,) = suggest_links(conn, snapshot_id, today=NOV)
+    assert "merchant not recurring" not in s.reasons
+    unpenalized = s.score
 
-    # With a low floor the Amazon charge shows, scored down and explained.
-    low = {
-        s.transaction["merchant"]: s
-        for s in suggest_links(conn, snapshot_id, today=NOV, min_score=0)
-    }
-    assert "merchant not recurring" in low["Amazon"].reasons
-    assert low["Amazon"].score < low["Newco"].score
+    # A repeat Amazon charge is scored down and explained (the monthly entry
+    # then only has room for the likelier Newco charge).
+    amazon = _amazon(seeder)
+    dismiss_suggestion(conn, snapshot_id, newco, s.entry_ref)
+    (low,) = suggest_links(conn, snapshot_id, today=NOV, min_score=0)
+    assert low.transaction["id"] == amazon
+    assert "merchant not recurring" in low.reasons
+    assert low.score < unpenalized
 
 
 def test_irregular_penalty_skips_one_time_entries(conn, snapshot_id, seeder):
     from tests.budget.conftest import make_entry
 
     make_entry(
-        conn, snapshot_id, amount=15.99, recurrence="one_time", date="2026-10-02"
+        conn,
+        snapshot_id,
+        amount=15.99,
+        recurrence="one_time",
+        date="2026-10-02",
+        category="Shopping",
     )
     txn_id = _amazon(seeder)
     (s,) = suggest_links(conn, snapshot_id, today=NOV)

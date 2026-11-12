@@ -226,6 +226,7 @@ def _rent_with_unlinked_charge(db_engine):
                 "amount": 2000,
                 "recurrence": "monthly",
                 "dayOfMonth": 1,
+                "autoAccountRef": acct,
             },
         )
         ref = get_budget_entries(conn, sid)[-1]["_db_id"]

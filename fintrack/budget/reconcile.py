@@ -213,7 +213,12 @@ _W_DATE = Decimal("0.10")
 # category and account agree — this gates candidacy so a $5 coffee never
 # matches $2000 rent. Within 25% it still scores (and flags drift).
 _AMOUNT_GATE = Decimal("0.25")
-_SUGGESTION_FLOOR = 0.35
+# Only medium-or-better matches are proposed (#90): below 0.55 a match rests
+# on little more than a similar amount, and those were almost never right.
+_SUGGESTION_FLOOR = 0.55
+# A transaction whose two best entries score within this of each other is a
+# coin flip between them, so neither is proposed (#90).
+_AMBIGUITY_MARGIN = 0.10
 
 # Recurring-series signals (issue #119), applied on top of the weights above
 # and capped at 1.0. A charge whose series is already linked to an entry is
@@ -403,11 +408,21 @@ def suggest_links(
 
     Suggestions are for confirmation only — nothing is written. Scoped to a
     month when both ``year`` and ``month`` are given, else all transactions.
-    Pairs the user dismissed are skipped, so a transaction whose best match
-    was rejected may be offered its next-best entry instead. Entries measured
-    by category total are never proposed: their category already counts the
-    transaction, and a link would only re-pin its category (silently
-    recategorizing it when the guess is wrong).
+    Entries measured by category total are never proposed: their category
+    already counts the transaction, and a link would only re-pin its category
+    (silently recategorizing it when the guess is wrong).
+
+    Tuned to propose fewer, likelier matches (issue #90):
+
+    - only scores of at least ``min_score`` (medium confidence by default);
+    - nothing for a transaction whose two best entries score within
+      ``_AMBIGUITY_MARGIN`` of each other — a guess between lookalikes;
+    - a discrete entry gets at most as many suggestions per month as it has
+      unlinked occurrences left, best first (one monthly bill, not every
+      similar charge);
+    - once the user dismisses any suggestion for a transaction, it gets no
+      more — it isn't re-offered the next-best entry. Linking by hand still
+      works, and ``undismiss_suggestions`` brings suggestions back.
 
     Recurring series (``recurring.series_index``) sharpen the scores (issue
     #119): see ``_series_signal``. Series are detected as of the end of the
@@ -423,28 +438,54 @@ def suggest_links(
     entries = [e for e in entries if not _measured_by_category(e, claims)]
     if not entries:
         return []
+    by_ref = {e["_db_id"]: e for e in entries}
     txns = get_transactions(conn, year=year, month=month, snapshot_id=snapshot_id)
-    dismissed = get_link_dismissals(conn, snapshot_id)
+    dismissed_txns = {txn_id for txn_id, _ in get_link_dismissals(conn, snapshot_id)}
     as_of = today
     if year is not None and month is not None:
         as_of = min(today, date(year, month, monthrange(year, month)[1]))
     series = series_index(conn, snapshot_id, today=as_of)
-    suggestions: list[Suggestion] = []
+
+    # Occurrences already realized by a link, per (entry, year, month).
+    linked: Counter = Counter()
     for txn in txns:
-        if txn.get("budget_entry_ref") is not None:
+        entry = by_ref.get(txn.get("budget_entry_ref"))
+        if entry is not None and not is_reversal(entry.get("kind"), txn["amount"]):
+            linked[(entry["_db_id"], txn["date"].year, txn["date"].month)] += 1
+
+    candidates: list[Suggestion] = []
+    for txn in txns:
+        if txn.get("budget_entry_ref") is not None or txn["id"] in dismissed_txns:
             continue
-        best: Suggestion | None = None
-        for entry in entries:
-            if (txn["id"], entry["_db_id"]) in dismissed:
+        scored = sorted(
+            (
+                cand
+                for entry in entries
+                if (cand := _score_pair(txn, entry, series)) is not None
+            ),
+            key=lambda s: s.score,
+            reverse=True,
+        )
+        if not scored or scored[0].score < min_score:
+            continue
+        if len(scored) > 1 and scored[0].score - scored[1].score < _AMBIGUITY_MARGIN:
+            continue
+        candidates.append(scored[0])
+
+    candidates.sort(key=lambda s: s.score, reverse=True)
+    taken: Counter = Counter()
+    suggestions: list[Suggestion] = []
+    for sug in candidates:
+        entry, d = sug.entry, sug.transaction["date"]
+        key = (sug.entry_ref, d.year, d.month)
+        if not entry.get("continuous"):
+            open_slots = expected_occurrences(entry, d.year, d.month) - linked[key]
+            if entry.get("recurrence") == "weekly":
+                open_slots += 1  # a month can hold a fifth weekly charge
+            if taken[key] >= open_slots:
                 continue
-            cand = _score_pair(txn, entry, series)
-            if cand is None:
-                continue
-            if best is None or cand.score > best.score:
-                best = cand
-        if best is not None and best.score >= min_score:
-            suggestions.append(best)
-    suggestions.sort(key=lambda s: s.score, reverse=True)
+        taken[key] += 1
+        suggestions.append(sug)
     return suggestions
 
 

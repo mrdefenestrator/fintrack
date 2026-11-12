@@ -573,9 +573,16 @@ Three things build on the link:
   charges"). Entries measured by category total (below) are never proposed:
   their category already counts the transaction, and a link would only re-pin
   its category. Suggestions are always presented for confirmation, never applied
-  silently. A rejected suggestion can be **dismissed**: the pair is stored in
-  `link_suggestion_dismissals` and never proposed again (the transaction may
-  still be offered its next-best entry, and manual linking is unaffected). On
+  silently. To keep them few and likely (#90): only **medium or high**
+  confidence (score ≥ 0.55) is proposed — below that a match rests on little
+  more than a similar amount; a transaction whose two best entries score within
+  0.10 of each other is a coin flip and gets nothing; and a discrete entry gets
+  at most as many suggestions a month as it has unlinked occurrences left (one
+  for a monthly bill, up to five for a weekly one), best first. A rejected
+  suggestion can be **dismissed**: the pair is stored in
+  `link_suggestion_dismissals`, and the transaction gets no further
+  suggestions — it isn't re-offered its next-best entry (`transactions
+  undismiss` brings them back, and manual linking is unaffected). On
   the Budget vs Actual page each entry shows how many of the month's unlinked
   transactions look like it; in edit mode a row under the entry lists them with
   Apply / Dismiss. The CLI has `transactions suggest [--apply]` (y / n / d per

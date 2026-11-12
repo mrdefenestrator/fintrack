@@ -13,7 +13,13 @@
 <div data-headline class="text-2xl font-semibold tabular-nums text-gray-800 dark:text-gray-100 {% if amount < 0 %}!text-red-600 dark:!text-red-400{% endif %}">{{ amount | fmt_money_whole }}</div>
 {% endmacro %}
 
-{# "▲ $1,235", colored by direction. #}
-{% macro change(amount) %}
-<div data-change class="tabular-nums font-medium {% if amount < 0 %}text-red-600 dark:text-red-400{% elif amount > 0 %}text-emerald-600 dark:text-emerald-400{% endif %}">{{ amount | fmt_change_whole }}</div>
+{# "▲ $1,235", colored by direction, then an optional muted note on its own
+   line ("since Nov 2025"). `partial` adds a "*" (the change counts only the
+   holdings that had a value then);
+   `attr` names the data- attribute tests and scripts find it by. #}
+{% macro change(amount, note=none, partial=false, attr='change') %}
+<div data-{{ attr }}>
+    <span class="tabular-nums font-medium {% if amount < 0 %}text-red-600 dark:text-red-400{% elif amount > 0 %}text-emerald-600 dark:text-emerald-400{% endif %}">{{ amount | fmt_change_whole }}</span>{% if partial %}<span title="Partial: counts only holdings with a value recorded by then" class="text-gray-400">*</span>{% endif %}
+    {% if note %}<div class="text-xs text-gray-500 dark:text-gray-400">{{ note }}</div>{% endif %}
+</div>
 {% endmacro %}

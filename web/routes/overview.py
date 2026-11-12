@@ -8,7 +8,7 @@ fintrack.insights.overview (shared with the `status` CLI command).
 
 from flask import Blueprint, current_app, render_template, request, url_for
 
-from fintrack.insights.overview import build_overview
+from fintrack.insights.overview import LOOKBACK_MONTHS, build_overview
 from web.routes.common import get_common_context, validate_snapshot
 
 overview_bp = Blueprint("overview", __name__)
@@ -32,11 +32,17 @@ def overview_view(filename):
         active_tab="overview",
         overview=overview,
         summary=overview["summary"],
-        # Projections on the Overview's horizon.
-        proj_url=url_for(
+        past=overview["past"],
+        # Net worth / Liquid: Projections' timeline over the same past year
+        # and next (plain Projections when there's no history back then).
+        timeline_url=_timeline_url(filename, overview),
+        # Projection warnings: Projections on the Overview's horizon, opened on
+        # the low point's month breakdown.
+        warnings_url=url_for(
             "projections.projections_view",
             filename=filename,
             months=overview["months"],
+            month=overview["summary"]["lowest_liquid"]["month_key"],
         ),
         # Cash flow card: Trends' Trailing 12, the window its average covers.
         trends_url=url_for("trends.index", filename=filename, period="trailing12"),
@@ -55,6 +61,22 @@ def overview_view(filename):
         # filtered to the recurring-charge findings.
         attention_url=_attention_url(filename, overview["attention"]),
         **context,
+    )
+
+
+def _timeline_url(filename: str, overview: dict) -> str:
+    past = overview["past"]
+    if past["liquid"] is None and past["net_worth"] is None:
+        return url_for(
+            "projections.projections_view",
+            filename=filename,
+            months=overview["months"],
+        )
+    return url_for(
+        "projections.projections_view",
+        filename=filename,
+        months=LOOKBACK_MONTHS + overview["months"],
+        **{"from": past["from"]},
     )
 
 

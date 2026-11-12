@@ -160,7 +160,8 @@ def test_status_smoke(tmp_path):
 
 def test_status_is_the_text_overview(tmp_path):
     """status prints the Overview cards: net worth and liquid now (whole
-    dollars) and their change by the end of the horizon, then the warnings."""
+    dollars), their change since a year back and by the end of the horizon,
+    then the warnings."""
     db = tmp_path / "test.db"
     runner = CliRunner()
     _add_snapshot(runner, db)
@@ -177,6 +178,16 @@ def test_status_is_the_text_overview(tmp_path):
             ],
             "months": 12,
             "has_holdings": True,
+            "past": {
+                "label": "Nov 2025",
+                "from": "2025-11",
+                "net_worth": {
+                    "then": Decimal(600),
+                    "change": Decimal("400.40"),
+                    "partial": True,
+                },
+                "liquid": None,
+            },
             "cash_flow": _CASH_FLOW,
             "debt_cards": _DEBT_CARDS,
             "attention": [
@@ -195,6 +206,7 @@ def test_status_is_the_text_overview(tmp_path):
                 "lowest_liquid": {
                     "amount": Decimal(200),
                     "month_label": "Feb 2027",
+                    "month_key": "2027-02",
                 },
                 "payoffs": [{"name": "Car loan", "month_label": "Mar 2027"}],
                 "warnings": [
@@ -211,8 +223,15 @@ def test_status_is_the_text_overview(tmp_path):
         result = runner.invoke(cli, ["--db", str(db), "status"])
     assert result.exit_code == 0, result.output
     lines = result.output.splitlines()
-    assert lines[0] == "Net worth  $1,000  ▲ $600 by Oct 2027"
-    assert lines[1] == "Liquid       $500  ▼ $120 by Oct 2027"
+    assert lines[0] == (
+        "Net worth  $1,000  ▲ $400* since Nov 2025       ▲ $600 by Oct 2027"
+    )
+    assert lines[1] == (
+        "Liquid       $500  no history back to Nov 2025  ▼ $120 by Oct 2027"
+    )
+    assert lines[2] == (
+        "  * partial: counts only holdings with a value recorded by then"
+    )
     assert "Needs attention: 1 item" in lines
     assert "  Spotify: $11.99/mo, not in budget" in lines
     assert "Spending alerts: 7 things to look at" in lines

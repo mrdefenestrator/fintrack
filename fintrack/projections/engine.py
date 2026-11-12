@@ -494,6 +494,8 @@ def summarize(result: dict[str, Any]) -> dict[str, Any]:
         "lowest_liquid": {
             "amount": liquid[low_idx],
             "month_label": months[low_idx]["label"],
+            # Projections' ?month= value, to open that month's breakdown.
+            "month_key": f"{months[low_idx]['year']:04d}-{months[low_idx]['month']:02d}",
         },
         "payoffs": payoffs,
         "warnings": list(by_account.values()),

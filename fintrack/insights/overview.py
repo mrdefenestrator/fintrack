@@ -8,6 +8,7 @@ data here, append its key, and add ``web/templates/overview/cards/<key>.html``
 """
 
 from datetime import date, datetime
+from decimal import Decimal
 from typing import Any
 
 from sqlalchemy.engine import Connection
@@ -17,7 +18,7 @@ from fintrack.insights import debt, stale
 from fintrack.insights.alerts import get_alerts
 from fintrack.insights.cash_flow import get_cash_flow, trailing_months_start
 from fintrack.ledger.alerts import load_alert_config
-from fintrack.projections import engine
+from fintrack.projections import engine, timeline
 
 # Cash flow card's average window: Trends' Trailing 12.
 CASH_FLOW_MONTHS = 12
@@ -27,6 +28,10 @@ SPENDING_ALERT_LINES = 5
 
 # Projection horizon the Overview reports on ("over the next 12 months").
 OVERVIEW_MONTHS = 12
+
+# How far back the Net worth / Liquid card looks: the change since the end of
+# the month this many months before the current one (actual balances).
+LOOKBACK_MONTHS = 12
 
 
 def needs_attention(
@@ -49,13 +54,22 @@ def needs_attention(
 def build_overview(
     conn: Connection, snapshot_id: int, today: date | None = None
 ) -> dict[str, Any]:
-    """Current liquid / net worth, where they're projected to be in
-    OVERVIEW_MONTHS, this month's cash flow, debt and card usage, what needs
-    attention, spending
-    alerts, and the projection's warnings (lowest liquid month, accounts
-    dipping below their minimum, loan payoffs)."""
+    """Current liquid / net worth, how they changed over the past
+    LOOKBACK_MONTHS and where they're projected to be in OVERVIEW_MONTHS,
+    this month's cash flow, debt and card usage, what needs attention,
+    spending alerts, and the projection's warnings (lowest liquid month,
+    accounts dipping below their minimum, loan payoffs)."""
     today = today or datetime.now().astimezone().date()
-    result = engine.project(conn, snapshot_id, months=OVERVIEW_MONTHS, today=today)
+    # Projections' timeline over the past year and the next: actual month-ends
+    # back to LOOKBACK_MONTHS ago, then the OVERVIEW_MONTHS projection.
+    tl = timeline.build_timeline(
+        conn,
+        snapshot_id,
+        start=timeline.shift_month((today.year, today.month), -LOOKBACK_MONTHS),
+        months=LOOKBACK_MONTHS + OVERVIEW_MONTHS,
+        today=today,
+    )
+    result = tl["projection"]
     summary = engine.summarize(result)
     return {
         "cards": [
@@ -69,11 +83,36 @@ def build_overview(
         "months": OVERVIEW_MONTHS,
         "has_holdings": bool(result["rows"]),
         "summary": summary,
+        "past": _past_change(tl),
         "cash_flow": _cash_flow_card(conn, snapshot_id, today),
         "debt_cards": debt.debt_and_cards(conn, snapshot_id, today),
         "attention": needs_attention(conn, snapshot_id, today=today),
         "spending_alerts": _spending_alerts_card(conn, snapshot_id, today),
     }
+
+
+def _past_change(tl: dict[str, Any]) -> dict[str, Any]:
+    """Liquid and net worth now against the timeline's first month-end (the
+    first column of the linked Projections window), like for like: the change
+    is summed over the holdings that had a balance recorded by then, so one
+    added since doesn't count as growth. ``partial`` when some didn't (as in
+    Projections' Changes view); None when none did."""
+    first = tl["months"][0]
+    out: dict[str, Any] = {"label": first["label"], "from": first["key"]}
+    for key, flag in (("liquid", "in_liquid"), ("net_worth", "in_net_worth")):
+        counted = [r for r in tl["rows"] if r[flag]]
+        known = [r for r in counted if r["cells"][0]["value"] is not None]
+        if not known:
+            out[key] = None
+            continue
+        out[key] = {
+            "then": tl[key][0]["value"],
+            "change": sum(
+                (r["start"] - r["cells"][0]["value"] for r in known), Decimal(0)
+            ),
+            "partial": len(known) < len(counted),
+        }
+    return out
 
 
 def _spending_alerts_card(

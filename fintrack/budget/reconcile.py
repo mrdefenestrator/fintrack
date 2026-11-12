@@ -215,6 +215,19 @@ _W_DATE = Decimal("0.10")
 _AMOUNT_GATE = Decimal("0.25")
 _SUGGESTION_FLOOR = 0.35
 
+# Recurring-series signals (issue #119), applied on top of the weights above
+# and capped at 1.0. A charge whose series is already linked to an entry is
+# almost surely that entry (and its amount is also judged against the
+# series' current price, so a price step reads as drift, not a different
+# bill); the newest charge of a series the budget
+# names but nothing links yet gets a nudge; a merchant known not to recur
+# (enough history, no cadence, or marked "not recurring") is unlikely to be
+# a discrete recurring bill.
+_SERIES_LINKED_BONUS = Decimal("0.30")
+_SERIES_MATCH_BONUS = Decimal("0.20")
+_IRREGULAR_PENALTY = Decimal("0.20")
+_RECURRING_RECURRENCES = frozenset({"weekly", "biweekly", "monthly", "annual"})
+
 
 @dataclass
 class Suggestion:
@@ -269,7 +282,37 @@ def is_reversal(entry_kind: str | None, amount: Any) -> bool:
     return amount > _ZERO  # expense
 
 
-def _score_pair(txn: dict[str, Any], entry: dict[str, Any]) -> Suggestion | None:
+def _series_signal(
+    txn: dict[str, Any], entry: dict[str, Any], series: Any
+) -> str | None:
+    """How the transaction's recurring series relates to ``entry``:
+    "linked" (its series is linked there), "match" (it is the newest charge of
+    a series that looks like the entry but isn't linked), "irregular" (its
+    merchant doesn't recur and the entry is a recurring bill), or None.
+    ``series`` is a ``recurring.SeriesIndex`` (or None to ignore recurrence)."""
+    if series is None:
+        return None
+    charge = series.series_of(txn)
+    if charge is not None:
+        if charge.entry_ref != entry["_db_id"]:
+            return None
+        if charge.status == "linked":
+            return "linked"
+        if charge.status == "unlinked" and charge.transaction_ids[-1] == txn["id"]:
+            return "match"
+        return None
+    if (
+        entry.get("recurrence") in _RECURRING_RECURRENCES
+        and not entry.get("continuous")
+        and series.is_irregular(txn)
+    ):
+        return "irregular"
+    return None
+
+
+def _score_pair(
+    txn: dict[str, Any], entry: dict[str, Any], series: Any = None
+) -> Suggestion | None:
     amount = money(txn["amount"])
     kind = entry.get("kind", "expense")
     if not _kind_matches_sign(kind, amount):
@@ -282,13 +325,21 @@ def _score_pair(txn: dict[str, Any], entry: dict[str, Any]) -> Suggestion | None
     entry_amount = money(entry.get("amount"))
     txn_abs = abs(amount)
     amount_c = _amount_component(txn_abs, entry_amount)
+    signal = _series_signal(txn, entry, series)
+    reasons: list[str] = []
+    if signal == "linked":
+        # Its series already realizes this entry, so the series' own current
+        # price is as good a yardstick as the (possibly stale) budget amount.
+        series_c = _amount_component(txn_abs, series.series_of(txn).pattern.amount)
+        if series_c > amount_c:
+            amount_c = series_c
+            reasons.append("amount fits series")
     if amount_c <= _ZERO:
         return None  # amount gate
 
-    reasons: list[str] = []
     if txn_abs == entry_amount:
-        reasons.append("amount exact")
-    else:
+        reasons.insert(0, "amount exact")
+    elif not reasons:
         reasons.append("amount close")
 
     category_c = _ZERO
@@ -316,6 +367,16 @@ def _score_pair(txn: dict[str, Any], entry: dict[str, Any]) -> Suggestion | None
         + _W_ACCOUNT * account_c
         + _W_DATE * date_c
     )
+    if signal == "linked":
+        score += _SERIES_LINKED_BONUS
+        reasons.append("recurring series linked here")
+    elif signal == "match":
+        score += _SERIES_MATCH_BONUS
+        reasons.append("recurring series matches")
+    elif signal == "irregular":
+        score -= _IRREGULAR_PENALTY
+        reasons.append("merchant not recurring")
+    score = min(Decimal(1), max(_ZERO, score))
     drift = txn_abs - entry_amount
     if abs(drift) > _TOLERANCE:
         reasons.append("price drift")
@@ -336,6 +397,7 @@ def suggest_links(
     year: int | None = None,
     month: int | None = None,
     min_score: float = _SUGGESTION_FLOOR,
+    today: date | None = None,
 ) -> list[Suggestion]:
     """Rank budget-entry candidates for each still-unlinked transaction.
 
@@ -346,7 +408,16 @@ def suggest_links(
     by category total are never proposed: their category already counts the
     transaction, and a link would only re-pin its category (silently
     recategorizing it when the guess is wrong).
+
+    Recurring series (``recurring.series_index``) sharpen the scores (issue
+    #119): see ``_series_signal``. Series are detected as of the end of the
+    month in scope (or ``today``, if sooner), so a past month is judged by the
+    history it had.
     """
+    # Imported here: recurring builds on this module (link_transaction).
+    from fintrack.budget.recurring import series_index
+
+    today = today or datetime.now().astimezone().date()
     entries = get_budget_entries(conn, snapshot_id)
     claims = Counter(e["category"] for e in entries if e.get("category"))
     entries = [e for e in entries if not _measured_by_category(e, claims)]
@@ -354,6 +425,10 @@ def suggest_links(
         return []
     txns = get_transactions(conn, year=year, month=month, snapshot_id=snapshot_id)
     dismissed = get_link_dismissals(conn, snapshot_id)
+    as_of = today
+    if year is not None and month is not None:
+        as_of = min(today, date(year, month, monthrange(year, month)[1]))
+    series = series_index(conn, snapshot_id, today=as_of)
     suggestions: list[Suggestion] = []
     for txn in txns:
         if txn.get("budget_entry_ref") is not None:
@@ -362,7 +437,7 @@ def suggest_links(
         for entry in entries:
             if (txn["id"], entry["_db_id"]) in dismissed:
                 continue
-            cand = _score_pair(txn, entry)
+            cand = _score_pair(txn, entry, series)
             if cand is None:
                 continue
             if best is None or cand.score > best.score:

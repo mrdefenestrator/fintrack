@@ -103,7 +103,9 @@ degrades to a warning without it).
   charges") detect steady merchant series locally and match them to the
   budget; findings show on Budget vs Actual's Recurring view
   (`?view=recurring`), the Overview "Needs attention" card, and `fintrack
-  recurring`. Same rule: **never send transaction data to the Claude API**.
+  recurring`. The detected series also sharpen `suggest_links` scores
+  (`recurring.series_index`, #119). Same rule: **never send transaction data
+  to the Claude API**.
   Needs attention is a list (`overview.needs_attention()`) that other findings
   opening the same kind of view (e.g. #102's) can append `{source, text}`
   items to; Spending alerts (#101) keep their own card.

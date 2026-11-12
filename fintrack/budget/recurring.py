@@ -288,33 +288,35 @@ def _classify(
             return
 
 
-def find_recurring(
+def series_key(txn: dict[str, Any]) -> tuple[str, str] | None:
+    """The (merchant, kind) series a transaction would belong to, or None
+    for one that can't recur (no merchant, zero amount, a transfer)."""
+    merchant = (txn.get("merchant") or "").strip()
+    amount = money(txn["amount"])
+    if not merchant or amount == _ZERO:
+        return None
+    if txn.get("category") in EXCLUDED_CATEGORIES:
+        return None
+    return merchant, "income" if amount > _ZERO else "expense"
+
+
+def _scan(
     conn: Connection,
     snapshot_id: int,
-    *,
-    today: date | None = None,
-    include_dismissed: bool = False,
-) -> list[RecurringCharge]:
-    """Every recurring series in the snapshot's last LOOKBACK_DAYS, matched
-    against the budget. Merchants the user dismissed are left out unless
-    ``include_dismissed``. Sorted: needs attention first, then by size."""
-    today = today or datetime.now().astimezone().date()
+    today: date,
+    dismissed: set[str],
+) -> tuple[list[RecurringCharge], dict[tuple[str, str], int]]:
+    """Every recurring series in the window ending ``today`` (unsorted), plus
+    how many charges each (merchant, kind) had in it, recurring or not."""
     start = today - timedelta(days=LOOKBACK_DAYS)
-    dismissed = (
-        set() if include_dismissed else get_recurring_dismissals(conn, snapshot_id)
-    )
     groups: dict[tuple[str, str], list[dict]] = {}
     for txn in get_transactions(conn, snapshot_id=snapshot_id):
         if not (start <= txn["date"] <= today):
             continue
-        merchant = (txn.get("merchant") or "").strip()
-        amount = money(txn["amount"])
-        if not merchant or amount == _ZERO or merchant in dismissed:
+        key = series_key(txn)
+        if key is None or key[0] in dismissed:
             continue
-        if txn.get("category") in EXCLUDED_CATEGORIES:
-            continue
-        kind = "income" if amount > _ZERO else "expense"
-        groups.setdefault((merchant, kind), []).append(txn)
+        groups.setdefault(key, []).append(txn)
 
     entries = get_budget_entries(conn, snapshot_id)
     claims = Counter(e["category"] for e in entries if e.get("category"))
@@ -344,6 +346,24 @@ def find_recurring(
         )
         _classify(charge, links, entries, claims)
         found.append(charge)
+    return found, {key: len(txns) for key, txns in groups.items()}
+
+
+def find_recurring(
+    conn: Connection,
+    snapshot_id: int,
+    *,
+    today: date | None = None,
+    include_dismissed: bool = False,
+) -> list[RecurringCharge]:
+    """Every recurring series in the snapshot's last LOOKBACK_DAYS, matched
+    against the budget. Merchants the user dismissed are left out unless
+    ``include_dismissed``. Sorted: needs attention first, then by size."""
+    today = today or datetime.now().astimezone().date()
+    dismissed = (
+        set() if include_dismissed else get_recurring_dismissals(conn, snapshot_id)
+    )
+    found, _ = _scan(conn, snapshot_id, today, dismissed)
     found.sort(
         key=lambda c: (
             not c.needs_attention,
@@ -353,6 +373,47 @@ def find_recurring(
         )
     )
     return found
+
+
+# A merchant with at least this many charges in the window but no steady
+# cadence is *irregular* (a store, not a subscription).
+IRREGULAR_MIN_COUNT = 3
+
+
+@dataclass
+class SeriesIndex:
+    """What the link suggester needs from recurrence (issue #119): which
+    series each transaction belongs to, and which merchants are known not to
+    recur."""
+
+    by_txn: dict[int, RecurringCharge] = field(default_factory=dict)
+    # (merchant, kind) pairs with enough history to tell, and no cadence — or
+    # merchants the user marked "not recurring".
+    irregular: set[tuple[str, str]] = field(default_factory=set)
+    dismissed: set[str] = field(default_factory=set)
+
+    def series_of(self, txn: dict[str, Any]) -> RecurringCharge | None:
+        return self.by_txn.get(txn["id"])
+
+    def is_irregular(self, txn: dict[str, Any]) -> bool:
+        key = series_key(txn)
+        return key is not None and (key in self.irregular or key[0] in self.dismissed)
+
+
+def series_index(conn: Connection, snapshot_id: int, *, today: date) -> SeriesIndex:
+    """Recurring series as of ``today``, indexed for the link suggester."""
+    dismissed = get_recurring_dismissals(conn, snapshot_id)
+    found, counts = _scan(conn, snapshot_id, today, dismissed)
+    recurring_keys = {(c.merchant, c.kind) for c in found}
+    return SeriesIndex(
+        by_txn={tid: c for c in found for tid in c.transaction_ids},
+        irregular={
+            key
+            for key, n in counts.items()
+            if n >= IRREGULAR_MIN_COUNT and key not in recurring_keys
+        },
+        dismissed=set(dismissed),
+    )
 
 
 def _usd(amount: Decimal) -> str:

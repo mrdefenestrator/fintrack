@@ -1,0 +1,46 @@
+{# Year in review (#102), above the Trends table in the Year period: the
+   year's income, spending, and savings rate against last year's same span,
+   net worth from the start of the year to its end (or today), and the top
+   merchants by spending. Per-category totals are columns in the table below.
+   Data: fintrack.insights.year_review. #}
+{% set cf = review.cash_flow %}
+{% set prev = review.prev_cash_flow %}
+{% set nw = review.net_worth %}
+{% macro rate(val) %}{% if val is not none %}{{ '%.0f' | format(val) }}%{% else %}—{% endif %}{% endmacro %}
+<section data-year-review class="mb-6 grid gap-4 md:grid-cols-2 text-sm">
+    <div class="rounded-lg bg-white dark:bg-gray-800 shadow-sm px-4 py-3 space-y-1 text-gray-600 dark:text-gray-300">
+        <h2 class="text-sm font-medium text-gray-500 dark:text-gray-400">{{ review.year }} in review{% if review.partial %} <span class="font-normal">· so far</span>{% endif %}</h2>
+        {% if cf.has_data %}
+        <div data-review-rate class="text-2xl font-semibold tabular-nums text-gray-800 dark:text-gray-100 {% if cf.rate is not none and cf.rate < 0 %}!text-red-600 dark:!text-red-400{% endif %}">{{ rate(cf.rate) }} <span class="text-sm font-normal text-gray-500 dark:text-gray-400">saved{% if prev.has_data %} · {{ rate(prev.rate) }} in {{ review.prev_year }}{% endif %}</span></div>
+        <div data-review-flow class="tabular-nums"><span class="whitespace-nowrap">Income {{ cf.income | fmt_money_whole }}</span> · <span class="whitespace-nowrap">Spending {{ cf.spending | fmt_money_whole }}</span> · <span class="whitespace-nowrap">Net {{ cf.net | fmt_money_whole }}</span></div>
+        {% else %}
+        <div data-review-flow>No transactions in {{ review.year }}{{ ' yet' if review.partial }}</div>
+        {% endif %}
+        <div data-review-net-worth class="tabular-nums">
+            {% if nw.shows_change %}
+            Net worth <span class="whitespace-nowrap">{{ nw.start | fmt_money_whole }} → {{ nw.end | fmt_money_whole }}</span>
+            <span class="whitespace-nowrap font-medium {% if nw.change < 0 %}text-red-600 dark:text-red-400{% elif nw.change > 0 %}text-emerald-600 dark:text-emerald-400{% endif %}">{{ nw.change | fmt_change_whole }}</span>
+            {% if nw.covered < nw.holdings %}<div class="text-xs text-gray-500 dark:text-gray-400">{{ nw.holdings - nw.covered }} of {{ nw.holdings }} holdings have no value before {{ review.year }}; they count at their end value</div>{% endif %}
+            {% elif nw.holdings %}
+            Net worth {{ nw.end | fmt_money_whole }} <span class="text-xs text-gray-500 dark:text-gray-400">· too little balance history before {{ review.year }} for a change</span>
+            {% else %}
+            <span class="text-gray-500 dark:text-gray-400">No net worth history for {{ review.year }}</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="rounded-lg bg-white dark:bg-gray-800 shadow-sm px-4 py-3 text-gray-600 dark:text-gray-300">
+        <h2 class="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Top merchants</h2>
+        {% if review.top_merchants %}
+        <ol data-top-merchants class="space-y-0.5">
+            {% for m in review.top_merchants %}
+            <li class="flex justify-between gap-3 tabular-nums">
+                <a class="truncate hover:underline" href="{{ url_for('transactions.index', filename=filename, all_months='true', search=m.merchant) }}">{{ loop.index }}. {{ m.merchant }}</a>
+                <span class="whitespace-nowrap">{{ m.spent | fmt_money_whole }} <span class="text-xs text-gray-500 dark:text-gray-400">· {{ m.count }}×</span></span>
+            </li>
+            {% endfor %}
+        </ol>
+        {% else %}
+        <div class="text-gray-500 dark:text-gray-400">No spending in {{ review.year }}{{ ' yet' if review.partial }}</div>
+        {% endif %}
+    </div>
+</section>

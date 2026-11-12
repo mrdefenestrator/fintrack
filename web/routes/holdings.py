@@ -48,6 +48,8 @@ from fintrack.core.types import (
     HOLDING_TYPE_OPTIONS,
     HOLDING_TYPE_VALUES,
 )
+from fintrack.insights import debt, stale
+from fintrack.insights.settings import load_insights_config
 from fintrack.networth import calculations
 from fintrack.networth.amortization import payoff_progress, scheduled_payment
 from fintrack.networth.prices import STALENESS_THRESHOLD, refresh_units
@@ -109,6 +111,7 @@ _CASH_COLS = _LEADING + [
 _CREDIT_COLS = _LEADING + [
     ("limit", "Limit", True, 1),
     ("available", "Available", True, 1),
+    ("usage", "Used", True, 1),
     ("rewards", "Rewards", True, 1),
     ("statement", "Statement", True, 1),
     ("due", "Due", False, 1),
@@ -117,6 +120,7 @@ _CREDIT_COLS = _LEADING + [
 ]
 _LOAN_COLS = _LEADING + [
     ("interest", "Interest", True, 1),
+    ("month_interest", "Mo. Interest", True, 1),
     ("equity", "Equity", True, 1),
     ("ltv", "LTV", True, 1),
     ("original", "Original", True, 1),
@@ -124,6 +128,7 @@ _LOAN_COLS = _LEADING + [
     ("originated", "Originated", False, 1),
     ("payment", "P&I", True, 1),
     ("progress", "Paid", True, 1),
+    ("payoff", "Payoff", False, 1),
     ("due", "Due", False, 1),
     ("linked", "Linked", False, 1),
     ("as_of", "As Of", False, 1),
@@ -147,6 +152,7 @@ _COL_TOOLTIPS: dict[str, str] = {
     "as_of": "Date of last balance update",
     "limit": "Credit limit",
     "available": "Available credit (limit minus owed)",
+    "usage": "Share of the credit limit in use (owed ÷ limit)",
     "rewards": "Rewards balance",
     "statement": "Last statement balance",
     "due": "Payment due date (day of month)",
@@ -159,6 +165,8 @@ _COL_TOOLTIPS: dict[str, str] = {
     "originated": "Loan origination date",
     "payment": "Monthly principal and interest payment",
     "progress": "Percentage of principal paid off",
+    "month_interest": "Interest part of this month's payment (owed × rate ÷ 12)",
+    "payoff": "When the balance reaches zero at the scheduled payment",
     "unit_price": "Price per unit or share",
     "qty": "Number of units or shares held",
     "source": "Price data source",
@@ -279,9 +287,19 @@ def _asset_col_fields(e: dict) -> dict:
     return m
 
 
-# As-of staleness thresholds (days) and colors, matching the accounts sparkline.
-_STALE_AMBER_DAYS = 35
-_STALE_RED_DAYS = 95
+# As-of staleness colors; the per-group thresholds are in configs/insights.yaml.
+_STALENESS_CLASSES = {
+    "stale": "text-amber-600 dark:text-amber-400",
+    "very_stale": "text-red-600 dark:text-red-400",
+}
+
+# Holdings band key -> holding group (the config's keys).
+_BAND_GROUP = {
+    "cash": "cash",
+    "credit": "credit_card",
+    "loan": "loan",
+    "asset": "asset",
+}
 
 # Blank-cell marker (plain dash, as the Accounts/Assets tables use) and the
 # muted color that de-emphasizes it so populated cells stand out.
@@ -383,23 +401,39 @@ def _cc_available(a: dict) -> str:
     return fmt_money(_money_dec(limit) + owed)
 
 
+def _usage_values(a: dict) -> dict:
+    """A card's Used cell: owed ÷ limit, amber past the configured highlight."""
+    usage = debt.card_usage(a) if a.get("type") == "credit_card" else None
+    if usage is None:
+        return {"usage": _BLANK}
+    return {
+        "usage": f"{usage['usage'] * 100:.0f}%",
+        "usage_class": "text-amber-600 dark:text-amber-400" if usage["high"] else "",
+    }
+
+
+def _loan_values(e: dict, today: date, is_debt: bool) -> dict:
+    """A loan's Mo. Interest and Payoff cells (issue #102)."""
+    if not is_debt:
+        return {"month_interest": _BLANK, "payoff": _BLANK}
+    loan = debt.loan_summary(e, today)
+    return {
+        "month_interest": _money(loan["interest"]),
+        "payoff": f"{loan['payoff']:%b %Y}" if loan["payoff"] else _BLANK,
+    }
+
+
 def _money_dec(x) -> Decimal:
     return Decimal(str(x)) if x is not None else Decimal(0)
 
 
-def _staleness_class(as_of_iso: str | None, today: date) -> str:
-    """Color the As-of cell by age: amber past 35 days, red past 95, else none."""
-    if not as_of_iso:
-        return ""
-    try:
-        age = (today - date.fromisoformat(as_of_iso)).days
-    except ValueError:
-        return ""
-    if age > _STALE_RED_DAYS:
-        return "text-red-600 dark:text-red-400"
-    if age > _STALE_AMBER_DAYS:
-        return "text-amber-600 dark:text-amber-400"
-    return ""
+def _staleness_class(as_of_iso: str | None, group_key: str, today: date) -> str:
+    """Color the As-of cell by age for its band: amber once stale, red once
+    very stale (thresholds per group in configs/insights.yaml), else none."""
+    level = stale.staleness(
+        as_of_iso, _BAND_GROUP[group_key], today, load_insights_config()
+    )
+    return _STALENESS_CLASSES.get(level, "") if level else ""
 
 
 def _raw(v) -> str:
@@ -429,12 +463,13 @@ def _make_row(
     """
     keys = [k for k, _, _, _ in cols]
     cells = [values.get(k, _BLANK) for k in keys]
-    staleness = _staleness_class(values.get("as_of_iso"), today)
     cell_classes = []
     for i, k in enumerate(keys):
         v = cells[i]
-        if k == "as_of" and staleness:
-            cell_classes.append(staleness)
+        # A value can carry its own cell color as "<key>_class" (a stale As
+        # Of, a card used past the highlight).
+        if values.get(f"{k}_class"):
+            cell_classes.append(values[f"{k}_class"])
         elif v == _BLANK:
             cell_classes.append(_MUTED)
         elif _is_display_negative(v):
@@ -470,6 +505,7 @@ def _account_row(a: dict, funding_by_id: dict, account_display: dict, today: dat
         "rewards": _money(a.get("rewards_balance")),
         "limit": _money(a.get("limit")),
         "available": _cc_available(a),  # computed, read-only (QA #10)
+        **_usage_values(a),
         "statement": _money(a.get("statement_balance")),
         "due": fmt_day_ordinal(due_day) if due_day else _BLANK,
         # Linked holding: for a credit card, the account that pays it.
@@ -478,6 +514,7 @@ def _account_row(a: dict, funding_by_id: dict, account_display: dict, today: dat
         "funding": fmt_money(funding) if funding else _BLANK,  # None/0 -> blank
         "as_of": a.get("asOfDate") or _BLANK,
         "as_of_iso": a.get("asOfDate"),
+        "as_of_class": _staleness_class(a.get("asOfDate"), group_key, today),
     }
     edit_raw = {
         "institution": a.get("institution") or "",
@@ -560,12 +597,14 @@ def _asset_row(
             e.get("originationDate") or _BLANK if has_amortization else _BLANK
         ),
         "payment": _money(payment),
+        **_loan_values(e, today, is_debt),
         "progress": _fmt_ltv(progress),
         "source": _BLANK if is_debt else (e.get("source") or _BLANK),
         "est_return": _fmt_pct(e.get("annualReturnRate")) if not is_debt else _BLANK,
         "contribution": _money(e.get("monthlyContribution")) if not is_debt else _BLANK,
         "as_of": e.get("asOfDate") or _BLANK,
         "as_of_iso": e.get("asOfDate"),
+        "as_of_class": _staleness_class(e.get("asOfDate"), group_key, today),
     }
     if pair is not None:
         values["equity"] = fmt_money(pair["equity"])

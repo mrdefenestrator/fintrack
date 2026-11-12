@@ -7,6 +7,7 @@ pytestmark = pytest.mark.e2e
 _CARDS = (
     "net_worth_liquid",
     "cash_flow",
+    "debt_cards",
     "needs_attention",
     "spending_alerts",
     "projection_warnings",
@@ -103,7 +104,7 @@ def test_overview_on_wide_screens_uses_columns(page, flask_server):
     boxes = [
         page.locator(f"[data-overview-card='{key}']").bounding_box() for key in _CARDS
     ]
-    # Five cards on the three xl columns: a row of three, then two.
+    # Six cards on the three xl columns: two rows of three.
     assert len({round(b["x"]) for b in boxes}) == 3
     assert len({round(b["y"]) for b in boxes[:3]}) == 1
     assert len({round(b["y"]) for b in boxes[3:]}) == 1
@@ -143,3 +144,13 @@ def test_needs_attention_card_opens_recurring(page, flask_server, _db_path):
     card.click()
     page.wait_for_url("**view=recurring&status=not_budgeted&status=price_change")
     assert page.locator("#recurring-table tr[data-recurring='StreamCo']").is_visible()
+
+
+def test_debt_and_cards_card_opens_the_loans_band(page, flask_server):
+    page.goto(f"{flask_server}/s/test_finances")
+    card = page.locator("[data-overview-card='debt_cards']")
+    href = card.get_attribute("href")
+    card.click()
+    page.wait_for_url(f"**{href}")
+    band = "loan" if href.endswith("#holdings-loan") else "credit"
+    assert page.locator(f"#holdings-{band}").count() == 1

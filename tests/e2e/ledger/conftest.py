@@ -363,7 +363,7 @@ def current_quarter_server(tmp_path_factory):
     """Flask server pre-seeded with one confirmed transaction dated today.
 
     Transaction: COSTCO WHOLESALE -$25.00, posted on the current date, so it
-    always falls inside date-windowed period views (quarterly, YTD).
+    always falls inside date-windowed period views (quarterly, Year).
     """
     port = _free_port()
     db_dir = tmp_path_factory.mktemp("current_quarter_db")

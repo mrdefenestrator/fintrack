@@ -147,3 +147,69 @@ def test_cash_flow_card_links_to_trailing_12_trends(client):
     assert "saved in " in card
     assert "No transactions yet this month" in card
     assert "No completed months in the past 12 yet" in card
+
+
+def test_needs_attention_opens_holdings_when_it_leads_with_stale_data(client):
+    from datetime import datetime, timedelta
+
+    engine = client.application.config["engine"]
+    today = datetime.now().astimezone().date()
+    with engine.connect() as conn:
+        add_account(
+            conn,
+            1,
+            {
+                "name": "Old Savings",
+                "type": "savings",
+                "balance": 5,
+                "asOfDate": (today - timedelta(days=41)).isoformat(),
+            },
+        )
+    card = _card(client.get("/s/home").get_data(as_text=True), "needs_attention")
+    assert "Old Savings: last updated 41 days ago" in card
+    assert 'href="/s/home/holdings"' in card
+
+
+def test_debt_and_cards_card_follows_cash_flow(client):
+    from decimal import Decimal
+
+    from fintrack.networth.repository import add_asset_entry
+
+    engine = client.application.config["engine"]
+    with engine.connect() as conn:
+        add_asset_entry(
+            conn,
+            1,
+            {
+                "kind": "debt",
+                "type": "loan",
+                "name": "Car",
+                "balance": Decimal(12000),
+                "interestRate": 0.06,
+                "originalPrincipal": 20000,
+                "termMonths": 60,
+                "originationDate": "2024-01-15",
+            },
+        )
+        add_account(
+            conn,
+            1,
+            {"name": "Visa", "type": "credit_card", "limit": 1000, "balance": -400},
+        )
+    html = client.get("/s/home").get_data(as_text=True)
+    assert html.index('data-overview-card="cash_flow"') < html.index(
+        'data-overview-card="debt_cards"'
+    )
+    card = _card(html, "debt_cards")
+    assert "$12,000" in card and "owed on 1 loan" in card
+    assert "Interest this month $60" in card
+    assert "Next payoff: <span" in card
+    assert "40%" in card and "text-amber-700" in card
+    assert 'href="/s/home/holdings#holdings-loan"' in card
+
+
+def test_debt_and_cards_card_without_loans_opens_cards(client):
+    card = _card(client.get("/s/home").get_data(as_text=True), "debt_cards")
+    assert "No loans" in card
+    assert "Card usage" not in card  # no cards with a limit either
+    assert 'href="/s/home/holdings#holdings-credit"' in card

@@ -8,7 +8,7 @@ pytestmark = pytest.mark.e2e
 
 _PERIODS = [
     ("quarterly", "Quarterly"),
-    ("ytd", "Year to Date"),
+    ("year", "Year"),
     ("trailing12", "Trailing 12 Mo"),
 ]
 
@@ -26,7 +26,7 @@ def test_trends_all_period_buttons_visible(page, flask_server):
 
 
 def test_trends_no_last_year_button(page, flask_server):
-    """The 'Last Year' preset is gone — paging YTD back one page covers it."""
+    """The 'Last Year' preset is gone — paging Year back one page covers it."""
     page.goto(f"{flask_server}/s/ledger/trends")
     assert page.locator("a:has-text('Last Year')").count() == 0
 
@@ -98,22 +98,22 @@ def test_trends_empty_db_has_no_data_rows(page, flask_server):
 # ---------------------------------------------------------------------------
 
 
-def test_trends_ytd_shows_data_rows(page, confirmed_server):
-    """YTD view shows at least one category row when data exists."""
-    page.goto(f"{confirmed_server}/s/ledger/trends?period=ytd")
+def test_trends_year_shows_data_rows(page, confirmed_server):
+    """Year view shows at least one category row when data exists."""
+    page.goto(f"{confirmed_server}/s/ledger/trends?period=year")
     rows = page.locator("table tbody tr")
     assert rows.count() >= 1
 
 
-def test_trends_ytd_shows_uncategorized_category(page, confirmed_server):
-    """YTD shows 'Uncategorized' since the classification API is disabled."""
-    page.goto(f"{confirmed_server}/s/ledger/trends?period=ytd")
+def test_trends_year_shows_uncategorized_category(page, confirmed_server):
+    """Year shows 'Uncategorized' since the classification API is disabled."""
+    page.goto(f"{confirmed_server}/s/ledger/trends?period=year")
     assert page.locator("table tbody td", has_text="Uncategorized").first.is_visible()
 
 
-def test_trends_ytd_grand_total_in_footer(page, confirmed_server):
-    """YTD footer shows the seeded $132 total for April 2026."""
-    page.goto(f"{confirmed_server}/s/ledger/trends?period=ytd")
+def test_trends_year_grand_total_in_footer(page, confirmed_server):
+    """Year footer shows the seeded $132 total for April 2026."""
+    page.goto(f"{confirmed_server}/s/ledger/trends?period=year")
     tfoot_text = page.locator("table tfoot").inner_text()
     # Amounts formatted with 0 decimals (money(0)) so $132.24 → "$132"
     assert "132" in tfoot_text
@@ -123,7 +123,7 @@ def test_trends_columns_are_sortable(page, confirmed_server):
     """Trends headers are wired for the shared client-side sort, and an
     expanded per-category detail row stays glued to its category row across a
     sort (the pair moves as one unit)."""
-    page.goto(f"{confirmed_server}/s/ledger/trends?period=ytd")
+    page.goto(f"{confirmed_server}/s/ledger/trends?period=year")
     table = page.locator("table.sortable")
     assert table.count() == 1
     assert table.locator("thead th.sortable-th").count() >= 1
@@ -159,7 +159,7 @@ def test_trends_quarterly_shows_data_rows(page, current_quarter_server):
 
 def test_trends_period_selector_updates_active_button(page, confirmed_server):
     """Clicking a period button makes it active and deactivates others."""
-    page.goto(f"{confirmed_server}/s/ledger/trends?period=ytd")
+    page.goto(f"{confirmed_server}/s/ledger/trends?period=year")
     page.click("a:has-text('Quarterly')")
     page.wait_for_url("**/trends**period=quarterly**")
 
@@ -167,7 +167,7 @@ def test_trends_period_selector_updates_active_button(page, confirmed_server):
         page.locator("a:has-text('Quarterly')").get_attribute("class") or ""
     )
     assert "bg-blue-500" not in (
-        page.locator("a:has-text('Year to Date')").get_attribute("class") or ""
+        page.get_by_role("link", name="Year", exact=True).get_attribute("class") or ""
     )
 
 
@@ -267,5 +267,9 @@ def test_trends_controls_fit_one_row_on_phones(page, flask_server, width):
     page.set_viewport_size({"width": width, "height": 800})
     page.goto(f"{flask_server}/s/ledger/trends")
     assert_controls_layout(page, width)
-    assert page.locator("[data-period-toggle] a", has_text="YTD").is_visible()
+    assert (
+        page.locator("[data-period-toggle]")
+        .get_by_role("link", name="Year", exact=True)
+        .is_visible()
+    )
     assert page.locator("[data-highlight-toggle] a", has_text="Highlight").is_visible()

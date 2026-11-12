@@ -1,3 +1,4 @@
+from datetime import date
 from decimal import Decimal
 from unittest.mock import patch
 
@@ -169,6 +170,7 @@ def test_status_is_the_text_overview(tmp_path):
             "cards": [
                 "net_worth_liquid",
                 "cash_flow",
+                "debt_cards",
                 "needs_attention",
                 "spending_alerts",
                 "projection_warnings",
@@ -176,6 +178,7 @@ def test_status_is_the_text_overview(tmp_path):
             "months": 12,
             "has_holdings": True,
             "cash_flow": _CASH_FLOW,
+            "debt_cards": _DEBT_CARDS,
             "attention": [
                 {"source": "recurring", "text": "Spotify: $11.99/mo, not in budget"}
             ],
@@ -222,7 +225,24 @@ def test_status_is_the_text_overview(tmp_path):
     assert "Cash flow: 25% saved in November so far" in lines
     assert "  Income $4,000 · Spending $3,000 · Net $1,000" in lines
     assert "  12-month average: 20% saved · $1,000/mo kept on $5,000 income" in lines
+    assert "Debt and cards: $9,000 owed on 1 loan" in lines
+    assert "  Interest this month $45 · Payments $300/mo" in lines
+    assert "  Next payoff: Car loan · Mar 2027" in lines
+    assert "  Card usage 35% (over 30%) · $350 of $1,000" in lines
 
+
+_DEBT_CARDS = {
+    "loans": [{"name": "Car loan"}],
+    "loan_owed": 9000,
+    "loan_interest": 45,
+    "loan_payment": 300,
+    "next_payoff": {"name": "Car loan", "payoff": date(2027, 3, 15)},
+    "card_usage": 0.35,
+    "card_usage_high": True,
+    "card_usage_high_pct": 30,
+    "card_owed": 350,
+    "card_limit": 1000,
+}
 
 _CASH_FLOW = {
     "month_label": "November",
@@ -285,3 +305,65 @@ def test_report_trends_prints_cash_flow(tmp_path):
     assert f"{today:%b %Y} (so far)" in out
     avg = out.splitlines()[-1]
     assert avg.split()[1:] == ["$4,000.00", "$1,000.00", "$3,000.00", "75%", "$0.00"]
+
+
+def test_report_trends_year_prints_the_year_in_review(tmp_path):
+    """`report trends --year` is the text version of Trends' Year period."""
+    from datetime import date
+
+    db = tmp_path / "test.db"
+    runner = CliRunner()
+    _add_snapshot(runner, db)
+    review = {
+        "year": 2025,
+        "start": date(2025, 1, 1),
+        "end": date(2025, 12, 31),
+        "partial": False,
+        "prev_year": 2024,
+        "prev_end": date(2024, 12, 31),
+        "categories": [
+            {
+                "category": "Groceries",
+                "total": -580.0,
+                "prev_total": -400.0,
+                "change_pct": 45.0,
+                "is_income": False,
+            },
+        ],
+        "cash_flow": {
+            "income": 4000.0,
+            "spending": 630.0,
+            "net": 3370.0,
+            "rate": 84.25,
+            "has_data": True,
+        },
+        "prev_cash_flow": {
+            "income": 3000.0,
+            "spending": 500.0,
+            "net": 2500.0,
+            "rate": 83.3,
+            "has_data": True,
+        },
+        "top_merchants": [{"merchant": "Safeway", "spent": 480.0, "count": 2}],
+        "net_worth": {
+            "start": Decimal(1500),
+            "end": Decimal(4000),
+            "change": Decimal(2500),
+            "covered": 1,
+            "holdings": 1,
+            "shows_change": True,
+        },
+    }
+    with patch("fintrack.cli.ledger.year_review", return_value=review):
+        result = runner.invoke(
+            cli, ["--db", str(db), "report", "trends", "--year", "2025"]
+        )
+    assert result.exit_code == 0, result.output
+    lines = result.output.splitlines()
+    assert lines[0] == "2025 in review"
+    groceries = next(line for line in lines if line.startswith("Groceries"))
+    assert groceries.split()[1:] == ["($580.00)", "($400.00)", "+45%"]
+    row_2025 = next(line for line in lines if line.startswith("2025  "))
+    assert row_2025.split()[1:] == ["$4,000.00", "$630.00", "$3,370.00", "84%"]
+    assert "Net worth: $1,500 → $4,000 (▲ $2,500)" in lines
+    assert any(line.startswith("1. Safeway") for line in lines)

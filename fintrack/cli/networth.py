@@ -115,7 +115,8 @@ def _echo_debt_cards(d) -> None:
 @click.command()
 @pass_cli
 def status(cli):
-    """Overview: net worth and liquid now and where the projection has them,
+    """Overview: net worth and liquid now, their change over the past year and
+    where the projection has them,
     cash flow, debt and card usage, what needs attention, and projection warnings (the text
     version of the web Overview page)."""
     with cli.connect() as conn:
@@ -125,16 +126,26 @@ def status(cli):
         click.echo("No holdings yet: add accounts, assets, and debts.\n")
 
     end = summary["end_label"]
+    past = overview["past"]
     rows = [
-        [name, fmt_money_whole(t["start"]), f"{fmt_change_whole(t['change'])} by {end}"]
-        for name, t in (
-            ("Net worth", summary["net_worth"]),
-            ("Liquid", summary["liquid"]),
+        [
+            name,
+            fmt_money_whole(t["start"]),
+            _past_change(p, past["label"]) if overview["has_holdings"] else "",
+            f"{fmt_change_whole(t['change'])} by {end}",
+        ]
+        for name, t, p in (
+            ("Net worth", summary["net_worth"], past["net_worth"]),
+            ("Liquid", summary["liquid"], past["liquid"]),
         )
     ]
     width = max(len(r[1]) for r in rows)
-    for name, now, change in rows:
-        click.echo(f"{name:<10} {now:>{width}}  {change}")
+    past_width = max(len(r[2]) for r in rows)
+    for name, now, since, change in rows:
+        since = f"{since:<{past_width}}  " if past_width else ""
+        click.echo(f"{name:<10} {now:>{width}}  {since}{change}")
+    if any(p and p["partial"] for p in (past["net_worth"], past["liquid"])):
+        click.echo("  * partial: counts only holdings with a value recorded by then")
 
     cf = overview["cash_flow"]
     m, avg = cf["this_month"], cf["average"]
@@ -195,6 +206,14 @@ def status(cli):
         )
     for p in summary["payoffs"]:
         click.echo(f"  Paid off: {p['name']} · {p['month_label']}")
+
+
+def _past_change(change: dict | None, label: str) -> str:
+    """'▲ $400 since Nov 2025' (with '*' when partial), or the no-history line."""
+    if change is None:
+        return f"no history back to {label}"
+    star = "*" if change["partial"] else ""
+    return f"{fmt_change_whole(change['change'])}{star} since {label}"
 
 
 def _pct(rate: float | None) -> str:

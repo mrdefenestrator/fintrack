@@ -962,7 +962,8 @@ top of a sheet, pushing the table down (worst on mobile); the sheets stay dense
 tables.
 
 `fintrack/insights/overview.py` `build_overview()` gathers the numbers from the
-existing calculations (today: a 12-month `engine.project()` + `summarize()`),
+existing calculations (today: Projections' `timeline.build_timeline()` over the
+past 12 months and the next 12, + `summarize()` of its projection),
 shared by the web route (`web/routes/overview.py`) and the `status` CLI
 command, which prints the same cards as text. It returns the card keys in
 order; each key renders `web/templates/overview/cards/<key>.html` with the
@@ -972,18 +973,18 @@ hasn't shipped are simply absent.
 
 | Card | Shows | Links to |
 |---|---|---|
-| Net worth / Liquid | both now, and their projected change by the end of the 12 months | Projections (`?months=12`); the whole card is the link |
+| Net worth / Liquid | both now; their actual change since the month-end a year back ("since Nov 2025", like for like: summed over the holdings with a value then, `*` when some had none; "No history back to …" when none did); and their projected change by the end of the 12 months | Projections' timeline over that past year and the next (`?months=24&from=YYYY-MM`), or `?months=12` with no history that far back; the whole card is the link |
 | Cash flow | this month's savings rate, income, spending, and net so far; the average rate, net, and income over Trailing 12's completed months | Trends (`?period=trailing12`) |
 | Debt and cards | total owed on loans, interest this month and total scheduled payments, the next payoff; total card usage (owed ÷ limit, amber past 30%) and owed of limit | Holdings at the Loans band (`#holdings-loan`), or the Credit Cards band without loans |
 | Needs attention | how many findings ("All clear" when none), then one line each, first five: recurring charges not in the budget ("Spotify: $11.99/mo, not in budget"), recurring price changes ("Netflix: $15.49 → $17.99 since Oct"), stale balances ("Chase Checking: last updated 41 days ago"), and accounts overdue for a statement ("Chase Checking: no statement imported in 51 days") | what the card leads with: Budget vs Actual's Recurring view filtered to those (`?view=recurring&status=not_budgeted&status=price_change`), or Holdings for stale data |
 | Spending alerts | status ("All clear" / how many things to look at), one line per spending alert (five, then "+N more") | Transactions (`?all_months=true&status=flagged`): the flagged charges and this month's rows in hot categories, each dismissable |
-| Projection warnings | status ("All clear" / how many accounts dip below their minimum), the low point, each below-minimum account, loan payoffs | Projections (`?months=12`), where below-minimum cells are marked |
+| Projection warnings | status ("All clear" / how many accounts dip below their minimum), the low point, each below-minimum account, loan payoffs | Projections opened on the low point's month breakdown (`?months=12&month=YYYY-MM`); below-minimum cells are marked in the grid |
 
 Cards are terse: whole dollars (`fmt_money_whole`), changes as ▲/▼ amounts
 (`fmt_change_whole`), one short line per item; exact figures and detail live on
 the sheets they link to. Each card is one link (the whole card) to one view;
-no per-line links or footer links. Opening Projections on a specific month
-(`?month=`) waits on the month breakdown working on phones (#114).
+no per-line links or footer links. The breakdown the warnings card opens still
+crowds the grid on phones (#114).
 
 Needs attention is fed by `needs_attention()` in `overview.py`: a list of
 `{source, text}` items that each feature appends to: recurring charges

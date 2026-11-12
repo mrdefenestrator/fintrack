@@ -21,8 +21,10 @@ def test_snapshot_root_lands_on_overview(page, flask_server):
         assert page.locator(f"[data-overview-card='{key}']").is_visible()
     liquid = page.locator("[data-figure='liquid']")
     assert liquid.locator("[data-headline]").inner_text().strip() == "$5,000"
-    assert liquid.locator("[data-change]").is_visible()
-    assert "Projected change by " in page.locator("[data-horizon]").inner_text()
+    assert "by " in liquid.locator("[data-change]").inner_text()
+    # The fixture has no balances from a year back.
+    assert "No history back to " in liquid.locator("[data-past-change]").inner_text()
+    assert page.locator("[data-horizon]").inner_text() == "Projected over the next year"
 
 
 def test_overview_is_first_in_the_nav(page, flask_server):
@@ -57,26 +59,80 @@ def test_net_worth_card_links_to_projections(page, flask_server):
     assert page.locator("[data-projection-table]").is_visible()
 
 
-def test_warnings_card_opens_projections(page, flask_server, _db_path):
-    """An account below its minimum gets one short line; the whole card opens
-    plain Projections, where the below-minimum cells are marked."""
+def _min_balance(db_path, amount):
     from sqlalchemy import create_engine, update
 
     from fintrack.core.models import cash_details
 
-    engine = create_engine(f"sqlite:///{_db_path}")
+    engine = create_engine(f"sqlite:///{db_path}")
     with engine.begin() as conn:
-        conn.execute(update(cash_details).values(minimum_balance=6000))
+        conn.execute(update(cash_details).values(minimum_balance=amount))
     engine.dispose()
 
+
+def test_warnings_card_opens_the_low_point_month(page, flask_server, _db_path):
+    """An account below its minimum gets one short line; the whole card opens
+    Projections on the low point's month breakdown."""
+    _min_balance(_db_path, 6000)
     page.goto(f"{flask_server}/s/test_finances")
     card = page.locator("[data-overview-card='projection_warnings']")
     status = card.locator("[data-status]").inner_text()
     assert "1 account dips below its minimum" in status
     assert "under $6,000 min from" in card.locator("[data-warnings]").inner_text()
+    low_label = card.locator("[data-lowest]").inner_text().split(" · ")[-1].strip()
     card.locator("[data-warnings] li").first.click()
-    page.wait_for_url("**/projections?months=12")
-    assert page.locator("[data-month-breakdown]").count() == 0
+    page.wait_for_url("**/projections?months=12&month=*")
+    breakdown = page.locator("[data-month-breakdown]")
+    assert breakdown.is_visible()
+    assert f"What happens in {low_label}" in breakdown.inner_text()
+
+
+def test_net_worth_card_shows_the_past_year(page, flask_server, _db_path):
+    """With a balance from a year back, Liquid shows its change since that
+    month-end, and the card opens Projections over the past year and next."""
+    from datetime import date, datetime
+    from decimal import Decimal
+
+    from sqlalchemy import create_engine, select
+
+    from fintrack.accounts.balance_history import record_balance
+    from fintrack.core.models import holdings
+    from fintrack.projections.timeline import shift_month
+    from fintrack.snapshots.repository import get_snapshot_id
+
+    today = datetime.now().astimezone().date()
+    y, m = shift_month((today.year, today.month), -12)
+    engine = create_engine(f"sqlite:///{_db_path}")
+    with engine.connect() as conn:  # record_balance commits
+        checking = conn.execute(
+            select(holdings.c.id).where(
+                holdings.c.name == "Main Checking",
+                holdings.c.snapshot_id == get_snapshot_id(conn, "test_finances"),
+            )
+        ).scalar_one()
+        record_balance(
+            conn, account_id=checking, balance=Decimal(4000), as_of=date(y, m, 1)
+        )
+        # The fixture's accounts have no history: record today's $5,000 too,
+        # so the old point isn't the latest.
+        record_balance(conn, account_id=checking, balance=Decimal(5000), as_of=today)
+    engine.dispose()
+
+    page.goto(f"{flask_server}/s/test_finances")
+    card = page.locator("[data-overview-card='net_worth_liquid']")
+    label = date(y, m, 1).strftime("%b %Y")
+    past = card.locator("[data-figure='liquid'] [data-past-change]").inner_text()
+    assert "▲ $1,000" in past and f"since {label}" in past
+    # Other holdings have no value that far back: net worth is partial.
+    assert (
+        "*" in card.locator("[data-figure='net-worth'] [data-past-change]").inner_text()
+    )
+    assert card.locator("[data-horizon]").inner_text() == (
+        "Actual over the past year, projected over the next"
+    )
+    card.click()
+    page.wait_for_url(f"**/projections?months=24&from={y:04d}-{m:02d}")
+    assert f"{label} – " in page.locator("[data-proj-window]").inner_text()
 
 
 def test_all_clear(page, flask_server):

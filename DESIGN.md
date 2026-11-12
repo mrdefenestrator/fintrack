@@ -569,7 +569,8 @@ Three things build on the link:
   so the classifier privacy constraint is untouched) scores each unlinked
   transaction against candidate entries on amount closeness (gated to ±25%),
   category match, flow-account match, and date proximity to the expected
-  occurrence. Entries measured by category total (below) are never proposed:
+  occurrence, sharpened by detected recurring series (see "Recurring
+  charges"). Entries measured by category total (below) are never proposed:
   their category already counts the transaction, and a link would only re-pin
   its category. Suggestions are always presented for confirmation, never applied
   silently. A rejected suggestion can be **dismissed**: the pair is stored in
@@ -668,8 +669,25 @@ series — Merchant · Category · Typical · Every · N · Last · Next · Budg
 Price change — with Kind and Status filters (Status includes a "Price change"
 flag) and a rough per-month footer; in edit mode the actions cell offers
 + (add) or a chain (link), and × (not recurring). The Overview's Needs
-attention card and `fintrack recurring` show the same findings. Whether
-recurrence should also feed `suggest_links` is a follow-up.
+attention card and `fintrack recurring` show the same findings.
+
+**Feeding link suggestions** (#119). `suggest_links` also reads the detected
+series (`recurring.series_index`, as of the end of the month in scope, so a
+past month is judged by the history it had), on top of the base weights and
+capped at 1.0:
+
+- a charge whose series is already **linked** to an entry gets +0.30 toward
+  that entry, and its amount is also judged against the series' current price
+  ("amount fits series"), so a price step past the ±25% gate is still proposed
+  (flagged as drift);
+- the **newest** charge of an `unlinked` series gets +0.20 toward the entry it
+  matches — linking it makes the series linked, which then lifts the rest;
+- a merchant known **not to recur** — at least 3 charges in the window and no
+  cadence, or marked "Not recurring" — gets −0.20 against discrete recurring
+  entries (weekly/biweekly/monthly/annual, not continuous). A merchant seen
+  only once or twice is unknown, not irregular, and isn't penalized.
+
+The reasons column names each signal. Still purely local.
 
 ## Web UI
 

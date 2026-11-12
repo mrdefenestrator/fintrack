@@ -702,3 +702,137 @@ def test_resolved_duplicate_is_not_an_actual(conn, snapshot_id, seeder):
         rent,
     )
     assert (a.count, a.actual) == (1, Decimal("2000.00"))
+
+
+# --------------------------------------------------------------------------
+# Suggestions sharpened by recurring series (issue #119)
+# --------------------------------------------------------------------------
+
+NOV = date(2026, 11, 20)
+
+
+def _monthly_charges(seeder, merchant, amounts, category, day=10, start_month=5):
+    """One charge a month from 2026-``start_month``, per amount; returns ids."""
+    return [
+        seeder.add(date(2026, start_month + i, day), f"-{a}", merchant, category)
+        for i, a in enumerate(amounts)
+    ]
+
+
+def test_charge_in_linked_series_scores_high_despite_price_step(
+    conn, snapshot_id, seeder
+):
+    # Netflix went from 15.49 to 22.99 — past the ±25% gate, so on amount alone
+    # the new charge would never be proposed. Its series is linked to the entry.
+    entry = make_expense_entry(
+        conn, snapshot_id, amount=15.49, category="Entertainment", day_of_month=10
+    )
+    ids = _monthly_charges(
+        seeder, "Netflix", ["15.49"] * 4 + ["22.99"] * 3, "Entertainment"
+    )
+    for txn_id in ids[:-1]:
+        link_transaction(conn, snapshot_id, txn_id, entry)
+
+    (s,) = suggest_links(conn, snapshot_id, today=NOV)
+    assert s.transaction["id"] == ids[-1]
+    assert s.entry_ref == entry
+    assert s.confidence == "high"
+    assert "recurring series linked here" in s.reasons
+    assert "price drift" in s.reasons
+
+
+def test_linked_series_picks_its_entry_over_a_lookalike(conn, snapshot_id, seeder):
+    # Two same-priced Entertainment lines; the series is linked to the second.
+    make_expense_entry(conn, snapshot_id, amount=11.99, category="Entertainment")
+    spotify = make_expense_entry(
+        conn, snapshot_id, amount=11.99, category="Entertainment"
+    )
+    ids = _monthly_charges(seeder, "Spotify", ["11.99"] * 6, "Entertainment")
+    for txn_id in ids[:-1]:
+        link_transaction(conn, snapshot_id, txn_id, spotify)
+    (s,) = suggest_links(conn, snapshot_id, today=NOV)
+    assert s.entry_ref == spotify
+
+
+def test_newest_charge_of_unlinked_series_is_nudged(conn, snapshot_id, seeder):
+    from tests.budget.conftest import make_entry
+
+    entry = make_entry(
+        conn, snapshot_id, description="Netflix", amount=15.49, recurrence="monthly"
+    )
+    ids = _monthly_charges(seeder, "Netflix", ["15.49"] * 6, "Entertainment")
+    by_txn = {
+        s.transaction["id"]: s for s in suggest_links(conn, snapshot_id, today=NOV)
+    }
+    newest = by_txn[ids[-1]]
+    assert newest.entry_ref == entry
+    assert "recurring series matches" in newest.reasons
+    assert all("recurring series matches" not in by_txn[i].reasons for i in ids[:-1])
+    assert newest.score > by_txn[ids[0]].score
+
+
+def _amazon(seeder):
+    # Irregular timing and amounts: a store, not a subscription.
+    for d, a in [
+        (date(2026, 6, 3), "42.10"),
+        (date(2026, 6, 20), "88.00"),
+        (date(2026, 8, 11), "23.50"),
+    ]:
+        seeder.add(d, f"-{a}", "Amazon", "Shopping")
+    return seeder.add(date(2026, 10, 2), "-15.99", "Amazon", "Shopping")
+
+
+def test_irregular_merchant_scores_lower_against_recurring_bill(
+    conn, snapshot_id, seeder
+):
+    make_expense_entry(conn, snapshot_id, amount=15.99, category="Subscriptions")
+    # A merchant seen once is unknown, not irregular: still suggested.
+    seeder.add(date(2026, 10, 4), "-15.99", "Newco", "Shopping")
+    _amazon(seeder)
+    suggestions = suggest_links(conn, snapshot_id, today=NOV)
+    assert [s.transaction["merchant"] for s in suggestions] == ["Newco"]
+
+    # With a low floor the Amazon charge shows, scored down and explained.
+    low = {
+        s.transaction["merchant"]: s
+        for s in suggest_links(conn, snapshot_id, today=NOV, min_score=0)
+    }
+    assert "merchant not recurring" in low["Amazon"].reasons
+    assert low["Amazon"].score < low["Newco"].score
+
+
+def test_irregular_penalty_skips_one_time_entries(conn, snapshot_id, seeder):
+    from tests.budget.conftest import make_entry
+
+    make_entry(
+        conn, snapshot_id, amount=15.99, recurrence="one_time", date="2026-10-02"
+    )
+    txn_id = _amazon(seeder)
+    (s,) = suggest_links(conn, snapshot_id, today=NOV)
+    assert s.transaction["id"] == txn_id
+    assert "merchant not recurring" not in s.reasons
+
+
+def test_merchant_marked_not_recurring_is_irregular(conn, snapshot_id, seeder):
+    from fintrack.budget.recurring import dismiss
+
+    make_expense_entry(conn, snapshot_id, amount=15.99, category="Subscriptions")
+    seeder.add(date(2026, 10, 4), "-15.99", "Newco", "Shopping")
+    dismiss(conn, snapshot_id, "Newco")
+    assert suggest_links(conn, snapshot_id, today=NOV) == []
+
+
+def test_past_month_judged_by_its_own_history(conn, snapshot_id, seeder):
+    # Viewing July: the series is detected as of July 31, so later charges
+    # (and the later link) don't count.
+    entry = make_expense_entry(
+        conn, snapshot_id, amount=15.49, category="Entertainment", day_of_month=10
+    )
+    ids = _monthly_charges(
+        seeder, "Netflix", ["15.49"] * 3 + ["22.99"] * 4, "Entertainment"
+    )
+    link_transaction(conn, snapshot_id, ids[-1], entry)
+    # July (ids[2], 15.49) is unlinked; its window has no links → no bonus.
+    (s,) = suggest_links(conn, snapshot_id, year=2026, month=7, today=NOV)
+    assert s.transaction["id"] == ids[2]
+    assert "recurring series linked here" not in s.reasons

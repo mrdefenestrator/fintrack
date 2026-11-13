@@ -44,7 +44,10 @@ def create_import(
     available_balance: Decimal | None = None,
     available_balance_date: date | None = None,
     beginning_balance: Decimal | None = None,
+    imported_at: datetime | None = None,
 ) -> int:
+    """Stage a statement import. `imported_at` defaults to now; seeds pass an
+    older time to show an account overdue for a statement (#102)."""
     # The denormalized group copy backs the DB-level importability check
     # (imports may only target cash/credit-card/loan holdings).
     holding_group = conn.execute(
@@ -67,6 +70,7 @@ def create_import(
             available_balance=available_balance,
             available_balance_date=available_balance_date,
             beginning_balance=beginning_balance,
+            **({"imported_at": imported_at} if imported_at is not None else {}),
         )
     )
     conn.commit()
@@ -298,3 +302,19 @@ def reject_import(conn: Connection, import_id: int) -> None:
         update(imports).where(imports.c.id == import_id).values(status="rejected")
     )
     conn.commit()
+
+
+def last_import_dates(conn: Connection, snapshot_id: int) -> dict[int, date]:
+    """``{account_id: date of its latest confirmed import}`` for the
+    snapshot's accounts that have one (stale-data reminders, issue #102)."""
+    stmt = (
+        select(imports.c.account_id, func.max(imports.c.imported_at).label("last"))
+        .select_from(imports.join(holdings, imports.c.account_id == holdings.c.id))
+        .where(holdings.c.snapshot_id == snapshot_id, imports.c.status == "confirmed")
+        .group_by(imports.c.account_id)
+    )
+    return {
+        row.account_id: row.last.date()
+        for row in conn.execute(stmt)
+        if row.last is not None
+    }

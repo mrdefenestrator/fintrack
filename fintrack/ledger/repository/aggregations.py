@@ -232,3 +232,35 @@ def get_rolling_average(
 
     rows = conn.execute(stmt).fetchall()
     return {row[0]: row[1] for row in rows}
+
+
+def get_merchant_totals(
+    conn: Connection,
+    *,
+    start_date: date,
+    end_date: date,
+    snapshot_id: int,
+    exclude_categories: tuple[str, ...] = (),
+) -> list[dict]:
+    """Net total and charge count per merchant for a date range, most spent
+    first (most negative total). Year in review's top merchants (#102)."""
+    subq = (
+        base_transaction_query(snapshot_id)
+        .where(
+            transactions.c.date >= start_date,
+            transactions.c.date <= end_date,
+        )
+        .subquery()
+    )
+    stmt = select(
+        subq.c.merchant,
+        func.count().label("count"),
+        func.sum(subq.c.amount).label("total"),
+    )
+    if exclude_categories:
+        stmt = stmt.where(subq.c.category.notin_(exclude_categories))
+    stmt = stmt.group_by(subq.c.merchant).order_by(func.sum(subq.c.amount))
+    return [
+        {"merchant": row.merchant, "count": row.count, "total": row.total}
+        for row in conn.execute(stmt)
+    ]

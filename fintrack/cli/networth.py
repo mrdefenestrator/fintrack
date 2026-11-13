@@ -87,11 +87,37 @@ def _load(cli, conn):
     return snapshot_id, load_finances_from_db(conn, snapshot_id)
 
 
+def _echo_debt_cards(d) -> None:
+    """The Overview "Debt and cards" card as text."""
+    n = len(d["loans"])
+    if n:
+        click.echo(
+            f"\nDebt and cards: {fmt_money_whole(d['loan_owed'])} owed on "
+            f"{n} loan{'s' if n != 1 else ''}"
+        )
+        line = f"  Interest this month {fmt_money_whole(d['loan_interest'])}"
+        if d["loan_payment"]:
+            line += f" · Payments {fmt_money_whole(d['loan_payment'])}/mo"
+        click.echo(line)
+        nxt = d["next_payoff"]
+        if nxt:
+            click.echo(f"  Next payoff: {nxt['name']} · {nxt['payoff']:%b %Y}")
+    else:
+        click.echo("\nDebt and cards: No loans")
+    if d["card_usage"] is not None:
+        flag = f" (over {d['card_usage_high_pct']:g}%)" if d["card_usage_high"] else ""
+        click.echo(
+            f"  Card usage {d['card_usage'] * 100:.0f}%{flag} · "
+            f"{fmt_money_whole(d['card_owed'])} of {fmt_money_whole(d['card_limit'])}"
+        )
+
+
 @click.command()
 @pass_cli
 def status(cli):
-    """Overview: net worth and liquid now and where the projection has them,
-    cash flow, what needs attention, and projection warnings (the text
+    """Overview: net worth and liquid now, their change over the past year and
+    where the projection has them,
+    cash flow, debt and card usage, what needs attention, and projection warnings (the text
     version of the web Overview page)."""
     with cli.connect() as conn:
         overview = build_overview(conn, cli.snapshot_id(conn))
@@ -100,16 +126,26 @@ def status(cli):
         click.echo("No holdings yet: add accounts, assets, and debts.\n")
 
     end = summary["end_label"]
+    past = overview["past"]
     rows = [
-        [name, fmt_money_whole(t["start"]), f"{fmt_change_whole(t['change'])} by {end}"]
-        for name, t in (
-            ("Net worth", summary["net_worth"]),
-            ("Liquid", summary["liquid"]),
+        [
+            name,
+            fmt_money_whole(t["start"]),
+            _past_change(p, past["label"]) if overview["has_holdings"] else "",
+            f"{fmt_change_whole(t['change'])} by {end}",
+        ]
+        for name, t, p in (
+            ("Net worth", summary["net_worth"], past["net_worth"]),
+            ("Liquid", summary["liquid"], past["liquid"]),
         )
     ]
     width = max(len(r[1]) for r in rows)
-    for name, now, change in rows:
-        click.echo(f"{name:<10} {now:>{width}}  {change}")
+    past_width = max(len(r[2]) for r in rows)
+    for name, now, since, change in rows:
+        since = f"{since:<{past_width}}  " if past_width else ""
+        click.echo(f"{name:<10} {now:>{width}}  {since}{change}")
+    if any(p and p["partial"] for p in (past["net_worth"], past["liquid"])):
+        click.echo("  * partial: counts only holdings with a value recorded by then")
 
     cf = overview["cash_flow"]
     m, avg = cf["this_month"], cf["average"]
@@ -130,6 +166,7 @@ def status(cli):
         )
     else:
         click.echo(f"  No completed months in the past {cf['months']} yet")
+    _echo_debt_cards(overview["debt_cards"])
     attention = overview["attention"]
     click.echo(
         f"\nNeeds attention: {len(attention)} item{'s' if len(attention) != 1 else ''}"
@@ -169,6 +206,14 @@ def status(cli):
         )
     for p in summary["payoffs"]:
         click.echo(f"  Paid off: {p['name']} · {p['month_label']}")
+
+
+def _past_change(change: dict | None, label: str) -> str:
+    """'▲ $400 since Nov 2025' (with '*' when partial), or the no-history line."""
+    if change is None:
+        return f"no history back to {label}"
+    star = "*" if change["partial"] else ""
+    return f"{fmt_change_whole(change['change'])}{star} since {label}"
 
 
 def _pct(rate: float | None) -> str:

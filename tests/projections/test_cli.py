@@ -135,3 +135,48 @@ def test_project_from_past_month(tmp_path):
 
     bad = _invoke(db, "project", "--from", "2026-13")
     assert bad.exit_code != 0
+
+
+def test_status_lists_stale_balances(tmp_path):
+    from datetime import datetime, timedelta
+
+    db = tmp_path / "t.db"
+    old = datetime.now().astimezone().date() - timedelta(days=41)
+    assert _invoke(db, "snapshots", "add", "main").exit_code == 0
+    _invoke(
+        db,
+        "accounts",
+        "add",
+        "--name",
+        "Chase Checking",
+        "--type",
+        "checking",
+        "--balance",
+        "1000",
+        "--asOfDate",
+        old.isoformat(),
+    )
+    output = _invoke(db, "status").output
+    assert "Needs attention: 1 item" in output
+    assert "  Chase Checking: last updated 41 days ago" in output
+
+
+def test_status_shows_debt_and_cards(tmp_path):
+    db = tmp_path / "t.db"
+    assert _invoke(db, "snapshots", "add", "main").exit_code == 0
+    _invoke(
+        db,
+        "accounts",
+        "add",
+        "--name",
+        "Visa",
+        "--type",
+        "credit_card",
+        "--limit",
+        "1000",
+        "--available",
+        "600",
+    )
+    output = _invoke(db, "status").output
+    assert "Debt and cards: No loans" in output
+    assert "  Card usage 40% (over 30%) · $400 of $1,000" in output

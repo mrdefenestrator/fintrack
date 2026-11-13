@@ -569,12 +569,20 @@ Three things build on the link:
   so the classifier privacy constraint is untouched) scores each unlinked
   transaction against candidate entries on amount closeness (gated to ±25%),
   category match, flow-account match, and date proximity to the expected
-  occurrence. Entries measured by category total (below) are never proposed:
+  occurrence, sharpened by detected recurring series (see "Recurring
+  charges"). Entries measured by category total (below) are never proposed:
   their category already counts the transaction, and a link would only re-pin
   its category. Suggestions are always presented for confirmation, never applied
-  silently. A rejected suggestion can be **dismissed**: the pair is stored in
-  `link_suggestion_dismissals` and never proposed again (the transaction may
-  still be offered its next-best entry, and manual linking is unaffected). On
+  silently. To keep them few and likely (#90): only **medium or high**
+  confidence (score ≥ 0.55) is proposed — below that a match rests on little
+  more than a similar amount; a transaction whose two best entries score within
+  0.10 of each other is a coin flip and gets nothing; and a discrete entry gets
+  at most as many suggestions a month as it has unlinked occurrences left (one
+  for a monthly bill, up to five for a weekly one), best first. A rejected
+  suggestion can be **dismissed**: the pair is stored in
+  `link_suggestion_dismissals`, and the transaction gets no further
+  suggestions — it isn't re-offered its next-best entry (`transactions
+  undismiss` brings them back, and manual linking is unaffected). On
   the Budget vs Actual page each entry shows how many of the month's unlinked
   transactions look like it; in edit mode a row under the entry lists them with
   Apply / Dismiss. The CLI has `transactions suggest [--apply]` (y / n / d per
@@ -668,8 +676,25 @@ series — Merchant · Category · Typical · Every · N · Last · Next · Budg
 Price change — with Kind and Status filters (Status includes a "Price change"
 flag) and a rough per-month footer; in edit mode the actions cell offers
 + (add) or a chain (link), and × (not recurring). The Overview's Needs
-attention card and `fintrack recurring` show the same findings. Whether
-recurrence should also feed `suggest_links` is a follow-up.
+attention card and `fintrack recurring` show the same findings.
+
+**Feeding link suggestions** (#119). `suggest_links` also reads the detected
+series (`recurring.series_index`, as of the end of the month in scope, so a
+past month is judged by the history it had), on top of the base weights and
+capped at 1.0:
+
+- a charge whose series is already **linked** to an entry gets +0.30 toward
+  that entry, and its amount is also judged against the series' current price
+  ("amount fits series"), so a price step past the ±25% gate is still proposed
+  (flagged as drift);
+- the **newest** charge of an `unlinked` series gets +0.20 toward the entry it
+  matches — linking it makes the series linked, which then lifts the rest;
+- a merchant known **not to recur** — at least 3 charges in the window and no
+  cadence, or marked "Not recurring" — gets −0.20 against discrete recurring
+  entries (weekly/biweekly/monthly/annual, not continuous). A merchant seen
+  only once or twice is unknown, not irregular, and isn't penalized.
+
+The reasons column names each signal. Still purely local.
 
 ## Web UI
 
@@ -730,11 +755,16 @@ independently drag-reorderable; debt↔asset equity/LTV pairing
   cells; shorter groups pad with a filler `<td colspan>` to the widest group's
   column count so the HTML table grid stays consistent.
   Cash: Reserve·Funding·As Of. Credit Cards:
-  Limit·Available·Rewards·Statement·Due·Linked·As Of. Loans:
-  Interest·Equity·LTV·Original·Term·Originated·P&I·Paid·Due·Linked·As Of. Assets:
+  Limit·Available·Used·Rewards·Statement·Due·Linked·As Of. Loans:
+  Interest·Mo. Interest·Equity·LTV·Original·Term·Originated·P&I·Paid·Payoff·Due·Linked·As Of. Assets:
   Unit Price·Qty·Source·Est. Return·Mo. Contrib. Equity and LTV show on the
   **loan** row (the debt side of a secured pair). Original, Term, and Originated
   capture loan origination inputs; P&I and Paid are derived amortization values.
+  Mo. Interest (owed × rate ÷ 12) and Payoff (when the current balance reaches
+  zero at P&I) come from `fintrack/insights/debt.py`, as does a card's Used
+  (owed ÷ limit, amber past `card_usage_high_pct`, 30%, in
+  `configs/insights.yaml`) — issue #102. Each band's `<tbody>` carries
+  `id="holdings-<key>"` so the Overview can link to it.
   Due is a recurring day of month, clamped to month-end when needed.
 - **Row accent by group, not sign.** Cash, Credit Cards, Loans, and Assets have
   distinct green, rose, amber, and blue accents. A credit card therefore reads
@@ -754,6 +784,11 @@ independently drag-reorderable; debt↔asset equity/LTV pairing
   its holdings (more than half) have a point that old, so right after loans
   and assets start their history it doesn't just repeat the Liquid change.
   Both notes show in view and edit mode alike.
+- **Stale As Of.** The As Of cell turns amber once a holding's balance is
+  older than its group's `stale_days` and red past `very_stale_days`
+  (`configs/insights.yaml`: 35 / 95 days for cash and cards, 90 / 180 for loans
+  and assets), via `fintrack/insights/stale.py` `staleness()` — the same check
+  that puts "last updated N days ago" lines on the Overview (issue #102).
 - **Credit-card Available is computed and read-only** = `credit_limit + balance`.
   balance is the canonical input (kept current by statement imports); editing the
   limit or balance recomputes Available and preserves the balance
@@ -844,6 +879,21 @@ count. Avg/mo for these rows follows the rule above; the average savings rate
 is average net ÷ average income, not a mean of monthly rates. The month in
 progress shows its figures so far, greyed like the body.
 
+Trends' periods are **Quarterly · Year · Trailing 12 Mo**. **Year** (#102,
+replacing Year to Date; old `?period=ytd` links still open it) is the current
+year so far, or a full calendar year when paged back, and doubles as the **year
+in review** (`fintrack/insights/year_review.py`, shared with `report trends
+--year YYYY`). It adds three columns after the months — the year's total, last
+year's over the same span, and the change in size (a year in progress is
+compared with the same dates last year, Jan 1 – today) — with the cash-flow
+footer rows filled in the same way (savings rate compares in points). Above the
+table, a panel shows the year's savings rate against last year's, income ·
+spending · net, net worth from the start of the year to its end (or today) from
+balance history, and the top ten merchants by spending (Income and Transfer left
+out; each links to its transactions). Net worth follows the Holdings footer's
+rule: a holding with no value before the year counts at its end value, and the
+change only shows once most holdings have a starting value.
+
 The actions column (drag + delete) renders only in edit mode. Edits swap the
 table's whole body (colgroup included), so a row whose edit changes its band
 simply re-renders in the new band.
@@ -919,7 +969,8 @@ top of a sheet, pushing the table down (worst on mobile); the sheets stay dense
 tables.
 
 `fintrack/insights/overview.py` `build_overview()` gathers the numbers from the
-existing calculations (today: a 12-month `engine.project()` + `summarize()`),
+existing calculations (today: Projections' `timeline.build_timeline()` over the
+past 12 months and the next 12, + `summarize()` of its projection),
 shared by the web route (`web/routes/overview.py`) and the `status` CLI
 command, which prints the same cards as text. It returns the card keys in
 order; each key renders `web/templates/overview/cards/<key>.html` with the
@@ -929,26 +980,41 @@ hasn't shipped are simply absent.
 
 | Card | Shows | Links to |
 |---|---|---|
-| Net worth / Liquid | both now, and their projected change by the end of the 12 months | Projections (`?months=12`); the whole card is the link |
+| Net worth / Liquid | both now; their actual change since the month-end a year back ("since Nov 2025", like for like: summed over the holdings with a value then, `*` when some had none; "No history back to …" when none did); and their projected change by the end of the 12 months | Projections' timeline over that past year and the next (`?months=24&from=YYYY-MM`), or `?months=12` with no history that far back; the whole card is the link |
 | Cash flow | this month's savings rate, income, spending, and net so far; the average rate, net, and income over Trailing 12's completed months | Trends (`?period=trailing12`) |
-| Needs attention | how many findings ("All clear" when none), then one line each, first five: recurring charges not in the budget ("Spotify: $11.99/mo, not in budget") and recurring price changes ("Netflix: $15.49 → $17.99 since Oct") | Budget vs Actual's Recurring view filtered to those (`?view=recurring&status=not_budgeted&status=price_change`) |
+| Debt and cards | total owed on loans, interest this month and total scheduled payments, the next payoff; total card usage (owed ÷ limit, amber past 30%) and owed of limit | Holdings at the Loans band (`#holdings-loan`), or the Credit Cards band without loans |
+| Needs attention | how many findings ("All clear" when none), then one line each, first five: recurring charges not in the budget ("Spotify: $11.99/mo, not in budget"), recurring price changes ("Netflix: $15.49 → $17.99 since Oct"), stale balances ("Chase Checking: last updated 41 days ago"), and accounts overdue for a statement ("Chase Checking: no statement imported in 51 days") | what the card leads with: Budget vs Actual's Recurring view filtered to those (`?view=recurring&status=not_budgeted&status=price_change`), or Holdings for stale data |
 | Spending alerts | status ("All clear" / how many things to look at), one line per spending alert (five, then "+N more") | Transactions (`?all_months=true&status=flagged`): the flagged charges and this month's rows in hot categories, each dismissable |
-| Projection warnings | status ("All clear" / how many accounts dip below their minimum), the low point, each below-minimum account, loan payoffs | Projections (`?months=12`), where below-minimum cells are marked |
+| Projection warnings | status ("All clear" / how many accounts dip below their minimum), the low point, each below-minimum account, loan payoffs | Projections opened on the low point's month breakdown (`?months=12&month=YYYY-MM`); below-minimum cells are marked in the grid |
 
 Cards are terse: whole dollars (`fmt_money_whole`), changes as ▲/▼ amounts
 (`fmt_change_whole`), one short line per item; exact figures and detail live on
 the sheets they link to. Each card is one link (the whole card) to one view;
-no per-line links or footer links. Opening Projections on a specific month
-(`?month=`) waits on the month breakdown working on phones (#114).
+no per-line links or footer links. The breakdown the warnings card opens still
+crowds the grid on phones (#114).
 
 Needs attention is fed by `needs_attention()` in `overview.py`: a list of
-`{source, text}` items that each feature appends to (recurring charges today;
-missed charges and stale balances are planned, #102). Spending alerts (#101)
-keep their own card, since they open a different view. Its one link follows
-what it holds.
+`{source, text}` items that each feature appends to: recurring charges
+(`source="recurring"`, #100), then stale data (`source="stale"`, #102). Spending
+alerts (#101) keep their own card, since they open a different view. Its one
+link follows the first item's source.
+
+Stale data (`fintrack/insights/stale.py`, thresholds in
+`configs/insights.yaml`) reports, oldest first, each holding whose As Of is past
+its group's `stale_days`, then each account that has had confirmed statement
+imports but none in `import_stale_days` (35). A holding already reported for a
+stale balance isn't reported again for its imports. `status` prints the same
+lines.
+
+Debt and cards (`fintrack/insights/debt.py` `debt_and_cards()`) summarizes each
+loan — owed, rate, scheduled payment (from the origination fields, as
+Projections uses), this month's interest (owed × rate ÷ 12), and the payoff date
+at that payment (`amortization.projected_payoff_date`) — plus each card's usage.
+A loan without origination fields still counts toward owed and interest but has
+no payment or payoff. `status` prints the card as text after Cash flow.
 
 Net worth's "change over the past 12 months" waits on balance history being
-recorded over time (#107, #98). Planned cards: Debt and cards (#102). An empty
+recorded over time (#107, #98). An empty
 snapshot still renders every card (zeros) under a pointer to Holdings and
 Budget.
 
@@ -1013,7 +1079,7 @@ transactions link <txn> <entry> | unlink <txn> | suggest | dismiss <txn> <entry>
 recurring  [list] [--all] [--dismissed] | add <merchant> | link <merchant> <entry> | dismiss <merchant> | undismiss <merchant>
 merchants  list | set
 categories list|add|edit|delete
-report     monthly | trends
+report     monthly | trends [--months N] [--year YYYY]
 status | budget | income | expenses | assets | debts | funding   # status = text Overview
 project    [--from YYYY-MM] [--months N] [--estimate] [--changes] [--month YYYY-MM]
 migrate-legacy …

@@ -24,7 +24,7 @@ It only ever writes these demo snapshots; it never touches other snapshots.
 import hashlib
 import os
 from calendar import monthrange
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
 from fintrack.accounts.balance_history import latest_point, record_balance
@@ -178,7 +178,7 @@ def seed_dense(conn) -> bool:
             "type": "gift_card",
             "institution": "Amazon",
             "balance": Decimal("75.00"),
-            "asOfDate": iso,
+            "asOfDate": _as_of("Amazon Gift Card", today),
         },
         today=today,
     )
@@ -188,7 +188,8 @@ def seed_dense(conn) -> bool:
         ("Travel Rewards Card", "Big Card Co", "-842.17", "8000.00", 15),
         ("Cashback Everyday", "Big Card Co", "-312.90", "12000.00", 3),
         ("Grocery Rewards", "Anytown Bank", "-128.45", "5000.00", 20),
-        ("Warehouse Store Card", "Warehouse Club", "-450.00", "3500.00", 10),
+        # Over 30% of its limit: the card-usage highlight (#102).
+        ("Warehouse Store Card", "Warehouse Club", "-1400.00", "3500.00", 10),
         ("Airline Miles Card", "Sky Bank", "-1580.22", "15000.00", 25),
     ]
     for name, institution, balance, limit, due in credit_cards:
@@ -204,7 +205,7 @@ def seed_dense(conn) -> bool:
                 "limit": Decimal(limit),
                 "statement_due_day_of_month": due,
                 "paymentAccountRef": checking,
-                "asOfDate": iso,
+                "asOfDate": _as_of(name, today),
             },
             today=today,
         )
@@ -270,7 +271,9 @@ def seed_dense(conn) -> bool:
             "institution": "Anytown",
             "value": Decimal("285000.00"),
             "annualReturnRate": Decimal("0.03"),
+            "asOfDate": _as_of("Rental Property", today),
         },
+        today=today,
     )
     car_id = add_asset_entry(
         conn,
@@ -292,7 +295,9 @@ def seed_dense(conn) -> bool:
             "name": "Family SUV",
             "value": Decimal("38000.00"),
             "annualReturnRate": Decimal("-0.10"),
+            "asOfDate": _as_of("Family SUV", today),
         },
+        today=today,
     )
 
     # Brokerage / crypto holdings (prices fetched from external APIs at render).
@@ -569,6 +574,12 @@ def seed_dense(conn) -> bool:
 
     # --- Transaction ↔ budget links (issue #53) -----------------------------
     _link_dense_budget(conn, sid)
+
+    # --- A statement import gone stale (issue #102) -------------------------
+    _seed_dense_overdue_import(conn, sid, today)
+
+    # --- The same months a year earlier, for Trends' year in review (#102) ---
+    _seed_dense_last_year(conn, sid, checking, today)
 
     print(f"Seeded example snapshot {DENSE_SNAPSHOT!r} (id={sid}).")
     return True
@@ -858,6 +869,91 @@ def _seed_dense_transactions(conn, checking_id: int, today: date) -> None:
     confirm_import(conn, import_id)
 
 
+# Stale data (issue #102): a few holdings last updated this many days ago, so
+# Overview > Needs attention and the amber/red Holdings As Of cells have
+# something to show. Thresholds (configs/insights.yaml): cash and cards go
+# amber past 35 days and red past 95; loans and assets amber past 90 and red
+# past 180. Kept short so every finding fits the Overview card's five lines.
+_DENSE_STALE_DAYS = {
+    "Amazon Gift Card": 100,  # cash: red
+    "Rental Property": 101,  # asset: amber
+    "Family SUV": 60,  # asset: still fresh (it would be amber as cash)
+}
+
+# An account whose last confirmed statement import is this old, though its
+# balance is current: the "no statement imported" reminder (past 35 days).
+_DENSE_OVERDUE_IMPORT = ("Joint Checking", 50)
+
+
+# Year in review (#102) compares a year with the one before, so the dense
+# snapshot gets last year's copy of the same months, scaled per category so
+# the comparison has a story: a raise since last year, groceries and shopping
+# up, dining and travel down, fixed bills unchanged. A little per-transaction
+# jitter keeps it from looking copied.
+_LAST_YEAR_FACTORS = {
+    "Income": Decimal("0.92"),
+    "Groceries": Decimal("0.85"),
+    "Shopping": Decimal("0.70"),
+    "Dining": Decimal("1.35"),
+    "Travel": Decimal("1.60"),
+    "Transport": Decimal("1.10"),
+}
+_LAST_YEAR_FIXED = {"Housing", "Income", "Subscriptions", "Utilities"}
+
+
+def _seed_dense_last_year(conn, sid, checking_id: int, today: date) -> None:
+    rows = []
+    for txn in get_transactions(conn, snapshot_id=sid):
+        when = txn["date"]
+        try:
+            earlier = when.replace(year=when.year - 1)
+        except ValueError:  # Feb 29
+            earlier = date(when.year - 1, 2, 28)
+        factor = _LAST_YEAR_FACTORS.get(txn["category"], Decimal(1))
+        if txn["category"] not in _LAST_YEAR_FIXED:
+            step = int(hashlib.sha256(str(txn["id"]).encode()).hexdigest(), 16) % 11
+            factor *= Decimal("0.95") + Decimal(step) / 100  # ±5%
+        amount = (Decimal(txn["amount"]) * factor).quantize(Decimal("0.01"))
+        desc = txn["raw_description"]
+        rows.append(
+            {
+                "date": earlier,
+                "amount": amount,
+                "raw_description": desc,
+                "normalized_merchant": txn["merchant"],
+                "fingerprint": _fingerprint(checking_id, earlier, str(amount), desc),
+            }
+        )
+    import_id = create_import(
+        conn,
+        account_id=checking_id,
+        filename="seed_dense_last_year.ofx",
+        file_hash=hashlib.sha256(b"seed-dense-last-year").hexdigest(),
+    )
+    insert_transactions(
+        conn, import_id=import_id, account_id=checking_id, transactions_data=rows
+    )
+    confirm_import(conn, import_id)
+
+
+def _as_of(name: str, today: date) -> str:
+    return (today - timedelta(days=_DENSE_STALE_DAYS.get(name, 0))).isoformat()
+
+
+def _seed_dense_overdue_import(conn, sid, today: date) -> None:
+    name, days = _DENSE_OVERDUE_IMPORT
+    account_id = next(a["id"] for a in get_accounts(conn, sid) if a["name"] == name)
+    when = today - timedelta(days=days)
+    import_id = create_import(
+        conn,
+        account_id=account_id,
+        filename="seed_joint_checking.ofx",
+        file_hash=hashlib.sha256(b"seed-dense-overdue-import").hexdigest(),
+        imported_at=datetime(when.year, when.month, when.day, 12, tzinfo=UTC),
+    )
+    confirm_import(conn, import_id)
+
+
 # Balances six weeks back for a few liquid accounts, so Holdings' Liquid footer
 # has a "since last month" change to show. The rest have no point that old and
 # count at today's value (the tooltip says so).
@@ -874,6 +970,7 @@ _DENSE_PAST_BALANCES = {
 
 def _seed_dense_history(conn, sid, today: date) -> None:
     ids = {a["name"]: a["id"] for a in get_accounts(conn, sid)}
+    back = today - timedelta(days=45)
     for name, balance in _DENSE_PAST_BALANCES.items():
         record_balance(
             conn,
@@ -883,7 +980,8 @@ def _seed_dense_history(conn, sid, today: date) -> None:
         )
     for entry in get_asset_entries(conn, sid):
         now = latest_point(conn, entry["id"])
-        if now is None:
+        # A backdated (stale) holding keeps its As Of: no newer points.
+        if now is None or back >= now["as_of"]:
             continue
         # Stored signed: a loan's point is negative, so * 1.02 owes more.
         factor = Decimal("1.02") if entry["kind"] == "debt" else Decimal("0.97")
@@ -920,6 +1018,8 @@ def _seed_dense_timeline(conn, sid, today: date) -> None:
                 continue
             total = today.year * 12 + today.month - 1 - back
             when = date(total // 12, total % 12 + 1, 10)
+            if when >= point["as_of"]:
+                continue  # never newer than a stale holding's As Of (#102)
             # Owned values were smaller, owed balances larger, with a little
             # month-to-month wobble so the Changes view has something to show.
             wobble = Decimal((holding_id * 7 + back * 13) % 9 - 4) / 400

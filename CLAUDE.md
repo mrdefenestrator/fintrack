@@ -57,11 +57,11 @@ degrades to a warning without it).
 - `fintrack/budget/` — budget entries, recurrence/proration engine
 - `fintrack/networth/` — assets/debts, key-number and funding calculations, liquidity-tier totals + equity pairs
 - `fintrack/projections/` — multi-month balance projection engine + estimators
-- `fintrack/insights/` — Overview numbers (web landing page + `status`), cash flow, spending alerts
+- `fintrack/insights/` — Overview numbers (web landing page + `status`), cash flow, spending alerts, stale data, debt and cards, year in review, and their thresholds (`settings.py`)
 - `fintrack/snapshots/`, `fintrack/migrate/` (legacy one-time import), `fintrack/cli/` (one module per command group)
 - `web/` — Flask app, routes/, Jinja2/Tailwind/HTMX templates
 - `tests/` — unit tests by domain; `tests/e2e/` Playwright (marker `e2e`)
-- `configs/` — categories.yaml, normalization.yaml, institutions/
+- `configs/` — categories.yaml, normalization.yaml, alerts.yaml, insights.yaml, institutions/
 - `migrations/` — Alembic (single chain)
 - `fintrack.py` — CLI entrypoint
 
@@ -103,7 +103,9 @@ degrades to a warning without it).
   charges") detect steady merchant series locally and match them to the
   budget; findings show on Budget vs Actual's Recurring view
   (`?view=recurring`), the Overview "Needs attention" card, and `fintrack
-  recurring`. Same rule: **never send transaction data to the Claude API**.
+  recurring`. The detected series also sharpen `suggest_links` scores
+  (`recurring.series_index`, #119). Same rule: **never send transaction data
+  to the Claude API**.
   Needs attention is a list (`overview.needs_attention()`) that other findings
   opening the same kind of view (e.g. #102's) can append `{source, text}`
   items to; Spending alerts (#101) keep their own card.
@@ -209,6 +211,14 @@ degrades to a warning without it).
   markers + "Flagged" filter, the import confirmation, `fintrack alerts`, and
   `status`. Only dismissals are stored (`alert_dismissals`). Never send
   transaction data to the Claude API for them.
+- Insight add-ons (#102, DESIGN.md "Overview" / "Holdings sheet" / Trends):
+  stale data (`fintrack/insights/stale.py`) appends `source="stale"` items to
+  Needs attention and colors Holdings' As Of per group; debt and cards
+  (`insights/debt.py`) feeds its Overview card plus Holdings' Mo. Interest,
+  Payoff, and Used columns; year in review (`insights/year_review.py`) backs
+  Trends' Year period and `report trends --year`. Every threshold lives in
+  `configs/insights.yaml` (`InsightsConfig`; unknown keys are an error), so
+  tune there rather than in code. All local; nothing goes to the Claude API.
 - SQLite runs with `foreign_keys=ON`; snapshot FKs cascade, ownership refs
   (payment_account_ref, auto_account_ref, secured_asset_ref) do not. Those
   refs are composite (`(ref, snapshot_id)`), so they can't cross snapshots.

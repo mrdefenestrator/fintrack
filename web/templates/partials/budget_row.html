@@ -4,8 +4,13 @@
    every cell/delete URL uses. `row.cells` follows `group.col_keys`; cells are
    mapped to their editable field by column key, never by position. The accent
    rail takes the band's (category's) tone. In view mode cells are plain; in
-   edit mode they click to edit, and the last cell holds the drag + delete
-   actions. #}
+   edit mode they click to edit, and the last cell holds the history / end /
+   drag / delete actions.
+   Budget history (issue #136): `row.marks` puts a dot on Amount when its
+   version starts in the viewed month, and on Description when the entry
+   starts or ends then (empty spans, so sorting reads the cell text as
+   before). `row.history`, when set, adds the edit-mode history row under the
+   entry (a data-detail-row, so sorting keeps it with its entry). #}
 {% from "macros/table.html" import cell_display, cell_non_editable, cell_edit_input, cell_edit_select %}
 {% import "partials/sheet.html" as sheet %}
 {% import "partials/grouped_sheet.html" as gs %}
@@ -14,10 +19,20 @@
 {% set row_cells = row.cells %}
 {% set col_keys = group.col_keys %}
 {% set _rec_sort = {'One Time': 1, 'Weekly': 2, 'Biweekly': 3, 'Monthly': 4, 'Quarterly': 5, 'Semiannual': 6, 'Annual': 7} %}
+{% macro _mark(kind, title) -%}
+{%- set _color = {'changed': '#3b82f6', 'starts': '#10b981', 'ends': '#f59e0b'}[kind] -%}
+<span class="budget-mark" data-budget-mark="{{ kind }}" title="{{ title }}" aria-label="{{ title }}" role="img" style="display:inline-block;width:0.45rem;height:0.45rem;border-radius:9999px;margin-left:0.3rem;vertical-align:middle;background:{{ _color }}"></span>
+{%- endmacro %}
+{% set _marks = row.marks or {} %}
+{% set _desc_marks %}{% if _marks.starts %}{{ _mark('starts', _marks.starts) }}{% endif %}{% if _marks.ends %}{{ _mark('ends', _marks.ends) }}{% endif %}{% endset %}
+{% set _amount_marks %}{% if _marks.changed %}{{ _mark('changed', _marks.changed) }}{% endif %}{% endset %}
+{% macro _with_marks(key, value) -%}
+{{ value ~ (_desc_marks if key == 'description' else (_amount_marks if key == 'amount' else '')) }}
+{%- endmacro %}
 <tr class="{{ gs.row_class() }}" id="budget-row-{{ index }}" data-kind="{{ kind }}" data-reorder-index="{{ reorder_index }}">
     {% if not edit_mode %}
     {% for cell in row_cells %}
-    <td class="{{ sheet.cell_class('text-right tabular-nums' if loop.index0 in group.right_align else '', sheet.neg(cell | display_is_negative)) }}"{% if col_keys[loop.index0] == 'recurrence' and _rec_sort.get(cell | trim) %} data-sort-value="{{ _rec_sort[cell | trim] }}"{% endif %}>{{ cell }}</td>
+    <td class="{{ sheet.cell_class('text-right tabular-nums' if loop.index0 in group.right_align else '', sheet.neg(cell | display_is_negative)) }}"{% if col_keys[loop.index0] == 'recurrence' and _rec_sort.get(cell | trim) %} data-sort-value="{{ _rec_sort[cell | trim] }}"{% endif %}>{{ _with_marks(col_keys[loop.index0], cell) }}</td>
     {% endfor %}
     {% else %}
     {% set recurrence_display = row_cells[col_keys.index('recurrence')] %}
@@ -151,7 +166,7 @@
                 'budget-table', inputmode) }}
         {% endif %}
     {% elif field %}
-        {{ cell_display(cell_value, right_align, is_negative,
+        {{ cell_display(_with_marks(col_keys[col_index], cell_value), right_align, is_negative,
             url_for('budget.cell_edit', filename=filename, index=index, field=field),
             'budget-table', is_updated_cell,
             sort_value=_rec_sort.get(cell_value | trim) if field == 'recurrence' else none) }}
@@ -162,3 +177,55 @@
     {% include "partials/budget_delete_icon.html" %}
     {% endif %}
 </tr>
+{% if edit_mode and row.history %}
+{% set h = row.history %}
+{% set _input = 'border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 px-1 py-0.5' %}
+{# The entry's plan history: when it starts and ends (blank = unbounded), and
+   each version with the month it took effect. Fixing an amount here changes
+   only the months that version covers; × removes a change (the version
+   before it runs on). Its own actions cell keeps the row on the full grid. #}
+<tr data-detail-row data-history-for="{{ index }}" class="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40">
+    <td colspan="{{ max_cols }}" class="px-1.5 py-1.5">
+        <div class="flex flex-wrap items-start gap-x-8 gap-y-2 pl-4 text-xs text-gray-700 dark:text-gray-200">
+            <form class="flex flex-wrap items-center gap-3" data-history-span
+                  hx-post="{{ url_for('budget.span', filename=filename, index=index) }}"
+                  hx-trigger="change" hx-target="#budget-table" hx-swap="innerHTML">
+                <label class="flex items-center gap-1">Starts
+                    <input type="month" name="start" value="{{ h.start }}" class="{{ _input }}" title="First month in the plan (blank: every earlier month)"></label>
+                <label class="flex items-center gap-1">Ends after
+                    <input type="month" name="end" value="{{ h.end }}" class="{{ _input }}" title="Last month in the plan (blank: open-ended)"></label>
+            </form>
+            <ul class="space-y-1" data-history-versions>
+                {% for v in h.versions %}
+                <li class="grid items-center gap-x-2 {{ 'font-semibold' if v.in_effect }}" data-version="{{ v.key }}"
+                    style="grid-template-columns: 5.5rem 6.5rem 5.5rem 6rem 1.5rem">
+                    {% if v.ym %}
+                    <a href="{{ url_for('budget.budget_view', filename=filename, ym=v.ym, edit=1) }}" class="text-blue-600 dark:text-blue-400 hover:underline" title="Show {{ v.label }}">{{ v.label }}</a>
+                    {% else %}
+                    <span title="In effect for every month before the first change">{{ v.label }}</span>
+                    {% endif %}
+                    <form hx-post="{{ url_for('budget.version_update', filename=filename, index=index) }}"
+                          hx-trigger="change" hx-target="#budget-table" hx-swap="innerHTML"
+                          onkeydown="if(event.keyCode===13){event.preventDefault();this.querySelector('input[name=amount]').blur();}">
+                        <input type="hidden" name="from" value="{{ v.key }}">
+                        <input type="text" name="amount" value="{{ v.amount }}" inputmode="decimal" size="1"
+                               class="{{ _input }} w-full text-right tabular-nums" aria-label="Amount from {{ v.label }}"
+                               title="Correct this version's amount ({{ v.amount_display }})">
+                    </form>
+                    <span>{{ v.recurrence }}</span>
+                    <span class="text-gray-500 dark:text-gray-400">{{ v.when }}</span>
+                    {% if not v.is_base %}
+                    <button type="button" data-version-remove
+                            hx-post="{{ url_for('budget.version_delete', filename=filename, index=index) }}"
+                            hx-vals='{{ {"from": v.key} | tojson }}' hx-target="#budget-table" hx-swap="innerHTML"
+                            title="Remove this change (the version before it runs on)"
+                            class="text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded font-bold">&times;</button>
+                    {% else %}<span></span>{% endif %}
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+    </td>
+    <td class="table-actions-cell px-1.5 py-1.5"></td>
+</tr>
+{% endif %}

@@ -7,16 +7,33 @@
 {% set _active_count = _kinds_active + _types_active + _rec_active %}
 {% import "partials/filter_controls.html" as fc %}
 {% import "partials/sheet_filter_bar.html" as fb %}
+{% import "partials/pager.html" as nav %}
 {% set kind_opts = [] %}
 {% for k in budget_kinds %}{% set _ = kind_opts.append({'value': k, 'display': k | capitalize, 'checked': k in include_kinds}) %}{% endfor %}
 {% set cat_opts = [] %}
 {% for c in categories %}{% set _ = cat_opts.append({'value': c, 'display': c, 'checked': c in include_categories}) %}{% endfor %}
 {% set rec_opts = [] %}
 {% for r in recurrence_options %}{% set _ = rec_opts.append({'value': r, 'display': r | format_recurrence, 'checked': r in include_recurrence}) %}{% endfor %}
+{# Month pager (issue #136): the sheet shows the plan for one month. Full-page
+   links that keep the filters and edit mode; "Now" returns to this month.
+   Later months are open too — editing one schedules a change. #}
+{% set _ym = none if is_current else viewed_ym %}
+{% call nav.pager_row() %}
+    {{ nav.pager(prev_url=prev_url, next_url=next_url, label=month_label,
+        is_latest=is_current, latest_url=now_url, latest_label='Now',
+        next_disabled=false, use_htmx=false, label_width='w-24') }}
+    <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
+        {% if edit_mode %}<span data-budget-edit-scope>Edits apply from {{ month_label }} until the next change</span>
+        {% elif is_past %}<span>The plan as it was in {{ month_label }}</span>
+        {% elif not is_current %}<span>The plan for {{ month_label }}</span>{% endif %}
+        <a href="{{ actual_url }}" class="text-blue-600 dark:text-blue-400 hover:underline" data-budget-actual-link>Budget vs Actual for {{ month_label }}</a>
+    </div>
+{% endcall %}
 <form id="budget-filter-form" method="get" action="{{ url_for('budget.budget_view', filename=filename) }}" class="shrink-0">
     {% if edit_mode %}<input type="hidden" name="edit" value="1">{% endif %}
+    {% if _ym %}<input type="hidden" name="ym" value="{{ _ym }}">{% endif %}
     {% call fb.filter_bar(active_count=_active_count,
-        reset_url=url_for('budget.budget_view', filename=filename, edit=1 if edit_mode else none),
+        reset_url=url_for('budget.budget_view', filename=filename, edit=1 if edit_mode else none, ym=_ym),
         use_htmx=false) %}
         {{ fc.multi_select('include_kind', 'Kind', kind_opts, form_id='budget-filter-form') }}
         {{ fc.multi_select('include', 'Category', cat_opts, form_id='budget-filter-form') }}
@@ -28,10 +45,18 @@
    per category, each with its own heading (Remaining/Monthly/Annual subtotals),
    sortable column header, rows, and add row; a pinned Net footer. Edits swap
    the table's whole body (#budget-table innerHTML), colgroup included. While a
-   filter hides rows, drag-reorder is locked (positions wouldn't line up). #}
+   filter hides rows, drag-reorder is locked (positions wouldn't line up).
+   Every sheet URL inside carries the viewed month (ym; budget.py
+   _add_viewed_month), so each edit lands in that month's plan. #}
 <table id="budget-table" class="grouped-sheet editable-table w-full text-sm border-collapse bg-white dark:bg-gray-800" style="white-space:nowrap"
+    data-viewed-month="{{ viewed_ym }}"
     data-cell-nav="budget-table"{% if _active_count %} data-reorder-locked{% endif %}>
     {% include "partials/budget_tbody.html" %}
 </table>
 </div>
+{# The actions column holds four buttons here (history, end/resume, drag,
+   delete), so it's wider than the shared two-button default. #}
+<style>
+#budget-table .table-actions-cell { width: 5.25rem; min-width: 5.25rem; max-width: 5.25rem; }
+</style>
 {% endblock %}

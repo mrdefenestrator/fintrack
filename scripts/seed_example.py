@@ -30,7 +30,12 @@ from decimal import Decimal
 from fintrack.accounts.balance_history import latest_point, record_balance
 from fintrack.accounts.repository import add_account, get_accounts
 from fintrack.budget.reconcile import link_transaction
-from fintrack.budget.repository import add_budget_entry, get_budget_entries
+from fintrack.budget.repository import (
+    add_budget_entry,
+    end_budget_entry,
+    get_budget_entries,
+    update_budget_entry_by_id,
+)
 from fintrack.core.db import get_engine, init_db
 from fintrack.ledger.repository.imports import (
     confirm_import,
@@ -564,6 +569,9 @@ def seed_dense(conn) -> bool:
         entry["amount"] = Decimal(entry["amount"])
         add_budget_entry(conn, sid, entry)
 
+    # --- Budget history (issue #136) ---------------------------------------
+    _seed_dense_budget_history(conn, sid, today)
+
     # --- Older balance points (issue #106) ----------------------------------
     _seed_dense_history(conn, sid, today)
     # --- A year of month-end history for the Projections timeline (#98) -----
@@ -1031,6 +1039,41 @@ def _seed_dense_timeline(conn, sid, today: date) -> None:
                 balance=(now * factor).quantize(Decimal("0.01")),
                 as_of=when,
             )
+
+
+def _months_ago(today: date, n: int) -> date:
+    i = today.year * 12 + today.month - 1 - n
+    return date(i // 12, i % 12 + 1, 1)
+
+
+def _seed_dense_budget_history(conn, sid, today: date) -> None:
+    """Give the plan some history (issue #136), on unlinked lines so the
+    transaction-backed demos (Netflix's price drift) are unchanged: the gym
+    raised its fee three months ago, and a meal kit was in the plan for a few
+    months before it was cancelled."""
+    by_desc = {e["description"]: e["_db_id"] for e in get_budget_entries(conn, sid)}
+    update_budget_entry_by_id(
+        conn,
+        sid,
+        by_desc["Gym Membership"],
+        {"amount": Decimal("49.00")},
+        effective=_months_ago(today, 3),
+    )
+    add_budget_entry(
+        conn,
+        sid,
+        {
+            "kind": "expense",
+            "description": "Meal Kit",
+            "amount": Decimal("60.00"),
+            "recurrence": "monthly",
+            "dayOfMonth": 20,
+            "category": "Groceries",
+            "startMonth": _months_ago(today, 7).isoformat(),
+        },
+    )
+    last = len(get_budget_entries(conn, sid)) - 1  # the entry just added
+    end_budget_entry(conn, sid, last, _months_ago(today, 2))
 
 
 def _link_dense_budget(conn, sid) -> None:

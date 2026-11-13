@@ -188,7 +188,7 @@ def project(
     today = today or datetime.now().astimezone().date()
 
     accounts = get_accounts(conn, snapshot_id)
-    budget = get_budget_entries(conn, snapshot_id)
+    budget = get_budget_entries(conn, snapshot_id, as_of=today)
     assets = get_asset_entries(conn, snapshot_id)
 
     # Current-month true-up (issue #53): budget flows already realized as linked

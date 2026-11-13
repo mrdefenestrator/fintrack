@@ -266,11 +266,15 @@ def _build_budget_table(
     day: int,
     account_display_by_id: dict[int, str] | None = None,
     show_index: bool = False,
+    indices: list[int] | None = None,
+    past: bool = False,
 ) -> tuple:
     """Build (headers, rows) for budget table (unified income+expenses). Rows include separator and total.
     Shows prorated subtotal (remainder of month), this month's scheduled amount,
     the per-month average (annual ÷ 12), and the annual amount.
     budget is a list of entries with kind: income|expense.
+    ``indices`` labels the Index column (default: each row's position); a
+    ``past`` month has no Remaining ("-").
     """
     headers = list(BUDGET_HEADERS)
     if show_index:
@@ -280,16 +284,18 @@ def _build_budget_table(
     totals = [Decimal(0)] * 4
     for idx, e in enumerate(budget):
         row, figures = budget_entry_row(e, year, month, day, account_display_by_id)
+        if past:
+            row[6] = "-"
         totals = [t + f for t, f in zip(totals, figures)]
         if show_index:
-            row = [str(idx)] + row
+            row = [str(indices[idx] if indices is not None else idx)] + row
         rows.append(row)
     num_cols = len(headers)
     total_row = [""] * num_cols
     total_row[0] = "Total"
     offset = 1 if show_index else 0
     for j, total in enumerate(totals):
-        total_row[6 + j + offset] = fmt_money(total)
+        total_row[6 + j + offset] = "-" if past and j == 0 else fmt_money(total)
     _append_table_separator_and_total(rows, headers, total_row)
     return (headers, rows)
 

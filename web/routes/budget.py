@@ -15,18 +15,37 @@ Rows are addressed by their position in the full, sort-ordered budget list
 (`index`), so edit/delete URLs are unaffected by grouping. Drag-reorder is per
 band: the band's local permutation is mapped onto the band's own slots in the
 full ordering (grouped_sheet.remap_group_order).
+
+Budget history (issue #136): the sheet shows the plan for one month (``ym``,
+default this month; a month pager above it). Only entries in that month's plan
+are shown, each as planned then. Every URL the sheet renders for its own
+endpoints carries ``ym`` (``_add_viewed_month`` below), so each request — htmx
+attribute or cell-nav.js's htmx.ajax alike — lands in that month, and edits
+apply from that month until the entry's next change. In edit mode a row can be ended after the viewed month, and its
+history row lists its versions for correcting past amounts in place.
 """
 
 import re
 from datetime import date
 from decimal import Decimal
+from itertools import pairwise
+from urllib.parse import urlencode
 
-from flask import Blueprint, abort, current_app, render_template, request
+from flask import (
+    Blueprint,
+    abort,
+    current_app,
+    g,
+    render_template,
+    request,
+    url_for,
+)
 
 from fintrack.budget import reconcile, recurring
 from fintrack.budget import repository as repo_budget
+from fintrack.budget.recurrence import as_month, entry_active
 from fintrack.core import filters, tables
-from fintrack.core.formatting import fmt_money
+from fintrack.core.formatting import fmt_money, fmt_recurrence_display
 from fintrack.core.loader import load_finances_from_db
 from fintrack.ledger.repository.categories import get_category_names
 from fintrack.networth import calculations
@@ -65,8 +84,8 @@ _TOOLTIPS = {
     "amount": "Per-occurrence amount",
     "recurrence": "How often this entry recurs",
     "when": "Day of month or specific date",
-    "remaining": "Prorated amount remaining this month",
-    "monthly": "Scheduled in this calendar month (an annual bill due in another month is $0)",
+    "remaining": "Prorated amount remaining this month (— for a past month)",
+    "monthly": "Scheduled in the month shown (an annual bill due in another month is $0)",
     "per_month": "Average per month: the annual amount ÷ 12",
     "annual": "Annualized total",
     "auto_account": "Account for auto-matching transactions",
@@ -175,6 +194,118 @@ def _band_key(category: str) -> str:
     return "cat-" + (re.sub(r"[^a-z0-9]+", "-", category.lower()).strip("-") or "x")
 
 
+_REMAINING = 5  # Remaining's position in a row's cells (Kind dropped)
+
+
+# The Budget sheet's own request endpoints: their URLs carry the viewed month.
+_SHEET_ENDPOINTS = {
+    "budget.cell_edit",
+    "budget.update",
+    "budget.when_update",
+    "budget.add",
+    "budget.reorder",
+    "budget.delete_btn",
+    "budget.delete_confirm",
+    "budget.delete",
+    "budget.end",
+    "budget.resume",
+    "budget.history",
+    "budget.span",
+    "budget.version_update",
+    "budget.version_delete",
+}
+
+
+@budget_bp.url_defaults
+def _add_viewed_month(endpoint: str, values: dict) -> None:
+    """While a request is about a month of the sheet, every sheet URL built
+    (url_for) carries it as ``ym`` — so edits made there apply to that month."""
+    if endpoint in _SHEET_ENDPOINTS and "ym" in g:
+        values.setdefault("ym", g.ym)
+
+
+def _viewed_month() -> date:
+    """The month the sheet shows (``ym=YYYY-MM`` in the query or form; this
+    month when absent or malformed). Remembered for ``_add_viewed_month``."""
+    raw = request.values.get("ym", "")
+    try:
+        year, month = (int(p) for p in raw.split("-"))
+        viewed = date(year, month, 1)
+    except ValueError:
+        viewed = repo_budget.this_month()
+    g.ym = _ym(viewed)
+    return viewed
+
+
+def _ym(d: date) -> str:
+    return f"{d:%Y-%m}"
+
+
+def _month_label(value) -> str:
+    return f"{as_month(value):%b %Y}"
+
+
+def _planned(budget: list[dict], viewed: date) -> list[int]:
+    """Indices of the entries in the viewed month's plan."""
+    return [
+        i for i, e in enumerate(budget) if entry_active(e, viewed.year, viewed.month)
+    ]
+
+
+def _marks(entry: dict, viewed: date) -> dict:
+    """What changes in the viewed month (issue #136), for the row's markers:
+    the amount/schedule (with the previous version's amount), the start, the
+    end."""
+    viewed_iso = viewed.isoformat()
+    marks: dict = {}
+    versions = entry.get("_versions") or []
+    for prev, v in pairwise(versions):
+        if v["from"] == viewed_iso:
+            sign = -1 if entry.get("kind") == "expense" else 1
+            marks["changed"] = (
+                f"Changed in {viewed:%b %Y} "
+                f"(was {fmt_money(sign * (prev.get('amount') or 0))}"
+                f" {fmt_recurrence_display(prev.get('recurrence') or '')})"
+            )
+    if entry.get("startMonth") == viewed_iso:
+        marks["starts"] = f"Starts in {viewed:%b %Y}"
+    if entry.get("endMonth") == viewed_iso:
+        marks["ends"] = f"Ends after {viewed:%b %Y}"
+    return marks
+
+
+def _history(entry: dict, viewed: date) -> dict:
+    """The edit-mode history row for one entry: its start and end months and
+    its versions, oldest first, each with the months it covers."""
+    sign = -1 if entry.get("kind") == "expense" else 1
+    versions = repo_budget.entry_versions(entry)
+    rows = []
+    for i, v in enumerate(versions):
+        start = as_month(v["from"])
+        nxt = versions[i + 1]["from"] if i + 1 < len(versions) else None
+        rows.append(
+            {
+                "is_base": i == 0,
+                "key": "base" if i == 0 else _ym(start),
+                "label": _month_label(start) if start else "Earliest",
+                "ym": _ym(start) if start else None,
+                "amount": "" if v.get("amount") is None else v["amount"],
+                "amount_display": fmt_money(sign * (v.get("amount") or 0)),
+                "recurrence": fmt_recurrence_display(v.get("recurrence") or "-"),
+                "when": tables._expected_display(
+                    {k: val for k, val in v.items() if val is not None}
+                ),
+                "in_effect": (start is None or start <= viewed)
+                and (nxt is None or viewed < as_month(nxt)),
+            }
+        )
+    return {
+        "start": _ym(as_month(entry["startMonth"])) if entry.get("startMonth") else "",
+        "end": _ym(as_month(entry["endMonth"])) if entry.get("endMonth") else "",
+        "versions": rows,
+    }
+
+
 def _sheet_ctx(
     budget: list[dict],
     shown: list[int],
@@ -182,26 +313,41 @@ def _sheet_ctx(
     ctx: dict,
     edit_mode: bool,
     filters_active: bool = False,
+    viewed: date | None = None,
+    history_index: int | None = None,
 ) -> dict:
     """Template context for the grouped budget table: the category bands for
     the `shown` entries (indices into `budget`), the Net footer, and the column
-    metadata."""
+    metadata. Figures are for the ``viewed`` month (default: this month):
+    Remaining is the rest of this month, the full month for a later one, and
+    "—" for a past one."""
+    current = date(ctx["year"], ctx["month"], 1)
+    viewed = viewed or current
+    past = viewed < current
+    day = ctx["day"] if viewed == current else 0
     by_category: dict[str, list[dict]] = {}
     for i in shown:
         e = budget[i]
         cells, figures = tables.budget_entry_row(
             e,
-            ctx["year"],
-            ctx["month"],
-            ctx["day"],
+            viewed.year,
+            viewed.month,
+            day,
             account_display_by_id=ctx["account_display_by_id"],
         )
+        cells = cells[1:]  # drop Kind
+        if past:
+            cells[_REMAINING] = "—"
+            figures = (Decimal(0), *figures[1:])
         by_category.setdefault(e.get("category") or "", []).append(
             {
                 "index": i,
                 "kind": e.get("kind", "income"),
-                "cells": cells[1:],  # drop Kind
+                "cells": cells,
                 "figures": figures,
+                "marks": _marks(e, viewed),
+                "ends_here": e.get("endMonth") == viewed.isoformat(),
+                "history": _history(e, viewed) if i == history_index else None,
             }
         )
 
@@ -238,7 +384,9 @@ def _sheet_ctx(
                 "first_kind": "income" if incomes * 2 > len(rows) else "expense",
                 "rows": rows,
                 "totals": [
-                    fmt_money(sum((r["figures"][j] for r in rows), Decimal(0)))
+                    "—"
+                    if past and j == 0
+                    else fmt_money(sum((r["figures"][j] for r in rows), Decimal(0)))
                     for j in range(len(_TOTAL_POS))
                 ],
                 **_COLUMN_META,
@@ -250,6 +398,8 @@ def _sheet_ctx(
     net[0] = "Net"
     for j, pos in enumerate(_TOTAL_POS):
         net[pos] = fmt_money(sum((r["figures"][j] for r in all_rows), Decimal(0)))
+    if past:
+        net[_TOTAL_POS[0]] = "—"
 
     return {
         "groups": groups,
@@ -262,6 +412,8 @@ def _sheet_ctx(
         "categories": categories,
         "recurrence_options": RECURRENCE_OPTIONS,
         "account_display_by_id": ctx["account_display_by_id"],
+        "viewed_ym": _ym(viewed),
+        "viewed_label": f"{viewed:%b %Y}",
     }
 
 
@@ -271,25 +423,68 @@ def _category_names() -> list[str]:
         return get_category_names(conn)
 
 
-def _render_tbody(snapshot_id: int, filename: str, edit_mode=True, **editing):
+def _render_tbody(
+    snapshot_id: int,
+    filename: str,
+    edit_mode=True,
+    history_index: int | None = None,
+    **editing,
+):
     """Re-render the whole grouped table body (colgroup + every band + footer)
-    for an edit swap (target #budget-table). Shows every entry: an edit swap
-    doesn't carry the page's filters."""
-    ctx = get_common_context(snapshot_id, filename, edit_mode)
+    for an edit swap (target #budget-table), for the viewed month. Shows every
+    entry in that month's plan: an edit swap doesn't carry the page's
+    filters. ``history_index`` opens that row's history."""
+    viewed = _viewed_month()
+    ctx = get_common_context(snapshot_id, filename, edit_mode, budget_as_of=viewed)
     budget = ctx["budget"]
     sheet = _sheet_ctx(
-        budget, list(range(len(budget))), _category_names(), ctx, edit_mode
+        budget,
+        _planned(budget, viewed),
+        _category_names(),
+        ctx,
+        edit_mode,
+        viewed=viewed,
+        history_index=history_index,
     )
     return render_template(
         "partials/budget_tbody.html", filename=filename, **sheet, **editing
     )
 
 
+def _month_urls(filename: str, viewed: date, current: date) -> dict:
+    """The Budget sheet's month pager: earlier / later / now links that keep
+    the page's other query parameters (filters, edit mode)."""
+    others = [(k, v) for k, v in request.args.items(multi=True) if k != "ym"]
+    base = url_for("budget.budget_view", filename=filename)
+
+    def url(month: date) -> str:
+        params = others + ([("ym", _ym(month))] if month != current else [])
+        return f"{base}?{urlencode(params)}" if params else base
+
+    prev = date(viewed.year - (viewed.month == 1), (viewed.month - 2) % 12 + 1, 1)
+    nxt = date(viewed.year + (viewed.month == 12), viewed.month % 12 + 1, 1)
+    return {
+        "month_label": f"{viewed:%b %Y}",
+        "prev_url": url(prev),
+        "next_url": url(nxt),
+        "now_url": url(current),
+        "is_current": viewed == current,
+        "is_past": viewed < current,
+        "actual_url": url_for(
+            "budget.actual_view",
+            filename=filename,
+            year=viewed.year,
+            month=viewed.month,
+        ),
+    }
+
+
 @budget_bp.route("/<filename>/budget")
 def budget_view(filename: str):
     snapshot_id = validate_snapshot(filename)
     edit_mode = request.args.get("edit") == "1"
-    ctx = get_common_context(snapshot_id, filename, edit_mode)
+    viewed = _viewed_month()
+    ctx = get_common_context(snapshot_id, filename, edit_mode, budget_as_of=viewed)
     ctx["active_tab"] = "budget"
     include_kinds = (
         request.args.getlist("include_kind") or request.args.getlist("kind") or []
@@ -303,8 +498,9 @@ def budget_view(filename: str):
         or []
     )
     full_budget = ctx["budget"]
+    planned = _planned(full_budget, viewed)
     filtered = filters.apply_budget_filters(
-        full_budget,
+        [full_budget[i] for i in planned],
         include_kinds=include_kinds or None,
         include_categories=include_categories or None,
         include_recurrence=include_recurrence or None,
@@ -312,7 +508,7 @@ def budget_view(filename: str):
     # Filters return the same entry dicts; map them back to their positions in
     # the full list (by identity — two identical entries must stay distinct).
     kept = {id(e) for e in filtered}
-    shown = [i for i, e in enumerate(full_budget) if id(e) in kept]
+    shown = [i for i in planned if id(full_budget[i]) in kept]
     categories = _category_names()
     include_kinds_set = {k.lower() for k in include_kinds}
     ctx["include_kinds"] = [k for k in BUDGET_KINDS if k in include_kinds_set]
@@ -321,6 +517,8 @@ def budget_view(filename: str):
         r for r in RECURRENCE_OPTIONS if r in set(include_recurrence)
     ]
     ctx["budget_kinds"] = BUDGET_KINDS
+    current = date(ctx["year"], ctx["month"], 1)
+    ctx.update(_month_urls(filename, viewed, current))
     ctx.update(
         _sheet_ctx(
             full_budget,
@@ -328,7 +526,8 @@ def budget_view(filename: str):
             categories,
             ctx,
             edit_mode,
-            filters_active=len(shown) < len(full_budget),
+            filters_active=len(shown) < len(planned),
+            viewed=viewed,
         )
     )
     return render_template("budget.html", **ctx)
@@ -588,19 +787,21 @@ def delete_btn(filename: str, index: int):
     budget = data.get("budget") or []
     if index < 0 or index >= len(budget):
         abort(404)
-    kind = budget[index].get("kind", "income")
+    entry = budget[index]
     return render_template(
         "partials/budget_delete_icon.html",
         filename=filename,
-        kind=kind,
+        kind=entry.get("kind", "income"),
         index=index,
         edit_mode=True,
+        row={"ends_here": entry.get("endMonth") == _viewed_month().isoformat()},
     )
 
 
 @budget_bp.route("/<filename>/budget/delete-confirm/<int:index>")
 def delete_confirm(filename: str, index: int):
     snapshot_id = validate_snapshot(filename)
+    _viewed_month()  # the confirm's own URLs keep the month
     engine = current_app.config["engine"]
     with engine.connect() as conn:
         data = load_finances_from_db(conn, snapshot_id)
@@ -644,14 +845,22 @@ def reorder(filename: str):
     rows in place."""
     snapshot_id = validate_snapshot(filename)
     category = request.args.get("category", "")
+    viewed = _viewed_month()
     local_order = parse_order(request.form.get("order", ""))
     if not local_order:
         return "", 422
     engine = current_app.config["engine"]
     with engine.connect() as conn:
         budget = load_finances_from_db(conn, snapshot_id).get("budget") or []
+        # The band shows only the viewed month's plan; entries outside it
+        # keep their slots.
         full = remap_group_order(
-            budget, lambda e: (e.get("category") or "") == category, local_order
+            budget,
+            lambda e: (
+                (e.get("category") or "") == category
+                and entry_active(e, viewed.year, viewed.month)
+            ),
+            local_order,
         )
         if full is None:
             return "", 422
@@ -668,11 +877,13 @@ def add(filename: str):
     kind = request.form.get("kind", "expense").strip()
     if kind not in ("income", "expense"):
         kind = "expense"
+    # A new entry is in the plan from the month it was added in (issue #136).
     entry = {
         "kind": kind,
         "description": "New entry",
         "amount": 0.0,
         "recurrence": "monthly",
+        "startMonth": _viewed_month().isoformat(),
     }
     engine = current_app.config["engine"]
     try:
@@ -700,7 +911,7 @@ def cell_edit(filename: str, index: int):
     snapshot_id = validate_snapshot(filename)
     engine = current_app.config["engine"]
     with engine.connect() as conn:
-        data = load_finances_from_db(conn, snapshot_id)
+        data = load_finances_from_db(conn, snapshot_id, budget_as_of=_viewed_month())
     budget = data.get("budget") or []
     if index < 0 or index >= len(budget):
         abort(404)
@@ -754,9 +965,10 @@ def update(filename: str, index: int):
     if error:
         return _render_tbody(snapshot_id, filename, edit_mode=True), 422
 
+    viewed = _viewed_month()
     engine = current_app.config["engine"]
     with engine.connect() as conn:
-        data = load_finances_from_db(conn, snapshot_id)
+        data = load_finances_from_db(conn, snapshot_id, budget_as_of=viewed)
     budget = data.get("budget") or []
     if index < 0 or index >= len(budget):
         abort(404)
@@ -771,7 +983,9 @@ def update(filename: str, index: int):
 
     try:
         with engine.connect() as conn:
-            repo_budget.update_budget_entry(conn, snapshot_id, index, {field: value})
+            repo_budget.update_budget_entry(
+                conn, snapshot_id, index, {field: value}, effective=viewed
+            )
     except ValueError:
         return _render_tbody(snapshot_id, filename, edit_mode=True), 422
 
@@ -816,7 +1030,12 @@ def when_update(filename: str, index: int):
     try:
         with engine.connect() as conn:
             repo_budget.update_budget_entry(
-                conn, snapshot_id, index, updates, delete_keys
+                conn,
+                snapshot_id,
+                index,
+                updates,
+                delete_keys,
+                effective=_viewed_month(),
             )
     except ValueError:
         return _render_tbody(snapshot_id, filename, edit_mode=True), 422
@@ -828,3 +1047,119 @@ def when_update(filename: str, index: int):
         updated_index=index,
         updated_field="when",
     )
+
+
+# ---------------------------------------------------------------------------
+# Budget history (issue #136): end / resume, the history row, versions
+# ---------------------------------------------------------------------------
+
+
+def _parse_ym(raw: str) -> date | None:
+    """``YYYY-MM`` (a month input's value) -> its 1st; "" -> None."""
+    raw = raw.strip()
+    if not raw:
+        return None
+    year, month = (int(p) for p in raw.split("-")[:2])
+    return date(year, month, 1)
+
+
+def _history_action(filename: str, index: int, action, keep_open: bool = True):
+    """Run a history write on entry ``index``, then re-render the sheet for
+    the viewed month (422 with the sheet unchanged on bad input)."""
+    snapshot_id = validate_snapshot(filename)
+    try:
+        with current_app.config["engine"].connect() as conn:
+            action(conn, snapshot_id)
+    except ValueError:  # bad index or month, end before start, no such version
+        return _render_tbody(
+            snapshot_id, filename, history_index=index if keep_open else None
+        ), 422
+    return _render_tbody(
+        snapshot_id, filename, history_index=index if keep_open else None
+    )
+
+
+@budget_bp.route("/<filename>/budget/end/<int:index>", methods=["POST"])
+def end(filename: str, index: int):
+    """Stop the entry after the viewed month; it stays in earlier months."""
+    viewed = _viewed_month()
+    return _history_action(
+        filename,
+        index,
+        lambda c, s: repo_budget.end_budget_entry(c, s, index, viewed),
+        keep_open=False,
+    )
+
+
+@budget_bp.route("/<filename>/budget/resume/<int:index>", methods=["POST"])
+def resume(filename: str, index: int):
+    """Undo an end: the entry is open-ended again."""
+    return _history_action(
+        filename,
+        index,
+        lambda c, s: repo_budget.end_budget_entry(c, s, index, None),
+        keep_open=False,
+    )
+
+
+@budget_bp.route("/<filename>/budget/history/<int:index>")
+def history(filename: str, index: int):
+    """Open (or, with ``close=1``, close) the row's history under it."""
+    snapshot_id = validate_snapshot(filename)
+    _viewed_month()
+    if request.args.get("close") == "1":
+        return _render_tbody(snapshot_id, filename)
+    return _render_tbody(snapshot_id, filename, history_index=index)
+
+
+@budget_bp.route("/<filename>/budget/span/<int:index>", methods=["POST"])
+def span(filename: str, index: int):
+    """Set the entry's first and last planned months (blank = unbounded)."""
+
+    def _set(conn, snapshot_id):
+        kwargs = {}
+        for key in ("start", "end"):
+            if key in request.form:
+                kwargs[key] = _parse_ym(request.form[key])
+        repo_budget.set_budget_entry_span(conn, snapshot_id, index, **kwargs)
+
+    return _history_action(filename, index, _set)
+
+
+def _version_from(raw: str) -> date | None:
+    """A version key from the history row: "base" or ``YYYY-MM``."""
+    return None if raw == "base" else _parse_ym(raw)
+
+
+@budget_bp.route("/<filename>/budget/version/<int:index>", methods=["POST"])
+def version_update(filename: str, index: int):
+    """Correct one version's amount in place (only the months it covers)."""
+
+    def _set(conn, snapshot_id):
+        value, error = coerce_value(
+            "amount", request.form.get("amount", "").strip(), BUDGET_COERCION
+        )
+        if error or value is None:
+            raise ValueError("amount must be a number")
+        repo_budget.update_budget_version(
+            conn,
+            snapshot_id,
+            index,
+            _version_from(request.form.get("from", "")),
+            {"amount": value},
+        )
+
+    return _history_action(filename, index, _set)
+
+
+@budget_bp.route("/<filename>/budget/version/<int:index>/delete", methods=["POST"])
+def version_delete(filename: str, index: int):
+    """Remove one dated change; the version before it runs on."""
+
+    def _delete(conn, snapshot_id):
+        version_from = _version_from(request.form.get("from", ""))
+        if version_from is None:
+            raise ValueError("the first version can't be removed")
+        repo_budget.delete_budget_version(conn, snapshot_id, index, version_from)
+
+    return _history_action(filename, index, _delete)

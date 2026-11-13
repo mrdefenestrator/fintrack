@@ -73,11 +73,17 @@ def quick_totals(data: dict, today: date | None = None) -> dict:
     }
 
 
-def get_common_context(snapshot_id: int, filename: str, edit_mode: bool):
-    """Data and computed values shared by all views."""
+def get_common_context(
+    snapshot_id: int,
+    filename: str,
+    edit_mode: bool,
+    budget_as_of: date | None = None,
+):
+    """Data and computed values shared by all views. Budget entries carry
+    their fields as of ``budget_as_of``'s month (default: this month)."""
     engine = current_app.config["engine"]
     with engine.connect() as conn:
-        data = load_finances_from_db(conn, snapshot_id)
+        data = load_finances_from_db(conn, snapshot_id, budget_as_of=budget_as_of)
         available_files = list_snapshots(conn)
 
     accs = data.get("accounts") or []

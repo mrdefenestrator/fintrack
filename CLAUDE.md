@@ -187,11 +187,12 @@ degrades to a warning without it).
   **flat** grouped sheets (`flat_sheet()`, `gs.flat_header`, one
   `sheet-group--flat` body, `gs.footer`) — build any new plain sheet the same
   way rather than on bare `sortable.js` tables (Trends alone keeps its own
-  styling). Budget, Transactions, Merchants, and Budget vs Actual also take a
-  **Group by** choice (#137: `GroupBy` options + `selected_group()` +
+  styling). Budget, Transactions, Merchants, Budget vs Actual, and Projections
+  also take a **Group by** choice (#137: `GroupBy` options + `selected_group()` +
   `category_bands()` in `grouped_sheet.py`, `?group=`, the `group_by_select`
   dropdown in the filter bar); Holdings stays fixed-group since its bands'
-  columns differ. An edit that moves rows between bands or changes many rows
+  columns differ. Holdings and Projections share the Type / Balance /
+  Institution filters (`web/routes/holding_filters.py`, #144). An edit that moves rows between bands or changes many rows
   re-renders the table into its scroll container (`HX-Retarget`), not a full
   reload, so the scroll position survives. See DESIGN.md "Holdings sheet" / "Budget
   sheet" / "Selectable grouping".

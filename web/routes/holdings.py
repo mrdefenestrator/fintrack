@@ -45,7 +45,6 @@ from fintrack.core.types import (
     ACCOUNT_TYPE_OPTIONS,
     ASSET_TYPE_OPTIONS,
     HOLDING_TYPE_LABELS,
-    HOLDING_TYPE_OPTIONS,
     HOLDING_TYPE_VALUES,
 )
 from fintrack.insights import debt, stale
@@ -64,6 +63,7 @@ from fintrack.networth.repository import (
 from .common import account_field_editable, get_common_context, validate_snapshot
 from .crud import ACCOUNTS_COERCION, ASSETS_COERCION, coerce_value, handle_delete
 from .grouped_sheet import group_columns, parse_order, remap_group_order
+from .holding_filters import read_filters
 
 holdings_bp = Blueprint("holdings", __name__, url_prefix="/s")
 
@@ -82,13 +82,8 @@ def _client_today() -> date | None:
         return None
 
 
-# The one holding-type vocabulary drives the Type filter's options + labels.
-_ALL_TYPE_OPTIONS: list[tuple[str, str]] = HOLDING_TYPE_OPTIONS
+# The one holding-type vocabulary drives the Type labels.
 _TYPE_LABELS: dict[str, str] = HOLDING_TYPE_LABELS
-
-# The two "balance side" filter buckets, keyed by the sign of a holding's
-# contribution (assets add to net worth, liabilities subtract).
-_BALANCE_LABELS: dict[str, str] = {"asset": "Assets", "liability": "Liabilities"}
 
 # ---------------------------------------------------------------------------
 # Column layouts. Each tuple is (key, header, right_align, span).
@@ -714,16 +709,6 @@ def _all_rows(ctx: dict, today: date) -> dict[str, list[dict]]:
     return rows
 
 
-def _apply_filters(rows, type_sel, balance_sel, inst_sel):
-    if type_sel:
-        rows = [r for r in rows if r["type_value"] in type_sel]
-    if balance_sel:
-        rows = [r for r in rows if r["balance_side"] in balance_sel]
-    if inst_sel:
-        rows = [r for r in rows if r["institution"] in inst_sel]
-    return rows
-
-
 def _groups_ctx(
     rows_by_group: dict[str, list[dict]], accounts, assets, rates=None, prior=None
 ):
@@ -945,54 +930,21 @@ def holdings_view(filename):
     ctx["active_tab"] = "holdings"
 
     rows_by_group = _all_rows(ctx, datetime.now().astimezone().date())
-    all_rows = [r for rows in rows_by_group.values() for r in rows]
-    institutions = sorted({r["institution"] for r in all_rows if r["institution"]})
-    present_types = {r["type_value"] for r in all_rows if r["type_value"]}
-    type_values_labels = [
-        (v, lbl) for v, lbl in _ALL_TYPE_OPTIONS if v in present_types
-    ]
-
-    # --- filters (multi-select, form-submit; mirrors the Assets sheet) ---
-    type_sel = [t for t in request.args.getlist("type") if t in present_types]
-    balance_sel = [b for b in request.args.getlist("balance") if b in _BALANCE_LABELS]
-    inst_sel = [i for i in request.args.getlist("institution") if i in institutions]
-
-    filtered = {
-        key: _apply_filters(rows, type_sel, balance_sel, inst_sel)
-        for key, rows in rows_by_group.items()
-    }
-
-    def _active(sel, total):
-        return len(sel) if 0 < len(sel) < total else 0
-
-    active_count = (
-        _active(type_sel, len(type_values_labels))
-        + _active(balance_sel, len(_BALANCE_LABELS))
-        + _active(inst_sel, len(institutions))
+    # Type / Balance / Institution (multi-select, form-submit), shared with
+    # Projections (web/routes/holding_filters.py).
+    flt = read_filters(
+        (r for rows in rows_by_group.values() for r in rows), request.args
     )
-
-    def _opts(values_labels, selected):
-        return [
-            {"value": v, "display": lbl, "checked": v in selected}
-            for v, lbl in values_labels
-        ]
-
+    filtered = {key: flt.apply(rows) for key, rows in rows_by_group.items()}
     ctx.update(
         _tbody_ctx(
             filtered,
             ctx,
-            filters_active=bool(type_sel or balance_sel or inst_sel),
+            filters_active=flt.active,
             edit_mode=edit_mode,
         )
     )
-    ctx.update(
-        {
-            "active_count": active_count,
-            "type_opts": _opts(type_values_labels, type_sel),
-            "balance_opts": _opts(list(_BALANCE_LABELS.items()), balance_sel),
-            "institution_opts": _opts([(i, i) for i in institutions], inst_sel),
-        }
-    )
+    ctx.update(flt.context())
     return render_template("holdings.html", **ctx)
 
 

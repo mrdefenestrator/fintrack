@@ -7,6 +7,7 @@ from sqlalchemy import select
 from fintrack.budget import reconcile
 from fintrack.budget.repository import get_budget_entries
 from fintrack.core.coerce import parse_amount_filter
+from fintrack.core.formatting import fmt_account_label
 from fintrack.core.models import transactions as txn_table
 from fintrack.insights.alerts import alerts_by_transaction
 from fintrack.ledger.repository.accounts import list_accounts
@@ -25,7 +26,16 @@ from fintrack.ledger.repository.duplicates import (
 from fintrack.ledger.repository.merchants import set_merchant_category
 from fintrack.ledger.repository.transactions import get_transactions
 from web.routes.common import snapshot_scoped
-from web.routes.grouped_sheet import flat_sheet
+from web.routes.grouped_sheet import (
+    NEUTRAL_TONE,
+    GroupBy,
+    band_key,
+    category_order,
+    category_tones,
+    flat_sheet,
+    selected_group,
+    unique_keys,
+)
 
 bp = snapshot_scoped(Blueprint("transactions", __name__, url_prefix="/s/<filename>"))
 
@@ -54,6 +64,86 @@ TRANSACTIONS_SHEET = flat_sheet(
         "budget": "Budget entry this transaction realizes",
     },
 )
+
+
+# "Group by" choices (issue #137); the first (a flat list) is the default.
+# Category bands take the category's color (the same hue as on Budget);
+# Account bands are neutral. Each band's heading shows its row count and the
+# Amount subtotal; the pinned footer still totals every row.
+TRANSACTION_GROUPS = [
+    GroupBy("none", "None"),
+    GroupBy("category", "Category"),
+    GroupBy("account", "Account"),
+]
+_UNCATEGORIZED = "Uncategorized"
+
+
+def _band(key: str, label: str, tone: str, rows: list[dict]) -> dict:
+    return {
+        **TRANSACTIONS_SHEET,
+        "key": key,
+        "flat": False,
+        "label": label,
+        "tone": tone,
+        "rows": rows,
+        "count": len(rows),
+        "total": sum((t["amount"] for t in rows), Decimal(0)),
+    }
+
+
+def _transaction_bands(
+    txns: list[dict], group: str, categories: list[str], accounts: list[dict]
+) -> list[dict]:
+    """Split the listed transactions into the bands of `group` (not
+    ``none``), keeping each band's rows in list (date) order."""
+    if group == "category":
+        by: dict[str, list[dict]] = {}
+        for t in txns:
+            c = t.get("category") or _UNCATEGORIZED
+            by.setdefault(c, []).append(t)
+        # Taxonomy order, then other used categories; Uncategorized closes.
+        order = [
+            c for c in category_order(categories, by) if c in by and c != _UNCATEGORIZED
+        ]
+        tones = category_tones(category_order(categories, by))
+        order += [_UNCATEGORIZED] if _UNCATEGORIZED in by else []
+        keys = unique_keys(band_key("txn-cat", c) for c in order)
+        return [
+            _band(
+                k,
+                c,
+                NEUTRAL_TONE if c == _UNCATEGORIZED else tones[c],
+                by[c],
+            )
+            for c, k in zip(order, keys)
+        ]
+    # account
+    by_acct: dict[int | None, list[dict]] = {}
+    for t in txns:
+        by_acct.setdefault(t.get("account_id"), []).append(t)
+    known = [a["id"] for a in accounts]
+    order = [a for a in known if a in by_acct] + [a for a in by_acct if a not in known]
+    label_of = {a["id"]: fmt_account_label(a) for a in accounts}
+    return [
+        _band(
+            f"txn-acct-{a}",
+            label_of.get(a) or by_acct[a][0].get("account_name") or "—",
+            NEUTRAL_TONE,
+            by_acct[a],
+        )
+        for a in order
+    ]
+
+
+def _regroup_redirect():
+    """When the sheet is grouped by category, an edit that can change a row's
+    category (a category correction, or a budget link, which pins the
+    category) reloads the page so the row lands in its new band; otherwise
+    None and the edit swaps just the row."""
+    if selected_group(TRANSACTION_GROUPS) != "category":
+        return None
+    current_url = request.headers.get("HX-Current-URL", f"/s/{g.filename}/transactions")
+    return "", 204, {"HX-Redirect": current_url}
 
 
 # User-editable overlay fields (transaction_corrections). Raw imported columns
@@ -195,6 +285,12 @@ def index():
 
     txn_count = len(txns)
     txn_total = sum((t["amount"] for t in txns), Decimal(0))
+    group = selected_group(TRANSACTION_GROUPS)
+    bands = (
+        _transaction_bands(txns, group, categories, accounts)
+        if group != "none"
+        else None
+    )
 
     prev_month = month - 1 if month > 1 else 12
     prev_year = year if month > 1 else year - 1
@@ -243,6 +339,9 @@ def index():
         budget_options=budget_options,
         budget_labels=budget_labels,
         txn_alerts=txn_alerts,
+        group=group,
+        group_options=TRANSACTION_GROUPS,
+        bands=bands,
     )
 
 
@@ -296,6 +395,8 @@ def update(txn_id):
             return "", 204, {"HX-Redirect": current_url}
 
         apply_transaction_correction(conn, txn_id, **{field: value})
+        if field == "category" and (redirect := _regroup_redirect()):
+            return redirect
         return _render_row(conn, txn_id)
 
 
@@ -315,6 +416,8 @@ def link(txn_id):
                 return "", 422
         else:
             reconcile.unlink_transaction(conn, txn_id)
+        if redirect := _regroup_redirect():
+            return redirect
         return _render_row(conn, txn_id)
 
 

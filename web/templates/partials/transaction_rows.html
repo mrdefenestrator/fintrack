@@ -1,11 +1,31 @@
 {# Transactions sheet: an unbanded grouped sheet (partials/grouped_sheet.html)
    — the shared column header, rows, sorting (group-sort.js, URL
    sort_transactions_*) and pinned footer of Holdings/Budget/Projections, with
-   no bands. Columns come from TRANSACTIONS_SHEET (web/routes/transactions.py).
+   no bands — or, with "Group by", banded by category or account. Columns come from TRANSACTIONS_SHEET (web/routes/transactions.py).
    Inline cell editing (Merchant/Category/Notes/Budget) swaps single rows —
    see partials/transaction_row.html and partials/ledger_cells.html. #}
 {% import "partials/grouped_sheet.html" as gs %}
 {% set txn_sheet = flat_sheets.transactions %}
+{% if bands %}
+{# Grouped (issue #137): one band per category or account, each with a heading
+   (label · row count, Amount subtotal), its own sortable header, and its
+   rows. Rows still swap one at a time (outerHTML on the row id), so cell-nav
+   runs in outerHTML mode over the whole table. #}
+{% set _amount_at = txn_sheet.col_keys.index('amount') %}
+<table id="txn-table" class="grouped-sheet w-full text-sm border-collapse bg-white dark:bg-gray-800" data-cell-nav="txn-table" data-cell-nav-swap="outerHTML" style="white-space:nowrap">
+    {% for band in bands %}
+    <tbody {{ gs.group_attrs(band) }}>
+        {% call gs.heading(band.label ~ ' · ' ~ band.count, _amount_at) %}
+        <td class="px-1.5 py-1.5 text-right tabular-nums text-sm font-semibold {{ 'text-red-600 dark:text-red-400' if band.total < 0 else 'text-green-600 dark:text-green-400' }}">{{ ('-$' if band.total < 0 else '+$') ~ (band.total|abs|money) }}</td>
+        <td colspan="{{ txn_sheet.ncols - _amount_at - 1 }}"></td>
+        {% endcall %}
+        {{ gs.header_row(band, txn_sheet.ncols, false) }}
+        {% for txn in band.rows %}
+        {% include "partials/transaction_row.html" %}
+        {% endfor %}
+    </tbody>
+    {% endfor %}
+{% else %}
 <table class="grouped-sheet w-full text-sm border-collapse bg-white dark:bg-gray-800" data-cell-nav="txn-tbody" style="white-space:nowrap">
     {{ gs.flat_header(txn_sheet, false) }}
     <tbody id="txn-tbody" {{ gs.group_attrs(txn_sheet) }}>
@@ -13,6 +33,7 @@
         {% include "partials/transaction_row.html" %}
         {% endfor %}
     </tbody>
+{% endif %}
     {# Pinned total: the transaction count is the row label; the sum sits in the
        Amount column, coloured like that column (green income / red spend).
        Hidden when there are no transactions. #}

@@ -7,6 +7,7 @@ Amount) are display-only.
 """
 
 import pytest
+from playwright.sync_api import expect
 
 from tests.e2e.controls import PHONE_WIDTHS, assert_controls_layout
 
@@ -420,3 +421,18 @@ def test_transactions_controls_layout_on_phones(page, flask_server, width, query
     page.goto(f"{flask_server}/s/ledger/transactions{query}")
     assert_controls_layout(page, width)
     assert page.locator("[data-range-toggle]").is_visible()
+
+
+def test_group_by_account_from_the_filter_bar(page, confirmed_server):
+    """Issue #137: Group by Account bands the list (htmx swap, URL kept), and
+    the month pager carries the grouping along."""
+    page.goto(f"{confirmed_server}/s/ledger/transactions?year=2026&month=4")
+    assert page.locator(".sheet-group-heading").count() == 0
+    page.locator("[data-group-by] button").click()
+    page.locator("[data-group-by] input[value='account']").check()
+    page.wait_for_url("**group=account**")
+    heading = page.locator(".sheet-group-heading td:first-child")
+    expect(heading).to_have_count(1)
+    assert heading.inner_text().strip().endswith("· 4")
+    assert page.locator("tbody.sheet-group tr[id^='txn-row-']").count() == 4
+    assert "group=account" in page.locator("[data-pager] a").first.get_attribute("href")

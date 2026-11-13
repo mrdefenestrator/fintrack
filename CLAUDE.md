@@ -175,7 +175,11 @@ degrades to a warning without it).
   **flat** grouped sheets (`flat_sheet()`, `gs.flat_header`, one
   `sheet-group--flat` body, `gs.footer`) — build any new plain sheet the same
   way rather than on bare `sortable.js` tables (Trends alone keeps its own
-  styling). See DESIGN.md "Holdings sheet" / "Budget sheet".
+  styling). Budget and Transactions also take a **Group by** choice (#137:
+  `GroupBy` options + `selected_group()` in `grouped_sheet.py`, `?group=`, the
+  `group_by_select` dropdown in the filter bar); Holdings stays fixed-group
+  since its bands' columns differ. See DESIGN.md "Holdings sheet" / "Budget
+  sheet" / "Selectable grouping".
 - **Page controls** (DESIGN.md "Page controls"): the time pager sits alone on
   the pager row above a sheet (`nav.pager_row`), never in the filter bar;
   every other control (view toggles via `nav.segmented`, filters, Reset) goes

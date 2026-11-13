@@ -15,13 +15,25 @@ its column header in a ``<thead>`` and ONE untinted body — no heading row, no
 accent rail — so a plain list shares the header, row, footer, sorting and
 sticky chrome of the banded sheets without inventing a band for it.
 
+Selectable grouping (issue #137) is also shared: a sheet offers a few
+``GroupBy`` choices (the first is its default), read from the ``?group=`` URL
+param with ``selected_group()`` and picked from the filter bar's "Group by"
+dropdown (``filter_controls.group_by_select``). A sheet's own route builds the
+bands for each choice; ``band_key()`` and ``category_tones()`` keep their keys
+and colors consistent across sheets.
+
 This module holds the Python side the sheets share: turning a column layout
-into the per-group header metadata the templates read, and mapping a band's
-local drag-reorder onto the band's slots in the full, stored ordering.
+into the per-group header metadata the templates read, mapping a band's
+local drag-reorder onto the band's slots in the full, stored ordering, and the
+group-by plumbing above.
 """
 
-from collections.abc import Callable, Sequence
-from typing import Any
+import re
+from collections.abc import Callable, Iterable, Sequence
+from typing import Any, NamedTuple
+from urllib.parse import parse_qs, urlsplit
+
+from flask import request
 
 # A column is (key, header, right_align, span).
 Column = tuple[str, str, bool, int]
@@ -79,3 +91,82 @@ def remap_group_order(
     for new_local, old_local in enumerate(local_order):
         full[positions[new_local]] = positions[old_local]
     return full
+
+
+class GroupBy(NamedTuple):
+    """One "Group by" choice: its ``?group=`` value and its dropdown label."""
+
+    key: str
+    label: str
+
+
+def selected_group(options: Sequence[GroupBy]) -> str:
+    """The sheet's active grouping: ``?group=`` if it names one of `options`,
+    else the default (the first option).
+
+    An edit swap (an htmx cell/row request) doesn't carry the page's query, so
+    the param falls back to the page URL htmx sends as ``HX-Current-URL`` —
+    the swapped-in body keeps the grouping the page shows."""
+    keys = [o.key for o in options]
+    raw = request.args.get("group")
+    if raw is None and request.headers.get("HX-Request"):
+        query = parse_qs(urlsplit(request.headers.get("HX-Current-URL", "")).query)
+        raw = (query.get("group") or [None])[0]
+    return raw if raw in keys else keys[0]
+
+
+def band_key(prefix: str, value: str) -> str:
+    """A stable DOM/URL-safe key for a band (``data-group``; the per-band sort
+    state lives in ``sort_<key>_col/_dir``)."""
+    return f"{prefix}-" + (re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-") or "x")
+
+
+def unique_keys(keys: Iterable[str]) -> list[str]:
+    """`keys` with a ``-`` appended to any that repeat (two values that slugify
+    alike must still be distinct bands)."""
+    seen: set[str] = set()
+    out = []
+    for key in keys:
+        while key in seen:
+            key += "-"
+        seen.add(key)
+        out.append(key)
+    return out
+
+
+# Category colors (partials/grouped_sheet.css palette), cycled in category
+# order. Ordered so consecutive hues contrast, including the wrap from last
+# to first. Shared so a category reads the same color on every sheet.
+CATEGORY_TONES = [
+    "blue",
+    "amber",
+    "violet",
+    "emerald",
+    "rose",
+    "cyan",
+    "orange",
+    "indigo",
+    "lime",
+    "fuchsia",
+    "teal",
+    "pink",
+]
+# Uncategorized, and the bands of a grouping that isn't by category.
+NEUTRAL_TONE = "slate"
+
+
+def category_order(taxonomy: Sequence[str], used: Iterable[str | None]) -> list[str]:
+    """Every category in band order: the taxonomy, then any others in use
+    (alphabetically). Uncategorized (empty/None) is left out — it closes the
+    sheet."""
+    known = set(taxonomy)
+    return list(taxonomy) + sorted({c for c in used if c} - known)
+
+
+def category_tones(categories: Sequence[str]) -> dict[str, str]:
+    """Category -> band color, cycling CATEGORY_TONES in `categories` order.
+    Colors index the full list, so a category keeps its color while filters
+    hide its neighbours."""
+    return {
+        c: CATEGORY_TONES[i % len(CATEGORY_TONES)] for i, c in enumerate(categories)
+    }

@@ -16,8 +16,9 @@
 <form id="budget-filter-form" method="get" action="{{ url_for('budget.budget_view', filename=filename) }}" class="shrink-0">
     {% if edit_mode %}<input type="hidden" name="edit" value="1">{% endif %}
     {% call fb.filter_bar(active_count=_active_count,
-        reset_url=url_for('budget.budget_view', filename=filename, edit=1 if edit_mode else none),
+        reset_url=url_for('budget.budget_view', filename=filename, edit=1 if edit_mode else none, group=group if group != group_options[0].key else none),
         use_htmx=false) %}
+        {{ fc.group_by_select(group_options, group, form_id='budget-filter-form') }}
         {{ fc.multi_select('include_kind', 'Kind', kind_opts, form_id='budget-filter-form') }}
         {{ fc.multi_select('include', 'Category', cat_opts, form_id='budget-filter-form') }}
         {{ fc.multi_select('include_recurrence', 'Recurrence', rec_opts, form_id='budget-filter-form') }}

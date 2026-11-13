@@ -455,3 +455,23 @@ def test_budget_when_annual_compound_edit(page, flask_server):
     page.goto(f"{flask_server}/s/test_finances/budget")
     row = page.locator("#budget-table tr:has-text('Car Insurance')").first
     assert row.get_by_text("Apr 10th").is_visible()
+
+
+def test_group_by_kind_from_the_filter_bar(page, flask_server):
+    """Issue #137: picking Kind in the Group by dropdown rebands the sheet
+    (Income / Expense) and keeps the choice in the URL."""
+    page.goto(f"{flask_server}/s/test_finances/budget")
+    page.locator("[data-group-by] button").click()
+    page.locator("[data-group-by] input[value='kind']").check()
+    page.wait_for_url("**group=kind**")
+    labels = [
+        t.strip().lower()
+        for t in page.locator(".sheet-group-heading td:first-child").all_inner_texts()
+    ]
+    assert labels == ["income", "expense"]
+    assert page.locator("[data-group-by-label]").inner_text() == "Kind"
+    # Salary sits in the Income band; Rent in Expense.
+    income = page.locator("tbody.sheet-group[data-group='kind-income']")
+    assert income.get_by_text("Salary", exact=True).is_visible()
+    expense = page.locator("tbody.sheet-group[data-group='kind-expense']")
+    assert expense.get_by_text("Rent", exact=True).is_visible()

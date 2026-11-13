@@ -3,7 +3,9 @@
    band). `index` is the entry's position in the full budget list — the handle
    every cell/delete URL uses. `row.cells` follows `group.col_keys`; cells are
    mapped to their editable field by column key, never by position. The accent
-   rail takes the band's (category's) tone. In view mode cells are plain; in
+   rail takes the band's (category's) tone.
+   (Off the category grouping the band is neutral and the row carries its
+   category's tone itself.) In view mode cells are plain; in
    edit mode they click to edit, and the last cell holds the drag + delete
    actions. #}
 {% from "macros/table.html" import cell_display, cell_non_editable, cell_edit_input, cell_edit_select %}
@@ -14,7 +16,7 @@
 {% set row_cells = row.cells %}
 {% set col_keys = group.col_keys %}
 {% set _rec_sort = {'One Time': 1, 'Weekly': 2, 'Biweekly': 3, 'Monthly': 4, 'Quarterly': 5, 'Semiannual': 6, 'Annual': 7} %}
-<tr class="{{ gs.row_class() }}" id="budget-row-{{ index }}" data-kind="{{ kind }}" data-reorder-index="{{ reorder_index }}">
+<tr class="{{ gs.row_class() }}" id="budget-row-{{ index }}" data-kind="{{ kind }}"{% if row.tone %} data-tone="{{ row.tone }}"{% endif %} data-reorder-index="{{ reorder_index }}">
     {% if not edit_mode %}
     {% for cell in row_cells %}
     <td class="{{ sheet.cell_class('text-right tabular-nums' if loop.index0 in group.right_align else '', sheet.neg(cell | display_is_negative)) }}"{% if col_keys[loop.index0] == 'recurrence' and _rec_sort.get(cell | trim) %} data-sort-value="{{ _rec_sort[cell | trim] }}"{% endif %}>{{ cell }}</td>
@@ -159,6 +161,9 @@
         {{ cell_non_editable(cell_value, right_align, is_negative) }}
     {% endif %}
     {% endfor %}
+    {# Drag handle only where the band reorders (category bands, or the
+       ungrouped list); Kind / Recurrence bands don't. #}
+    {% set reorderable = group.reorder is not none %}
     {% include "partials/budget_delete_icon.html" %}
     {% endif %}
 </tr>

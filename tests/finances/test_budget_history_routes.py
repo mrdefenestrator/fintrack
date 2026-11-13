@@ -139,6 +139,8 @@ def test_editing_a_past_month_applies_until_the_next_change(client, db_engine):
     body = resp.get_data(as_text=True)
     assert "($2,050.00)" in body
     assert 'data-budget-mark="changed"' in body
+    # The dot leads the amount so right-aligned figures stay lined up.
+    assert re.search(r'data-budget-mark="changed"[^>]*></span>\s*\(\$2,050\.00\)', body)
 
 
 def test_description_edits_apply_to_every_month(client, db_engine):

@@ -1040,8 +1040,10 @@ CLI's `budget` table keeps its Kind column.
 - **Markers.** A dot on Amount when the entry's amount/schedule changed in the
   viewed month — its tooltip lists the whole history, one line per version
   ("Until Jul 2026: ($45.00) Monthly, 2nd" / "From Aug 2026: ($49.00) …") —
-  and on Description when it starts or ends then. Empty spans, so sorting
-  still reads the cell text.
+  and on Description when it starts or ends then. Each dot sits on the side
+  away from its cell's alignment edge (before an amount, after a
+  description), so values stay aligned; empty spans, so sorting still reads
+  the cell text.
 - **End / Resume.** The actions cell (wider here: three buttons) adds **End**
   (stop after the viewed month; **Resume** in its last month) before drag and
   delete.

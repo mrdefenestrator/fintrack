@@ -18,15 +18,17 @@
 {% set row_cells = row.cells %}
 {% set col_keys = group.col_keys %}
 {% set _rec_sort = {'One Time': 1, 'Weekly': 2, 'Biweekly': 3, 'Monthly': 4, 'Quarterly': 5, 'Semiannual': 6, 'Annual': 7} %}
-{% macro _mark(kind, title) -%}
+{# A dot sits on the side away from its cell's alignment edge, so it never
+   moves the value: before a right-aligned amount, after left-aligned text. #}
+{% macro _mark(kind, title, leading=false) -%}
 {%- set _color = {'changed': '#3b82f6', 'starts': '#10b981', 'ends': '#f59e0b'}[kind] -%}
-<span class="budget-mark" data-budget-mark="{{ kind }}" title="{{ title }}" aria-label="{{ title }}" role="img" style="display:inline-block;width:0.45rem;height:0.45rem;border-radius:9999px;margin-left:0.3rem;vertical-align:middle;background:{{ _color }}"></span>
+<span class="budget-mark" data-budget-mark="{{ kind }}" title="{{ title }}" aria-label="{{ title }}" role="img" style="display:inline-block;width:0.45rem;height:0.45rem;border-radius:9999px;{{ 'margin-right' if leading else 'margin-left' }}:0.3rem;vertical-align:middle;background:{{ _color }}"></span>
 {%- endmacro %}
 {% set _marks = row.marks or {} %}
 {% set _desc_marks %}{% if _marks.starts %}{{ _mark('starts', _marks.starts) }}{% endif %}{% if _marks.ends %}{{ _mark('ends', _marks.ends) }}{% endif %}{% endset %}
-{% set _amount_marks %}{% if _marks.changed %}{{ _mark('changed', _marks.changed) }}{% endif %}{% endset %}
+{% set _amount_marks %}{% if _marks.changed %}{{ _mark('changed', _marks.changed, leading=true) }}{% endif %}{% endset %}
 {% macro _with_marks(key, value) -%}
-{{ value ~ (_desc_marks if key == 'description' else (_amount_marks if key == 'amount' else '')) }}
+{%- if key == 'amount' %}{{ _amount_marks ~ value }}{% elif key == 'description' %}{{ value ~ _desc_marks }}{% else %}{{ value }}{% endif -%}
 {%- endmacro %}
 <tr class="{{ gs.row_class() }}" id="budget-row-{{ index }}" data-kind="{{ kind }}" data-reorder-index="{{ reorder_index }}">
     {% if not edit_mode %}

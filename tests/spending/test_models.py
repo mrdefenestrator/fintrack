@@ -21,6 +21,7 @@ def test_all_tables_created(engine):
         "alert_dismissals",
         "categories",
         "budget_entries",
+        "budget_entry_versions",
         "balance_history",
         "price_cache",
     }

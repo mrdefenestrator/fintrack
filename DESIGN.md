@@ -204,7 +204,14 @@ Single `MetaData` in `fintrack/core/models.py`.
   `day_of_year`, `continuous`), `auto_account_ref` (which account the money
   moves through), and a nullable `category` linking to the ledger taxonomy so
   projections don't double-count a budgeted expense against estimated
-  category spend.
+  category spend. `start_month` / `end_month` (the 1st of the first and last
+  month the entry is in the plan; NULL = unbounded) bound it in time, and its
+  schedule columns are its *base* version (see "Budget history").
+- **budget_entry_versions** — dated changes to a budget entry's amount and
+  schedule (`amount`, `recurrence`, `date`, `day_of_month`, `month`,
+  `day_of_year`, `continuous`), each a full set of those fields in effect from
+  `effective_from` (the 1st of a month) until the entry's next version; unique
+  per `(entry_id, effective_from)`, cascades with the entry.
 - **balance_history** — the dated value of every holding (cash and card
   balances, signed loan balances, asset values) and the time series behind a
   holding's cached balance; see below. Its `account_id` is a holding id in
@@ -539,6 +546,60 @@ into the Trends page as Budget/mo and Delta columns alongside the existing
 per-category spending averages; selected estimates can be included in the
 projection engine as unscheduled spend.
 
+## Budget history
+
+The budget keeps its history (issue #136) instead of being one timeless plan,
+so past months are measured against the plan they had: a price change doesn't
+rewrite earlier months as drift, and stopping a line doesn't erase it.
+
+- **Model.** An entry is in the plan from `start_month` through `end_month`
+  (either NULL = unbounded; entries from before #136 have neither, so they
+  apply to every month as they always did). Its amount and schedule are
+  *versioned*: the schedule columns on `budget_entries` are the base version,
+  and each `budget_entry_versions` row takes over from its month until the
+  next. What isn't versioned — kind, description, category, auto account, sort
+  order — lives on the entry and applies to every month. Category stays
+  unversioned on purpose: a linked entry pins its transactions' category, and
+  a per-month category would make a transaction's category depend on its date.
+- **Reads.** `get_budget_entries(as_of=…)` returns every entry with its fields
+  as of that month (default: this month), `startMonth` / `endMonth`, and —
+  only when it has dated changes — `_versions` (oldest first, base `from`
+  None). The recurrence engine resolves any other month itself
+  (`recurrence.entry_for_month`): `budget_entry_in_month` and
+  `subtotal_remainder_of_month` use the month's own version and return 0 for a
+  month outside the entry's span, so every multi-month reader — projections
+  (a scheduled raise shows up in its month), cash flow's Budgeted net, year in
+  review — reads each month's plan with no changes of its own. Readers that
+  list entries for one month filter with `entry_active`: Budget vs Actual and
+  link suggestions (`reconcile._planned_entries`, each entry as of that
+  month, so drift compares a charge to the price it had), recurring matching
+  (today's plan; a series linked to an ended entry still reads as linked),
+  and the projection estimator's claimed categories (an ended line stops
+  claiming). Trends' Budget/mo averages each window month's own plan
+  (`budgeted_monthly_by_category(budget, months)`).
+- **Edits.** `update_budget_entry(…, effective=month)` writes versioned fields
+  from that month until the entry's next change: it edits the version that
+  starts that month in place (or the base, when the entry starts then), and
+  otherwise splits the version covering the month by inserting a new one. A
+  version left identical to the one before it is dropped, so changing a value
+  back leaves no trace. `update_budget_version` corrects one version in place
+  (exactly the months it covers); `delete_budget_version` removes a change so
+  the version before runs on (the base can't be removed).
+  `set_budget_entry_span` sets the start/end: moving the start past changes
+  folds the one in effect then into the base; ending drops changes after the
+  end. `end_budget_entry(…, month)` ends after a month (None resumes) — the
+  entry, its history, and its links stay, which is why ending, not deleting,
+  is how a line stops. A new entry starts in the month it's added from; one
+  added from a recurring series starts with its first charge and keeps a
+  recent price change as a version from the month it changed.
+- **Budget sheet.** A month pager shows the plan for one month (`ym`; see
+  "Budget sheet").
+- **CLI.** `budget` / `income` / `expenses` take `--month YYYY-MM` (only
+  entries in that month's plan, each as planned then; indices stay stable);
+  `add --from`, `edit --from` (default this month), `edit --version base|YYYY-MM`
+  (correct one version in place), `end [--after YYYY-MM] [--resume]`, and
+  `history` (start, end, and every version).
+
 ## Transaction–budget association
 
 Beyond the category-level rollup, an individual transaction can be linked to
@@ -585,10 +646,11 @@ Three things build on the link:
   undismiss` brings them back, and manual linking is unaffected). On
   the Budget vs Actual page each entry shows how many of the month's unlinked
   transactions look like it; in edit mode a row under the entry lists them with
-  Apply / Dismiss. The CLI has `transactions suggest [--apply]` (y / n / d per
+  Apply / Dismiss. Only entries in that month's plan are candidates. The CLI has `transactions suggest [--apply]` (y / n / d per
   suggestion) and `transactions dismiss` / `undismiss`.
-- **Budget-vs-actual per entry** (`budget_actuals`) — for a month, each entry's
-  scheduled amount is compared to its actual and classified matched / over /
+- **Budget-vs-actual per entry** (`budget_actuals`) — for a month, each entry in
+  that month's plan, as planned then (its version in effect; see "Budget
+  history"), has its scheduled amount compared to its actual and classified matched / over /
   under / on pace / missing / upcoming / unlinked / inactive. Discrete entries (bills,
   paychecks) are measured by their linked transactions, exposing price drift (a
   linked charge that differs from the budgeted amount). A variable, continuous
@@ -666,7 +728,9 @@ is purely local — no transaction data goes to the Claude API.
   complement to Budget vs Actual's per-entry drift.
 - **Actions.** *Add to budget* creates an entry from the series (current price,
   cadence → recurrence, day of month / month from the last charge, category,
-  usual account) and links every charge in it; *Link* links them to the
+  usual account), planned from the month of its first charge (a recent price
+  change becomes a version from the month it changed — see "Budget history"),
+  and links every charge in it; *Link* links them to the
   `unlinked` match; *Not recurring* stores the merchant in
   `recurring_dismissals` and hides it.
 
@@ -889,7 +953,8 @@ data* — months where the snapshot has any transactions in the window, minus th
 month in progress — not every calendar month in the window, so a short history
 isn't understated and a partial month doesn't drag it down (no completed month
 → "—"). **Change** compares the last completed month to that average.
-**Delta** (Avg/mo − Budget/mo, where Budget/mo is annual ÷ 12) is worded by the
+**Delta** (Avg/mo − Budget/mo, where Budget/mo is annual ÷ 12, averaged over
+the window's months from each month's own plan — see "Budget history") is worded by the
 row's kind: spending reads "$X over" / "$X under", income and the Net (kept)
 row read "$X short" / "$X ahead"; color is green when the result beats the
 budget, red when it doesn't.
@@ -967,8 +1032,7 @@ taxonomy lacks follow alphabetically, and entries with no category close the
 sheet as **Uncategorized**. Every band shares one column set —
 Category·Description·Amount·Recurrence·When·Remaining·This month·Per month·
 Annual·Auto account — so there is no ragged edge. **This month** is what's
-scheduled in the current calendar month (an annual bill due in another month is
-$0); **Per month** is the annual amount ÷ 12, the same figure as Trends'
+scheduled in the month shown (an annual bill due in another month is $0); **Per month** is the annual amount ÷ 12, the same figure as Trends'
 Budget/mo (#103). Category stays a column, always shown (as
 Holdings keeps Type), because editing it is how an entry moves between bands.
 There is **no Kind column**: kind isn't editable on the sheet (the add buttons
@@ -989,6 +1053,37 @@ CLI's `budget` table keeps its Kind column.
   category. Drag-reorder is per band (`/budget/reorder?category=…`); rows keep
   their full-list position as the edit/delete handle. Kind / Category /
   Recurrence filters work as before, and lock reordering while active.
+- **One month's plan** (issue #136, "Budget history"). A month pager on the
+  pager row (default this month, `?ym=YYYY-MM`; full-page links that keep the
+  filters and edit mode; later months are open too) picks the month; the sheet
+  shows only entries in that month's plan, each as planned then. This month's
+  Remaining is the rest of the month, a later month's the full month, and a
+  past month's "—". Beside the pager: what the view is ("Edits apply from
+  <month> until the next change" in edit mode, "The plan as it was in
+  <month>" for a past month) and a link to Budget vs Actual for the month
+  (which links back with "Edit the plan for <month>").
+- **Edits land in the viewed month.** Every sheet URL carries `ym`
+  (`budget.py` `_add_viewed_month`, a blueprint `url_defaults` hook, so
+  cell-nav.js's `htmx.ajax` saves carry it too). Amount and schedule edits
+  apply from that month until the entry's next change; other fields apply to
+  every month; a stub added from a band starts that month. Drag-reorder moves
+  only the rows shown, leaving entries outside the month in their slots.
+- **Markers.** A dot on Amount when the entry's amount/schedule changed in the
+  viewed month — its tooltip lists the whole history, one line per version
+  ("Until Jul 2026: ($45.00) Monthly, 2nd" / "From Aug 2026: ($49.00) …") —
+  and on Description when it starts or ends then. Each dot sits on the side
+  away from its cell's alignment edge (before an amount, after a
+  description), so values stay aligned; empty spans, so sorting still reads
+  the cell text.
+- **End / Resume.** The actions cell (wider here: three buttons) adds **End**
+  (stop after the viewed month; **Resume** in its last month) before drag and
+  delete.
+- **Correcting the past is ordinary editing**, not a separate history editor
+  (a nested history row was tried and dropped as more machinery than it
+  earns). Edit in the month a change started to fix that change in place;
+  set a value back to the previous version's to remove the change (identical
+  neighbours collapse). The CLI keeps `history` and `edit --version` for
+  listing and correcting versions directly.
 
 ### Overview
 
@@ -1111,7 +1206,8 @@ recurring  [list] [--all] [--dismissed] | add <merchant> | link <merchant> <entr
 merchants  list | set
 categories list|add|edit|delete
 report     monthly | trends [--months N] [--year YYYY]
-status | budget | income | expenses | assets | debts | funding   # status = text Overview
+status | budget [--month YYYY-MM] | assets | debts | funding   # status = text Overview
+income | expenses  [--month YYYY-MM] | add [--from YYYY-MM] | edit <i> [--from YYYY-MM | --version base|YYYY-MM] | end <i> [--after YYYY-MM] [--resume] | history <i> | delete <i>
 project    [--from YYYY-MM] [--months N] [--estimate] [--changes] [--month YYYY-MM]
 migrate-legacy …
 serve      [--port]

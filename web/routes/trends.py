@@ -6,6 +6,7 @@ from datetime import date, datetime
 
 from flask import Blueprint, current_app, g, render_template, request
 
+from fintrack.budget.recurrence import month_sequence
 from fintrack.budget.repository import budgeted_monthly_by_category, get_budget_entries
 from fintrack.insights.cash_flow import compute_cash_flow
 from fintrack.insights.year_review import year_review
@@ -149,7 +150,14 @@ def index():
         )
     prev_totals = {c["category"]: c for c in review["categories"]} if review else {}
 
-    budgeted, budget_kinds = budgeted_monthly_by_category(budget)
+    # Budget/mo is each window month's own plan, averaged (issue #136), so a
+    # past window is measured against the budget it had.
+    window_months = month_sequence(
+        start.year,
+        start.month,
+        (end.year - start.year) * 12 + end.month - start.month + 1,
+    )
+    budgeted, budget_kinds = budgeted_monthly_by_category(budget, window_months)
 
     by_category: dict = defaultdict(lambda: {"total": 0, "months": defaultdict(float)})
     all_months: set[tuple[int, int]] = set()

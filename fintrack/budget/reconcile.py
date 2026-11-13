@@ -31,7 +31,7 @@ from typing import Any
 
 from sqlalchemy import Connection, select
 
-from fintrack.budget.recurrence import budget_entry_in_month, money
+from fintrack.budget.recurrence import budget_entry_in_month, entry_active, money
 from fintrack.budget.repository import get_budget_entries, get_budget_entry
 from fintrack.core.models import holdings, transactions
 from fintrack.ledger.repository.aggregations import get_monthly_category_totals
@@ -151,6 +151,21 @@ def dismiss_suggestion(
 def undismiss_suggestions(conn: Connection, transaction_id: int) -> int:
     """Forget every dismissed suggestion for a transaction; returns the count."""
     return clear_link_dismissals(conn, transaction_id)
+
+
+def _planned_entries(
+    conn: Connection, snapshot_id: int, year: int | None, month: int | None
+) -> list[dict[str, Any]]:
+    """The entries in the plan for the month (issue #136), each as planned
+    then — its version in effect, and not before its start or after its end.
+    Every entry, as of this month, when no month is given."""
+    if year is None or month is None:
+        return get_budget_entries(conn, snapshot_id)
+    return [
+        e
+        for e in get_budget_entries(conn, snapshot_id, as_of=date(year, month, 1))
+        if entry_active(e, year, month)
+    ]
 
 
 def occurs_in_month(entry: dict[str, Any], year: int, month: int) -> bool:
@@ -433,7 +448,7 @@ def suggest_links(
     from fintrack.budget.recurring import series_index
 
     today = today or datetime.now().astimezone().date()
-    entries = get_budget_entries(conn, snapshot_id)
+    entries = _planned_entries(conn, snapshot_id, year, month)
     claims = Counter(e["category"] for e in entries if e.get("category"))
     entries = [e for e in entries if not _measured_by_category(e, claims)]
     if not entries:
@@ -638,7 +653,7 @@ def budget_actuals(
     and price drift.
     """
     today = today or datetime.now().astimezone().date()
-    entries = get_budget_entries(conn, snapshot_id)
+    entries = _planned_entries(conn, snapshot_id, year, month)
     month_txns = get_transactions(conn, year=year, month=month, snapshot_id=snapshot_id)
     link_ranges = get_budget_link_date_ranges(conn, snapshot_id)
     category_totals = {

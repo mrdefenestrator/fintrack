@@ -3,11 +3,14 @@
    band). `index` is the entry's position in the full budget list — the handle
    every cell/delete URL uses. `row.cells` follows `group.col_keys`; cells are
    mapped to their editable field by column key, never by position. The accent
-   rail takes the band's (category's) tone.
-   (Off the category grouping the band is neutral and the row carries its
-   category's tone itself.) In view mode cells are plain; in
-   edit mode they click to edit, and the last cell holds the drag + delete
-   actions. #}
+   rail takes the band's (category's) tone; off the category grouping the band
+   is neutral and the row carries its category's tone itself. In view mode
+   cells are plain; in edit mode they click to edit, and the last cell holds
+   the end / drag / delete actions.
+   Budget history (issue #136): `row.marks` puts a dot on Amount when its
+   version starts in the viewed month, and on Description when the entry
+   starts or ends then (empty spans, so sorting reads the cell text as
+   before). The change dot's tooltip lists the entry's whole history. #}
 {% from "macros/table.html" import cell_display, cell_non_editable, cell_edit_input, cell_edit_select %}
 {% import "partials/sheet.html" as sheet %}
 {% import "partials/grouped_sheet.html" as gs %}
@@ -16,10 +19,22 @@
 {% set row_cells = row.cells %}
 {% set col_keys = group.col_keys %}
 {% set _rec_sort = {'One Time': 1, 'Weekly': 2, 'Biweekly': 3, 'Monthly': 4, 'Quarterly': 5, 'Semiannual': 6, 'Annual': 7} %}
+{# A dot sits on the side away from its cell's alignment edge, so it never
+   moves the value: before a right-aligned amount, after left-aligned text. #}
+{% macro _mark(kind, title, leading=false) -%}
+{%- set _color = {'changed': '#3b82f6', 'starts': '#10b981', 'ends': '#f59e0b'}[kind] -%}
+<span class="budget-mark" data-budget-mark="{{ kind }}" title="{{ title }}" aria-label="{{ title }}" role="img" style="display:inline-block;width:0.45rem;height:0.45rem;border-radius:9999px;{{ 'margin-right' if leading else 'margin-left' }}:0.3rem;vertical-align:middle;background:{{ _color }}"></span>
+{%- endmacro %}
+{% set _marks = row.marks or {} %}
+{% set _desc_marks %}{% if _marks.starts %}{{ _mark('starts', _marks.starts) }}{% endif %}{% if _marks.ends %}{{ _mark('ends', _marks.ends) }}{% endif %}{% endset %}
+{% set _amount_marks %}{% if _marks.changed %}{{ _mark('changed', _marks.changed, leading=true) }}{% endif %}{% endset %}
+{% macro _with_marks(key, value) -%}
+{%- if key == 'amount' %}{{ _amount_marks ~ value }}{% elif key == 'description' %}{{ value ~ _desc_marks }}{% else %}{{ value }}{% endif -%}
+{%- endmacro %}
 <tr class="{{ gs.row_class() }}" id="budget-row-{{ index }}" data-kind="{{ kind }}"{% if row.tone %} data-tone="{{ row.tone }}"{% endif %} data-reorder-index="{{ reorder_index }}">
     {% if not edit_mode %}
     {% for cell in row_cells %}
-    <td class="{{ sheet.cell_class('text-right tabular-nums' if loop.index0 in group.right_align else '', sheet.neg(cell | display_is_negative)) }}"{% if col_keys[loop.index0] == 'recurrence' and _rec_sort.get(cell | trim) %} data-sort-value="{{ _rec_sort[cell | trim] }}"{% endif %}>{{ cell }}</td>
+    <td class="{{ sheet.cell_class('text-right tabular-nums' if loop.index0 in group.right_align else '', sheet.neg(cell | display_is_negative)) }}"{% if col_keys[loop.index0] == 'recurrence' and _rec_sort.get(cell | trim) %} data-sort-value="{{ _rec_sort[cell | trim] }}"{% endif %}>{{ _with_marks(col_keys[loop.index0], cell) }}</td>
     {% endfor %}
     {% else %}
     {% set recurrence_display = row_cells[col_keys.index('recurrence')] %}
@@ -153,7 +168,7 @@
                 'budget-table', inputmode) }}
         {% endif %}
     {% elif field %}
-        {{ cell_display(cell_value, right_align, is_negative,
+        {{ cell_display(_with_marks(col_keys[col_index], cell_value), right_align, is_negative,
             url_for('budget.cell_edit', filename=filename, index=index, field=field),
             'budget-table', is_updated_cell,
             sort_value=_rec_sort.get(cell_value | trim) if field == 'recurrence' else none) }}

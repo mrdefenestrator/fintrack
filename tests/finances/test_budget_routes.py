@@ -280,7 +280,8 @@ def test_group_by_none_is_one_flat_reorderable_body(client, db_engine):
     assert "<thead>" in table
     assert table.count('class="sheet-group sheet-group--flat"') == 1
     assert table.count('id="budget-row-') == len(_ENTRIES)
-    assert 'data-reorder-url="/s/home/budget/reorder?all=1"' in table
+    # (The URL also carries the viewed month, ym — issue #136.)
+    assert 'data-reorder-url="/s/home/budget/reorder?all=1' in table
     order = ",".join(str(i) for i in reversed(range(len(_ENTRIES))))
     assert (
         client.post("/s/home/budget/reorder?all=1", data={"order": order}).status_code

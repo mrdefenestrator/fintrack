@@ -99,6 +99,18 @@ degrades to a warning without it).
   correction.category, merchant_cache.category, 'Uncategorized')`), so the
   Category and Budget columns can't contradict; the Transactions sheet shows
   that category read-only while linked.
+- **Budget history** (#136, DESIGN.md "Budget history"): an entry is planned
+  from `start_month` through `end_month` (NULL = unbounded) and its amount/
+  schedule are versioned (`budget_entry_versions`; the entry's own schedule
+  columns are the base version). Reads take an `as_of` month; the recurrence
+  engine resolves each month's version itself, so per-month readers need
+  nothing extra, and one-month listings filter with `entry_active`. Edits made
+  while viewing a month apply from it until the next change
+  (`update_budget_entry(effective=…)`); description/category/account apply to
+  every month. Stop a line with `end_budget_entry`, not delete (delete loses
+  its history and unlinks its transactions). The Budget sheet shows one month
+  (`?ym=`); its URLs carry `ym` via a `url_defaults` hook — keep new sheet
+  endpoints in `_SHEET_ENDPOINTS`.
 - Recurring charges (`fintrack/budget/recurring.py`, DESIGN.md "Recurring
   charges") detect steady merchant series locally and match them to the
   budget; findings show on Budget vs Actual's Recurring view

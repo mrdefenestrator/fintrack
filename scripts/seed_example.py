@@ -30,7 +30,12 @@ from decimal import Decimal
 from fintrack.accounts.balance_history import latest_point, record_balance
 from fintrack.accounts.repository import add_account, get_accounts
 from fintrack.budget.reconcile import link_transaction
-from fintrack.budget.repository import add_budget_entry, get_budget_entries
+from fintrack.budget.repository import (
+    add_budget_entry,
+    end_budget_entry,
+    get_budget_entries,
+    update_budget_entry_by_id,
+)
 from fintrack.core.db import get_engine, init_db
 from fintrack.ledger.repository.imports import (
     confirm_import,
@@ -564,6 +569,9 @@ def seed_dense(conn) -> bool:
         entry["amount"] = Decimal(entry["amount"])
         add_budget_entry(conn, sid, entry)
 
+    # --- Budget history (issue #136) ---------------------------------------
+    _seed_dense_budget_history(conn, sid, today)
+
     # --- Older balance points (issue #106) ----------------------------------
     _seed_dense_history(conn, sid, today)
     # --- A year of month-end history for the Projections timeline (#98) -----
@@ -1031,6 +1039,69 @@ def _seed_dense_timeline(conn, sid, today: date) -> None:
                 balance=(now * factor).quantize(Decimal("0.01")),
                 as_of=when,
             )
+
+
+def _months_ago(today: date, n: int) -> date:
+    """The 1st of the month ``n`` months before today's (negative: ahead)."""
+    i = today.year * 12 + today.month - 1 - n
+    return date(i // 12, i % 12 + 1, 1)
+
+
+def _seed_dense_budget_history(conn, sid, today: date) -> None:
+    """Give the plan some history to page through (issue #136). Each case is on
+    a line no transaction links to, so the transaction-backed demos (Netflix's
+    price drift in Budget vs Actual) are unchanged:
+
+    - past change: the gym raised its fee three months ago ($45 -> $49);
+    - ended line: a meal kit was planned for a few months, then cancelled
+      (ends two months ago);
+    - scheduled change: a salary raise two months from now ($5,200 -> $5,500),
+      which Projections picks up in its month;
+    - future start: pet insurance joins the plan next month.
+    """
+    by_desc = {e["description"]: e["_db_id"] for e in get_budget_entries(conn, sid)}
+    update_budget_entry_by_id(
+        conn,
+        sid,
+        by_desc["Gym Membership"],
+        {"amount": Decimal("49.00")},
+        effective=_months_ago(today, 3),
+    )
+    update_budget_entry_by_id(
+        conn,
+        sid,
+        by_desc["Salary"],
+        {"amount": Decimal("5500.00")},
+        effective=_months_ago(today, -2),
+    )
+    add_budget_entry(
+        conn,
+        sid,
+        {
+            "kind": "expense",
+            "description": "Meal Kit",
+            "amount": Decimal("60.00"),
+            "recurrence": "monthly",
+            "dayOfMonth": 20,
+            "category": "Groceries",
+            "startMonth": _months_ago(today, 7).isoformat(),
+        },
+    )
+    last = len(get_budget_entries(conn, sid)) - 1  # the entry just added
+    end_budget_entry(conn, sid, last, _months_ago(today, 2))
+    add_budget_entry(
+        conn,
+        sid,
+        {
+            "kind": "expense",
+            "description": "Pet Insurance",
+            "amount": Decimal("38.00"),
+            "recurrence": "monthly",
+            "dayOfMonth": 6,
+            "category": "Healthcare",
+            "startMonth": _months_ago(today, -1).isoformat(),
+        },
+    )
 
 
 def _link_dense_budget(conn, sid) -> None:

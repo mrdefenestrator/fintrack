@@ -11,6 +11,16 @@ exactly 2 pay periods per month (26/year), so months with a third payday are
 understated and the annual total is slightly conservative. Weekly entries
 (issue #100) use the exact average instead, 52/12 occurrences per month, and
 prorate the current month by days remaining.
+
+Budget history (issue #136): an entry is in the plan only from its
+``startMonth`` through its ``endMonth`` (ISO dates, the 1st of a month; either
+may be absent = unbounded), and its amount/schedule may change over time —
+``_versions`` lists each version with the month it took effect (``from``; the
+base version's is None). The per-month functions here resolve the version in
+effect for the month they're asked about (``entry_for_month``), so a
+multi-month caller (projections, cash flow, Budget vs Actual) reads each
+month's own plan. An entry's flat fields are the version in effect for the
+month the repository loaded it for; ``amount_annual`` reads those.
 """
 
 import calendar
@@ -67,12 +77,81 @@ def semiannual_other_month(month: int) -> int:
     return (month + 5) % 12 + 1
 
 
+# The fields a budget entry version carries (issue #136); everything else
+# (kind, description, category, auto account) applies to every month.
+VERSIONED_FIELDS = (
+    "amount",
+    "recurrence",
+    "date",
+    "dayOfMonth",
+    "month",
+    "dayOfYear",
+    "continuous",
+)
+
+
+def as_month(value: Any) -> date | None:
+    """The 1st of the month of a date or ISO date string (None stays None)."""
+    if value is None or value == "":
+        return None
+    if isinstance(value, str):
+        value = date.fromisoformat(value[:10])
+    return value.replace(day=1)
+
+
+def entry_active(entry: dict[str, Any], year: int, month: int) -> bool:
+    """Whether the entry is in the plan for this month (between its start and
+    end months, both inclusive; an absent bound is unbounded)."""
+    key = date(year, month, 1)
+    start = as_month(entry.get("startMonth"))
+    end = as_month(entry.get("endMonth"))
+    return (start is None or start <= key) and (end is None or key <= end)
+
+
+def version_in_effect(entry: dict[str, Any], year: int, month: int) -> dict[str, Any]:
+    """The entry's versioned fields as of this month: the latest version that
+    took effect on or before it (the base version before the first change).
+    An entry without ``_versions`` is its own only version."""
+    versions = entry.get("_versions")
+    if not versions:
+        return {f: entry.get(f) for f in VERSIONED_FIELDS}
+    key = date(year, month, 1)
+    chosen = versions[0]
+    for v in versions[1:]:
+        if as_month(v["from"]) <= key:
+            chosen = v
+        else:
+            break
+    return {f: chosen.get(f) for f in VERSIONED_FIELDS}
+
+
+def entry_for_month(
+    entry: dict[str, Any], year: int, month: int
+) -> dict[str, Any] | None:
+    """The entry as planned for this month, or None when it isn't in the plan
+    then. Returns ``entry`` itself when nothing differs (the common case)."""
+    if not entry_active(entry, year, month):
+        return None
+    if not entry.get("_versions"):
+        return entry
+    fields = version_in_effect(entry, year, month)
+    if all(entry.get(f) == fields[f] for f in VERSIONED_FIELDS):
+        return entry
+    out = {k: v for k, v in entry.items() if k not in VERSIONED_FIELDS}
+    out.update({k: v for k, v in fields.items() if v is not None})
+    return out
+
+
 def budget_entry_in_month(
     entry: dict[str, Any], year: int, month: int, day: int | None = None
 ) -> Decimal:
     """Amount of this income/expense entry that falls in the given month (0 or full amount).
     For continuous monthly entries, day is used to prorate by proportion of month remaining.
+    The month's own version applies; an entry not in that month's plan is 0.
     """
+    entry = entry_for_month(entry, year, month)
+    if entry is None:
+        return _ZERO
     rec = entry.get("recurrence", "")
     amount = money(entry.get("amount"))
     if rec == "monthly":
@@ -140,7 +219,11 @@ def subtotal_remainder_of_month(
     """Expected amount for the remainder of the month for this entry (non-negative).
     Used for the income/expenses table Subtotal column. See DESIGN.md for rules.
     day=0 means start of month (full month remaining).
+    The month's own version applies; an entry not in that month's plan is 0.
     """
+    entry = entry_for_month(entry, year, month)
+    if entry is None:
+        return _ZERO
     rec = entry.get("recurrence", "")
     amount = money(entry.get("amount"))
     day_effective = max(

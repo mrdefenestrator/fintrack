@@ -54,7 +54,8 @@
 {% set _reset = "%s?year=%s&month=%s%s" | format(_url, year, month, '&edit=1' if edit_mode else '') %}
 
 {# Pager row (nav.pager_row, as on every page with a pager): the month pager,
-   then that month's missing / drift / suggested-link badges. The By month /
+   then that month's missing / drift / suggested-link badges and a link to
+   the Budget sheet's plan for the month. The By month /
    Recurring toggle leads the filter bar. #}
 {% call nav.pager_row() %}
     {{ nav.pager(
@@ -79,6 +80,10 @@
         {% endif %}
     </div>
     {% endif %}
+    {# A wrong amount is noticed here; the plan for this month is one click
+       away (issue #136). #}
+    <a data-actuals-plan-link href="{{ url_for('budget.budget_view', filename=filename, ym='%04d-%02d' | format(year, month), edit=1) }}"
+       class="text-xs text-blue-600 dark:text-blue-400 hover:underline">Edit the plan for {{ month_label }}</a>
 {% endcall %}
 
 {% set _lead %}{{ views.view_toggle('month', filename, edit_mode) }}{% endset %}

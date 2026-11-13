@@ -1,13 +1,14 @@
 """Net-worth command groups: status, accounts, budget, income/expenses,
 assets/debts, funding (ported from the finances argparse CLI)."""
 
-from datetime import datetime
+from datetime import date, datetime
 
 import click
 
 from fintrack.accounts import repository as repo_accounts
 from fintrack.accounts.balance_history import get_balance_history
 from fintrack.budget import repository as repo_budget
+from fintrack.budget.recurrence import as_month, entry_active
 from fintrack.cli.helpers import (
     drop_separator_rows,
     echo_table,
@@ -25,6 +26,7 @@ from fintrack.core.formatting import (
     fmt_change_whole,
     fmt_money,
     fmt_money_whole,
+    fmt_recurrence_display,
 )
 from fintrack.core.loader import load_finances_from_db
 from fintrack.core.tables import (
@@ -33,6 +35,7 @@ from fintrack.core.tables import (
     _build_budget_table,
     _build_funding_table,
     _build_net_worth_table,
+    _expected_display,
 )
 from fintrack.core.types import ASSET_TYPE_VALUES
 from fintrack.insights.overview import build_overview
@@ -82,9 +85,60 @@ _ASSETS_COLALIGN = (
 _ASSET_ONLY_TYPES = list(ASSET_TYPE_VALUES)
 
 
-def _load(cli, conn):
+def _load(cli, conn, budget_as_of: date | None = None):
     snapshot_id = cli.snapshot_id(conn)
-    return snapshot_id, load_finances_from_db(conn, snapshot_id)
+    return snapshot_id, load_finances_from_db(
+        conn, snapshot_id, budget_as_of=budget_as_of
+    )
+
+
+def _parse_month(value: str | None, param: str) -> date | None:
+    """``YYYY-MM`` -> the 1st of that month (None when not given)."""
+    if value is None:
+        return None
+    try:
+        year, month = (int(p) for p in value.split("-"))
+        return date(year, month, 1)
+    except ValueError:
+        raise click.BadParameter(f"expected YYYY-MM, got {value!r}", param_hint=param)
+
+
+_MONTH_OPTION = click.option(
+    "--month",
+    "plan_month",
+    default=None,
+    metavar="YYYY-MM",
+    help="Show the plan for this month (default: this month).",
+)
+
+
+def _planned_budget_table(
+    entries: list,
+    indices: list[int],
+    month: date,
+    accounts: list,
+    show_id: bool,
+):
+    """The budget table for ``month``'s plan: only entries in it, each as
+    planned then; Remaining is today's for this month, the full month for a
+    later one, and "-" for a past one."""
+    keep = [
+        (i, e)
+        for i, e in zip(indices, entries)
+        if entry_active(e, month.year, month.month)
+    ]
+    today = datetime.now().astimezone().date()
+    current = today.replace(day=1)
+    return _build_budget_table(
+        [e for _, e in keep],
+        month.year,
+        month.month,
+        today.day if month == current else 0,
+        account_display_by_id=_account_display_by_id(accounts),
+        show_index=show_id,
+        indices=[i for i, _ in keep],
+        past=month < current,
+    )
 
 
 def _echo_debt_cards(d) -> None:
@@ -448,6 +502,7 @@ def accounts_delete(cli, account_id, dry_run):
 @click.option("-x", "--exclude-category", "exclude_categories", multiple=True)
 @click.option("--include-recurrence", "include_recurrence", multiple=True)
 @click.option("--exclude-recurrence", "exclude_recurrence", multiple=True)
+@_MONTH_OPTION
 @sort_options
 @pass_cli
 def budget(
@@ -457,13 +512,16 @@ def budget(
     exclude_categories,
     include_recurrence,
     exclude_recurrence,
+    plan_month,
     sort_key,
     sort_dir,
     show_id,
 ):
-    """Income and expenses together, with subtotals for this month."""
+    """Income and expenses together, with subtotals for this month (or the
+    plan for --month: only entries in it, each as planned then)."""
+    month = _parse_month(plan_month, "--month") or repo_budget.this_month()
     with cli.connect() as conn:
-        _, data = _load(cli, conn)
+        _, data = _load(cli, conn, budget_as_of=month)
     entries = apply_budget_filters(
         data.get("budget") or [],
         include_kinds=list(include_kinds) or None,
@@ -476,14 +534,12 @@ def budget(
         return
     if sort_key:
         entries = sort_items(entries, sort_key, sort_dir == "desc")
-    today = datetime.now().astimezone().date()
-    headers, rows = _build_budget_table(
+    headers, rows = _planned_budget_table(
         entries,
-        today.year,
-        today.month,
-        today.day,
-        account_display_by_id=_account_display_by_id(data.get("accounts") or []),
-        show_index=show_id,
+        list(range(len(entries))),
+        month,
+        data.get("accounts") or [],
+        show_id,
     )
     echo_table(rows, headers, _BUDGET_COLALIGN, show_id)
 
@@ -558,25 +614,29 @@ def make_budget_kind_group(kind: str, label: str) -> click.Group:
         invoke_without_command=True,
         help=f"{label.capitalize()} budget entries; bare invocation lists them.",
     )
+    @_MONTH_OPTION
     @sort_options
     @click.pass_context
-    def group(ctx, sort_key, sort_dir, show_id):
+    def group(ctx, plan_month, sort_key, sort_dir, show_id):
         if ctx.invoked_subcommand is not None:
             return
         cli = ctx.obj
+        month = _parse_month(plan_month, "--month") or repo_budget.this_month()
         with cli.connect() as conn:
-            _, data = _load(cli, conn)
-        entries = _kind_entries(data.get("budget") or [], kind)
+            _, data = _load(cli, conn, budget_as_of=month)
+        # Indices stay each entry's position among all of this kind, so they
+        # address the same entry in edit/delete/end whatever month is shown.
+        indexed = list(enumerate(_kind_entries(data.get("budget") or [], kind)))
         if sort_key:
-            entries = sort_items(entries, sort_key, sort_dir == "desc")
-        today = datetime.now().astimezone().date()
-        headers, rows = _build_budget_table(
-            entries,
-            today.year,
-            today.month,
-            today.day,
-            account_display_by_id=_account_display_by_id(data.get("accounts") or []),
-            show_index=show_id,
+            order = sort_items([e for _, e in indexed], sort_key, sort_dir == "desc")
+            position = {id(e): i for i, e in indexed}
+            indexed = [(position[id(e)], e) for e in order]
+        headers, rows = _planned_budget_table(
+            [e for _, e in indexed],
+            [i for i, _ in indexed],
+            month,
+            data.get("accounts") or [],
+            show_id,
         )
         rows = drop_separator_rows(rows)
         if not rows:
@@ -585,10 +645,19 @@ def make_budget_kind_group(kind: str, label: str) -> click.Group:
 
     @group.command("add")
     @_budget_entry_options(kind, adding=True)
+    @click.option(
+        "--from",
+        "from_month",
+        default=None,
+        metavar="YYYY-MM",
+        help="First month in the plan (default: this month).",
+    )
     @pass_cli
-    def add(cli, **kwargs):
+    def add(cli, from_month, **kwargs):
         entry = {"kind": kind}
         entry.update(_budget_fields(kwargs))
+        start = _parse_month(from_month, "--from") or repo_budget.this_month()
+        entry["startMonth"] = start.isoformat()
         with cli.connect() as conn:
             snapshot_id = cli.snapshot_id(conn)
             try:
@@ -600,21 +669,121 @@ def make_budget_kind_group(kind: str, label: str) -> click.Group:
     @group.command("edit")
     @click.argument("index", type=int)
     @_budget_entry_options(kind, adding=False)
+    @click.option(
+        "--from",
+        "from_month",
+        default=None,
+        metavar="YYYY-MM",
+        help="Amount/schedule changes apply from this month until the entry's "
+        "next change (default: this month); earlier months keep their plan.",
+    )
+    @click.option(
+        "--version",
+        "version",
+        default=None,
+        metavar="base|YYYY-MM",
+        help="Instead, correct one version in place: the one that took effect "
+        "that month (see `history`), or the first ('base').",
+    )
     @pass_cli
-    def edit(cli, index, **kwargs):
+    def edit(cli, index, from_month, version, **kwargs):
+        """Edit an entry. Description, category and account apply to every
+        month; amount and schedule change from --from on (issue #136)."""
         updates = _budget_fields(kwargs)
         if not updates:
             raise click.ClickException("specify at least one field to update")
+        if from_month and version:
+            raise click.ClickException("use --from or --version, not both")
+        effective = _parse_month(from_month, "--from")
+        version_from = (
+            None if version in (None, "base") else _parse_month(version, "--version")
+        )
         with cli.connect() as conn:
             snapshot_id, data = _load(cli, conn)
             global_idx = _global_index(
                 data.get("budget") or [], kind, index, label.capitalize()
             )
             try:
-                repo_budget.update_budget_entry(conn, snapshot_id, global_idx, updates)
+                if version is not None:
+                    repo_budget.update_budget_version(
+                        conn, snapshot_id, global_idx, version_from, updates
+                    )
+                else:
+                    repo_budget.update_budget_entry(
+                        conn, snapshot_id, global_idx, updates, effective=effective
+                    )
             except ValueError as e:
                 raise click.ClickException(str(e))
         click.echo(f"Updated {label} at index {index}")
+
+    @group.command("end")
+    @click.argument("index", type=int)
+    @click.option(
+        "--after",
+        "after",
+        default=None,
+        metavar="YYYY-MM",
+        help="Last month in the plan (default: this month).",
+    )
+    @click.option("--resume", is_flag=True, help="Undo an end (open-ended again).")
+    @pass_cli
+    def end(cli, index, after, resume):
+        """Stop an entry after a month, keeping its history and links."""
+        last = (
+            None
+            if resume
+            else (_parse_month(after, "--after") or repo_budget.this_month())
+        )
+        with cli.connect() as conn:
+            snapshot_id, data = _load(cli, conn)
+            global_idx = _global_index(
+                data.get("budget") or [], kind, index, label.capitalize()
+            )
+            try:
+                repo_budget.end_budget_entry(conn, snapshot_id, global_idx, last)
+            except ValueError as e:
+                raise click.ClickException(str(e))
+        if last is None:
+            click.echo(f"Resumed {label} at index {index}")
+        else:
+            click.echo(f"Ended {label} at index {index} after {last:%b %Y}")
+
+    @group.command("history")
+    @click.argument("index", type=int)
+    @pass_cli
+    def history(cli, index):
+        """An entry's plan over time: when it starts and ends, and each
+        version of its amount and schedule."""
+        with cli.connect() as conn:
+            _, data = _load(cli, conn)
+        entries = _kind_entries(data.get("budget") or [], kind)
+        if index < 0 or index >= len(entries):
+            raise click.ClickException(
+                f"{label.capitalize()} index {index} out of range"
+            )
+        entry = entries[index]
+        start, end_ = entry.get("startMonth"), entry.get("endMonth")
+        click.echo(
+            f"{entry.get('description', '?')}: "
+            f"from {_month_text(start) if start else 'the beginning'}"
+            f" to {_month_text(end_) if end_ else 'open-ended'}"
+        )
+        rows = [
+            [
+                f"{as_month(v['from']):%Y-%m}" if i else "base",
+                _month_text(v["from"]) if v["from"] else "(earliest)",
+                fmt_money(v.get("amount") or 0),
+                fmt_recurrence_display(v.get("recurrence") or "-"),
+                _expected_display({k: x for k, x in v.items() if x is not None}),
+            ]
+            for i, v in enumerate(repo_budget.entry_versions(entry))
+        ]
+        echo_table(
+            rows,
+            ["Version", "From", "Amount", "Recurrence", "When"],
+            ("left", "left", "right", "left", "left"),
+            False,
+        )
 
     @group.command("delete")
     @click.argument("index", type=int)
@@ -639,6 +808,10 @@ def make_budget_kind_group(kind: str, label: str) -> click.Group:
         click.echo(f"Deleted {label} at index {index}")
 
     return group
+
+
+def _month_text(value) -> str:
+    return f"{as_month(value):%b %Y}"
 
 
 income = make_budget_kind_group("income", "income")

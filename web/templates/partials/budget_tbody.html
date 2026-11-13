@@ -34,7 +34,7 @@
     {% set reorder_index = loop.index0 %}
     {% include "partials/budget_row.html" %}
     {% else %}
-    {{ gs.empty_row(span, 'No entries match the current filters.' if filters_active else 'No budget entries yet.') }}
+    {{ gs.empty_row(span, 'No entries match the current filters.' if filters_active else 'No budget entries in ' ~ viewed_label ~ '.') }}
     {% endfor %}
     {% if edit_mode and not (filters_active and not flat.rows) %}
     {% call gs.add_row(span) %}{{ add_buttons(flat.add) }}{% endcall %}
@@ -59,7 +59,7 @@
 {% else %}
 {# No bands: nothing budgeted yet, or every entry filtered out. #}
 <tbody class="sheet-group" data-tone="slate">
-    {{ gs.empty_row(span, 'No entries match the current filters.' if filters_active else 'No budget entries yet.') }}
+    {{ gs.empty_row(span, 'No entries match the current filters.' if filters_active else 'No budget entries in ' ~ viewed_label ~ '.') }}
     {% if edit_mode and not filters_active %}
     {% call gs.add_row(span) %}{{ add_buttons([{'kind': 'expense'}]) }}{% endcall %}
     {% endif %}

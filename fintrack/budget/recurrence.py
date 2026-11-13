@@ -18,7 +18,7 @@ may be absent = unbounded), and its amount/schedule may change over time —
 ``_versions`` lists each version with the month it took effect (``from``; the
 base version's is None). The per-month functions here resolve the version in
 effect for the month they're asked about (``entry_for_month``), so a
-multi-month caller (projections, cash flow, Budget vs Actual) reads each
+multi-month caller (projections, cash flow, the Budget sheet's actuals) reads each
 month's own plan. An entry's flat fields are the version in effect for the
 month the repository loaded it for; ``amount_annual`` reads those.
 """

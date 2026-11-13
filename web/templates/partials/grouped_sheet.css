@@ -1,7 +1,7 @@
 /* Grouped spreadsheet sheets (Holdings, Budget, Projections): one <table class="grouped-sheet">
    split into bands, each its own <tbody class="sheet-group" data-tone="…">.
    Banding is optional: a flat sheet (Transactions, Merchants, Categories,
-   Budget vs Actual) has its column header in a <thead> and one untoned
+   Budget's Recurring view) has its column header in a <thead> and one untoned
    <tbody class="sheet-group sheet-group--flat">.
    Markup: templates/partials/grouped_sheet.html. Sorting: js/group-sort.js.
 

@@ -1,4 +1,4 @@
-"""Budget blueprint - the grouped Budget sheet, Budget vs Actual, and CRUD.
+"""Budget blueprint - the grouped Budget sheet, its Recurring view, and CRUD.
 
 The Budget sheet is a grouped sheet (see grouped_sheet.py), like Holdings: ONE
 table split into one band per **category**, in the category taxonomy's order
@@ -40,6 +40,7 @@ from flask import (
     abort,
     current_app,
     g,
+    redirect,
     render_template,
     request,
     url_for,
@@ -63,10 +64,8 @@ from .crud import (
 )
 from .grouped_sheet import (
     NEUTRAL_TONE,
-    Band,
     GroupBy,
     band_key,
-    category_bands,
     category_order,
     category_tones,
     flat_sheet,
@@ -116,35 +115,8 @@ _TOOLTIPS = {
 _COLUMN_META = group_columns(_COLS, _TOOLTIPS)
 _NCOLS = len(_COLS)
 
-# The Budget vs Actual sheet (read-only, unbanded); rows map cells by key
-# (partials/budget_actual_content.html).
-ACTUAL_SHEET = flat_sheet(
-    "actual",
-    [
-        ("entry", "Entry", False, 1),
-        ("category", "Category", False, 1),
-        ("expected", "Expected", True, 1),
-        ("actual", "Actual", True, 1),
-        ("delta", "Delta", True, 1),
-        ("count", "N", True, 1),
-        ("status", "Status", False, 1),
-        ("drift", "Drift", True, 1),
-        ("last_seen", "Last seen", False, 1),
-    ],
-    {
-        "entry": "Budget entry",
-        "category": "Budget category",
-        "expected": "Scheduled amount this month (income +, expenses −)",
-        "actual": "Realized from linked transactions, net of linked refunds/clawbacks (or the category total for a variable line); income +, expenses −",
-        "delta": "Actual minus expected: + is better than budget (less spent or more earned)",
-        "count": "Number of linked transactions (refunds/clawbacks excluded)",
-        "status": "Matched / over / under / on pace / missing / upcoming / not linked. Mid-month, a variable line is judged against its pace (expected × share of the month gone)",
-        "drift": "Linked charge vs budgeted amount (price drift)",
-        "last_seen": "Date of the most recent linked transaction (any month)",
-    },
-)
-# Budget vs Actual's Recurring view (issue #100, read-only apart from the
-# edit-mode actions): one row per recurring merchant series.
+# Budget's Recurring view (issues #100, #143; ``?view=recurring``, read-only
+# apart from the edit-mode actions): one row per recurring merchant series.
 RECURRING_SHEET = flat_sheet(
     "recurring",
     [
@@ -660,6 +632,8 @@ def _month_urls(filename: str, viewed: date, current: date) -> dict:
 @budget_bp.route("/<filename>/budget")
 def budget_view(filename: str):
     snapshot_id = validate_snapshot(filename)
+    if request.args.get("view") == "recurring":
+        return _render_recurring(filename, snapshot_id)
     edit_mode = request.args.get("edit") == "1"
     viewed = _viewed_month()
     ctx = get_common_context(snapshot_id, filename, edit_mode, budget_as_of=viewed)
@@ -716,6 +690,13 @@ def budget_view(filename: str):
     ctx["include_statuses"] = include_statuses
     ctx["budget_kinds"] = BUDGET_KINDS
     ctx.update(_month_urls(filename, viewed, current))
+    # The Plan / Recurring toggle (issue #143) keeps the month and edit mode.
+    ym = _ym(viewed) if viewed != current else None
+    edit = 1 if edit_mode else None
+    ctx["plan_url"] = url_for("budget.budget_view", filename=filename, ym=ym, edit=edit)
+    ctx["recurring_url"] = url_for(
+        "budget.budget_view", filename=filename, view="recurring", ym=ym, edit=edit
+    )
     ctx.update(
         _sheet_ctx(
             full_budget,
@@ -761,102 +742,21 @@ def suggestion_dismiss(filename: str):
     return _suggestion_action(filename, reconcile.dismiss_suggestion)
 
 
-# Budget vs Actual "Group by" (issue #137); the first (a flat list) is the
-# default. Category bands follow the taxonomy in their category's color;
-# Status bands follow ACTUAL_STATUSES' order, neutral. Each band heading shows
-# its entry count and Expected / Actual / Delta subtotals.
-ACTUAL_GROUPS = [
-    GroupBy("none", "None"),
-    GroupBy("category", "Category"),
-    GroupBy("status", "Status"),
-]
-
-
-def _actual_bands(shown: list, group: str) -> list[dict] | None:
-    """The bands of `group` over the shown entries (None when ungrouped)."""
-    if group == "none":
-        return None
-    if group == "category":
-        bands = category_bands(
-            shown, lambda a: a.entry.get("category"), _category_names(), "act-cat"
-        )
-    else:
-        bands = [
-            Band(f"act-status-{s}", label, NEUTRAL_TONE, rows)
-            for s, label in ACTUAL_STATUSES.items()
-            if (rows := [a for a in shown if a.status == s])
-        ]
-        # Statuses the filter list doesn't name (none today) close the sheet.
-        known = set(ACTUAL_STATUSES)
-        for s in sorted({a.status for a in shown} - known):
-            rows = [a for a in shown if a.status == s]
-            bands.append(Band(f"act-status-{s}", s, NEUTRAL_TONE, rows))
-
-    def net(rows: list, attr: str) -> Decimal:
-        return sum((getattr(a, f"signed_{attr}") for a in rows), Decimal(0))
-
-    return [
-        {
-            **ACTUAL_SHEET,
-            "key": b.key,
-            "flat": False,
-            "label": b.label,
-            "tone": b.tone,
-            "rows": b.rows,
-            "net_expected": net(b.rows, "expected"),
-            "net_actual": net(b.rows, "actual"),
-            "net_delta": net(b.rows, "actual") - net(b.rows, "expected"),
-        }
-        for b in bands
-    ]
-
-
-def _valid_month(year: int, month: int, default: date) -> date:
-    try:
-        return date(year, month, 1)
-    except ValueError:
-        return default
-
-
 @budget_bp.route("/<filename>/budget/actual")
 def actual_view(filename: str):
-    """Per-entry budget-vs-actual for one month (issue #53), on its own page
-    (issue #73): expected vs realized from linked transactions, with
-    missed/upcoming/drift flags. Month paging (``?year=&month=``, default: now)
-    and htmx partial swaps mirror the Transactions sheet. In edit mode, link
-    suggestions for the month sit under the entry they'd realize, with
-    Apply / Dismiss actions (issue #70)."""
-    return _render_actual(filename, validate_snapshot(filename))
-
-
-def _suggestion_action(filename: str, action):
-    """Run a link-suggestion action, then re-render the page for the month and
-    filters in the query string (the buttons post to the page's own query)."""
-    snapshot_id = validate_snapshot(filename)
-    try:
-        txn_id = int(request.form["transaction_id"])
-        entry_ref = int(request.form["budget_entry_ref"])
-    except (KeyError, ValueError):
-        return "", 422
-    engine = current_app.config["engine"]
-    with engine.connect() as conn:
-        try:
-            action(conn, snapshot_id, txn_id, entry_ref)
-        except ValueError:  # incl. SnapshotMismatch
-            return "", 422
-    return _render_actual(filename, snapshot_id)
-
-
-@budget_bp.route("/<filename>/budget/actual/link", methods=["POST"])
-def actual_link(filename: str):
-    """Apply a link suggestion."""
-    return _suggestion_action(filename, reconcile.link_transaction)
-
-
-@budget_bp.route("/<filename>/budget/actual/dismiss", methods=["POST"])
-def actual_dismiss(filename: str):
-    """Dismiss a link suggestion so it isn't proposed again."""
-    return _suggestion_action(filename, reconcile.dismiss_suggestion)
+    """Budget vs Actual merged into the Budget sheet (issue #143): its old URL
+    redirects there, keeping the query — ``?year=&month=`` becomes ``ym``, and
+    ``view=recurring`` opens the Recurring view."""
+    validate_snapshot(filename)
+    params = [
+        (k, v) for k, v in request.args.items(multi=True) if k not in ("year", "month")
+    ]
+    year = request.args.get("year", type=int)
+    month = request.args.get("month", type=int)
+    if year and month and 1 <= month <= 12:
+        params.append(("ym", f"{year:04d}-{month:02d}"))
+    url = url_for("budget.budget_view", filename=filename)
+    return redirect(f"{url}?{urlencode(params)}" if params else url)
 
 
 def _recurring_action(filename: str, action):
@@ -872,10 +772,10 @@ def _recurring_action(filename: str, action):
             action(conn, snapshot_id, merchant, kind)
         except ValueError:  # NotRecurring, SnapshotMismatch, bad entry_ref
             return "", 422
-    return _render_actual(filename, snapshot_id)
+    return _render_recurring(filename, snapshot_id)
 
 
-@budget_bp.route("/<filename>/budget/actual/recurring/add", methods=["POST"])
+@budget_bp.route("/<filename>/budget/recurring/add", methods=["POST"])
 def recurring_add(filename: str):
     """Add a recurring series to the budget and link its transactions."""
     return _recurring_action(
@@ -883,7 +783,7 @@ def recurring_add(filename: str):
     )
 
 
-@budget_bp.route("/<filename>/budget/actual/recurring/link", methods=["POST"])
+@budget_bp.route("/<filename>/budget/recurring/link", methods=["POST"])
 def recurring_link(filename: str):
     """Link a series to the existing entry that looks like it."""
     try:
@@ -896,16 +796,32 @@ def recurring_link(filename: str):
     )
 
 
-@budget_bp.route("/<filename>/budget/actual/recurring/dismiss", methods=["POST"])
+@budget_bp.route("/<filename>/budget/recurring/dismiss", methods=["POST"])
 def recurring_dismiss(filename: str):
     """Mark a merchant "not recurring"."""
     return _recurring_action(filename, lambda c, s, m, k: recurring.dismiss(c, s, m))
 
 
-def _render_recurring(filename: str, snapshot_id: int, ctx: dict):
-    """Budget vs Actual's Recurring view (``?view=recurring``, issue #100):
-    every recurring merchant series of the last 13 months and how it sits in
-    the budget, with Add to budget / Link / Not recurring in edit mode."""
+def _render_recurring(filename: str, snapshot_id: int):
+    """Budget's Recurring view (``?view=recurring``; issues #100, #143): every
+    recurring merchant series of the last 13 months and how it sits in the
+    budget, with Add to budget / Link / Not recurring in edit mode. The
+    Plan / Recurring toggle leads its filter bar; switching keeps the month
+    (``ym``) and edit mode."""
+    edit_mode = request.args.get("edit") == "1"
+    ctx = get_common_context(snapshot_id, filename, edit_mode)
+    ctx["active_tab"] = "budget"
+    ym = request.args.get("ym") or None
+    ctx["plan_url"] = url_for(
+        "budget.budget_view", filename=filename, ym=ym, edit=1 if edit_mode else None
+    )
+    ctx["recurring_url"] = url_for(
+        "budget.budget_view",
+        filename=filename,
+        view="recurring",
+        ym=ym,
+        edit=1 if edit_mode else None,
+    )
     with current_app.config["engine"].connect() as conn:
         charges = recurring.find_recurring(conn, snapshot_id)
     include_kinds = [k for k in BUDGET_KINDS if k in request.args.getlist("kind")]
@@ -945,104 +861,7 @@ def _render_recurring(filename: str, snapshot_id: int, ctx: dict):
     template = (
         "partials/budget_recurring_content.html"
         if request.headers.get("HX-Request")
-        else "budget_actual.html"
-    )
-    return render_template(template, **ctx)
-
-
-def _render_actual(filename: str, snapshot_id: int):
-    edit_mode = request.args.get("edit") == "1"
-    ctx = get_common_context(snapshot_id, filename, edit_mode)
-    ctx["active_tab"] = "budget_actual"
-    if request.args.get("view") == "recurring":
-        return _render_recurring(filename, snapshot_id, ctx)
-    current = date(ctx["year"], ctx["month"], 1)
-    viewed = _valid_month(
-        request.args.get("year", current.year, type=int),
-        request.args.get("month", current.month, type=int),
-        current,
-    )
-    engine = current_app.config["engine"]
-    with engine.connect() as conn:
-        actuals = reconcile.budget_actuals(
-            conn, snapshot_id, year=viewed.year, month=viewed.month
-        )
-        suggestions = reconcile.suggest_links(
-            conn, snapshot_id, year=viewed.year, month=viewed.month
-        )
-    active = [a for a in actuals if a.status != "inactive"]
-
-    include_kinds = [k for k in BUDGET_KINDS if k in request.args.getlist("kind")]
-    categories = sorted(
-        {a.entry["category"] for a in active if a.entry.get("category")}
-    )
-    include_categories = [
-        c for c in categories if c in request.args.getlist("category")
-    ]
-    include_statuses = [
-        s for s in ACTUAL_STATUSES if s in request.args.getlist("status")
-    ]
-    shown = [
-        a
-        for a in active
-        if (not include_kinds or a.entry.get("kind", "income") in include_kinds)
-        and (not include_categories or a.entry.get("category") in include_categories)
-        and (not include_statuses or a.status in include_statuses)
-    ]
-
-    # Net totals of the signed figures (income +, expenses −): a positive delta
-    # is a surplus against budget, a negative one a shortfall.
-    def _net(attr: str) -> Decimal:
-        return sum((getattr(a, f"signed_{attr}") for a in shown), Decimal(0))
-
-    net_expected, net_actual = _net("expected"), _net("actual")
-
-    # Suggestions grouped under the entry they'd realize, best first
-    # (suggest_links already sorts by score). Only shown entries host them.
-    shown_refs = {a.entry_ref for a in shown}
-    suggestions_by_entry: dict[int, list] = {}
-    for sug in suggestions:
-        if sug.entry_ref in shown_refs:
-            suggestions_by_entry.setdefault(sug.entry_ref, []).append(sug)
-
-    prev = date(viewed.year - (viewed.month == 1), (viewed.month - 2) % 12 + 1, 1)
-    nxt = date(viewed.year + (viewed.month == 12), viewed.month % 12 + 1, 1)
-    group = selected_group(ACTUAL_GROUPS)
-    ctx.update(
-        view="month",
-        budget_actuals=shown,
-        group=group,
-        group_options=ACTUAL_GROUPS,
-        bands=_actual_bands(shown, group),
-        missing_count=sum(a.status == "missing" for a in active),
-        drift_count=sum(bool(a.drift_amount) for a in active),
-        suggestions_by_entry=suggestions_by_entry,
-        suggestion_count=sum(len(v) for v in suggestions_by_entry.values()),
-        self_query=request.query_string.decode(),
-        net_expected=net_expected,
-        net_actual=net_actual,
-        net_delta=net_actual - net_expected,
-        year=viewed.year,
-        month=viewed.month,
-        month_label=f"{viewed:%b %Y}",
-        is_latest=viewed >= current,
-        prev_year=prev.year,
-        prev_month=prev.month,
-        next_year=nxt.year,
-        next_month=nxt.month,
-        latest_year=current.year,
-        latest_month=current.month,
-        budget_kinds=BUDGET_KINDS,
-        actual_categories=categories,
-        actual_statuses=ACTUAL_STATUSES,
-        include_kinds=include_kinds,
-        include_categories=include_categories,
-        include_statuses=include_statuses,
-    )
-    template = (
-        "partials/budget_actual_content.html"
-        if request.headers.get("HX-Request")
-        else "budget_actual.html"
+        else "budget_recurring.html"
     )
     return render_template(template, **ctx)
 

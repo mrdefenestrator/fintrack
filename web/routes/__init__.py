@@ -1,6 +1,6 @@
 """Flask Blueprints for the unified fintrack web app."""
 
-from .budget import ACTUAL_SHEET, RECURRING_SHEET, budget_bp
+from .budget import RECURRING_SHEET, budget_bp
 from .categories import CATEGORIES_SHEET
 from .categories import bp as categories_bp
 from .edit_mode import edit_mode_bp
@@ -23,7 +23,6 @@ FLAT_SHEETS = {
     "transactions": TRANSACTIONS_SHEET,
     "merchants": MERCHANTS_SHEET,
     "categories": CATEGORIES_SHEET,
-    "actual": ACTUAL_SHEET,
     "recurring": RECURRING_SHEET,
 }
 

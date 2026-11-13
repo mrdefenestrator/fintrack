@@ -9,6 +9,7 @@
 {% import "partials/sheet_filter_bar.html" as fb %}
 {% import "partials/pager.html" as nav %}
 {% import "partials/budget_findings.html" as bf %}
+{% import "partials/budget_views.html" as views %}
 {% set kind_opts = [] %}
 {% for k in budget_kinds %}{% set _ = kind_opts.append({'value': k, 'display': k | capitalize, 'checked': k in include_kinds}) %}{% endfor %}
 {% set cat_opts = [] %}
@@ -37,9 +38,10 @@
 <form id="budget-filter-form" method="get" action="{{ url_for('budget.budget_view', filename=filename) }}" class="shrink-0">
     {% if edit_mode %}<input type="hidden" name="edit" value="1">{% endif %}
     {% if _ym %}<input type="hidden" name="ym" value="{{ _ym }}">{% endif %}
+    {% set _lead %}{{ views.view_toggle('plan', plan_url, recurring_url) }}{% endset %}
     {% call fb.filter_bar(active_count=_active_count,
         reset_url=url_for('budget.budget_view', filename=filename, edit=1 if edit_mode else none, ym=_ym, group=group if group != group_options[0].key else none),
-        use_htmx=false) %}
+        use_htmx=false, lead=_lead) %}
         {{ fc.group_by_select(group_options, group, form_id='budget-filter-form') }}
         {{ fc.multi_select('include_kind', 'Kind', kind_opts, form_id='budget-filter-form') }}
         {{ fc.multi_select('include', 'Category', cat_opts, form_id='budget-filter-form') }}

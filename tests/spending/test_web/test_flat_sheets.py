@@ -28,7 +28,6 @@ PAGES = {
     "transactions": "/s/home/transactions?year=2024&month=1",
     "merchants": "/s/home/merchants",
     "categories": "/s/home/categories",
-    "actual": "/s/home/budget/actual?year=2024&month=1",
 }
 
 

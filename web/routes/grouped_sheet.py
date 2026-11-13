@@ -1,6 +1,6 @@
 """Shared plumbing for grouped spreadsheet sheets (Holdings, Budget,
 Projections) and their unbanded form (Transactions, Merchants, Categories,
-Budget vs Actual).
+Budget's Recurring view).
 
 A grouped sheet is ONE table split into bands. Each band is its own
 ``<tbody class="sheet-group">`` with a tinted heading row (label + subtotals),
@@ -200,8 +200,8 @@ def category_bands(
     order (other used categories alphabetically, Uncategorized — no category,
     or the literal "Uncategorized" — last), each in its category's hue and
     Uncategorized neutral. Items keep their order within a band. The shared
-    "Group by: Category" of the ledger sheets (Transactions, Merchants,
-    Budget vs Actual); Budget builds its own (per-band add/reorder)."""
+    "Group by: Category" of the ledger sheets (Transactions, Merchants);
+    Budget builds its own (per-band add/reorder)."""
     by: dict[str, list] = {}
     for item in items:
         by.setdefault(category_of(item) or UNCATEGORIZED, []).append(item)

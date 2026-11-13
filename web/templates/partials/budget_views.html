@@ -1,0 +1,13 @@
+{# Budget's two views (issue #143): the Plan — the month's plan against its
+   actuals, the default — and the Recurring list (?view=recurring, issue
+   #100). The toggle leads each view's filter bar (nav.segmented); full-page
+   links that keep the month (ym) and edit mode. #}
+{% macro view_toggle(view, plan_url, recurring_url) %}
+{% import "partials/pager.html" as nav %}
+{% set _opts = [] %}
+{% for key, label, href in [('plan', 'Plan', plan_url), ('recurring', 'Recurring', recurring_url)] %}
+{% set _ = _opts.append({'url': href, 'label': label, 'active': view == key,
+    'attrs': 'role="tab" aria-selected="%s" data-view="%s"' | format('true' if view == key else 'false', key)}) %}
+{% endfor %}
+{{ nav.segmented(_opts, use_htmx=false, attrs='data-budget-views role="tablist"') }}
+{% endmacro %}

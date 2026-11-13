@@ -9,7 +9,7 @@ Three local checks, each tuned in ``configs/alerts.yaml`` (AlertConfig):
 3. **Running hot** — part-way through the month, a category's spending so far
    is on pace to land well over its budget for the month (or its recent
    monthly average when it has no budget). "On pace" allows for lump sums:
-   like Budget vs Actual, a budgeted category's continuous (variable) lines
+   like the Budget sheet's actuals, a budgeted category's continuous (variable) lines
    are expected to accrue through the month and its fixed lines in full; an
    unbudgeted one is compared with what it had usually spent by the same day.
    Charges that already carry their own alert don't count, so one big charge

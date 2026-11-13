@@ -208,41 +208,44 @@ def test_merchants_reset_keeps_the_grouping(client):
     assert reset.endswith("?group=source")
 
 
-# --- Budget vs Actual --------------------------------------------------------
+# --- Budget: Group by Status (issue #143) ------------------------------------
 
 
-def test_actual_default_is_flat(client):
-    body = _get(client, "/s/home/budget/actual")
-    assert _headings(body) == []
-    assert "data-group-by-label>None<" in body
+def test_budget_group_by_status(client):
+    """Budget vs Actual's Status grouping moved to the Budget sheet: neutral
+    bands in status order, each row keeping its category color, with This
+    month / Actual / Delta subtotals (signed: expenses negative)."""
+    body = _get(client, "/s/home/budget?group=status")
+    assert _headings(body) == ["Matched", "Not linked"]
+    matched = _band(body, "status-matched")
+    assert "Rent" in matched
+    assert 'data-group="status-matched" data-tone="slate"' in body
+    heading = matched.split("</tr>")[0]
+    # This month, Actual, Delta, (Status), Per month.
+    assert re.findall(r">\s*([^<>]*?)\s*</td>", heading)[1:6] == [
+        "($2,000.00)",
+        "($2,000.00)",
+        "$0.00",
+        "",
+        "($2,000.00)",
+    ]
+    assert 'data-tone="blue"' in matched  # Rent keeps Housing's color
+    # Status bands don't drag-reorder (the stored order is per category).
+    edit = _get(client, "/s/home/budget?group=status&edit=1")
+    assert "data-reorder-url" not in edit
 
 
-def test_actual_group_by_category(client):
-    body = _get(client, "/s/home/budget/actual?group=category")
-    assert _headings(body) == ["Housing · 1", "Groceries · 1", "Uncategorized · 1"]
-    housing = _band(body, "act-cat-housing").split("</tr>")[0]
-    # Expected / Actual / Delta subtotals (signed: expenses negative).
-    assert "-$2,000.00" in housing
-    assert 'data-group="act-cat-housing" data-tone="blue"' in body
-
-
-def test_actual_group_by_status(client):
-    body = _get(client, "/s/home/budget/actual?group=status")
-    assert _headings(body) == ["Matched · 1", "Not linked · 2"]
-    assert "Rent" in _band(body, "act-status-matched")
-
-
-@pytest.mark.parametrize("group", ["category", "status"])
+@pytest.mark.parametrize("group", ["category", "status", "none"])
 @pytest.mark.parametrize("edit", ["", "&edit=1"])
-def test_actual_rows_span_the_full_grid(client, group, edit):
+def test_budget_rows_span_the_full_grid(client, group, edit):
     parser = _Spans()
-    parser.feed(_get(client, f"/s/home/budget/actual?group={group}{edit}"))
+    parser.feed(_get(client, f"/s/home/budget?group={group}{edit}"))
     assert len(set(parser.rows)) == 1, parser.rows
 
 
-def test_actual_pager_and_reset_keep_the_grouping(client):
-    body = _get(client, "/s/home/budget/actual?group=status&status=matched")
+def test_budget_pager_and_reset_keep_the_grouping(client):
+    body = _get(client, "/s/home/budget?group=status&status=matched")
     pager = body.split("data-pager>")[1].split("data-filter-bar")[0]
-    assert "group=status" in pager
+    assert "group=status" in pager and "status=matched" in pager
     reset = re.search(r'<a href="([^"]+)"[^>]*>Reset</a>', body).group(1)
     assert "group=status" in reset and "status=matched" not in reset

@@ -1042,15 +1042,23 @@ def _seed_dense_timeline(conn, sid, today: date) -> None:
 
 
 def _months_ago(today: date, n: int) -> date:
+    """The 1st of the month ``n`` months before today's (negative: ahead)."""
     i = today.year * 12 + today.month - 1 - n
     return date(i // 12, i % 12 + 1, 1)
 
 
 def _seed_dense_budget_history(conn, sid, today: date) -> None:
-    """Give the plan some history (issue #136), on unlinked lines so the
-    transaction-backed demos (Netflix's price drift) are unchanged: the gym
-    raised its fee three months ago, and a meal kit was in the plan for a few
-    months before it was cancelled."""
+    """Give the plan some history to page through (issue #136). Each case is on
+    a line no transaction links to, so the transaction-backed demos (Netflix's
+    price drift in Budget vs Actual) are unchanged:
+
+    - past change: the gym raised its fee three months ago ($45 -> $49);
+    - ended line: a meal kit was planned for a few months, then cancelled
+      (ends two months ago);
+    - scheduled change: a salary raise two months from now ($5,200 -> $5,500),
+      which Projections picks up in its month;
+    - future start: pet insurance joins the plan next month.
+    """
     by_desc = {e["description"]: e["_db_id"] for e in get_budget_entries(conn, sid)}
     update_budget_entry_by_id(
         conn,
@@ -1058,6 +1066,13 @@ def _seed_dense_budget_history(conn, sid, today: date) -> None:
         by_desc["Gym Membership"],
         {"amount": Decimal("49.00")},
         effective=_months_ago(today, 3),
+    )
+    update_budget_entry_by_id(
+        conn,
+        sid,
+        by_desc["Salary"],
+        {"amount": Decimal("5500.00")},
+        effective=_months_ago(today, -2),
     )
     add_budget_entry(
         conn,
@@ -1074,6 +1089,19 @@ def _seed_dense_budget_history(conn, sid, today: date) -> None:
     )
     last = len(get_budget_entries(conn, sid)) - 1  # the entry just added
     end_budget_entry(conn, sid, last, _months_ago(today, 2))
+    add_budget_entry(
+        conn,
+        sid,
+        {
+            "kind": "expense",
+            "description": "Pet Insurance",
+            "amount": Decimal("38.00"),
+            "recurrence": "monthly",
+            "dayOfMonth": 6,
+            "category": "Healthcare",
+            "startMonth": _months_ago(today, -1).isoformat(),
+        },
+    )
 
 
 def _link_dense_budget(conn, sid) -> None:

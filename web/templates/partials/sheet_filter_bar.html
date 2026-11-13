@@ -27,13 +27,21 @@
                    rendered first and always visible, phones included. Build it
                    with {% set _lead %}…{% endset %}.
    - filters:      False for a bar with only `lead` (no {% call %} body, no
-                   trigger) — Trends and Projections.
+                   trigger) — Trends.
+   - compact:      for a wide `lead` (Projections): on phones the trigger is
+                   just its icon (+ count badge; the label stays for screen
+                   readers), and Reset moves into the dropped panel, so lead +
+                   trigger still fit one row. sm+ looks the same either way.
 
    One row of compact text-xs controls on every screen: lead, then (sm+) the
    filters inline or (phones) a "Filters" button that drops them into a
    full-width panel below, then Reset at the far right. #}
-{%- macro filter_bar(active_count=0, reset_url='', hx_target='#content', use_htmx=true, label='Filters', icon='M4 6h16M7 12h10M10 18h4', lead=none, filters=true) -%}
+{%- macro filter_bar(active_count=0, reset_url='', hx_target='#content', use_htmx=true, label='Filters', icon='M4 6h16M7 12h10M10 18h4', lead=none, filters=true, compact=false) -%}
 {% set _btn = 'inline-flex items-center gap-1 bg-gray-50 dark:bg-gray-700 px-2 py-1 rounded border border-gray-200 dark:border-gray-600 text-xs text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600' %}
+{%- macro _reset() -%}
+<a href="{{ reset_url }}" {% if use_htmx %}hx-get="{{ reset_url }}" hx-target="{{ hx_target }}" hx-push-url="true"{% endif %}
+    class="ml-auto {{ _btn }} cursor-pointer" data-filter-reset>Reset</a>
+{%- endmacro -%}
 <div class="shrink-0 relative z-20" x-data="{ open: false }" data-filter-bar>
     <div class="flex flex-wrap items-center gap-1.5 p-2 bg-white dark:bg-gray-800 rounded-t-lg border border-gray-300 dark:border-gray-600 text-sm text-gray-600 dark:text-gray-300">
         {% if lead %}<div class="flex items-center gap-1.5" data-bar-lead>{{ lead }}</div>{% endif %}
@@ -44,7 +52,7 @@
             <svg class="w-3.5 h-3.5 shrink-0 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="{{ icon }}" />
             </svg>
-            {{ label }}
+            {% if compact %}<span class="sr-only">{{ label }}</span>{% else %}{{ label }}{% endif %}
             {% if active_count %}<span data-filter-count class="bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 font-medium rounded-full px-1.5 tabular-nums">{{ active_count }}</span>{% endif %}
             <svg class="w-3.5 h-3.5 shrink-0 transition-transform duration-150 text-gray-400 dark:text-gray-500"
                 :class="{ 'rotate-180': open }" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -61,11 +69,11 @@
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="{{ icon }}" />
             </svg>
             {{ caller() }}
+            {% if compact and reset_url %}{{ _reset() }}{% endif %}
         </div>
         {% endif %}
-        {% if reset_url %}
-        <a href="{{ reset_url }}" {% if use_htmx %}hx-get="{{ reset_url }}" hx-target="{{ hx_target }}" hx-push-url="true"{% endif %}
-            class="ml-auto {{ _btn }} cursor-pointer">Reset</a>
+        {% if reset_url and not (compact and filters) %}
+        {{ _reset() }}
         {% endif %}
     </div>
 </div>

@@ -214,12 +214,274 @@ def test_breakdown_uses_month_keys_and_ignores_past_months(client):
 
 
 def test_view_controls_lead_the_filter_bar(client):
-    # Window size, Balances / Changes and Estimate lead the grid's filter bar;
-    # the pager sits on its own row above it.
+    # Window size and Balances / Changes lead the grid's filter bar; Estimate
+    # opens its panel (with the filters, #144). The pager sits on its own row
+    # above it.
     body = _get(client)
     assert body.index("data-pager-row") < body.index("data-filter-bar")
-    lead = body.split("data-bar-lead")[1].split("data-sheet-scroll")[0]
-    for hook in ("data-window-size", "data-view-toggle", "data-estimate-toggle"):
+    lead = body.split("data-bar-lead")[1].split("data-filter-toggle")[0]
+    for hook in ("data-window-size", "data-view-toggle"):
         assert hook in lead
-    assert "estimate=1" in lead
     assert "data-pager" not in lead
+    panel = body.split("data-filter-panel")[1].split("data-sheet-scroll")[0]
+    assert "data-estimate-toggle" in panel
+    assert "estimate=1" in panel
+    # Compact bar: Reset sits in the panel, and the phone trigger is just its
+    # icon (label for screen readers).
+    assert "data-filter-reset" in panel
+    toggle = body.split("data-filter-toggle")[1].split("</button>")[0]
+    assert '<span class="sr-only">Filters</span>' in toggle
+
+
+# --- Filters and Group by (#144) ---------------------------------------------
+
+
+@pytest.fixture()
+def wide_client():
+    """Every holding group, two institutions plus none, and an Unassigned flow."""
+    from fintrack.networth.repository import add_asset_entry
+    from web.app import create_app
+
+    engine = create_engine("sqlite:///:memory:", future=True)
+    init_db(engine)
+    with engine.connect() as conn:
+        sid = create_snapshot(conn, "home")
+        for acct in (
+            {"name": "Checking", "type": "checking", "institution": "Chase"},
+            {"name": "Savings", "type": "savings", "institution": "Ally"},
+            {
+                "name": "Visa",
+                "type": "credit_card",
+                "institution": "Chase",
+                "limit": 1000,
+                "balance": -400,
+            },
+        ):
+            add_account(conn, sid, {"balance": 1000, **acct})
+        add_asset_entry(
+            conn,
+            sid,
+            {
+                "kind": "asset",
+                "type": "brokerage",
+                "name": "Index Fund",
+                "institution": "Ally",
+                "value": 5000,
+            },
+        )
+        add_asset_entry(
+            conn,
+            sid,
+            {"kind": "debt", "type": "loan", "name": "Car Loan", "balance": 8000},
+        )
+        add_budget_entry(
+            conn,
+            sid,
+            {
+                "kind": "expense",
+                "description": "Gym",
+                "amount": 50,
+                "recurrence": "monthly",
+                "dayOfMonth": 5,
+            },
+        )
+        conn.commit()
+
+    app = create_app(db_path=":memory:")
+    app.config["TESTING"] = True
+    app.config["engine"] = engine
+    with app.test_client() as c:
+        yield c
+
+
+def _bands(body):
+    return re.findall(r'<tbody class="sheet-group" data-group="([\w-]+)"', body)
+
+
+def _names(body):
+    """Holding names in the grid's data rows, in order."""
+    table = body.split('id="projections-table"')[1].split("total-row")[0]
+    return re.findall(
+        r'<tr class="sheet-group-row[^"]*"[^>]*>\s*<td[^>]*>([^<]+)</td>', table
+    )
+
+
+def test_filter_bar_offers_group_by_and_holding_filters(wide_client):
+    body = _get(wide_client)
+    bar = body.split("data-filter-bar")[1].split("data-sheet-scroll")[0]
+    assert "data-group-by" in bar
+    assert "Holding group" in bar
+    for name in ('name="type"', 'name="balance"', 'name="institution"'):
+        assert name in bar
+    # The view toggles still lead the bar.
+    assert "data-bar-lead" in bar and "data-window-size" in bar
+    assert bar.index("data-bar-lead") < bar.index("data-group-by")
+    # Only the types and institutions present are offered.
+    assert 'value="brokerage"' in bar and 'value="vehicle"' not in bar
+    assert 'value="Ally"' in bar and 'value="Chase"' in bar
+
+
+def test_default_grouping_is_the_holdings_bands(wide_client):
+    assert _bands(_get(wide_client)) == [
+        "cash",
+        "credit",
+        "loan",
+        "asset",
+        "unassigned",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("query", "names"),
+    [
+        ("?type=savings&type=brokerage", ["Ally Savings", "Ally Index Fund"]),
+        ("?balance=liability", ["Chase Visa", "Car Loan"]),
+        ("?institution=Chase", ["Chase Checking", "Chase Visa"]),
+        ("?institution=Ally&balance=asset", ["Ally Savings", "Ally Index Fund"]),
+    ],
+)
+def test_filters_narrow_the_rows_and_hide_unassigned(wide_client, query, names):
+    body = _get(wide_client, query)
+    assert sorted(_names(body)) == sorted(names)
+    assert "unassigned" not in _bands(body)
+    assert "(no account)" not in body
+    # The footer stays snapshot-wide.
+    assert "Liquid total" in body and "Net worth" in body
+    # Reset clears the filters.
+    assert "Reset" in body
+
+
+def test_unknown_filter_values_are_ignored(wide_client):
+    body = _get(wide_client, "?type=vehicle&institution=Nowhere&balance=x")
+    assert _bands(body) == ["cash", "credit", "loan", "asset", "unassigned"]
+
+
+def test_band_subtotals_follow_the_filter(wide_client):
+    body = _get(wide_client, "?type=checking")
+    heading = body.split('<tr class="sheet-group-heading">')[1].split("</tr>")[0]
+    assert "1,000" in heading
+    assert "2,000" not in heading
+
+
+def test_filters_that_match_nothing_show_a_message(wide_client):
+    body = _get(wide_client, "?type=checking&balance=liability")
+    assert _bands(body) == []
+    assert "No holdings match these filters." in body
+    parser = _RowSpans()
+    parser.feed(body)
+    assert len(set(parser.rows)) == 1, parser.rows
+
+
+@pytest.mark.parametrize(
+    ("group", "bands"),
+    [
+        (
+            "tier",
+            ["tier-liquid", "tier-semi-liquid", "tier-illiquid", "unassigned"],
+        ),
+        (
+            "institution",
+            ["inst-ally", "inst-chase", "inst-x", "unassigned"],
+        ),
+        (
+            "type",
+            [
+                "type-checking",
+                "type-savings",
+                "type-credit-card",
+                "type-loan",
+                "type-brokerage",
+                "unassigned",
+            ],
+        ),
+    ],
+)
+def test_group_by_rebands_the_rows(wide_client, group, bands):
+    body = _get(wide_client, f"?group={group}")
+    assert _bands(body) == bands
+    # Five holdings and the (no account) row.
+    assert len(_names(body)) == 6
+
+
+def test_group_by_institution_labels_the_blank_band(wide_client):
+    body = _get(wide_client, "?group=institution")
+    assert "(no institution)" in body
+
+
+def test_group_by_tier_puts_cards_with_cash(wide_client):
+    body = _get(wide_client, "?group=tier")
+    liquid = body.split('data-group="tier-liquid"')[1].split("</tbody>")[0]
+    assert {"Chase Checking", "Ally Savings", "Chase Visa"} <= set(
+        _names('id="projections-table"' + liquid)
+    )
+
+
+def test_group_by_none_is_one_flat_body(wide_client):
+    body = _get(wide_client, "?group=none")
+    assert "sheet-group--flat" in body
+    table = body.split('id="projections-table"')[1]
+    assert 'class="sheet-group-heading"' not in table
+    # The pinned column header still carries the month links.
+    thead = table.split("<thead>")[1].split("</thead>")[0]
+    assert thead.count("data-header-link") == 12
+    assert "(no account)" in body
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "?group=none",
+        "?group=tier&view=change",
+        f"?group=institution&from={_PAST}",
+        "?group=type&type=loan",
+    ],
+)
+def test_every_grouping_spans_the_full_grid(wide_client, query):
+    parser = _RowSpans()
+    parser.feed(_get(wide_client, query))
+    assert parser.rows
+    assert len(set(parser.rows)) == 1, parser.rows
+
+
+def test_links_keep_filters_and_grouping(wide_client):
+    body = _get(wide_client, "?group=tier&institution=Chase&type=checking")
+    bar = body.split("data-bar-lead")[1].split("data-sheet-scroll")[0]
+    # Every link but Reset (which clears the filters).
+    links = [
+        href
+        for href, attrs in re.findall(r'href="([^"]+)"([^>]*)>', bar)
+        if "data-filter-reset" not in attrs
+    ]
+    assert len(links) >= 6
+    for link in links:
+        assert "group=tier" in link
+        assert "institution=Chase" in link
+        assert "type=checking" in link
+    pager = body.split("data-proj-window")[1].split("</div>")[0]
+    for link in re.findall(r'href="([^"]+)"', pager):
+        assert "group=tier" in link and "institution=Chase" in link
+    # Month breakdown links in the column header carry them too.
+    header = body.split('<tr class="sheet-group-header')[1].split("</tr>")[0]
+    for link in re.findall(r'href="([^"]+)"', header):
+        assert "group=tier" in link and "institution=Chase" in link
+
+
+def test_filter_form_carries_the_page_state(wide_client):
+    body = _get(wide_client, f"?months=24&view=change&estimate=1&from={_PAST}")
+    form = body.split('id="projections-filter-form"')[1].split("</form>")[0]
+    for name, value in (
+        ("months", "24"),
+        ("view", "change"),
+        ("estimate", "1"),
+        ("from", _PAST),
+    ):
+        assert f'<input type="hidden" name="{name}" value="{value}">' in form
+    # Group and the filters come from the form's own controls, not hidden inputs.
+    assert 'type="hidden" name="group"' not in form
+
+
+def test_reset_keeps_the_grouping(wide_client):
+    body = _get(wide_client, "?group=type&institution=Chase")
+    reset = re.search(r'<a href="([^"]+)"\s+class="ml-auto', body).group(1)
+    assert "group=type" in reset
+    assert "institution" not in reset

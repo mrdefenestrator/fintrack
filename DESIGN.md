@@ -888,8 +888,8 @@ sheet reuses them rather than copying Holdings:
   `remap_group_order()` maps a band's local drag permutation onto that band's
   own slots in the full stored ordering (other bands' rows stay put).
 
-**Selectable grouping (issue #137).** Budget, Transactions, Merchants, and
-Budget vs Actual let the user pick how a sheet is banded from a **Group by**
+**Selectable grouping (issue #137).** Budget, Transactions, Merchants,
+Budget vs Actual, and Projections (#144) let the user pick how a sheet is banded from a **Group by**
 dropdown in its filter bar (`filter_controls.group_by_select`): a radio list named
 `group`, so the choice lives in `?group=` and rides along with the page's other
 controls, its pager, and Reset (it's a view, not a filter, so it adds no chip and
@@ -936,6 +936,15 @@ footer still totals every row.
   Actual / Delta subtotaled per band. Status bands follow the Status filter's
   order. Link-suggestion actions post to the page's own query, so they keep the
   grouping. The Recurring view has no grouping.
+- **Projections** (#144): Holding group (default — Holdings' four bands and
+  tones) · Liquidity (Liquid / Semi-liquid / Illiquid, by
+  `account_tier`/`asset_tier`, so a symbol-denominated wallet drops a tier) ·
+  Institution (alphabetical, "(no institution)" last in slate) · Type (the
+  `HOLDING_TYPE_OPTIONS` order, "(no type)" last) · None (a flat sheet whose
+  `<thead>` keeps the month-breakdown links). Institution and Type tones cycle
+  `CATEGORY_TONES` by their index in the full list, so a band keeps its hue
+  while filters hide others. Every grouping keeps the per-month band
+  subtotals and the Unassigned band last; it's read-only, so nothing reorders.
 - **Holdings** is deliberately not selectable yet: its bands have different
   trailing columns, so mixing groups in one band needs its own design.
 
@@ -1184,8 +1193,22 @@ drawn per column position with `background-image` from a small `<style>` in
 the template, so they layer over every row's own background and never touch the
 box-shadows sticky rows draw their edges with. The ◀ window ▶ + Now pager
 and the summary line share the pager row above the grid; the 6 / 12 / 24
-window size (6M / 1Y / 2Y on phones), Balances / Changes and an Estimate
-toggle lead the grid's filter bar (see "Page controls").
+window size (6M / 1Y / 2Y on phones) and Balances / Changes toggles lead the
+grid's filter bar, and the Estimate toggle comes first among its filters (see
+"Page controls").
+
+**Filters (#144).** The grid takes Holdings' Type / Balance / Institution
+multi-selects (`web/routes/holding_filters.py`, shared by both sheets:
+`read_filters()` over rows carrying `type_value` / `balance_side` /
+`institution`; Balance is by group, so cards and loans are liabilities even at
+zero) plus the Group by above. They narrow the rows and so the band subtotals;
+the Liquid / Net worth footer and the summary line stay snapshot-wide, like
+Holdings'. The Unassigned flows have no type, side, or institution, so any
+active filter hides them; a filter that matches nothing leaves one "No
+holdings match these filters." row. The filter form is a GET form whose hidden
+inputs carry the window, size, view, Estimate, and open month, and `proj_url()`
+puts `group` and the filters on every pager, toggle, and breakdown link; Reset
+clears the filters but keeps the grouping.
 
 ## Page controls
 
@@ -1200,12 +1223,15 @@ Every sheet page puts its controls in the same two places, with one look:
 - **Filter bar** (`sheet_filter_bar.filter_bar`), fused to the sheet's top:
   the page's view toggles first as its `lead` (`nav.segmented`: Month / Year /
   All time, By month / Recurring, Trends' period + Highlight, Projections'
-  window + Balances / Changes + Estimate), then the filter dropdowns and
+  window + Balances / Changes), then the filter dropdowns and
   search, then Reset. Everything is the same compact text-xs control. On a
   phone it stays one row — lead toggles (with `short` labels where needed),
   a "Filters" button that drops the dropdowns into a panel below, and Reset —
-  so view toggles never hide behind the Filters button. Trends and
-  Projections have lead-only bars (`filters=false`).
+  so view toggles never hide behind the Filters button. Trends has a
+  lead-only bar (`filters=false`). Projections' lead is too wide for the full
+  trigger, so its bar is `compact`: on a phone the Filters button is just its
+  funnel icon (+ count badge; the label stays for screen readers) and Reset
+  moves into the panel, next to Estimate, Group by, and the filters.
 
 ## CLI
 

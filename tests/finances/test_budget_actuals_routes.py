@@ -119,13 +119,13 @@ def _add_rent(db_engine):
         )
 
 
-def test_budget_sheet_no_longer_embeds_actuals(client, db_engine):
+def test_budget_sheet_shows_actuals(client, db_engine):
+    """Issue #143: the Budget sheet carries the month's Actual / Delta /
+    Status itself."""
     _add_rent(db_engine)
     body = client.get("/s/home/budget").get_data(as_text=True)
-    assert "budget-actual-table" not in body
-    assert "Not linked" not in body
-    # ...but the sidebar links to the dedicated page.
-    assert 'href="/s/home/budget/actual"' in body
+    row = body.split('id="budget-row-0"')[1].split("</tr>")[0]
+    assert 'data-status="unlinked"' in row and "Not linked" in row
 
 
 def test_page_marks_its_sidebar_entry_active(client, db_engine):

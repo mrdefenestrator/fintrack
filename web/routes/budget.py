@@ -83,15 +83,18 @@ BUDGET_KINDS = calculations.BUDGET_KINDS
 RECURRENCE_OPTIONS = calculations.RECURRENCE_OPTIONS
 
 # Column layout (key, header, right_align, span): tables.BUDGET_HEADERS minus
-# Kind (the first cell of budget_entry_row, dropped below).
+# Kind (the first cell of budget_entry_row, dropped below). Actual / Delta /
+# Status are the month's budget-vs-actual (issue #143; reconcile.EntryActual).
 _COLS = [
     ("category", "Category", False, 1),
     ("description", "Description", False, 1),
     ("amount", "Amount", True, 1),
     ("recurrence", "Recurrence", False, 1),
     ("when", "When", True, 1),
-    ("remaining", "Remaining", True, 1),
     ("monthly", "This month", True, 1),
+    ("actual", "Actual", True, 1),
+    ("delta", "Delta", True, 1),
+    ("status", "Status", False, 1),
     ("per_month", "Per month", True, 1),
     ("annual", "Annual", True, 1),
     ("auto_account", "Auto account", False, 1),
@@ -102,8 +105,10 @@ _TOOLTIPS = {
     "amount": "Per-occurrence amount",
     "recurrence": "How often this entry recurs",
     "when": "Day of month or specific date",
-    "remaining": "Prorated amount remaining this month (— for a past month)",
     "monthly": "Scheduled in the month shown (an annual bill due in another month is $0)",
+    "actual": "Realized from linked transactions, net of linked refunds/clawbacks (or the category total for a variable line); income +, expenses −. Opens those transactions. Blank for a future month",
+    "delta": "Actual minus This month: + is better than budget (less spent or more earned)",
+    "status": "Matched / over / under / on pace / missing / upcoming / not linked / not due. Mid-month, a variable line is judged against its pace (expected × share of the month gone)",
     "per_month": "Average per month: the annual amount ÷ 12",
     "annual": "Annualized total",
     "auto_account": "Account for auto-matching transactions",
@@ -181,21 +186,39 @@ RECURRING_EVERY = {
     "annual": "Year",
 }
 
-# The heading label spans Category..When; the Remaining / This month / Per month /
-# Annual subtotals sit under their columns.
+# The heading label spans Category..When; the This month / Actual / Delta /
+# Per month / Annual subtotals sit under their columns (a row's figures, in
+# order, go in these columns; Status, between them, has none).
 _LABEL_SPAN = 5
-_TOTAL_POS = [5, 6, 7, 8]
+_TOTAL_POS = [5, 6, 7, 9, 10]
+_ACTUAL_FIGURES = {1, 2}  # Actual and Delta: "—" for a future month
 _UNCATEGORIZED = "Uncategorized"
 
+# The month's budget-vs-actual statuses (reconcile.EntryActual.status), in
+# display order: the Status filter, its badge labels, and Status bands.
+ACTUAL_STATUSES = {
+    "matched": "Matched",
+    "over": "Over",
+    "under": "Under",
+    "on_pace": "On pace",
+    "missing": "Missing",
+    "upcoming": "Upcoming",
+    "unlinked": "Not linked",
+    "inactive": "Not due",
+}
+# Group by Status: a future month has no actuals, so its entries share a band.
+_NO_ACTUALS = "No actuals yet"
+
 # "Group by" choices (issue #137); the first is the default. Category bands
-# are colored per category and drag-reorderable; Kind and Recurrence bands are
-# neutral (each row keeps its category's color on its rail) and locked, since
-# the stored order is per category. None is a flat sheet: one body, reordered
-# as the whole list.
+# are colored per category and drag-reorderable; Kind, Recurrence and Status
+# bands are neutral (each row keeps its category's color on its rail) and
+# locked, since the stored order is per category. None is a flat sheet: one
+# body, reordered as the whole list.
 BUDGET_GROUPS = [
     GroupBy("category", "Category"),
     GroupBy("kind", "Kind"),
     GroupBy("recurrence", "Recurrence"),
+    GroupBy("status", "Status"),
     GroupBy("none", "None"),
 ]
 # Recurrence bands run from most to least frequent; one-time entries close.
@@ -216,15 +239,18 @@ def _band_key(category: str) -> str:
     return band_key("cat", category) if category else "uncategorized"
 
 
-def _subtotals(rows: list[dict], past: bool) -> list[str]:
-    """Remaining / This month / Per month / Annual sums over `rows`, formatted;
-    a past month has no Remaining ("—")."""
-    return [
-        "—"
-        if past and j == 0
-        else fmt_money(sum((r["figures"][j] for r in rows), Decimal(0)))
-        for j in range(len(_TOTAL_POS))
-    ]
+def _subtotals(rows: list[dict], has_actuals: bool) -> list[str]:
+    """The heading's cells from This month through Annual: each figure's sum
+    over `rows`, formatted, under its column (blank under Status). A future
+    month has no Actual / Delta ("—")."""
+    cells = [""] * (_TOTAL_POS[-1] - _LABEL_SPAN + 1)
+    for j, pos in enumerate(_TOTAL_POS):
+        cells[pos - _LABEL_SPAN] = (
+            "—"
+            if j in _ACTUAL_FIGURES and not has_actuals
+            else fmt_money(sum((r["figures"][j] for r in rows), Decimal(0)))
+        )
+    return cells
 
 
 def _band(
@@ -233,7 +259,7 @@ def _band(
     tone: str,
     rows: list[dict],
     add: list[dict],
-    past: bool,
+    has_actuals: bool,
     **extra,
 ) -> dict:
     """One band: heading label/tone, rows, subtotals, and its add buttons
@@ -243,7 +269,7 @@ def _band(
         "label": label,
         "tone": tone,
         "rows": rows,
-        "totals": _subtotals(rows, past),
+        "totals": _subtotals(rows, has_actuals),
         "add": add,
         "reorder": None,
         **_COLUMN_META,
@@ -259,7 +285,7 @@ def _add_kinds(rows: list[dict], **vals) -> list[dict]:
 
 
 def _group_bands(
-    rows: list[dict], group: str, all_categories: list[str], past: bool
+    rows: list[dict], group: str, all_categories: list[str], has_actuals: bool
 ) -> list:
     """Split the shown rows into the bands of `group` (not ``none``)."""
     if group == "category":
@@ -275,7 +301,7 @@ def _group_bands(
                 tones.get(c, NEUTRAL_TONE),
                 by[c],
                 _add_kinds(by[c], category=c),
-                past,
+                has_actuals,
                 reorder={"category": c},
             )
             for c, key in zip(order, unique_keys(_band_key(c) for c in order))
@@ -288,10 +314,23 @@ def _group_bands(
                 NEUTRAL_TONE,
                 band_rows,
                 [{"kind": k}],
-                past,
+                has_actuals,
             )
             for k in BUDGET_KINDS
             if (band_rows := [r for r in rows if r["kind"] == k])
+        ]
+    if group == "status":
+        return [
+            _band(
+                band_key("status", s or "none"),
+                label,
+                NEUTRAL_TONE,
+                band_rows,
+                _add_kinds(band_rows),
+                has_actuals,
+            )
+            for s, label in [*ACTUAL_STATUSES.items(), (None, _NO_ACTUALS)]
+            if (band_rows := [r for r in rows if r["status"] == s])
         ]
     # recurrence
     used = {r["recurrence"] for r in rows}
@@ -308,13 +347,10 @@ def _group_bands(
                 NEUTRAL_TONE,
                 band_rows,
                 _add_kinds(band_rows, recurrence=rec),
-                past,
+                has_actuals,
             )
         )
     return bands
-
-
-_REMAINING = 5  # Remaining's position in a row's cells (Kind dropped)
 
 
 # The Budget sheet's own request endpoints: their URLs carry the viewed month.
@@ -329,6 +365,8 @@ _SHEET_ENDPOINTS = {
     "budget.delete",
     "budget.end",
     "budget.resume",
+    "budget.suggestion_link",
+    "budget.suggestion_dismiss",
 }
 
 
@@ -427,16 +465,17 @@ def _sheet_ctx(
     filters_active: bool = False,
     viewed: date | None = None,
     group: str = "category",
+    *,
+    month: dict,
 ) -> dict:
     """Template context for the budget table: the bands of `group` (or, for
     ``none``, one flat body) over the `shown` entries (indices into `budget`),
     the Net footer, and the column metadata. Figures are for the ``viewed``
-    month (default: this month): Remaining is the rest of this month, the full
-    month for a later one, and "—" for a past one."""
-    current = date(ctx["year"], ctx["month"], 1)
-    viewed = viewed or current
-    past = viewed < current
-    day = ctx["day"] if viewed == current else 0
+    month (default: this month), with its actuals and link suggestions from
+    `month` (``_month_actuals``; none for a future month)."""
+    viewed = viewed or date(ctx["year"], ctx["month"], 1)
+    actuals = month["actuals"]
+    has_actuals = actuals is not None
     # Every category in band order; colors index into this full list (not just
     # the shown bands), so a category keeps its color while filters hide its
     # neighbours.
@@ -445,17 +484,15 @@ def _sheet_ctx(
     rows = []
     for i in shown:
         e = budget[i]
+        actual = actuals.get(i) if has_actuals else None
         cells, figures = tables.budget_entry_row(
             e,
             viewed.year,
             viewed.month,
-            day,
             account_display_by_id=ctx["account_display_by_id"],
+            actual=actual,
         )
         cells = cells[1:]  # drop Kind
-        if past:
-            cells[_REMAINING] = "—"
-            figures = (Decimal(0), *figures[1:])
         category = e.get("category") or ""
         rows.append(
             {
@@ -472,6 +509,13 @@ def _sheet_ctx(
                 "figures": figures,
                 "marks": _marks(e, viewed),
                 "ends_here": e.get("endMonth") == viewed.isoformat(),
+                # The month's budget-vs-actual (None for a future month) and
+                # the unlinked transactions that look like this entry.
+                "actual": actual,
+                "status": actual.status if actual else None,
+                "suggestions": month["suggestions"].get(actual.entry_ref, [])
+                if actual
+                else [],
             }
         )
 
@@ -485,11 +529,11 @@ def _sheet_ctx(
         groups = [flat] if rows else []
     else:
         flat = None
-        groups = _group_bands(rows, group, all_categories, past)
+        groups = _group_bands(rows, group, all_categories, has_actuals)
 
     net = [""] * _NCOLS
     net[0] = "Net"
-    for pos, total in zip(_TOTAL_POS, _subtotals(rows, past)):
+    for pos, total in enumerate(_subtotals(rows, has_actuals), start=_LABEL_SPAN):
         net[pos] = total
 
     return {
@@ -508,6 +552,41 @@ def _sheet_ctx(
         "account_display_by_id": ctx["account_display_by_id"],
         "viewed_ym": _ym(viewed),
         "viewed_label": f"{viewed:%b %Y}",
+        "viewed_year": viewed.year,
+        "viewed_month": viewed.month,
+        "has_actuals": has_actuals,
+        "actual_statuses": ACTUAL_STATUSES,
+        **month["findings"],
+    }
+
+
+def _month_actuals(snapshot_id: int, viewed: date, current: date) -> dict:
+    """The viewed month's budget-vs-actual (issue #143): ``actuals`` (each
+    entry's reconcile.EntryActual by its index in the full budget list; None
+    for a future month, which has none yet), link ``suggestions`` by entry id,
+    and the pager row's ``findings`` counts (missing / drift / suggested)."""
+    if viewed > current:
+        actuals, suggestions = None, []
+    else:
+        with current_app.config["engine"].connect() as conn:
+            actuals = reconcile.budget_actuals_by_index(
+                conn, snapshot_id, year=viewed.year, month=viewed.month
+            )
+            suggestions = reconcile.suggest_links(
+                conn, snapshot_id, year=viewed.year, month=viewed.month
+            )
+    by_entry: dict[int, list] = {}
+    for sug in suggestions:  # best first (suggest_links sorts by score)
+        by_entry.setdefault(sug.entry_ref, []).append(sug)
+    found = list((actuals or {}).values())
+    return {
+        "actuals": actuals,
+        "suggestions": by_entry,
+        "findings": {
+            "missing_count": sum(a.status == "missing" for a in found),
+            "drift_count": sum(bool(a.drift_amount) for a in found),
+            "suggestion_count": len(suggestions),
+        },
     }
 
 
@@ -530,6 +609,7 @@ def _render_tbody(
     viewed = _viewed_month()
     ctx = get_common_context(snapshot_id, filename, edit_mode, budget_as_of=viewed)
     budget = ctx["budget"]
+    current = date(ctx["year"], ctx["month"], 1)
     sheet = _sheet_ctx(
         budget,
         _planned(budget, viewed),
@@ -538,9 +618,17 @@ def _render_tbody(
         edit_mode,
         viewed=viewed,
         group=selected_group(BUDGET_GROUPS),
+        month=_month_actuals(snapshot_id, viewed, current),
     )
+    # The pager row's findings change with the edit; they ride along
+    # out-of-band (budget_tbody.html).
     return render_template(
-        "partials/budget_tbody.html", filename=filename, **sheet, **editing
+        "partials/budget_tbody.html",
+        filename=filename,
+        findings_oob=True,
+        edit_url=None,
+        **sheet,
+        **editing,
     )
 
 
@@ -548,6 +636,7 @@ def _month_urls(filename: str, viewed: date, current: date) -> dict:
     """The Budget sheet's month pager: earlier / later / now links that keep
     the page's other query parameters (filters, edit mode)."""
     others = [(k, v) for k, v in request.args.items(multi=True) if k != "ym"]
+    no_edit = [(k, v) for k, v in others if k != "edit"]
     base = url_for("budget.budget_view", filename=filename)
 
     def url(month: date) -> str:
@@ -563,12 +652,8 @@ def _month_urls(filename: str, viewed: date, current: date) -> dict:
         "now_url": url(current),
         "is_current": viewed == current,
         "is_past": viewed < current,
-        "actual_url": url_for(
-            "budget.actual_view",
-            filename=filename,
-            year=viewed.year,
-            month=viewed.month,
-        ),
+        # The suggested-links badge opens the same view in edit mode.
+        "edit_url": f"{base}?{urlencode(no_edit + [('edit', '1')] + ([('ym', _ym(viewed))] if viewed != current else []))}",
     }
 
 
@@ -583,7 +668,10 @@ def budget_view(filename: str):
         request.args.getlist("include_kind") or request.args.getlist("kind") or []
     )
     include_categories = (
-        request.args.getlist("include") or request.args.getlist("i") or []
+        request.args.getlist("include")
+        or request.args.getlist("i")
+        or request.args.getlist("category")
+        or []
     )
     include_recurrence = (
         request.args.getlist("include_recurrence")
@@ -598,10 +686,26 @@ def budget_view(filename: str):
         include_categories=include_categories or None,
         include_recurrence=include_recurrence or None,
     )
+    current = date(ctx["year"], ctx["month"], 1)
+    month = _month_actuals(snapshot_id, viewed, current)
+    include_statuses = [
+        s for s in ACTUAL_STATUSES if s in request.args.getlist("status")
+    ]
     # Filters return the same entry dicts; map them back to their positions in
     # the full list (by identity — two identical entries must stay distinct).
     kept = {id(e) for e in filtered}
-    shown = [i for i in planned if id(full_budget[i]) in kept]
+    shown = [
+        i
+        for i in planned
+        if id(full_budget[i]) in kept
+        and (
+            not include_statuses
+            or (
+                (a := (month["actuals"] or {}).get(i)) is not None
+                and a.status in include_statuses
+            )
+        )
+    ]
     categories = _category_names()
     include_kinds_set = {k.lower() for k in include_kinds}
     ctx["include_kinds"] = [k for k in BUDGET_KINDS if k in include_kinds_set]
@@ -609,8 +713,8 @@ def budget_view(filename: str):
     ctx["include_recurrence"] = [
         r for r in RECURRENCE_OPTIONS if r in set(include_recurrence)
     ]
+    ctx["include_statuses"] = include_statuses
     ctx["budget_kinds"] = BUDGET_KINDS
-    current = date(ctx["year"], ctx["month"], 1)
     ctx.update(_month_urls(filename, viewed, current))
     ctx.update(
         _sheet_ctx(
@@ -622,22 +726,39 @@ def budget_view(filename: str):
             filters_active=len(shown) < len(planned),
             viewed=viewed,
             group=selected_group(BUDGET_GROUPS),
+            month=month,
         )
     )
     return render_template("budget.html", **ctx)
 
 
-# Status filter options for the Budget vs Actual page, in display order
-# ("inactive" entries are never shown, so it isn't offered).
-ACTUAL_STATUSES = {
-    "matched": "Matched",
-    "over": "Over",
-    "under": "Under",
-    "on_pace": "On pace",
-    "missing": "Missing",
-    "upcoming": "Upcoming",
-    "unlinked": "Not linked",
-}
+def _suggestion_action(filename: str, action):
+    """Apply or dismiss a link suggestion (edit mode, under the entry it would
+    realize), then re-render the sheet for the viewed month."""
+    snapshot_id = validate_snapshot(filename)
+    try:
+        txn_id = int(request.form["transaction_id"])
+        entry_ref = int(request.form["budget_entry_ref"])
+    except (KeyError, ValueError):
+        return "", 422
+    with current_app.config["engine"].connect() as conn:
+        try:
+            action(conn, snapshot_id, txn_id, entry_ref)
+        except ValueError:  # incl. SnapshotMismatch
+            return "", 422
+    return _render_tbody(snapshot_id, filename)
+
+
+@budget_bp.route("/<filename>/budget/suggestion/link", methods=["POST"])
+def suggestion_link(filename: str):
+    """Apply a link suggestion: link the transaction to the entry."""
+    return _suggestion_action(filename, reconcile.link_transaction)
+
+
+@budget_bp.route("/<filename>/budget/suggestion/dismiss", methods=["POST"])
+def suggestion_dismiss(filename: str):
+    """Dismiss a link suggestion so it isn't proposed again."""
+    return _suggestion_action(filename, reconcile.dismiss_suggestion)
 
 
 # Budget vs Actual "Group by" (issue #137); the first (a flat list) is the

@@ -10,7 +10,14 @@
    Budget history (issue #136): `row.marks` puts a dot on Amount when its
    version starts in the viewed month, and on Description when the entry
    starts or ends then (empty spans, so sorting reads the cell text as
-   before). The change dot's tooltip lists the entry's whole history. #}
+   before). The change dot's tooltip lists the entry's whole history.
+   Budget vs actual (issue #143): Actual / Delta / Status come from
+   `row.actual` (reconcile.EntryActual; none for a future month) and read the
+   same in view and edit mode — they aren't editable. Actual links to the
+   transactions behind it; its tooltip says how many, the last one seen, and
+   any refunds netted in, and a purple dot marks price drift. In edit mode a
+   detail row under the entry lists the month's link suggestions for it, with
+   Apply / Dismiss (group-sort.js and row-reorder.js keep it under its row). #}
 {% from "macros/table.html" import cell_display, cell_non_editable, cell_edit_input, cell_edit_select %}
 {% import "partials/sheet.html" as sheet %}
 {% import "partials/grouped_sheet.html" as gs %}
@@ -22,19 +29,63 @@
 {# A dot sits on the side away from its cell's alignment edge, so it never
    moves the value: before a right-aligned amount, after left-aligned text. #}
 {% macro _mark(kind, title, leading=false) -%}
-{%- set _color = {'changed': '#3b82f6', 'starts': '#10b981', 'ends': '#f59e0b'}[kind] -%}
+{%- set _color = {'changed': '#3b82f6', 'starts': '#10b981', 'ends': '#f59e0b', 'drift': '#a855f7'}[kind] -%}
 <span class="budget-mark" data-budget-mark="{{ kind }}" title="{{ title }}" aria-label="{{ title }}" role="img" style="display:inline-block;width:0.45rem;height:0.45rem;border-radius:9999px;{{ 'margin-right' if leading else 'margin-left' }}:0.3rem;vertical-align:middle;background:{{ _color }}"></span>
 {%- endmacro %}
 {% set _marks = row.marks or {} %}
 {% set _desc_marks %}{% if _marks.starts %}{{ _mark('starts', _marks.starts) }}{% endif %}{% if _marks.ends %}{{ _mark('ends', _marks.ends) }}{% endif %}{% endset %}
 {% set _amount_marks %}{% if _marks.changed %}{{ _mark('changed', _marks.changed, leading=true) }}{% endif %}{% endset %}
+{# --- Budget vs actual cells (issue #143) --- #}
+{% set _a = row.actual %}
+{% set _muted = 'text-gray-400 dark:text-gray-500' %}
+{% set _tone_text = {'good': 'text-green-600 dark:text-green-400', 'bad': 'text-red-600 dark:text-red-400', 'neutral': ''} %}
+{% set _badge = {
+    'good':    'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300',
+    'bad':     'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300',
+    'neutral': 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300',
+} %}
+{% macro _actual_cell(key, value) %}
+{% if _a is none %}
+<td class="{{ sheet.cell_class('text-right tabular-nums' if key != 'status' else '', _muted) }}" title="No actuals for a future month">—</td>
+{% elif key == 'actual' %}
+{% set _refunds = 'refunds' if kind == 'expense' else 'clawbacks' %}
+{% set _tip = [] %}
+{% if _a.source == 'category' %}
+{% set _ = _tip.append("%s's total for %s (a variable line): %d transaction%s" | format(row.category or 'Uncategorized', viewed_label, _a.count, '' if _a.count == 1 else 's')) %}
+{% set _href = url_for('transactions.index', filename=filename, year=viewed_year, month=viewed_month, category=row.category) if _a.count and row.category else none %}
+{% else %}
+{% set _ = _tip.append('%d linked transaction%s in %s' | format(_a.count, '' if _a.count == 1 else 's', viewed_label)) %}
+{% if _a.reversed_amount %}{% set _ = _tip.append('Net of $%s in linked %s' | format(_a.reversed_amount | money, _refunds)) %}{% endif %}
+{% set _href = url_for('transactions.index', filename=filename, year=viewed_year, month=viewed_month, budget=_a.entry_ref) if _a.count or _a.reversed_amount else none %}
+{% endif %}
+{% if _a.last_linked %}{% set _ = _tip.append('Last seen %s' | format(_a.last_linked)) %}{% endif %}
+<td class="{{ sheet.cell_class('text-right tabular-nums', sheet.neg(value | display_is_negative)) }}" title="{{ _tip | join('
+') }}" data-actual{% if _a.reversed_amount %} data-actual-reversed{% endif %}>
+{%- if _a.drift_amount and (_a.drift_amount > 0 or _a.drift_amount < 0) -%}
+{{ _mark('drift', 'Price drift: %s$%s per charge vs the budgeted amount' | format('+' if _a.drift_amount > 0 else '-', _a.drift_amount | abs | money), leading=true) }}
+{%- endif -%}
+{%- if _href %}<a href="{{ _href }}" class="hover:underline" data-actual-link>{{ value }}</a>{% else %}{{ value }}{% endif -%}
+</td>
+{% elif key == 'delta' %}
+{# A pace line's Delta is against the full month, so it isn't judged yet. #}
+<td class="{{ sheet.cell_class('text-right tabular-nums', _tone_text[_a.tone if _a.pace is none else 'neutral']) }}" data-delta>{{ value }}</td>
+{% else %}
+{% set _label = actual_statuses.get(_a.status, _a.status) %}
+<td class="{{ sheet.cell_class() }}" data-status="{{ _a.status }}"><span class="px-1.5 py-0.5 rounded text-xs {{ _badge[_a.tone] }}"{% if _a.pace is not none %} data-pace title="Month in progress: judged against pace, ${{ _a.pace | money }} expected by today"{% endif %}>{{ _label }}{% if _a.pace is not none and _a.status in ('over', 'under') %} pace{% endif %}</span>
+{%- if _a.pace is not none %}<span class="ml-1 text-xs {{ _muted }}">${{ _a.pace | money }} by today</span>{% endif -%}
+{%- if row.suggestions and not edit_mode %}<span class="ml-1 px-1 rounded text-xs {{ _badge['neutral'] }}" data-suggested-count title="Unlinked transactions this month that look like this entry: review them in edit mode">{{ row.suggestions | length }} suggested</span>{% endif -%}
+</td>
+{% endif %}
+{% endmacro %}
 {% macro _with_marks(key, value) -%}
 {%- if key == 'amount' %}{{ _amount_marks ~ value }}{% elif key == 'description' %}{{ value ~ _desc_marks }}{% else %}{{ value }}{% endif -%}
 {%- endmacro %}
 <tr class="{{ gs.row_class() }}" id="budget-row-{{ index }}" data-kind="{{ kind }}"{% if row.tone %} data-tone="{{ row.tone }}"{% endif %} data-reorder-index="{{ reorder_index }}">
     {% if not edit_mode %}
     {% for cell in row_cells %}
+    {% if col_keys[loop.index0] in ('actual', 'delta', 'status') %}{{ _actual_cell(col_keys[loop.index0], cell) }}{% else %}
     <td class="{{ sheet.cell_class('text-right tabular-nums' if loop.index0 in group.right_align else '', sheet.neg(cell | display_is_negative)) }}"{% if col_keys[loop.index0] == 'recurrence' and _rec_sort.get(cell | trim) %} data-sort-value="{{ _rec_sort[cell | trim] }}"{% endif %}>{{ _with_marks(col_keys[loop.index0], cell) }}</td>
+    {% endif %}
     {% endfor %}
     {% else %}
     {% set recurrence_display = row_cells[col_keys.index('recurrence')] %}
@@ -53,7 +104,9 @@
     {% set is_negative = cell_value is not none and cell_value | display_is_negative %}
     {% set is_updated_cell = (updated_index is defined and updated_index==index and updated_field is defined and updated_field==field) %}
     {% set is_editing_cell = (editing_index is defined and editing_index==index and editing_field is defined and editing_field==field) %}
-    {% if is_editing_cell and field %}
+    {% if col_keys[col_index] in ('actual', 'delta', 'status') %}
+        {{ _actual_cell(col_keys[col_index], cell_value) }}
+    {% elif is_editing_cell and field %}
         {% if field == 'category' %}
             {% call(caller) cell_edit_select(field, editing_value, right_align,
                 url_for('budget.update', filename=filename, index=index),
@@ -182,3 +235,40 @@
     {% include "partials/budget_delete_icon.html" %}
     {% endif %}
 </tr>
+{% if edit_mode and row.suggestions %}
+{# The month's link suggestions for this entry (issues #70, #143): one detail
+   row under it, spanning the full grid (actions cell included). Fixed
+   columns (issue #93), identical in every suggestion of every entry, so
+   Apply / Dismiss line up down the sheet: date · merchant (clipped) · amount
+   · confidence · Apply · Dismiss · reasons (last, so they can't push the
+   buttons). Inline style, not a Tailwind arbitrary class, so it doesn't depend
+   on the CDN build. The actions swap the sheet for the viewed month. #}
+<tr data-detail-row data-detail-of="budget-row-{{ index }}" data-suggestions-for="{{ index }}" class="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40">
+    <td colspan="{{ group.ncols }}" class="px-1.5 py-1">
+        <ul class="space-y-1 pl-4 text-xs">
+            {% for s in row.suggestions %}
+            {% set t = s.transaction %}
+            {% set _vals = {'transaction_id': t.id, 'budget_entry_ref': s.entry_ref} | tojson %}
+            <li data-suggestion data-transaction-id="{{ t.id }}" class="grid items-center gap-x-2"
+                style="grid-template-columns: 5rem 14rem 6rem 3.5rem auto auto minmax(0, 1fr)">
+                <span class="{{ _muted }} tabular-nums">{{ t.date }}</span>
+                <span class="min-w-0">{{ sheet.clip(t.merchant or '—', '14rem') }}</span>
+                <span class="text-right tabular-nums {{ sheet.neg(t.amount < 0) }}">{{ '-' if t.amount < 0 }}${{ t.amount | abs | money }}</span>
+                <span class="justify-self-start px-1 rounded {{ _badge['good'] if s.confidence == 'high' else _badge['neutral'] }}" title="Score {{ '%.2f' | format(s.score) }}">{{ s.confidence }}</span>
+                <button type="button" data-suggestion-apply
+                        hx-post="{{ url_for('budget.suggestion_link', filename=filename) }}"
+                        hx-vals='{{ _vals }}' hx-target="#budget-table" hx-swap="innerHTML"
+                        class="px-2 py-0.5 rounded bg-blue-600 text-white hover:bg-blue-700">Apply</button>
+                <button type="button" data-suggestion-dismiss
+                        hx-post="{{ url_for('budget.suggestion_dismiss', filename=filename) }}"
+                        hx-vals='{{ _vals }}' hx-target="#budget-table" hx-swap="innerHTML"
+                        title="Don't suggest this entry for this transaction again"
+                        class="px-2 py-0.5 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700">Dismiss</button>
+                <span class="{{ _muted }}">{{ s.reasons | join(', ') }}</span>
+            </li>
+            {% endfor %}
+        </ul>
+    </td>
+    <td class="table-actions-cell px-1.5 py-1"></td>
+</tr>
+{% endif %}

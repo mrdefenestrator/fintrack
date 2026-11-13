@@ -19,17 +19,7 @@ from fintrack.budget.reconcile import (
 from fintrack.budget.repository import get_budget_entries
 from fintrack.cli.helpers import echo_table, pass_cli
 from fintrack.core.formatting import fmt_money
-
-_STATUS_LABEL = {
-    "matched": "✓ matched",
-    "over": "▲ over",
-    "under": "▼ under",
-    "on_pace": "~ on pace",
-    "missing": "✗ missing",
-    "upcoming": "· upcoming",
-    "unlinked": "· not linked",
-    "inactive": "  —",
-}
+from fintrack.core.tables import budget_status_text
 
 
 def _entry_index_map(entries) -> dict[int, int]:
@@ -216,10 +206,7 @@ def budget_actual(cli, year, month):
                 fmt_money(a.signed_delta),
                 a.count,
                 "category" if a.source == "category" else "links",
-                _STATUS_LABEL.get(a.status, a.status)
-                + (
-                    f" (pace {fmt_money(a.pace).strip()})" if a.pace is not None else ""
-                ),
+                budget_status_text(a),
                 drift,
             ]
         )

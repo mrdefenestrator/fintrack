@@ -125,7 +125,7 @@ def test_no_kind_column(client):
     assert ">Category " in header
     view = client.get("/s/home/budget").get_data(as_text=True)
     row = view.split('id="budget-row-0"')[1].split("</tr>")[0]
-    assert row.count("<td") == 10  # Category … Auto account
+    assert row.count("<td") == 12  # Category … Auto account
 
 
 def test_add_row_leads_with_band_majority_kind(client):

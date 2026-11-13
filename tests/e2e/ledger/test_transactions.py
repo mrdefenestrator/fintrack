@@ -7,6 +7,7 @@ Amount) are display-only.
 """
 
 import pytest
+from playwright.sync_api import expect
 
 from tests.e2e.controls import PHONE_WIDTHS, assert_controls_layout
 
@@ -420,3 +421,56 @@ def test_transactions_controls_layout_on_phones(page, flask_server, width, query
     page.goto(f"{flask_server}/s/ledger/transactions{query}")
     assert_controls_layout(page, width)
     assert page.locator("[data-range-toggle]").is_visible()
+
+
+def test_group_by_account_from_the_filter_bar(page, confirmed_server):
+    """Issue #137: Group by Account bands the list (htmx swap, URL kept), and
+    the month pager carries the grouping along."""
+    page.goto(f"{confirmed_server}/s/ledger/transactions?year=2026&month=4")
+    assert page.locator(".sheet-group-heading").count() == 0
+    page.locator("[data-group-by] button").click()
+    page.locator("[data-group-by] input[value='account']").check()
+    page.wait_for_url("**group=account**")
+    heading = page.locator(".sheet-group-heading td:first-child")
+    expect(heading).to_have_count(1)
+    assert heading.inner_text().strip().endswith("· 4")
+    assert page.locator("tbody.sheet-group tr[id^='txn-row-']").count() == 4
+    assert "group=account" in page.locator("[data-pager] a").first.get_attribute("href")
+
+
+def test_recategorizing_while_grouped_keeps_the_scroll_position(page, confirmed_server):
+    """Issue #137: grouped by category, a category edit moves the row to its
+    new band by re-rendering the table inside its scroll container — no full
+    reload (which jumped to the top), and the scroll position is restored
+    after the swap (htmx inserts the new table before removing the old one,
+    and scroll anchoring would otherwise carry the sheet to its bottom)."""
+    page.set_viewport_size({"width": 1280, "height": 280})
+    page.goto(
+        f"{confirmed_server}/s/ledger/transactions?year=2026&month=4&edit=1"
+        "&group=category"
+    )
+    sheet = page.locator("#txn-sheet")
+    row = page.locator("tr[id^='txn-row-']").first
+    row_id = row.get_attribute("id")
+    with page.expect_response(lambda r: "/cell" in r.url):
+        row.locator("td").nth(4).click()
+    select = page.locator(f"#{row_id} select[name='value']")
+    # Wait until htmx has wired up the swapped-in editor; changing it before
+    # then would fire no request.
+    page.wait_for_function(
+        "el => !!(el && el['htmx-internal-data'] && el['htmx-internal-data'].initHash)",
+        arg=select.element_handle(),
+    )
+    # A mid-sheet position (not the bottom, where a jump would hide).
+    max_top = sheet.evaluate("el => el.scrollHeight - el.clientHeight")
+    assert max_top > 20
+    before = sheet.evaluate("el => { el.scrollTop = 15; return el.scrollTop; }")
+    target = select.locator("option").nth(2).get_attribute("value")
+    with page.expect_response(lambda r: r.url.endswith("/update")):
+        select.select_option(target)
+    band = page.locator(f"tbody.sheet-group:has(#{row_id})")
+    expect(band.locator(".sheet-group-heading td").first).to_contain_text(
+        target, ignore_case=True
+    )
+    assert page.url.endswith("&group=category")  # no navigation
+    assert sheet.evaluate("el => el.scrollTop") == before

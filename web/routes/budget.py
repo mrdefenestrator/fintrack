@@ -11,6 +11,10 @@ neighbouring bands differ (Uncategorized is slate). There is no Kind column:
 an entry's kind shows in its sign (expenses are negative), and it is set by
 the band's "+ Add expense" / "+ Add income" buttons.
 
+"Group by" (issue #137, ``?group=``) can instead band the sheet by kind or
+recurrence (neutral bands; rows keep their category color, no drag-reorder) or
+show it unbanded (``none``, reordered as one list); see BUDGET_GROUPS.
+
 Rows are addressed by their position in the full, sort-ordered budget list
 (`index`), so edit/delete URLs are unaffected by grouping. Drag-reorder is per
 band: the band's local permutation is mapped onto the band's own slots in the
@@ -27,7 +31,6 @@ is corrected by paging to the month its change started and editing it there;
 the change dot's tooltip lists the entry's whole history.
 """
 
-import re
 from datetime import date
 from decimal import Decimal
 from urllib.parse import urlencode
@@ -58,7 +61,21 @@ from .crud import (
     handle_delete,
     handle_move,
 )
-from .grouped_sheet import flat_sheet, group_columns, parse_order, remap_group_order
+from .grouped_sheet import (
+    NEUTRAL_TONE,
+    Band,
+    GroupBy,
+    band_key,
+    category_bands,
+    category_order,
+    category_tones,
+    flat_sheet,
+    group_columns,
+    parse_order,
+    remap_group_order,
+    selected_group,
+    unique_keys,
+)
 
 budget_bp = Blueprint("budget", __name__, url_prefix="/s")
 
@@ -168,31 +185,133 @@ RECURRING_EVERY = {
 # Annual subtotals sit under their columns.
 _LABEL_SPAN = 5
 _TOTAL_POS = [5, 6, 7, 8]
-# Band colors (partials/grouped_sheet.css palette), cycled in category order.
-# Ordered so consecutive hues contrast, including the wrap from last to first.
-_CATEGORY_TONES = [
-    "blue",
-    "amber",
-    "violet",
-    "emerald",
-    "rose",
-    "cyan",
-    "orange",
-    "indigo",
-    "lime",
-    "fuchsia",
-    "teal",
-    "pink",
-]
-_UNCATEGORIZED_TONE = "slate"
 _UNCATEGORIZED = "Uncategorized"
+
+# "Group by" choices (issue #137); the first is the default. Category bands
+# are colored per category and drag-reorderable; Kind and Recurrence bands are
+# neutral (each row keeps its category's color on its rail) and locked, since
+# the stored order is per category. None is a flat sheet: one body, reordered
+# as the whole list.
+BUDGET_GROUPS = [
+    GroupBy("category", "Category"),
+    GroupBy("kind", "Kind"),
+    GroupBy("recurrence", "Recurrence"),
+    GroupBy("none", "None"),
+]
+# Recurrence bands run from most to least frequent; one-time entries close.
+_RECURRENCE_BAND_ORDER = [
+    "weekly",
+    "biweekly",
+    "monthly",
+    "quarterly",
+    "semiannual",
+    "annual",
+    "one_time",
+]
+_BUDGET_FLAT = flat_sheet("budget", _COLS, _TOOLTIPS)
 
 
 def _band_key(category: str) -> str:
     """A stable DOM/URL-safe key for a category band (per-band sort state)."""
-    if not category:
-        return "uncategorized"
-    return "cat-" + (re.sub(r"[^a-z0-9]+", "-", category.lower()).strip("-") or "x")
+    return band_key("cat", category) if category else "uncategorized"
+
+
+def _subtotals(rows: list[dict], past: bool) -> list[str]:
+    """Remaining / This month / Per month / Annual sums over `rows`, formatted;
+    a past month has no Remaining ("—")."""
+    return [
+        "—"
+        if past and j == 0
+        else fmt_money(sum((r["figures"][j] for r in rows), Decimal(0)))
+        for j in range(len(_TOTAL_POS))
+    ]
+
+
+def _band(
+    key: str,
+    label: str,
+    tone: str,
+    rows: list[dict],
+    add: list[dict],
+    past: bool,
+    **extra,
+) -> dict:
+    """One band: heading label/tone, rows, subtotals, and its add buttons
+    (``{kind, category, recurrence}`` posts for ``budget.add``)."""
+    return {
+        "key": key,
+        "label": label,
+        "tone": tone,
+        "rows": rows,
+        "totals": _subtotals(rows, past),
+        "add": add,
+        "reorder": None,
+        **_COLUMN_META,
+        **extra,
+    }
+
+
+def _add_kinds(rows: list[dict], **vals) -> list[dict]:
+    """Add buttons for both kinds, the band's majority kind first."""
+    incomes = sum(r["kind"] == "income" for r in rows)
+    kinds = ["income", "expense"] if incomes * 2 > len(rows) else ["expense", "income"]
+    return [{"kind": k, **vals} for k in kinds]
+
+
+def _group_bands(
+    rows: list[dict], group: str, all_categories: list[str], past: bool
+) -> list:
+    """Split the shown rows into the bands of `group` (not ``none``)."""
+    if group == "category":
+        by: dict[str, list[dict]] = {}
+        for r in rows:
+            by.setdefault(r["category"], []).append(r)
+        order = [c for c in all_categories if c in by] + ([""] if "" in by else [])
+        tones = category_tones(all_categories)
+        return [
+            _band(
+                key,
+                c or _UNCATEGORIZED,
+                tones.get(c, NEUTRAL_TONE),
+                by[c],
+                _add_kinds(by[c], category=c),
+                past,
+                reorder={"category": c},
+            )
+            for c, key in zip(order, unique_keys(_band_key(c) for c in order))
+        ]
+    if group == "kind":
+        return [
+            _band(
+                f"kind-{k}",
+                k.capitalize(),
+                NEUTRAL_TONE,
+                band_rows,
+                [{"kind": k}],
+                past,
+            )
+            for k in BUDGET_KINDS
+            if (band_rows := [r for r in rows if r["kind"] == k])
+        ]
+    # recurrence
+    used = {r["recurrence"] for r in rows}
+    order = [r for r in _RECURRENCE_BAND_ORDER if r in used] + sorted(
+        used - set(_RECURRENCE_BAND_ORDER)
+    )
+    bands = []
+    for rec in order:
+        band_rows = [r for r in rows if r["recurrence"] == rec]
+        bands.append(
+            _band(
+                band_key("rec", rec),
+                fmt_recurrence_display(rec),
+                NEUTRAL_TONE,
+                band_rows,
+                _add_kinds(band_rows, recurrence=rec),
+                past,
+            )
+        )
+    return bands
 
 
 _REMAINING = 5  # Remaining's position in a row's cells (Kind dropped)
@@ -307,17 +426,23 @@ def _sheet_ctx(
     edit_mode: bool,
     filters_active: bool = False,
     viewed: date | None = None,
+    group: str = "category",
 ) -> dict:
-    """Template context for the grouped budget table: the category bands for
-    the `shown` entries (indices into `budget`), the Net footer, and the column
-    metadata. Figures are for the ``viewed`` month (default: this month):
-    Remaining is the rest of this month, the full month for a later one, and
-    "—" for a past one."""
+    """Template context for the budget table: the bands of `group` (or, for
+    ``none``, one flat body) over the `shown` entries (indices into `budget`),
+    the Net footer, and the column metadata. Figures are for the ``viewed``
+    month (default: this month): Remaining is the rest of this month, the full
+    month for a later one, and "—" for a past one."""
     current = date(ctx["year"], ctx["month"], 1)
     viewed = viewed or current
     past = viewed < current
     day = ctx["day"] if viewed == current else 0
-    by_category: dict[str, list[dict]] = {}
+    # Every category in band order; colors index into this full list (not just
+    # the shown bands), so a category keeps its color while filters hide its
+    # neighbours.
+    all_categories = category_order(categories, (e.get("category") for e in budget))
+    tones = category_tones(all_categories)
+    rows = []
     for i in shown:
         e = budget[i]
         cells, figures = tables.budget_entry_row(
@@ -331,10 +456,18 @@ def _sheet_ctx(
         if past:
             cells[_REMAINING] = "—"
             figures = (Decimal(0), *figures[1:])
-        by_category.setdefault(e.get("category") or "", []).append(
+        category = e.get("category") or ""
+        rows.append(
             {
                 "index": i,
                 "kind": e.get("kind", "income"),
+                "category": category,
+                "recurrence": e.get("recurrence") or "monthly",
+                # Off the category grouping a row keeps its category's color on
+                # its own rail (the band is neutral).
+                "tone": None
+                if group == "category"
+                else tones.get(category, NEUTRAL_TONE),
                 "cells": cells,
                 "figures": figures,
                 "marks": _marks(e, viewed),
@@ -342,59 +475,29 @@ def _sheet_ctx(
             }
         )
 
-    # Every category in band order: the taxonomy, then any others the budget
-    # uses. Colors index into this full list (not just the shown bands), so a
-    # category keeps its color while filters hide its neighbours.
-    known = set(categories)
-    all_categories = categories + sorted(
-        {e.get("category") for e in budget if e.get("category")} - known
-    )
-    tone_of = {
-        c: _CATEGORY_TONES[i % len(_CATEGORY_TONES)]
-        for i, c in enumerate(all_categories)
-    }
-    order = [c for c in all_categories if c in by_category] + (
-        [""] if "" in by_category else []
-    )
-    keys: set[str] = set()
-    groups = []
-    for category in order:
-        rows = by_category[category]
-        incomes = sum(r["kind"] == "income" for r in rows)
-        key = _band_key(category)
-        while key in keys:  # two categories that slugify alike
-            key += "-"
-        keys.add(key)
-        groups.append(
-            {
-                "key": key,
-                "category": category,
-                "label": category or _UNCATEGORIZED,
-                "tone": tone_of.get(category, _UNCATEGORIZED_TONE),
-                # The add row leads with the band's majority kind.
-                "first_kind": "income" if incomes * 2 > len(rows) else "expense",
-                "rows": rows,
-                "totals": [
-                    "—"
-                    if past and j == 0
-                    else fmt_money(sum((r["figures"][j] for r in rows), Decimal(0)))
-                    for j in range(len(_TOTAL_POS))
-                ],
-                **_COLUMN_META,
-            }
-        )
+    if group == "none":
+        flat = {
+            **_BUDGET_FLAT,
+            "rows": rows,
+            "add": _add_kinds(rows) if rows else [{"kind": "expense"}],
+            "reorder": {"all": 1},
+        }
+        groups = [flat] if rows else []
+    else:
+        flat = None
+        groups = _group_bands(rows, group, all_categories, past)
 
-    all_rows = [r for g in groups for r in g["rows"]]
     net = [""] * _NCOLS
     net[0] = "Net"
-    for j, pos in enumerate(_TOTAL_POS):
-        net[pos] = fmt_money(sum((r["figures"][j] for r in all_rows), Decimal(0)))
-    if past:
-        net[_TOTAL_POS[0]] = "—"
+    for pos, total in zip(_TOTAL_POS, _subtotals(rows, past)):
+        net[pos] = total
 
     return {
         "groups": groups,
-        "footer_rows": [net] if all_rows else [],
+        "flat": flat,
+        "group": group,
+        "group_options": BUDGET_GROUPS,
+        "footer_rows": [net] if rows else [],
         "filters_active": filters_active,
         "max_cols": _NCOLS,
         "label_span": _LABEL_SPAN,
@@ -434,6 +537,7 @@ def _render_tbody(
         ctx,
         edit_mode,
         viewed=viewed,
+        group=selected_group(BUDGET_GROUPS),
     )
     return render_template(
         "partials/budget_tbody.html", filename=filename, **sheet, **editing
@@ -517,6 +621,7 @@ def budget_view(filename: str):
             edit_mode,
             filters_active=len(shown) < len(planned),
             viewed=viewed,
+            group=selected_group(BUDGET_GROUPS),
         )
     )
     return render_template("budget.html", **ctx)
@@ -533,6 +638,56 @@ ACTUAL_STATUSES = {
     "upcoming": "Upcoming",
     "unlinked": "Not linked",
 }
+
+
+# Budget vs Actual "Group by" (issue #137); the first (a flat list) is the
+# default. Category bands follow the taxonomy in their category's color;
+# Status bands follow ACTUAL_STATUSES' order, neutral. Each band heading shows
+# its entry count and Expected / Actual / Delta subtotals.
+ACTUAL_GROUPS = [
+    GroupBy("none", "None"),
+    GroupBy("category", "Category"),
+    GroupBy("status", "Status"),
+]
+
+
+def _actual_bands(shown: list, group: str) -> list[dict] | None:
+    """The bands of `group` over the shown entries (None when ungrouped)."""
+    if group == "none":
+        return None
+    if group == "category":
+        bands = category_bands(
+            shown, lambda a: a.entry.get("category"), _category_names(), "act-cat"
+        )
+    else:
+        bands = [
+            Band(f"act-status-{s}", label, NEUTRAL_TONE, rows)
+            for s, label in ACTUAL_STATUSES.items()
+            if (rows := [a for a in shown if a.status == s])
+        ]
+        # Statuses the filter list doesn't name (none today) close the sheet.
+        known = set(ACTUAL_STATUSES)
+        for s in sorted({a.status for a in shown} - known):
+            rows = [a for a in shown if a.status == s]
+            bands.append(Band(f"act-status-{s}", s, NEUTRAL_TONE, rows))
+
+    def net(rows: list, attr: str) -> Decimal:
+        return sum((getattr(a, f"signed_{attr}") for a in rows), Decimal(0))
+
+    return [
+        {
+            **ACTUAL_SHEET,
+            "key": b.key,
+            "flat": False,
+            "label": b.label,
+            "tone": b.tone,
+            "rows": b.rows,
+            "net_expected": net(b.rows, "expected"),
+            "net_actual": net(b.rows, "actual"),
+            "net_delta": net(b.rows, "actual") - net(b.rows, "expected"),
+        }
+        for b in bands
+    ]
 
 
 def _valid_month(year: int, month: int, default: date) -> date:
@@ -731,9 +886,13 @@ def _render_actual(filename: str, snapshot_id: int):
 
     prev = date(viewed.year - (viewed.month == 1), (viewed.month - 2) % 12 + 1, 1)
     nxt = date(viewed.year + (viewed.month == 12), viewed.month % 12 + 1, 1)
+    group = selected_group(ACTUAL_GROUPS)
     ctx.update(
         view="month",
         budget_actuals=shown,
+        group=group,
+        group_options=ACTUAL_GROUPS,
+        bands=_actual_bands(shown, group),
         missing_count=sum(a.status == "missing" for a in active),
         drift_count=sum(bool(a.drift_amount) for a in active),
         suggestions_by_entry=suggestions_by_entry,
@@ -784,6 +943,8 @@ def delete_btn(filename: str, index: int):
         index=index,
         edit_mode=True,
         row={"ends_here": entry.get("endMonth") == _viewed_month().isoformat()},
+        # Kind / Recurrence bands don't drag-reorder (see BUDGET_GROUPS).
+        reorderable=selected_group(BUDGET_GROUPS) in ("category", "none"),
     )
 
 
@@ -831,9 +992,10 @@ def reorder(filename: str):
     """Persist a drag reorder within one category band (``?category=``; empty
     for Uncategorized). The posted ``order`` permutes the band's own rows; it is
     mapped onto the band's slots in the full ordering, leaving other bands'
-    rows in place."""
+    rows in place. ``?all=1`` (the ungrouped sheet) permutes the whole list."""
     snapshot_id = validate_snapshot(filename)
     category = request.args.get("category", "")
+    whole_list = request.args.get("all") == "1"
     viewed = _viewed_month()
     local_order = parse_order(request.form.get("order", ""))
     if not local_order:
@@ -846,7 +1008,7 @@ def reorder(filename: str):
         full = remap_group_order(
             budget,
             lambda e: (
-                (e.get("category") or "") == category
+                (whole_list or (e.get("category") or "") == category)
                 and entry_active(e, viewed.year, viewed.month)
             ),
             local_order,
@@ -874,6 +1036,10 @@ def add(filename: str):
         "recurrence": "monthly",
         "startMonth": _viewed_month().isoformat(),
     }
+    # Added from a recurrence band: give the stub that band's recurrence.
+    recurrence = request.form.get("recurrence", "").strip()
+    if recurrence in RECURRENCE_OPTIONS:
+        entry["recurrence"] = recurrence
     engine = current_app.config["engine"]
     try:
         with engine.connect() as conn:

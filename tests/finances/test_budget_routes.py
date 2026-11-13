@@ -239,6 +239,84 @@ def test_recategorizing_moves_row_to_its_new_band(client):
     assert 'data-group="cat-groceries"' not in body
 
 
+# --- Group by (issue #137) -------------------------------------------------
+
+
+def test_group_by_kind_bands_are_neutral_and_rows_keep_category_color(client):
+    body = client.get("/s/home/budget?group=kind&edit=1").get_data(as_text=True)
+    assert _band_labels(body) == ["Income", "Expense"]
+    assert 'data-group="kind-income" data-tone="slate"' in body
+    assert 'data-group="kind-expense" data-tone="slate"' in body
+    income = body.split('data-group="kind-income"')[1].split("</tbody>")[0]
+    assert 'id="budget-row-0"' in income and 'id="budget-row-5"' in income
+    # A row's own rail keeps its category's hue (Housing is amber).
+    assert re.search(r'id="budget-row-5" data-kind="income" data-tone="amber"', body)
+    # The stored order is per category, so kind bands don't drag-reorder;
+    # a band adds only its own kind.
+    assert "data-reorder-url" not in body
+    assert "+ Add expense" not in income
+    # Subtotals and the Net footer don't depend on the grouping.
+    footer = body.split('class="total-row')[1]
+    assert "$1,640.00" in footer
+
+
+def test_group_by_recurrence_adds_with_the_band_recurrence(client, db_engine):
+    client.post(
+        "/s/home/budget/update/2", data={"field": "recurrence", "value": "weekly"}
+    )
+    body = client.get("/s/home/budget?group=recurrence&edit=1").get_data(as_text=True)
+    assert _band_labels(body) == ["Weekly", "Monthly"]
+    weekly = body.split('data-group="rec-weekly"')[1].split("</tbody>")[0]
+    assert '"recurrence": "weekly"' in weekly
+    client.post("/s/home/budget/add", data={"kind": "expense", "recurrence": "weekly"})
+    with db_engine.connect() as conn:
+        assert get_budget_entries(conn, 1)[-1]["recurrence"] == "weekly"
+
+
+def test_group_by_none_is_one_flat_reorderable_body(client, db_engine):
+    body = client.get("/s/home/budget?group=none&edit=1").get_data(as_text=True)
+    table = _table(body)
+    assert _band_labels(body) == []
+    assert "<thead>" in table
+    assert table.count('class="sheet-group sheet-group--flat"') == 1
+    assert table.count('id="budget-row-') == len(_ENTRIES)
+    # (The URL also carries the viewed month, ym — issue #136.)
+    assert 'data-reorder-url="/s/home/budget/reorder?all=1' in table
+    order = ",".join(str(i) for i in reversed(range(len(_ENTRIES))))
+    assert (
+        client.post("/s/home/budget/reorder?all=1", data={"order": order}).status_code
+        == 204
+    )
+    assert _descriptions(db_engine) == [d for _, d, _, _ in reversed(_ENTRIES)]
+
+
+def test_unknown_group_falls_back_to_category(client):
+    body = client.get("/s/home/budget?group=bogus").get_data(as_text=True)
+    assert _band_labels(body) == _TAXONOMY + ["Pets", "Uncategorized"]
+
+
+def test_edit_swap_keeps_the_page_grouping(client):
+    body = client.get(
+        "/s/home/budget/cell/1?field=description",
+        headers={
+            "HX-Request": "true",
+            "HX-Current-URL": "http://localhost/s/home/budget?group=kind&edit=1",
+        },
+    ).get_data(as_text=True)
+    assert 'data-group="kind-expense"' in body
+    assert 'data-group="cat-housing"' not in body
+
+
+def test_group_by_control_and_reset_keep_the_grouping(client):
+    body = client.get("/s/home/budget?group=kind&include=Housing").get_data(
+        as_text=True
+    )
+    assert "data-group-by-label>Kind<" in body
+    assert 'name="group" value="kind" checked' in body
+    reset = re.search(r'<a href="([^"]+)"[^>]*>Reset</a>', body).group(1)
+    assert "group=kind" in reset and "include" not in reset
+
+
 @pytest.mark.parametrize("page", ["budget", "holdings"])
 def test_band_css_ships_inline_with_the_page(client, page):
     """The band chrome (tints, rails, sticky heading/header) must arrive with
@@ -274,14 +352,18 @@ class _RowSpans(HTMLParser):
             self.in_table = False
 
 
-@pytest.mark.parametrize("page", ["budget", "holdings"])
+@pytest.mark.parametrize(
+    "page",
+    ["budget", "budget?group=kind", "budget?group=recurrence", "holdings"],
+)
 @pytest.mark.parametrize("edit", [False, True])
 def test_every_row_spans_the_full_grid(client, page, edit):
     """Every row (band heading, column header, data, add, footer) spans the same
     number of grid slots, and in edit mode each heading closes with its own
     sticky actions cell — otherwise heading content paints over the pinned
     actions column when the sheet scrolls sideways."""
-    body = client.get(f"/s/home/{page}{'?edit=1' if edit else ''}").get_data(
+    sep = "&" if "?" in page else "?"
+    body = client.get(f"/s/home/{page}{sep + 'edit=1' if edit else ''}").get_data(
         as_text=True
     )
     parser = _RowSpans()
@@ -292,3 +374,18 @@ def test_every_row_spans_the_full_grid(client, page, edit):
     assert headings
     for h in headings:
         assert ("table-actions-cell" in h.split("</tr>")[0]) is edit
+
+
+def test_drag_handles_only_where_bands_reorder(client):
+    by_kind = client.get("/s/home/budget?group=kind&edit=1").get_data(as_text=True)
+    by_cat = client.get("/s/home/budget?edit=1").get_data(as_text=True)
+    assert "drag-handle" not in _table(by_kind)
+    assert "drag-handle" in _table(by_cat)
+    cancel = client.get(
+        "/s/home/budget/delete-btn/1",
+        headers={
+            "HX-Request": "true",
+            "HX-Current-URL": "http://localhost/s/home/budget?group=kind&edit=1",
+        },
+    ).get_data(as_text=True)
+    assert "drag-handle" not in cancel

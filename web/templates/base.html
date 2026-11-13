@@ -172,6 +172,26 @@
                 String(d.getMonth() + 1).padStart(2, '0') + '-' +
                 String(d.getDate()).padStart(2, '0');
         });
+        // Keep a sheet's scroll position when an edit re-renders the table
+        // inside its scroll container (HX-Retarget to a [data-sheet-scroll],
+        // issue #137). htmx inserts the new table before removing the old one,
+        // and the browser's scroll anchoring follows the old rows down, so
+        // without this the sheet jumps to its bottom.
+        (function () {
+            let kept = null;
+            document.addEventListener('htmx:beforeSwap', (evt) => {
+                const t = evt.detail.target;
+                kept = (t && t.matches && t.matches('[data-sheet-scroll]'))
+                    ? { el: t, top: t.scrollTop, left: t.scrollLeft }
+                    : null;
+            });
+            document.addEventListener('htmx:afterSwap', () => {
+                if (!kept) return;
+                kept.el.scrollTop = kept.top;
+                kept.el.scrollLeft = kept.left;
+                kept = null;
+            });
+        })();
         // Keep the caret in a search box across htmx content swaps (QA #4). The
         // search inputs live inside the swapped #content, so a filter reload
         // replaces the element and would drop focus mid-type. Record the

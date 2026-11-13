@@ -19,10 +19,10 @@
 
 {# filter_qs carries the column filters (multi account_id / category, status, q)
    for the time-nav links; month/all-months state is passed explicitly. #}
-{% set filter_qs %}{% for aid in selected_accounts %}&account_id={{ aid }}{% endfor %}{% for c in selected_categories %}&category={{ c | urlencode }}{% endfor %}{% if selected_status %}&status={{ selected_status }}{% endif %}{% if q %}&q={{ q | urlencode }}{% endif %}{% if edit_mode %}&edit=1{% endif %}{% endset %}
+{% set filter_qs %}{% for aid in selected_accounts %}&account_id={{ aid }}{% endfor %}{% for c in selected_categories %}&category={{ c | urlencode }}{% endfor %}{% if selected_status %}&status={{ selected_status }}{% endif %}{% if q %}&q={{ q | urlencode }}{% endif %}{% if group != group_options[0].key %}&group={{ group }}{% endif %}{% if edit_mode %}&edit=1{% endif %}{% endset %}
 
 {% set _active = (selected_accounts | length) + (selected_categories | length) + (1 if selected_status else 0) + (1 if q else 0) %}
-{% set _edit_qs = '&edit=1' if edit_mode else '' %}
+{% set _edit_qs = ('&group=' ~ group if group != group_options[0].key else '') ~ ('&edit=1' if edit_mode else '') %}
 {% set _reset = "%s?year=%s&month=%s%s%s" | format(_url, year, month, '&all_months=true' if all_months else ('&all_months=year' if this_year else ''), _edit_qs) %}
 
 <span id="month-state" data-year="{{ year }}" data-month="{{ month }}" hidden></span>
@@ -69,6 +69,7 @@
 {# Integrated filter card (QA item 13), fused to the top of the table. #}
 {% call fb.filter_bar(active_count=_active, reset_url=_reset, lead=_lead) %}
     {% if edit_mode %}<input type="hidden" name="edit" value="1">{% endif %}
+    {{ fc.group_by_select(group_options, group, _url) }}
     {{ fc.multi_select('account_id', 'Account', account_opts, _url) }}
     {{ fc.multi_select('category', 'Category', category_opts, _url) }}
     {{ fc.single_select('status', 'Status', status_opts, selected_status or '', _url) }}
@@ -81,6 +82,6 @@
     <input type="hidden" name="all_months" value="{{ 'true' if all_months else ('year' if this_year else '') }}">
 {% endcall %}
 
-<div class="table-scroll-container rounded-b-lg border-l border-b border-r border-gray-300 dark:border-gray-600 shadow-sm" data-sheet-scroll>
+<div id="txn-sheet" class="table-scroll-container rounded-b-lg border-l border-b border-r border-gray-300 dark:border-gray-600 shadow-sm" data-sheet-scroll>
     {% include "partials/transaction_rows.html" %}
 </div>

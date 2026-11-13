@@ -1,5 +1,6 @@
 {# Budget table body — the whole inside of #budget-table: colgroup, one band
-   (<tbody class="sheet-group">) per category, and the pinned Net footer. It is
+   (<tbody class="sheet-group">) per category — or per kind / recurrence, or
+   one flat body, as "Group by" picks (issue #137) — and the pinned Net footer. It is
    the swap unit for edits (hx-target #budget-table, innerHTML), so the colgroup
    lives here and survives a swap. Shared band markup: partials/grouped_sheet.html. #}
 {% import "partials/grouped_sheet.html" as gs %}
@@ -16,12 +17,32 @@
     <col style="width: 6.5rem">
     <col style="width: 10rem">
 </colgroup>
-{% macro add_buttons(category, first_kind) %}
-{% set kinds = ['income', 'expense'] if first_kind == 'income' else ['expense', 'income'] %}
-{% for k in kinds %}{{ gs.add_button(url_for('budget.add', filename=filename), 'Add ' ~ k, {'kind': k, 'category': category}) }}{% endfor %}
+{# A band's "+ Add …" buttons: one per {kind, category?, recurrence?} spec in
+   `adds` (the route puts the band's majority kind first). #}
+{% macro add_buttons(adds) %}
+{% for a in adds %}{{ gs.add_button(url_for('budget.add', filename=filename), 'Add ' ~ a.kind, a) }}{% endfor %}
 {% endmacro %}
+{# Drag-reorder URL for a band (edit mode, and only where `reorder` is set:
+   category bands, or the whole list when ungrouped). #}
+{% macro reorder_url(g) %}{% if edit_mode and g.reorder %}{{ url_for('budget.reorder', filename=filename, **g.reorder) }}{% endif %}{% endmacro %}
+{% if flat %}
+{# Group by: None — one flat body under a pinned <thead> header. #}
+{% set group = flat %}
+{{ gs.flat_header(flat, edit_mode) }}
+<tbody {{ gs.group_attrs(flat, reorder_url(flat) or none) }}>
+    {% for row in flat.rows %}
+    {% set reorder_index = loop.index0 %}
+    {% include "partials/budget_row.html" %}
+    {% else %}
+    {{ gs.empty_row(span, 'No entries match the current filters.' if filters_active else 'No budget entries in ' ~ viewed_label ~ '.') }}
+    {% endfor %}
+    {% if edit_mode and not (filters_active and not flat.rows) %}
+    {% call gs.add_row(span) %}{{ add_buttons(flat.add) }}{% endcall %}
+    {% endif %}
+</tbody>
+{% else %}
 {% for group in groups %}
-<tbody {{ gs.group_attrs(group, url_for('budget.reorder', filename=filename, category=group.category) if edit_mode else none) }}>
+<tbody {{ gs.group_attrs(group, reorder_url(group) or none) }}>
     {% call gs.heading(group.label, label_span, edit_mode) %}
         {% for total in group.totals %}{{ gs.subtotal_cell(total) }}{% endfor %}
         <td colspan="{{ max_cols - label_span - group.totals | length }}"></td>
@@ -32,7 +53,7 @@
     {% include "partials/budget_row.html" %}
     {% endfor %}
     {% if edit_mode %}
-    {% call gs.add_row(span) %}{{ add_buttons(group.category, group.first_kind) }}{% endcall %}
+    {% call gs.add_row(span) %}{{ add_buttons(group.add) }}{% endcall %}
     {% endif %}
 </tbody>
 {% else %}
@@ -40,8 +61,9 @@
 <tbody class="sheet-group" data-tone="slate">
     {{ gs.empty_row(span, 'No entries match the current filters.' if filters_active else 'No budget entries in ' ~ viewed_label ~ '.') }}
     {% if edit_mode and not filters_active %}
-    {% call gs.add_row(span) %}{{ add_buttons('', 'expense') }}{% endcall %}
+    {% call gs.add_row(span) %}{{ add_buttons([{'kind': 'expense'}]) }}{% endcall %}
     {% endif %}
 </tbody>
 {% endfor %}
+{% endif %}
 {{ gs.footer(footer_rows, total_pos, edit_mode) }}

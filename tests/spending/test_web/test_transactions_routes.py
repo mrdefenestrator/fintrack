@@ -154,16 +154,24 @@ def test_update_notes_writes_correction(client, seeded, db_engine):
         assert get_correction(conn, txn_id)["notes"] == "reimbursable"
 
 
-def test_update_category_apply_to_merchant_redirects_and_sets_cache(
+def test_update_category_apply_to_merchant_refreshes_table_and_sets_cache(
     client, seeded, db_engine
 ):
+    """Many rows change, so the whole table re-renders in place (into the
+    sheet's scroll container, keeping the scroll) for the page's own query."""
     _, txn_id = seeded
     resp = client.post(
         f"/s/ledger/transactions/{txn_id}/update",
         data={"field": "category", "value": "Dining", "apply_to_merchant": "on"},
+        headers={
+            "HX-Request": "true",
+            "HX-Current-URL": "http://localhost/s/ledger/transactions?year=2024&month=1",
+        },
     )
-    assert resp.status_code == 204
-    assert resp.headers.get("HX-Redirect")
+    assert resp.status_code == 200
+    assert resp.headers["HX-Retarget"] == "#txn-sheet"
+    assert resp.headers["HX-Reswap"] == "innerHTML"
+    assert f'id="txn-row-{txn_id}"' in resp.get_data(as_text=True)
     with db_engine.connect() as conn:
         assert get_cached_category(conn, "WHOLE FOODS") == "Dining"
         # per-transaction correction NOT written in the merchant-wide branch

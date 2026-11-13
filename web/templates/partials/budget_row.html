@@ -3,9 +3,10 @@
    band). `index` is the entry's position in the full budget list — the handle
    every cell/delete URL uses. `row.cells` follows `group.col_keys`; cells are
    mapped to their editable field by column key, never by position. The accent
-   rail takes the band's (category's) tone. In view mode cells are plain; in
-   edit mode they click to edit, and the last cell holds the end / drag /
-   delete actions.
+   rail takes the band's (category's) tone; off the category grouping the band
+   is neutral and the row carries its category's tone itself. In view mode
+   cells are plain; in edit mode they click to edit, and the last cell holds
+   the end / drag / delete actions.
    Budget history (issue #136): `row.marks` puts a dot on Amount when its
    version starts in the viewed month, and on Description when the entry
    starts or ends then (empty spans, so sorting reads the cell text as
@@ -30,7 +31,7 @@
 {% macro _with_marks(key, value) -%}
 {%- if key == 'amount' %}{{ _amount_marks ~ value }}{% elif key == 'description' %}{{ value ~ _desc_marks }}{% else %}{{ value }}{% endif -%}
 {%- endmacro %}
-<tr class="{{ gs.row_class() }}" id="budget-row-{{ index }}" data-kind="{{ kind }}" data-reorder-index="{{ reorder_index }}">
+<tr class="{{ gs.row_class() }}" id="budget-row-{{ index }}" data-kind="{{ kind }}"{% if row.tone %} data-tone="{{ row.tone }}"{% endif %} data-reorder-index="{{ reorder_index }}">
     {% if not edit_mode %}
     {% for cell in row_cells %}
     <td class="{{ sheet.cell_class('text-right tabular-nums' if loop.index0 in group.right_align else '', sheet.neg(cell | display_is_negative)) }}"{% if col_keys[loop.index0] == 'recurrence' and _rec_sort.get(cell | trim) %} data-sort-value="{{ _rec_sort[cell | trim] }}"{% endif %}>{{ _with_marks(col_keys[loop.index0], cell) }}</td>
@@ -175,6 +176,9 @@
         {{ cell_non_editable(cell_value, right_align, is_negative) }}
     {% endif %}
     {% endfor %}
+    {# Drag handle only where the band reorders (category bands, or the
+       ungrouped list); Kind / Recurrence bands don't. #}
+    {% set reorderable = group.reorder is not none %}
     {% include "partials/budget_delete_icon.html" %}
     {% endif %}
 </tr>

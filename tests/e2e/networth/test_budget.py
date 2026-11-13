@@ -1,6 +1,9 @@
 """Budget table e2e tests — CRUD, filters, period toggle."""
 
+from urllib.parse import parse_qs
+
 import pytest
+from playwright.sync_api import expect
 
 from tests.e2e.networth.conftest import enable_edit_mode
 
@@ -455,3 +458,52 @@ def test_budget_when_annual_compound_edit(page, flask_server):
     page.goto(f"{flask_server}/s/test_finances/budget")
     row = page.locator("#budget-table tr:has-text('Car Insurance')").first
     assert row.get_by_text("Apr 10th").is_visible()
+
+
+def test_group_by_kind_from_the_filter_bar(page, flask_server):
+    """Issue #137: picking Kind in the Group by dropdown rebands the sheet
+    (Income / Expense) and keeps the choice in the URL."""
+    page.goto(f"{flask_server}/s/test_finances/budget")
+    page.locator("[data-group-by] button").click()
+    page.locator("[data-group-by] input[value='kind']").check()
+    page.wait_for_url("**group=kind**")
+    labels = [
+        t.strip().lower()
+        for t in page.locator(".sheet-group-heading td:first-child").all_inner_texts()
+    ]
+    assert labels == ["income", "expense"]
+    assert page.locator("[data-group-by-label]").inner_text() == "Kind"
+    # Salary sits in the Income band; Rent in Expense.
+    income = page.locator("tbody.sheet-group[data-group='kind-income']")
+    assert income.get_by_text("Salary", exact=True).is_visible()
+    expense = page.locator("tbody.sheet-group[data-group='kind-expense']")
+    assert expense.get_by_text("Rent", exact=True).is_visible()
+
+
+def test_group_by_none_drags_across_the_whole_list(page, flask_server):
+    """Issue #137: ungrouped, a row can be dragged anywhere in the list, and
+    the browser posts a whole-list permutation to /budget/reorder?all=1. (The
+    POST is intercepted so the shared fixture's order stays put; the server
+    side is covered by unit tests.)"""
+    posted = []
+
+    def capture(route):
+        posted.append((route.request.url, route.request.post_data))
+        route.fulfill(status=204, body="")
+
+    page.route("**/budget/reorder**", capture)
+    page.goto(f"{flask_server}/s/test_finances/budget?group=none&edit=1")
+    body = page.locator("#budget-table tbody.sheet-group--flat")
+    assert "reorder?all=1" in body.get_attribute("data-reorder-url")
+    rows = body.locator("tr[data-reorder-index]")
+    n = rows.count()
+    assert n > 3
+    first = rows.nth(0).get_attribute("id")
+    rows.nth(0).locator(".drag-handle").drag_to(rows.nth(3))
+    expect(body.locator("tr[data-reorder-index]").nth(0)).not_to_have_id(first)
+    assert len(posted) == 1
+    url, data = posted[0]
+    assert "reorder?all=1" in url
+    order = [int(i) for i in parse_qs(data)["order"][0].split(",")]
+    assert sorted(order) == list(range(n))  # the whole list, not one band
+    assert order != list(range(n))

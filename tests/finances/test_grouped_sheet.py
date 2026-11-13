@@ -40,3 +40,43 @@ def test_remap_rejects_non_permutation():
     assert remap_group_order(items, in_a, [0]) is None
     assert remap_group_order(items, in_a, [0, 0]) is None
     assert remap_group_order(items, in_a, [0, 2]) is None
+
+
+def test_selected_group_reads_query_then_htmx_page_url():
+    from flask import Flask
+
+    from web.routes.grouped_sheet import GroupBy, selected_group
+
+    opts = [GroupBy("a", "A"), GroupBy("b", "B")]
+    app = Flask(__name__)
+    with app.test_request_context("/x?group=b"):
+        assert selected_group(opts) == "b"
+    with app.test_request_context("/x?group=nope"):
+        assert selected_group(opts) == "a"
+    with app.test_request_context(
+        "/x/cell",
+        headers={"HX-Request": "true", "HX-Current-URL": "http://h/x?group=b"},
+    ):
+        assert selected_group(opts) == "b"
+    # Only htmx requests fall back to the page URL.
+    with app.test_request_context(
+        "/x", headers={"HX-Current-URL": "http://h/x?group=b"}
+    ):
+        assert selected_group(opts) == "a"
+
+
+def test_band_keys_and_category_tones():
+    from web.routes.grouped_sheet import (
+        CATEGORY_TONES,
+        band_key,
+        category_order,
+        category_tones,
+        unique_keys,
+    )
+
+    assert band_key("cat", "Food & Drink") == "cat-food-drink"
+    assert band_key("cat", "!!") == "cat-x"
+    assert unique_keys(["a", "a", "b"]) == ["a", "a-", "b"]
+    assert category_order(["Z", "A"], ["B", None, "A", ""]) == ["Z", "A", "B"]
+    tones = category_tones([f"c{i}" for i in range(len(CATEGORY_TONES) + 1)])
+    assert tones["c0"] == tones[f"c{len(CATEGORY_TONES)}"] == CATEGORY_TONES[0]

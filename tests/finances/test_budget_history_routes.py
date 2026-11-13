@@ -307,3 +307,95 @@ def test_cli_rejects_a_bad_month(db_path):
     result = CliRunner().invoke(cli, ["--db", str(db_path), "budget", "--month", "May"])
     assert result.exit_code != 0
     assert "YYYY-MM" in result.output
+
+
+# --- With "Group by" (issue #137) ------------------------------------------
+
+
+def _heading_cells(body: str) -> list[list[str]]:
+    """Each band heading's cells (label, then subtotals), as text."""
+    return [
+        [
+            re.sub(r"<[^>]+>", "", c).strip()
+            for c in re.findall(r"<td[^>]*>(.*?)</td>", h)
+        ]
+        for h in re.findall(
+            r'<tr class="sheet-group-heading">(.*?)</tr>', body, flags=re.DOTALL
+        )
+    ]
+
+
+@pytest.mark.parametrize("group", ["kind", "recurrence"])
+def test_past_month_grouped_has_no_remaining(client, group):
+    """A past month's bands, in any grouping, show "—" for Remaining (and only
+    that month's plan: Gym starts this month)."""
+    body = client.get(f"/s/home/budget?ym={_ym(PREV)}&group={group}").get_data(
+        as_text=True
+    )
+    (heading,) = _heading_cells(body)
+    assert heading[0] in ("Expense", "Monthly")
+    assert heading[1] == "—"
+    assert heading[2] == "($2,000.00)"
+    assert "Gym" not in body
+    footer = body.split('class="total-row')[1]
+    assert "—" in footer
+
+
+def test_pager_and_reset_keep_the_grouping(client):
+    body = client.get(f"/s/home/budget?ym={_ym(PREV)}&group=kind").get_data(
+        as_text=True
+    )
+    pager = body.split("data-pager>")[1].split("</div>")[0]
+    assert f"group=kind&amp;ym={_ym(PREV2)}" in pager
+    assert 'href="/s/home/budget?group=kind"' in pager  # "Now"
+    reset = re.search(r'<a href="([^"]+)"[^>]*>Reset</a>', body).group(1)
+    assert "group=kind" in reset and f"ym={_ym(PREV)}" in reset
+
+
+def test_edit_swap_keeps_month_and_grouping(client):
+    """An edit made while viewing a past month, grouped by kind, swaps back
+    that month's plan in the same grouping."""
+    resp = client.post(
+        f"/s/home/budget/update/0?ym={_ym(PREV)}",
+        data={"field": "amount", "value": "2050"},
+        headers={
+            "HX-Request": "true",
+            "HX-Current-URL": f"http://localhost/s/home/budget?ym={_ym(PREV)}"
+            "&group=kind&edit=1",
+        },
+    )
+    body = resp.get_data(as_text=True)
+    assert 'data-group="kind-expense"' in body
+    assert "($2,050.00)" in body
+    assert "Gym" not in body  # still the past month's plan
+
+
+def test_ungrouped_reorder_permutes_only_the_viewed_months_entries(client, db_engine):
+    with db_engine.connect() as conn:
+        add_budget_entry(
+            conn,
+            1,
+            {
+                "kind": "expense",
+                "description": "Old",
+                "amount": 5,
+                "recurrence": "monthly",
+                "dayOfMonth": 1,
+                "endMonth": _ym(PREV2) + "-01",
+            },
+        )
+    # This month shows Rent, Gym (Old ended): swap them, Old keeps its slot.
+    resp = client.post(
+        f"/s/home/budget/reorder?all=1&ym={_ym(NOW)}", data={"order": "1,0"}
+    )
+    assert resp.status_code == 204
+    with db_engine.connect() as conn:
+        order = [e["description"] for e in get_budget_entries(conn, 1)]
+    assert order == ["Gym", "Rent", "Old"]
+    # A permutation sized for the whole list is refused for this month.
+    assert (
+        client.post(
+            f"/s/home/budget/reorder?all=1&ym={_ym(NOW)}", data={"order": "2,1,0"}
+        ).status_code
+        == 422
+    )

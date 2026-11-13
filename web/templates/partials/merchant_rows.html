@@ -1,17 +1,37 @@
 {# Merchants sheet: an unbanded grouped sheet (partials/grouped_sheet.html)
    sharing the banded sheets' header, rows, sorting (group-sort.js, URL
-   sort_merchants_*) and pinned footer. Columns come from MERCHANTS_SHEET
+   sort_merchants_*) and pinned footer; "Group by" bands it by category or
+   source (issue #137). Columns come from MERCHANTS_SHEET
    (web/routes/merchants.py). Inline Category editing swaps single rows — see
    partials/merchant_row.html. #}
 {% import "partials/grouped_sheet.html" as gs %}
 {% set m_sheet = flat_sheets.merchants %}
 <table id="merchants-table" class="grouped-sheet w-full text-sm border-collapse bg-white dark:bg-gray-800" data-cell-nav="merchants-table" data-cell-nav-swap="outerHTML" style="white-space:nowrap">
+    {% if bands %}
+    {# Grouped (issue #137): one band per category or source — heading with
+       the merchant count and the Transactions subtotal, its own sortable
+       header. #}
+    {% set _count_at = m_sheet.col_keys.index('txn_count') %}
+    {% for band in bands %}
+    <tbody {{ gs.group_attrs(band) }}>
+        {% call gs.heading(band.label ~ ' · ' ~ band.count, _count_at) %}
+        {{ gs.subtotal_cell(band.txn_total) }}
+        <td colspan="{{ m_sheet.ncols - _count_at - 1 }}"></td>
+        {% endcall %}
+        {{ gs.header_row(band, m_sheet.ncols, false) }}
+        {% for m in band.rows %}
+        {% include "partials/merchant_row.html" %}
+        {% endfor %}
+    </tbody>
+    {% endfor %}
+    {% else %}
     {{ gs.flat_header(m_sheet, false) }}
     <tbody {{ gs.group_attrs(m_sheet) }}>
         {% for m in merchants %}
         {% include "partials/merchant_row.html" %}
         {% endfor %}
     </tbody>
+    {% endif %}
     {% if merchant_count %}
     {% set _count_at = m_sheet.col_keys.index('txn_count') %}
     {{ gs.footer([[

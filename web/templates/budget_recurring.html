@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Budget — fintrack{% endblock %}
+{% block content %}
+{# Budget's Recurring view (?view=recurring, issues #100, #143). Its filters
+   and edit-mode actions swap #content. #}
+<div id="content" class="flex-1 min-h-0 flex flex-col">
+    {% include "partials/budget_recurring_content.html" %}
+</div>
+{% endblock %}

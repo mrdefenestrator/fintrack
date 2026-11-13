@@ -1,5 +1,5 @@
 """`fintrack recurring` (issue #100): recurring charges not in the budget and
-recurring price changes — the CLI side of Budget vs Actual's Recurring view.
+recurring price changes — the CLI side of the Budget sheet's Recurring view.
 """
 
 import click

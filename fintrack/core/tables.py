@@ -23,7 +23,6 @@ from fintrack.networth.calculations import (
     _budget_entry_in_month,
     _entry_subtotal,
     _semiannual_other_month,
-    _subtotal_remainder_of_month,
 )
 
 
@@ -214,34 +213,72 @@ BUDGET_HEADERS = [
     "Amount",
     "Recurrence",
     "When",
-    "Remaining",
     "This month",
+    "Actual",
+    "Delta",
+    "Status",
     "Per month",
     "Annual",
     "Auto account",
 ]
+# Where the summed figures sit in a budget row (budget_entry_row's figures, in
+# order): This month, Actual, Delta, Per month, Annual. Status has no total.
+BUDGET_TOTAL_COLUMNS = (6, 7, 8, 10, 11)
+
+# Budget-vs-actual statuses as the CLI prints them (reconcile.EntryActual.status).
+STATUS_TEXT = {
+    "matched": "✓ matched",
+    "over": "▲ over",
+    "under": "▼ under",
+    "on_pace": "~ on pace",
+    "missing": "✗ missing",
+    "upcoming": "· upcoming",
+    "unlinked": "· not linked",
+    "inactive": "  not due",
+}
+
+
+def budget_status_text(actual: Any) -> str:
+    """An EntryActual's status for the CLI, with its pace when it has one
+    ("~ on pace (pace $120.00)")."""
+    text = STATUS_TEXT.get(actual.status, actual.status)
+    if actual.pace is not None:
+        text += f" (pace {fmt_money(actual.pace).strip()})"
+    return text
 
 
 def budget_entry_row(
     e: dict[str, Any],
     year: int,
     month: int,
-    day: int,
     account_display_by_id: dict[int, str] | None = None,
-) -> tuple[list[str], tuple[Decimal, Decimal, Decimal, Decimal]]:
+    actual: Any = None,
+) -> tuple[list[str], tuple[Decimal, Decimal, Decimal, Decimal, Decimal]]:
     """One budget entry's display cells (BUDGET_HEADERS order) plus its signed
-    (remaining-this-month, this-month, per-month, annual) figures — income
-    positive, expenses negative — so callers can subtotal any grouping of rows.
+    (this-month, actual, delta, per-month, annual) figures — income positive,
+    expenses negative — so callers can subtotal any grouping of rows.
 
-    "This month" is what's scheduled in this calendar month (an annual bill
-    billed in another month is 0); "Per month" is the annual amount ÷ 12."""
+    "This month" is what's scheduled in the month (an annual bill billed in
+    another month is 0); "Per month" is the annual amount ÷ 12. Actual, Delta
+    and Status come from ``actual`` (the entry's ``reconcile.EntryActual`` for
+    the month; issue #143): Delta is actual − expected, signed, so + beats the
+    budget. Without one (a future month) they read "-" and count as 0."""
     account_display_by_id = account_display_by_id or {}
     kind = e.get("kind", "income")
     sign = 1 if kind == "income" else -1
-    remaining = sign * _subtotal_remainder_of_month(e, year, month, day)
     monthly = sign * _budget_entry_in_month(e, year, month, day=0)
     annual = sign * _amount_annual(e)
     per_month = annual / 12
+    if actual is not None:
+        realized, delta = actual.signed_actual, actual.signed_delta
+        actual_cells = [
+            fmt_money(realized),
+            fmt_money(delta),
+            budget_status_text(actual),
+        ]
+    else:
+        realized = delta = Decimal(0)
+        actual_cells = ["-", "-", "-"]
     ref = e.get("autoAccountRef")
     cells = [
         kind.capitalize(),
@@ -250,42 +287,42 @@ def budget_entry_row(
         fmt_money(sign * e.get("amount", 0)),
         fmt_recurrence_display(e.get("recurrence") or "-"),
         _expected_display(e),
-        fmt_money(remaining),
         fmt_money(monthly),
+        *actual_cells,
         fmt_money(per_month),
         fmt_money(annual),
         account_display_by_id.get(ref, "-") if ref is not None else "-",
     ]
-    return cells, (remaining, monthly, per_month, annual)
+    return cells, (monthly, realized, delta, per_month, annual)
 
 
 def _build_budget_table(
     budget: list[dict[str, Any]],
     year: int,
     month: int,
-    day: int,
     account_display_by_id: dict[int, str] | None = None,
     show_index: bool = False,
     indices: list[int] | None = None,
-    past: bool = False,
+    actuals: list[Any] | None = None,
 ) -> tuple:
-    """Build (headers, rows) for budget table (unified income+expenses). Rows include separator and total.
-    Shows prorated subtotal (remainder of month), this month's scheduled amount,
-    the per-month average (annual ÷ 12), and the annual amount.
-    budget is a list of entries with kind: income|expense.
-    ``indices`` labels the Index column (default: each row's position); a
-    ``past`` month has no Remaining ("-").
+    """Build (headers, rows) for the budget table (income and expenses
+    together) for one month. Rows include a separator and a total row.
+
+    Shows what's scheduled this month, the month's Actual / Delta / Status
+    (``actuals``: each entry's ``reconcile.EntryActual``, aligned with
+    ``budget``; None for a future month, whose actuals read "-"), the
+    per-month average (annual ÷ 12), and the annual amount. ``indices`` labels
+    the Index column (default: each row's position).
     """
     headers = list(BUDGET_HEADERS)
     if show_index:
         headers = ["Index"] + headers
 
     rows = []
-    totals = [Decimal(0)] * 4
+    totals = [Decimal(0)] * len(BUDGET_TOTAL_COLUMNS)
     for idx, e in enumerate(budget):
-        row, figures = budget_entry_row(e, year, month, day, account_display_by_id)
-        if past:
-            row[6] = "-"
+        actual = actuals[idx] if actuals is not None else None
+        row, figures = budget_entry_row(e, year, month, account_display_by_id, actual)
         totals = [t + f for t, f in zip(totals, figures)]
         if show_index:
             row = [str(indices[idx] if indices is not None else idx)] + row
@@ -294,8 +331,9 @@ def _build_budget_table(
     total_row = [""] * num_cols
     total_row[0] = "Total"
     offset = 1 if show_index else 0
-    for j, total in enumerate(totals):
-        total_row[6 + j + offset] = "-" if past and j == 0 else fmt_money(total)
+    no_actuals = (7, 8) if actuals is None else ()
+    for col, total in zip(BUDGET_TOTAL_COLUMNS, totals):
+        total_row[col + offset] = "-" if col in no_actuals else fmt_money(total)
     _append_table_separator_and_total(rows, headers, total_row)
     return (headers, rows)
 

@@ -1,5 +1,8 @@
 """Tests for finances/tables.py — table builders for CLI and web."""
 
+from decimal import Decimal
+
+from fintrack.budget.reconcile import EntryActual
 from fintrack.core.tables import (
     _account_display_by_id,
     _build_accounts_table,
@@ -273,7 +276,7 @@ class TestBuildBudgetTable:
                 "dayOfMonth": 1,
             },
         ]
-        headers, rows = _build_budget_table(budget, 2025, 2, 0)
+        headers, rows = _build_budget_table(budget, 2025, 2)
         assert headers[0] == "Kind"
         # Income row
         assert rows[0][0] == "Income"
@@ -293,7 +296,7 @@ class TestBuildBudgetTable:
                 "recurrence": "monthly",
             }
         ]
-        headers, rows = _build_budget_table(budget, 2025, 2, 0, show_index=True)
+        headers, rows = _build_budget_table(budget, 2025, 2, show_index=True)
         assert headers[0] == "Index"
         assert rows[0][0] == "0"
 
@@ -306,12 +309,24 @@ class TestBuildBudgetTable:
                 "recurrence": "monthly",
             }
         ]
-        headers, rows = _build_budget_table(budget, 2025, 2, 0)
-        assert headers[7:10] == ["This month", "Per month", "Annual"]
+        headers, rows = _build_budget_table(budget, 2025, 2)
+        assert headers[6:12] == [
+            "This month",
+            "Actual",
+            "Delta",
+            "Status",
+            "Per month",
+            "Annual",
+        ]
+        assert "Remaining" not in headers
         # This month = 100, Per month = 1200 / 12 = 100, Annual = 1200
-        assert "$100.00" in rows[0][7]
-        assert "$100.00" in rows[0][8]
-        assert "$1,200.00" in rows[0][9]
+        assert "$100.00" in rows[0][6]
+        assert "$100.00" in rows[0][10]
+        assert "$1,200.00" in rows[0][11]
+        # No actuals given (a future month): Actual / Delta / Status read "-",
+        # and so do their totals.
+        assert rows[0][7:10] == ["-", "-", "-"]
+        assert rows[-1][7:9] == ["-", "-"]
 
     def test_annual_entry_this_month_vs_per_month(self):
         """An annual bill due in another month is $0 this month but still
@@ -326,12 +341,12 @@ class TestBuildBudgetTable:
                 "dayOfMonth": 1,
             }
         ]
-        _, rows = _build_budget_table(budget, 2025, 2, 0)
-        assert rows[0][7].strip() == "$0.00"
-        assert rows[0][8] == "($11.58)"
-        assert rows[0][9] == "($139.00)"
+        _, rows = _build_budget_table(budget, 2025, 2)
+        assert rows[0][6].strip() == "$0.00"
+        assert rows[0][10] == "($11.58)"
+        assert rows[0][11] == "($139.00)"
         # Footer totals line up under the same columns.
-        assert rows[-1][8] == "($11.58)"
+        assert rows[-1][10] == "($11.58)"
 
     def test_auto_account_ref(self):
         account_map = {1: "Chase Checking"}
@@ -345,9 +360,9 @@ class TestBuildBudgetTable:
             }
         ]
         _, rows = _build_budget_table(
-            budget, 2025, 2, 0, account_display_by_id=account_map
+            budget, 2025, 2, account_display_by_id=account_map
         )
-        assert rows[0][10] == "Chase Checking"
+        assert rows[0][12] == "Chase Checking"
 
     def test_auto_account_ref_missing(self):
         budget = [
@@ -359,11 +374,72 @@ class TestBuildBudgetTable:
                 "autoAccountRef": 99,
             }
         ]
-        _, rows = _build_budget_table(budget, 2025, 2, 0)
-        assert rows[0][10] == "-"
+        _, rows = _build_budget_table(budget, 2025, 2)
+        assert rows[0][12] == "-"
+
+    def test_actual_delta_status_from_the_month_actuals(self):
+        """Issue #143: each row shows its entry's actual for the month, the
+        signed delta (+ beats the budget) and the status; the total row sums
+        Actual and Delta like This month."""
+        budget = [
+            {
+                "kind": "income",
+                "description": "Pay",
+                "amount": 1000,
+                "recurrence": "monthly",
+            },
+            {
+                "kind": "expense",
+                "description": "Rent",
+                "amount": 500,
+                "recurrence": "monthly",
+            },
+        ]
+        actuals = [
+            EntryActual(
+                entry=budget[0],
+                entry_ref=1,
+                expected=Decimal(1000),
+                actual=Decimal(1100),
+                delta=Decimal(100),
+                count=1,
+                status="over",
+                last_linked=None,
+                drift_amount=Decimal(0),
+            ),
+            EntryActual(
+                entry=budget[1],
+                entry_ref=2,
+                expected=Decimal(500),
+                actual=Decimal(450),
+                delta=Decimal(-50),
+                count=1,
+                status="on_pace",
+                last_linked=None,
+                drift_amount=Decimal(0),
+                pace=Decimal(250),
+            ),
+        ]
+        _, rows = _build_budget_table(budget, 2025, 2, actuals=actuals)
+
+        def cells(row):
+            return [c.strip() for c in row]
+
+        assert cells(rows[0][7:10]) == ["$1,100.00", "$100.00", "▲ over"]
+        # An expense: spent 450 of 500, so the signed delta is +50.
+        assert cells(rows[1][7:10]) == [
+            "($450.00)",
+            "$50.00",
+            "~ on pace (pace $250.00)",
+        ]
+        total = cells(rows[-1])
+        assert total[6] == "$500.00"
+        assert total[7] == "$650.00"
+        assert total[8] == "$150.00"
+        assert total[9] == ""
 
     def test_empty_budget(self):
-        _headers, rows = _build_budget_table([], 2025, 2, 0)
+        _headers, rows = _build_budget_table([], 2025, 2)
         # Should still have separator and total
         assert len(rows) == 2  # separator + total
         assert rows[-1][0] == "Total"

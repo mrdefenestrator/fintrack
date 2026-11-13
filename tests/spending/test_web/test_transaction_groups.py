@@ -299,3 +299,38 @@ def test_recategorizing_swaps_the_row_when_not_grouped_by_category(client, db_en
     )
     assert resp.status_code == 200
     assert f'id="txn-row-{txn}"' in resp.get_data(as_text=True)
+
+
+def test_budget_filter_keeps_the_rows_linked_to_an_entry(client, db_engine):
+    """Issue #143: ?budget=<entry id> (what the Budget sheet's Actual cell
+    opens) keeps only the transactions linked to that entry; the Budget
+    dropdown shows it ticked, and the month pager keeps it."""
+    from fintrack.budget.reconcile import link_transaction
+
+    with db_engine.connect() as conn:
+        add_budget_entry(
+            conn,
+            1,
+            {
+                "kind": "expense",
+                "description": "Groceries run",
+                "amount": 50,
+                "recurrence": "monthly",
+                "category": "Groceries",
+            },
+        )
+        ref = get_budget_entries(conn, 1)[0]["_db_id"]
+        txn = _txn_id(db_engine, "WHOLE FOODS", 3)
+        link_transaction(conn, 1, txn, ref)
+        assert [
+            t["id"]
+            for t in get_transactions(conn, budget_entry_refs=[ref], snapshot_id=1)
+        ] == [txn]
+
+    body = _get(client, f"&budget={ref}")
+    assert body.count('id="txn-row-') == 1
+    assert f'id="txn-row-{txn}"' in body
+    assert re.search(rf'name="budget" value="{ref}"[^>]*checked', body)
+    assert f"budget={ref}" in body.split('title="Earlier"')[0].rsplit("href=", 1)[1]
+    # A malformed id is ignored rather than failing the page.
+    assert _get(client, "&budget=x").count('id="txn-row-') == 4

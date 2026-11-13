@@ -1,4 +1,4 @@
-{# Budget vs Actual's Recurring view (issue #100): every merchant that charges
+{# Budget's Recurring view (issues #100, #143): every merchant that charges
    (or pays) on a steady cadence for a steady amount over the last 13 months,
    and how it sits in the budget — not in budget, not linked to the entry that
    looks like it, covered by a variable category line, or in budget — plus any
@@ -7,15 +7,16 @@
    entry and link the series) or a chain (link it to the entry that looks like
    it), and × ("not recurring": stop showing it). Actions post to this view's own query
    string so its filters survive the re-render.
-   An unbanded grouped sheet like the month view; columns come from
+   An unbanded flat grouped sheet; columns come from
    RECURRING_SHEET (web/routes/budget.py) and cells map by column key. #}
 {% import "partials/sheet.html" as sheet %}
 {% import "partials/grouped_sheet.html" as gs %}
 {% import "partials/filter_controls.html" as fc %}
 {% import "partials/pager.html" as nav %}
 {% import "partials/sheet_filter_bar.html" as fb %}
-{% import "partials/budget_actual_views.html" as views %}
-{% set _url = url_for('budget.actual_view', filename=filename) %}
+{% import "partials/budget_views.html" as views %}
+{% set _url = url_for('budget.budget_view', filename=filename) %}
+{% set _ym = request.args.get('ym') %}
 {% set _badge = {
     'not_budgeted': 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300',
     'unlinked': 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300',
@@ -28,10 +29,10 @@
 {% set status_opts = [] %}
 {% for s, label in recurring_statuses.items() %}{% set _ = status_opts.append({'value': s, 'display': label, 'checked': s in include_statuses}) %}{% endfor %}
 {% set _active = (include_kinds | length) + (include_statuses | length) %}
-{% set _reset = "%s?view=recurring%s" | format(_url, '&edit=1' if edit_mode else '') %}
+{% set _reset = "%s?view=recurring%s%s" | format(_url, '&ym=' ~ _ym if _ym else '', '&edit=1' if edit_mode else '') %}
 
 {# No pager in this view, but the same pager row keeps the sheet where the
-   By month view has it: the window it covers and its badges. #}
+   Plan view has it: the window it covers and its badges. #}
 {% call nav.pager_row() %}
     <span class="px-1 text-sm font-medium text-gray-700 dark:text-gray-200">Last 13 months</span>
     {% if not_budgeted_count or price_change_count %}
@@ -42,9 +43,10 @@
     {% endif %}
 {% endcall %}
 
-{% set _lead %}{{ views.view_toggle('recurring', filename, edit_mode) }}{% endset %}
+{% set _lead %}{{ views.view_toggle('recurring', plan_url, recurring_url) }}{% endset %}
 {% call fb.filter_bar(active_count=_active, reset_url=_reset, lead=_lead) %}
     <input type="hidden" name="view" value="recurring">
+    {% if _ym %}<input type="hidden" name="ym" value="{{ _ym }}">{% endif %}
     {% if edit_mode %}<input type="hidden" name="edit" value="1">{% endif %}
     {{ fc.multi_select('kind', 'Kind', kind_opts, _url) }}
     {{ fc.multi_select('status', 'Status', status_opts, _url) }}

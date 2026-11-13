@@ -260,6 +260,14 @@ def _sheet_context(args: MultiDict) -> dict:
             selected_accounts.append(int(a))
         except ValueError:
             pass
+    # Budget entries (issue #143): the rows linked to any of them — what the
+    # Budget sheet's Actual cell opens.
+    selected_budget = []
+    for b in args.getlist("budget"):
+        try:
+            selected_budget.append(int(b))
+        except ValueError:
+            pass
     # One smart filter box (QA item 1): `q` filters by amount when it parses as
     # an amount expression (e.g. "45", ">50", "10-20"), otherwise it searches
     # merchant/description text. Legacy `search`/`amount` params are still
@@ -293,6 +301,7 @@ def _sheet_context(args: MultiDict) -> dict:
             amount=amount,
             status=None if flagged else status,
             transaction_ids=txn_alerts.keys() if flagged else None,
+            budget_entry_refs=selected_budget or None,
             snapshot_id=g.snapshot_id,
         )
         accounts = list_accounts(conn, g.snapshot_id)
@@ -339,6 +348,7 @@ def _sheet_context(args: MultiDict) -> dict:
         "month_label": month_label,
         "selected_categories": selected_categories,
         "selected_accounts": selected_accounts,
+        "selected_budget": selected_budget,
         "q": amount or search or "",
         "selected_status": status,
         "all_months": all_months,

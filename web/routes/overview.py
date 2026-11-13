@@ -57,7 +57,7 @@ def overview_view(filename):
         debt_url=url_for("holdings.holdings_view", filename=filename)
         + ("#holdings-loan" if overview["debt_cards"]["loans"] else "#holdings-credit"),
         # Needs attention: one link, following what the card leads with —
-        # Holdings for stale data, else Budget vs Actual's Recurring view
+        # Holdings for stale data, else Budget's Recurring view
         # filtered to the recurring-charge findings.
         attention_url=_attention_url(filename, overview["attention"]),
         **context,
@@ -84,7 +84,7 @@ def _attention_url(filename: str, items: list[dict]) -> str:
     if items and items[0]["source"] == "stale":
         return url_for("holdings.holdings_view", filename=filename)
     return url_for(
-        "budget.actual_view",
+        "budget.budget_view",
         filename=filename,
         view="recurring",
         status=["not_budgeted", "price_change"],

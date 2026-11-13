@@ -98,7 +98,10 @@ degrades to a warning without it).
   transaction's resolved category (`coalesce(budget_entry.category,
   correction.category, merchant_cache.category, 'Uncategorized')`), so the
   Category and Budget columns can't contradict; the Transactions sheet shows
-  that category read-only while linked.
+  that category read-only while linked. Budget-vs-actual lives **on the Budget
+  sheet** (#143: Actual · Delta · Status per entry for the viewed month, link
+  suggestions in edit mode; the old `/budget/actual` page redirects there), and
+  the CLI `budget` table shows the same columns — keep the two at parity.
 - **Budget history** (#136, DESIGN.md "Budget history"): an entry is planned
   from `start_month` through `end_month` (NULL = unbounded) and its amount/
   schedule are versioned (`budget_entry_versions`; the entry's own schedule
@@ -113,8 +116,8 @@ degrades to a warning without it).
   endpoints in `_SHEET_ENDPOINTS`.
 - Recurring charges (`fintrack/budget/recurring.py`, DESIGN.md "Recurring
   charges") detect steady merchant series locally and match them to the
-  budget; findings show on Budget vs Actual's Recurring view
-  (`?view=recurring`), the Overview "Needs attention" card, and `fintrack
+  budget; findings show on the Budget sheet's Recurring view
+  (`/budget?view=recurring`), the Overview "Needs attention" card, and `fintrack
   recurring`. The detected series also sharpen `suggest_links` scores
   (`recurring.series_index`, #119). Same rule: **never send transaction data
   to the Claude API**.
@@ -171,7 +174,7 @@ degrades to a warning without it).
   and the Python CLI (which keeps separate `accounts`/`assets`/`debts` commands)
   are both first-class; keep them at parity.
 - **Grouped sheets.** Holdings, Budget (one band per category, colored per
-  category, with Remaining/This month/Per month/Annual subtotals and a Net footer; no Kind
+  category, with This month/Actual/Delta/Per month/Annual subtotals and a Net footer; no Kind
   column — the sign shows it), and the read-only Projections grid (Holdings'
   bands + an Unassigned band) share one grouped-sheet layer —
   `partials/grouped_sheet.html` macros, `partials/grouped_sheet.css` (inlined
@@ -183,11 +186,11 @@ degrades to a warning without it).
   the pinned actions column (`test_every_row_spans_the_full_grid`); and row
   templates map cells to fields **by column key, never position**, so adding or
   dropping a column can't shift which field a click edits. Banding is
-  optional: Transactions, Merchants, Categories, and Budget vs Actual are
+  optional: Transactions, Merchants, Categories, and Budget's Recurring view are
   **flat** grouped sheets (`flat_sheet()`, `gs.flat_header`, one
   `sheet-group--flat` body, `gs.footer`) — build any new plain sheet the same
   way rather than on bare `sortable.js` tables (Trends alone keeps its own
-  styling). Budget, Transactions, Merchants, and Budget vs Actual also take a
+  styling). Budget, Transactions, and Merchants also take a
   **Group by** choice (#137: `GroupBy` options + `selected_group()` +
   `category_bands()` in `grouped_sheet.py`, `?group=`, the `group_by_select`
   dropdown in the filter bar); Holdings stays fixed-group since its bands'

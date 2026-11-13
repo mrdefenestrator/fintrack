@@ -1,7 +1,7 @@
 /* Grouped spreadsheet sheets (Holdings, Budget, Projections): one <table class="grouped-sheet">
    split into bands, each its own <tbody class="sheet-group" data-tone="…">.
    Banding is optional: a flat sheet (Transactions, Merchants, Categories,
-   Budget vs Actual) has its column header in a <thead> and one untoned
+   Budget's Recurring view) has its column header in a <thead> and one untoned
    <tbody class="sheet-group sheet-group--flat">.
    Markup: templates/partials/grouped_sheet.html. Sorting: js/group-sort.js.
 
@@ -57,8 +57,10 @@
 /* Lift the data-row rail above the top scroll shadow (z-4) so it stays crisp as
    rows scroll under the pinned header, while the shadow still falls over the
    rest of the data cells. Kept below the sticky band chrome (z-7) and the
-   actions column (z-6) so the rail still clips behind them. */
-.grouped-sheet .sheet-group > tr.sheet-group-row > td:first-child {
+   actions column (z-6) so the rail still clips behind them. A row's detail row
+   (Budget's link suggestions) continues its rail. */
+.grouped-sheet .sheet-group > tr.sheet-group-row > td:first-child,
+.grouped-sheet .sheet-group > tr[data-detail-row] > td:first-child {
     position: relative;
     z-index: 5;
 }

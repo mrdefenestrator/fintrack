@@ -68,6 +68,10 @@
             cell = row.cells[parseInt((key || "").slice(1), 10)];
         }
         if (!cell) return undefined;
+        // A cell being edited holds an input: sort by what it holds, so the
+        // row doesn't jump to the band's end the moment its editor opens.
+        var input = cell.querySelector("input.table-cell-input");
+        if (input) return input.value;
         var v = cell.getAttribute("data-sort-value");
         return v !== null ? v : cell.textContent;
     }

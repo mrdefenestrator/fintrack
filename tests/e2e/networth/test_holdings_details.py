@@ -80,3 +80,22 @@ def test_details_label_sorts_its_band(page, flask_server):
     assert "sort_asset_col=f-qty" in page.url and "sort_asset_dir=desc" in page.url
     page.reload()
     assert "Savings Bonds" in rows.first.inner_text()
+
+
+def test_editing_a_sorted_field_keeps_the_row_in_place(page, flask_server):
+    """Opening an editor in a band sorted by that field must not move the row:
+    group-sort.js re-sorts after the swap, and the edited cell holds an input
+    rather than text."""
+    page.goto(f"{flask_server}/s/test_finances/holdings?edit=1")
+    rows = page.locator("#holdings-asset tr[data-reorder-index]")
+    qty = page.locator('#holdings-asset [data-sort-key="f-qty"]')
+    qty.click()
+    qty.click()  # desc: Savings Bonds (50) first
+    first = rows.first
+    assert "Savings Bonds" in first.inner_text()
+    first.locator('[data-cell-key="f-qty"]').click()
+    page.locator(
+        '#holdings-asset .cell-editing[data-cell-key="f-qty"] input[name=value]'
+    ).wait_for()
+    assert "Savings Bonds" in rows.first.inner_text()
+    page.keyboard.press("Escape")

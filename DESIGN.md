@@ -856,7 +856,8 @@ independently drag-reorderable; debt↔asset equity/LTV pairing
   `[data-sort-field]` element, honouring its `data-sort-value` (Payoff sorts
   by its date, not its "Mon YYYY" text). The Details cell as a whole doesn't
   sort. A saved `sort_<band>_col` that the band's header no longer offers is
-  ignored.
+  ignored. On every grouped sheet, a cell whose editor is open sorts by the
+  input's value, so opening an editor in a sorted band doesn't move the row.
 - **Row accent by group, not sign.** Cash, Credit Cards, Loans, and Assets have
   distinct green, rose, amber, and blue accents. A credit card therefore reads
   as a liability even at a zero balance rather than changing with the current

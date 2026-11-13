@@ -1,7 +1,15 @@
 """Shared grouped-sheet helpers (web/routes/grouped_sheet.py), used by the
 Holdings and Budget sheets."""
 
-from web.routes.grouped_sheet import group_columns, parse_order, remap_group_order
+import pytest
+
+from web.routes.grouped_sheet import (
+    SubField,
+    compound_column,
+    group_columns,
+    parse_order,
+    remap_group_order,
+)
 
 
 def test_group_columns_metadata():
@@ -14,7 +22,37 @@ def test_group_columns_metadata():
         "right_align": [1, 2],
         "spans": [1, 2, 1],
         "ncols": 3,
+        "compound": {},
     }
+
+
+def test_compound_column_places_fields_by_line_and_track():
+    """Holdings' Details: fields keyed, each placed on its own grid line/track
+    (None leaves a track empty), on one shared template."""
+    layout = compound_column(
+        [
+            [SubField("x", "X", True), None],
+            [SubField("y", "Y", False), SubField("z", "Z", True)],
+        ],
+        ["4rem", "6rem"],
+        {"z": "Zed"},
+    )
+    assert layout["template"] == "4rem 6rem"
+    assert layout["lines"] == 2
+    assert layout["keys"] == ["x", "y", "z"]
+    assert [(f["key"], f["row"], f["col"]) for f in layout["fields"]] == [
+        ("x", 1, 1),
+        ("y", 2, 1),
+        ("z", 2, 2),
+    ]
+    assert layout["fields"][2]["tooltip"] == "Zed"
+    meta = group_columns([("d", "D", False, 1)], compound={"d": layout})
+    assert meta["compound"]["d"] is layout
+
+
+def test_compound_column_rejects_a_short_line():
+    with pytest.raises(ValueError):
+        compound_column([[SubField("x", "X", True)]], ["4rem", "6rem"])
 
 
 def test_parse_order():

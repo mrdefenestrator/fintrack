@@ -813,23 +813,50 @@ from exactly one source now (loans no longer straddle two tables), so each is
 independently drag-reorderable; debt↔asset equity/LTV pairing
 (`calculations.equity_pairs`) is unchanged.
 
-- **Ragged right edge with shared leading columns.** The first four columns —
-  Institution·Type·Name·Amount — are shared across all groups and stay aligned
-  via `<col>` widths. Each group appends its own trailing columns as real `<td>`
-  cells; shorter groups pad with a filler `<td colspan>` to the widest group's
-  column count so the HTML table grid stays consistent.
-  Cash: Reserve·Funding·As Of. Credit Cards:
-  Limit·Available·Used·Rewards·Statement·Due·Linked·As Of. Loans:
-  Interest·Mo. Interest·Equity·LTV·Original·Term·Originated·P&I·Paid·Payoff·Due·Linked·As Of. Assets:
-  Unit Price·Qty·Source·Est. Return·Mo. Contrib. Equity and LTV show on the
-  **loan** row (the debt side of a secured pair). Original, Term, and Originated
-  capture loan origination inputs; P&I and Paid are derived amortization values.
+- **One column spine, with a Details column (issue #142).** Every band shares
+  the same eight columns — **Institution · Type · Name · Amount · Details ·
+  Due · Linked · As Of** — so Due, Linked, and As Of line up down the whole
+  sheet and you can scan one column for freshness or due dates. The leading
+  four keep fixed `<col>` widths. A band a spine column doesn't apply to shows
+  "-" there (Cash has no Due or Linked; Assets no Due). Linked is a card's
+  payment account, a loan's secured asset, or, on an asset row, the loans
+  secured against it. Assets show As Of like the other bands.
+  **Details** is a *compound column*: one cell holding the band's own fields
+  on a CSS grid with fixed track widths, and the band's column header carries
+  the matching labels on the same `grid-template-columns`, so a field and its
+  label line up row to row (each row's grid is independent, so tracks can't be
+  content-sized). Cash: Reserve·Funding. Credit Cards:
+  Limit·Available·Used·Rewards·Statement. Assets: Unit Price·Qty·Source·Est.
+  Return·Mo. Contrib. Loans wrap their ten fields onto two lines, stacked so
+  each track holds one kind of value: Interest·Mo. Interest·P&I·Paid·Payoff
+  over Term·Original·Equity·LTV·Originated. Equity and LTV show on the
+  **loan** row (the debt side of a secured pair). Original, Term, and
+  Originated capture loan origination inputs; P&I and Paid are derived
+  amortization values.
   Mo. Interest (owed × rate ÷ 12) and Payoff (when the current balance reaches
   zero at P&I) come from `fintrack/insights/debt.py`, as does a card's Used
   (owed ÷ limit, amber past `card_usage_high_pct`, 30%, in
   `configs/insights.yaml`) — issue #102. Each band's `<tbody>` carries
   `id="holdings-<key>"` so the Overview can link to it.
   Due is a recurring day of month, clamped to month-end when needed.
+  The layouts live in `web/routes/holdings.py` (`_SPINE`, `_DETAILS`, built
+  with `grouped_sheet.compound_column()`); since every band has the same
+  spine, no row needs a filler cell.
+- **Details fields stay cells.** Each field is still labeled, colored (stale,
+  negative, muted blank), and click-to-edit on its own: in edit mode an
+  editable field opens its editor inside its grid track (the same input/select
+  forms as a whole-cell editor, `macros/table.html` `edit_input_form` /
+  `edit_select_form`), and `cell-nav.js` treats it as its own stop
+  (`data-cell-key="f-<field>"`): Tab walks a Details cell's fields in order
+  before moving on, Enter moves to the same field in the next row.
+- **Sorting inside Details: the labels sort.** Rather than drop sorting for
+  the fields that moved into Details, each Details label in the header is its
+  own sort control (`data-sort-key="f-<field>"`, asc → desc → none like any
+  column header); `group-sort.js` sorts the band by the row's
+  `[data-sort-field]` element, honouring its `data-sort-value` (Payoff sorts
+  by its date, not its "Mon YYYY" text). The Details cell as a whole doesn't
+  sort. A saved `sort_<band>_col` that the band's header no longer offers is
+  ignored.
 - **Row accent by group, not sign.** Cash, Credit Cards, Loans, and Assets have
   distinct green, rose, amber, and blue accents. A credit card therefore reads
   as a liability even at a zero balance rather than changing with the current
@@ -883,6 +910,11 @@ sheet reuses them rather than copying Holdings:
 - per-band sorting — `static/js/group-sort.js` (asc → desc → none, state in
   `sort_<band>_col/_dir` URL params, honours a cell's `data-sort-value`;
   a sorted band's drag-reorder is disabled);
+- compound columns — `grouped_sheet.compound_column()` lays several keyed
+  fields (`SubField`) on a fixed-track grid in one cell (`.sheet-compound`);
+  `group_columns(…, compound={key: layout})` makes `header_row` render that
+  column's labels on the same grid, each sortable by `f-<field>`. Holdings'
+  Details is the one user so far;
 - Python — `web/routes/grouped_sheet.py`: `group_columns()` turns a
   `(key, header, right_align, span)` column list into the header metadata, and
   `remap_group_order()` maps a band's local drag permutation onto that band's
@@ -936,8 +968,9 @@ footer still totals every row.
   Actual / Delta subtotaled per band. Status bands follow the Status filter's
   order. Link-suggestion actions post to the page's own query, so they keep the
   grouping. The Recurring view has no grouping.
-- **Holdings** is deliberately not selectable yet: its bands have different
-  trailing columns, so mixing groups in one band needs its own design.
+- **Holdings** is deliberately not selectable yet: its bands share the spine
+  but each has its own Details fields, so mixing groups in one band needs its
+  own design.
 
 **Banding is optional — flat sheets (issue #48).** Transactions, Merchants,
 Categories, and Budget vs Actual are *flat* grouped sheets: the same layer with
@@ -1042,7 +1075,9 @@ box-shadows (`web/templates/partials/grouped_sheet.css`, `base.html`). Only the 
 stays pinned to the bottom; the add ("+ Add …") row flows inline as the last row
 of its group. `web/static/js/sheet-scroll.js` pins the total(s) to the bottom
 with a faint grid canvas and drives the four edge scroll-shadows (the side
-shadows cover the column header but stop at the group title band).
+shadows cover the column header but stop at the group title band). The top
+shadow sits under the column header of the band pinned at the top, which can
+be taller in one band (Holdings' Loans labels Details on two lines).
 
 ### Budget sheet
 

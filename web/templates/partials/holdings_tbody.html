@@ -1,10 +1,18 @@
-{# Holdings table body — ONE table with four leading columns (Institution, Type,
-   Name, Amount) aligned across all groups. Each group appends its own trailing
-   columns as real <td> cells, giving a ragged right edge with native table
-   auto-sizing. Shorter groups pad with a filler cell to the max column count. #}
+{# Holdings table body — ONE table, one column spine shared by all four bands
+   (issue #142):
+
+       Institution · Type · Name · Amount · Details · Due · Linked · As Of
+
+   so Due, Linked, and As Of line up down the whole sheet. Details is a
+   compound column: each band's own fields on a fixed-track CSS grid, labeled
+   by the band's header on the same template (grouped_sheet.compound_column,
+   built in web/routes/holdings.py). Every row spans the same eight columns
+   (plus the actions column in edit mode), so no row needs a filler cell.
+   Cells map by column key (group.col_keys) and Details fields by field key —
+   never by position. #}
 {% import "partials/sheet.html" as sheet %}
 {% import "partials/grouped_sheet.html" as gs %}
-{% from "macros/table.html" import cell_display, cell_edit_input, cell_edit_select, cell_non_editable %}
+{% from "macros/table.html" import cell_display, cell_edit_input, cell_edit_select, cell_non_editable, edit_input_form, edit_select_form %}
 {% set es = editing_source | default(none) %}
 {% set er = editing_ref | default(none) %}
 {% set ef = editing_field | default(none) %}
@@ -14,6 +22,93 @@
 {# The actions column (drag + delete) exists only in edit mode — in view mode it
    is dropped entirely so it stops eating horizontal space (esp. on mobile). #}
 {% set span = max_cols + 1 if edit_mode else max_cols %}
+
+{# The open editor for `field` on `row`: a select for Type and the Linked refs,
+   else a text input. `td` wraps it in a whole-cell editor; otherwise it is
+   the bare form (a Details field's grid item wraps it). #}
+{% macro editor(row, field, right, td=true, colspan=1) %}
+    {% set update_url = url_for('holdings.update', filename=filename, source=row.source, ref=row.ref) %}
+    {% set display_url = url_for('holdings.cell_edit', filename=filename, source=row.source, ref=row.ref, field=field, display=1) %}
+    {% if field in ('type', 'paymentAccountRef', 'assetRef') %}
+        {% if field == 'type' %}
+            {% set opts = account_type_options if row.source == 'account' else asset_type_options %}
+        {% else %}
+            {% set opts = account_ref_options if field == 'paymentAccountRef' else asset_ref_options %}
+        {% endif %}
+        {% set raw = row.edit_raw[field] %}
+        {% set options %}
+            {% if field != 'type' %}<option value="">-</option>{% endif %}
+            {% for value, label in opts %}
+            <option value="{{ value }}" {% if value | string == raw %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        {% endset %}
+        {% if td %}
+            {% call(caller) cell_edit_select(field, raw, right, update_url, display_url, 'holdings-table', none, none, colspan=colspan) %}{{ options }}{% endcall %}
+        {% else %}
+            {% call edit_select_form(field, right, update_url, display_url, 'holdings-table') %}{{ options }}{% endcall %}
+        {% endif %}
+    {% elif td %}
+        {{ cell_edit_input(field, row.edit_raw[field], right, update_url, display_url, 'holdings-table', none, colspan=colspan) }}
+    {% else %}
+        {{ edit_input_form(field, row.edit_raw[field], right, update_url, display_url, 'holdings-table', none) }}
+    {% endif %}
+{% endmacro %}
+
+{# A row's Details cell: each of the band's fields as a grid item, placed by
+   its key's track. In edit mode an editable field is click-to-edit on its
+   own (hx-get, data-cell-key for cell-nav.js); a read-only one is greyed like
+   a read-only cell. data-sort-field / data-sort-value feed the header labels'
+   sorting (group-sort.js). #}
+{% macro details_cell(group, row) %}
+<td class="{{ sheet.cell_class() }} holdings-details">
+    {{ gs.compound_grid_open(group.compound.details) }}
+    {% for f in group.compound.details.fields %}
+    {% set d = row.details[f.key] %}
+    {% set field = d.field %}
+    {% set align = 'text-right tabular-nums' if f.right_align else '' %}
+    {% set attrs %}style="{{ gs.compound_place(f) }}" data-sort-field="{{ f.key }}"{% if d.sort %} data-sort-value="{{ d.sort }}"{% endif %}{% endset %}
+    {% if edit_mode and field and es == row.source and er == row.ref and ef == field %}
+        <div class="cell-editing {{ align }}" {{ attrs }} data-cell-key="f-{{ f.key }}">{{ editor(row, field, f.right_align, td=false) }}</div>
+    {% elif f.key == 'unit_price' and row.refresh_unit %}
+        {# Symbol + per-unit price, with a hover ↻ that force-refreshes just
+           this symbol. Stale prices (>24h) are amber and keep the button
+           visible; the tooltip narrates the cached age. The value stays
+           click-to-edit (the `unit` field) in edit mode; the button is a
+           sibling with stopPropagation so it never opens the editor. #}
+        {% set refresh_url = url_for('holdings.refresh_price', filename=filename, unit=row.refresh_unit) %}
+        {% set stale_cls = 'text-amber-600 dark:text-amber-400' if row.price_stale else '' %}
+        <span class="holdings-symbol-cell inline-flex items-center justify-end gap-1 {{ align }}" {{ attrs }}>
+            {% if edit_mode and field %}
+            <span class="cursor-pointer rounded px-0.5 hover:bg-blue-50 dark:hover:bg-blue-900/20 {{ stale_cls }}"
+                  hx-get="{{ url_for('holdings.cell_edit', filename=filename, source=row.source, ref=row.ref, field=field) }}"
+                  hx-trigger="click" hx-swap="innerHTML" hx-target="#holdings-table"
+                  data-cell-key="f-{{ f.key }}" role="button" tabindex="0">{{ d.value }}</span>
+            {% else %}
+            <span class="{{ stale_cls }}">{{ d.value }}</span>
+            {% endif %}
+            <button type="button" title="{{ row.price_title }}" aria-label="{{ row.price_title }}"
+                    onclick="event.stopPropagation()"
+                    hx-post="{{ refresh_url }}" hx-vals='{"edit": "{{ 1 if edit_mode else 0 }}"}'
+                    hx-target="#holdings-table" hx-swap="innerHTML"
+                    class="holdings-refresh-btn shrink-0 leading-none text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 {% if row.price_stale %}is-stale text-amber-500 dark:text-amber-400{% endif %}">
+                <span class="holdings-refresh-glyph">↻</span></button>
+        </span>
+    {% elif edit_mode and field %}
+        <span class="{{ align }} {{ d.cls }} cursor-pointer rounded hover:bg-blue-50 dark:hover:bg-blue-900/20" {{ attrs }}
+              hx-get="{{ url_for('holdings.cell_edit', filename=filename, source=row.source, ref=row.ref, field=field) }}"
+              hx-trigger="click" hx-swap="innerHTML" hx-target="#holdings-table"
+              data-cell-key="f-{{ f.key }}" role="button" tabindex="0" title="{{ f.label }}">{{ d.value }}</span>
+    {% elif edit_mode %}
+        {% set neg = d.value | display_is_negative %}
+        <span class="{{ align }} {{ 'text-red-400 dark:text-red-500' if neg else 'text-gray-400 dark:text-gray-500' }}" {{ attrs }}>{{ d.value }}</span>
+    {% else %}
+        <span class="{{ align }} {{ d.cls }}" {{ attrs }}>{{ d.value }}</span>
+    {% endif %}
+    {% endfor %}
+    </div>
+</td>
+{% endmacro %}
+
 {# Fixed widths for the shared leading columns. Rendered here (not in the page
    shell) so an innerHTML swap of #holdings-table re-inserts it and the table
    never reflows on edit/refresh. #}
@@ -35,10 +130,11 @@
     {% call gs.heading(group.label, 3, edit_mode) %}
         {{ gs.subtotal_cell(group.total) }}
         {% if group.refreshable_units %}
-        {# Park the control in the Unit Price column (the first trailing slot),
-           right-aligned so it sits over the prices it refreshes; the rest of the
-           row pads out to full width. #}
-        <td class="px-2 py-1.5 text-right">
+        {# Park the control in Details, over the Unit Price field it refreshes
+           (the band's first track), right-aligned like the prices. #}
+        <td class="px-1.5 py-1.5">
+            {{ gs.compound_grid_open(group.compound.details) }}
+            <span class="text-right" style="grid-column: 1">
             <button type="button"
                 title="Refresh all {{ group.refreshable_units | length }} live price{{ 's' if group.refreshable_units | length != 1 else '' }} now"
                 hx-post="{{ url_for('holdings.refresh_all_prices', filename=filename) }}"
@@ -47,6 +143,8 @@
                 class="holdings-refresh-btn holdings-refresh-all whitespace-nowrap text-xs font-medium text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400">
                 <span class="holdings-refresh-glyph">↻</span> Refresh prices
             </button>
+            </span>
+            </div>
         </td>
         <td colspan="{{ max_cols - 5 }}"></td>
         {% else %}
@@ -58,71 +156,23 @@
     <tr class="{{ gs.row_class() }}" id="holding-row-{{ row.source }}-{{ row.ref }}" data-accent="{{ row.accent_side }}"{% if group.reorderable %} data-reorder-index="{{ loop.index0 }}"{% endif %}>
         {% for cell in row.cells %}
         {% set i = loop.index0 %}
+        {% set colkey = group.col_keys[i] %}
         {% set field = row.fields[i] %}
         {% set right = i in group.right_align %}
-        {% set colspan = group.spans[i] %}
-        {% set colkey = group.col_keys[i] if group.col_keys else none %}
-        {% set is_editing_this = edit_mode and field and es == row.source and er == row.ref and ef == field %}
-        {% if colkey == 'unit_price' and row.refresh_unit and not is_editing_this %}
-            {# Symbol + per-unit price, with a hover ↻ that force-refreshes just
-               this symbol. Stale prices (>24h) are amber and keep the button
-               visible; the tooltip narrates the cached age. The value stays
-               click-to-edit (the `unit` field) in edit mode; the button is a
-               sibling with stopPropagation so it never opens the editor. #}
-            {% set refresh_url = url_for('holdings.refresh_price', filename=filename, unit=row.refresh_unit) %}
-            {% set edit_url = url_for('holdings.cell_edit', filename=filename, source=row.source, ref=row.ref, field=field) if (edit_mode and field) else none %}
-            <td class="{{ sheet.cell_class('text-right tabular-nums', row.cell_classes[i]) }} holdings-symbol-cell"{% if colspan > 1 %} colspan="{{ colspan }}"{% endif %}>
-                <span class="inline-flex items-center justify-end gap-1 w-full">
-                    {% set stale_cls = 'text-amber-600 dark:text-amber-400' if row.price_stale else '' %}
-                    {% if edit_url %}
-                    <span class="cursor-pointer rounded px-0.5 hover:bg-blue-50 dark:hover:bg-blue-900/20 {{ stale_cls }}"
-                          hx-get="{{ edit_url }}" hx-trigger="click" hx-swap="innerHTML" hx-target="#holdings-table"
-                          role="button" tabindex="0">{{ cell }}</span>
-                    {% else %}
-                    <span class="{{ stale_cls }}">{{ cell }}</span>
-                    {% endif %}
-                    <button type="button" title="{{ row.price_title }}" aria-label="{{ row.price_title }}"
-                            onclick="event.stopPropagation()"
-                            hx-post="{{ refresh_url }}" hx-vals='{"edit": "{{ 1 if edit_mode else 0 }}"}'
-                            hx-target="#holdings-table" hx-swap="innerHTML"
-                            class="holdings-refresh-btn shrink-0 leading-none text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 {% if row.price_stale %}is-stale text-amber-500 dark:text-amber-400{% endif %}">
-                        <span class="holdings-refresh-glyph">↻</span></button>
-                </span>
-            </td>
-        {% elif is_editing_this %}
-            {% set update_url = url_for('holdings.update', filename=filename, source=row.source, ref=row.ref) %}
-            {% set display_url = url_for('holdings.cell_edit', filename=filename, source=row.source, ref=row.ref, field=field, display=1) %}
-            {% if field == 'type' %}
-                {% set opts = account_type_options if row.source == 'account' else asset_type_options %}
-                {% call(caller) cell_edit_select('type', row.edit_raw['type'], right, update_url, display_url, 'holdings-table', none, none, colspan=colspan) %}
-                    {% for value, label in opts %}
-                    <option value="{{ value }}" {% if value == row.edit_raw['type'] %}selected{% endif %}>{{ label }}</option>
-                    {% endfor %}
-                {% endcall %}
-            {% elif field in ('paymentAccountRef', 'assetRef') %}
-                {% set opts = account_ref_options if field == 'paymentAccountRef' else asset_ref_options %}
-                {% call(caller) cell_edit_select(field, row.edit_raw[field], right, update_url, display_url, 'holdings-table', none, none, colspan=colspan) %}
-                    <option value="">-</option>
-                    {% for value, label in opts %}
-                    <option value="{{ value }}" {% if value | string == row.edit_raw[field] %}selected{% endif %}>{{ label }}</option>
-                    {% endfor %}
-                {% endcall %}
-            {% else %}
-                {{ cell_edit_input(field, row.edit_raw[field], right, update_url, display_url, 'holdings-table', none, colspan=colspan) }}
-            {% endif %}
+        {% if colkey == 'details' %}
+            {{ details_cell(group, row) }}
+        {% elif edit_mode and field and es == row.source and er == row.ref and ef == field %}
+            {{ editor(row, field, right) }}
         {% elif edit_mode and field %}
             {% set cell_edit_url = url_for('holdings.cell_edit', filename=filename, source=row.source, ref=row.ref, field=field) %}
             {% set is_updated = us == row.source and ur == row.ref and uf == field %}
-            {{ cell_display(cell, right, cell | display_is_negative, cell_edit_url, 'holdings-table', is_updated, colspan=colspan) }}
+            {{ cell_display(cell, right, cell | display_is_negative, cell_edit_url, 'holdings-table', is_updated) }}
         {% elif edit_mode %}
-            {{ cell_non_editable(cell, right, cell | display_is_negative, colspan=colspan) }}
+            {{ cell_non_editable(cell, right, cell | display_is_negative) }}
         {% else %}
-            <td class="{{ sheet.cell_class('text-right tabular-nums' if right else '', (sheet.neg(cell | display_is_negative) ~ ' ' ~ row.cell_classes[i]) | trim) }}"{% if colspan > 1 %} colspan="{{ colspan }}"{% endif %}>{{ cell }}</td>
+            <td class="{{ sheet.cell_class('text-right tabular-nums' if right else '', (sheet.neg(cell | display_is_negative) ~ ' ' ~ row.cell_classes[i]) | trim) }}">{{ cell }}</td>
         {% endif %}
         {% endfor %}
-        {% if group.ncols < max_cols %}
-        <td colspan="{{ max_cols - group.ncols }}"></td>
-        {% endif %}
         {% if edit_mode %}{% with source=row.source, ref=row.ref %}{% include "partials/holdings_actions_cell.html" %}{% endwith %}{% endif %}
     </tr>
     {% else %}

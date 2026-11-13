@@ -63,7 +63,13 @@ from fintrack.networth.repository import (
 
 from .common import account_field_editable, get_common_context, validate_snapshot
 from .crud import ACCOUNTS_COERCION, ASSETS_COERCION, coerce_value, handle_delete
-from .grouped_sheet import group_columns, parse_order, remap_group_order
+from .grouped_sheet import (
+    SubField,
+    compound_column,
+    group_columns,
+    parse_order,
+    remap_group_order,
+)
 
 holdings_bp = Blueprint("holdings", __name__, url_prefix="/s")
 
@@ -91,56 +97,84 @@ _TYPE_LABELS: dict[str, str] = HOLDING_TYPE_LABELS
 _BALANCE_LABELS: dict[str, str] = {"asset": "Assets", "liability": "Liabilities"}
 
 # ---------------------------------------------------------------------------
-# Column layouts. Each tuple is (key, header, right_align, span).
+# Column layouts (issue #142). Every band shares one spine of real columns,
+# each tuple (key, header, right_align, span):
 #
-# The first four columns (Institution · Type · Name · Amount) are shared across
-# all groups. Each group appends its own trailing columns as real <td> cells,
-# giving a ragged right edge with native table auto-sizing.
+#   Institution · Type · Name · Amount · Details · Due · Linked · As Of
+#
+# so Due, Linked, and As Of line up across bands (a band they don't apply to
+# shows "-"). Details is a compound column: each band's own fields on a
+# fixed-track CSS grid (grouped_sheet.compound_column), labeled by the band's
+# header on the same template. Loans' ten fields wrap onto two lines, stacked
+# so each track holds one kind of value (rate, money, money, percent, date).
 # ---------------------------------------------------------------------------
-_LEADING: list[tuple[str, str, bool, int]] = [
+_SPINE: list[tuple[str, str, bool, int]] = [
     ("institution", "Institution", False, 1),
     ("type", "Type", False, 1),
     ("name", "Name", False, 1),
     ("amount", "Amount", True, 1),
-]
-_CASH_COLS = _LEADING + [
-    ("reserve", "Reserve", True, 1),
-    ("funding", "Funding", True, 1),
-    ("as_of", "As Of", False, 1),
-]
-_CREDIT_COLS = _LEADING + [
-    ("limit", "Limit", True, 1),
-    ("available", "Available", True, 1),
-    ("usage", "Used", True, 1),
-    ("rewards", "Rewards", True, 1),
-    ("statement", "Statement", True, 1),
+    ("details", "Details", False, 1),
     ("due", "Due", False, 1),
     ("linked", "Linked", False, 1),
     ("as_of", "As Of", False, 1),
-]
-_LOAN_COLS = _LEADING + [
-    ("interest", "Interest", True, 1),
-    ("month_interest", "Mo. Interest", True, 1),
-    ("equity", "Equity", True, 1),
-    ("ltv", "LTV", True, 1),
-    ("original", "Original", True, 1),
-    ("term", "Term", True, 1),
-    ("originated", "Originated", False, 1),
-    ("payment", "P&I", True, 1),
-    ("progress", "Paid", True, 1),
-    ("payoff", "Payoff", False, 1),
-    ("due", "Due", False, 1),
-    ("linked", "Linked", False, 1),
-    ("as_of", "As Of", False, 1),
-]
-_ASSET_COLS = _LEADING + [
-    ("unit_price", "Unit Price", True, 1),
-    ("qty", "Qty", True, 1),
-    ("source", "Source", False, 1),
-    ("est_return", "Est. Return", True, 1),
-    ("contribution", "Mo. Contrib.", True, 1),
 ]
 _AMOUNT_POS = 3
+
+
+def _f(key: str, label: str, right_align: bool = True) -> SubField:
+    return SubField(key, label, right_align)
+
+
+# Each band's Details: (lines of fields, track widths).
+_DETAILS: dict[str, tuple[list[list[SubField | None]], list[str]]] = {
+    "cash": (
+        [[_f("reserve", "Reserve"), _f("funding", "Funding")]],
+        ["7rem", "7rem"],
+    ),
+    "credit": (
+        [
+            [
+                _f("limit", "Limit"),
+                _f("available", "Available"),
+                _f("usage", "Used"),
+                _f("rewards", "Rewards"),
+                _f("statement", "Statement"),
+            ]
+        ],
+        ["6.5rem", "6.5rem", "3.5rem", "5.5rem", "6.5rem"],
+    ),
+    "loan": (
+        [
+            [
+                _f("interest", "Interest"),
+                _f("month_interest", "Mo. Interest"),
+                _f("payment", "P&I"),
+                _f("progress", "Paid"),
+                _f("payoff", "Payoff", False),
+            ],
+            [
+                _f("term", "Term"),
+                _f("original", "Original"),
+                _f("equity", "Equity"),
+                _f("ltv", "LTV"),
+                _f("originated", "Originated", False),
+            ],
+        ],
+        ["4.5rem", "7rem", "7rem", "3.5rem", "6rem"],
+    ),
+    "asset": (
+        [
+            [
+                _f("unit_price", "Unit Price"),
+                _f("qty", "Qty"),
+                _f("source", "Source", False),
+                _f("est_return", "Est. Return"),
+                _f("contribution", "Mo. Contrib."),
+            ]
+        ],
+        ["8.5rem", "4rem", "5rem", "5.5rem", "6.5rem"],
+    ),
+}
 
 _COL_TOOLTIPS: dict[str, str] = {
     "institution": "Financial institution or brokerage",
@@ -155,8 +189,10 @@ _COL_TOOLTIPS: dict[str, str] = {
     "usage": "Share of the credit limit in use (owed ÷ limit)",
     "rewards": "Rewards balance",
     "statement": "Last statement balance",
-    "due": "Payment due date (day of month)",
-    "linked": "Linked payment account or secured asset",
+    "due": "Payment due day of month (cards and loans)",
+    "linked": "A card's payment account, a loan's secured asset, or the loans"
+    " secured against an asset",
+    "details": "Each band's own fields",
     "interest": "Annual interest rate",
     "equity": "Current equity (asset value minus owed)",
     "ltv": "Loan-to-value ratio",
@@ -174,19 +210,24 @@ _COL_TOOLTIPS: dict[str, str] = {
     "contribution": "Monthly contribution amount",
 }
 
-# Group definitions: key -> (label, source, singular noun for the add button,
-# full column layout). Order here is the top-to-bottom render order.
-_GROUPS: list[tuple[str, str, str, str, list]] = [
-    ("cash", "Cash", "account", "account", _CASH_COLS),
-    ("credit", "Credit Cards", "account", "credit card", _CREDIT_COLS),
-    ("loan", "Loans", "asset", "loan", _LOAN_COLS),
-    ("asset", "Assets", "asset", "asset", _ASSET_COLS),
+# Group definitions: key -> (label, source, singular noun for the add button).
+# Order here is the top-to-bottom render order.
+_GROUPS: list[tuple[str, str, str, str]] = [
+    ("cash", "Cash", "account", "account"),
+    ("credit", "Credit Cards", "account", "credit card"),
+    ("loan", "Loans", "asset", "loan"),
+    ("asset", "Assets", "asset", "asset"),
 ]
-_GROUP_COLS = {key: cols for key, _, _, _, cols in _GROUPS}
+# Each band's Details layout, as the compound-column metadata the header and
+# rows render from.
+_GROUP_DETAILS = {
+    key: compound_column(*_DETAILS[key], _COL_TOOLTIPS) for key, *_ in _GROUPS
+}
 # Band tone (partials/grouped_sheet.css palette), temperature-coded: cool = you own it,
 # warm = you owe it.
 _GROUP_TONES = {"cash": "emerald", "credit": "rose", "loan": "amber", "asset": "blue"}
-_MAX_COLS = max(len(cols) for cols in _GROUP_COLS.values())
+# Every band has the same spine, so every row spans exactly these columns.
+_MAX_COLS = len(_SPINE)
 
 
 def _account_group_key(a: dict) -> str:
@@ -420,6 +461,8 @@ def _loan_values(e: dict, today: date, is_debt: bool) -> dict:
     return {
         "month_interest": _money(loan["interest"]),
         "payoff": f"{loan['payoff']:%b %Y}" if loan["payoff"] else _BLANK,
+        # "Mar 2029" doesn't sort as text; sort a Details field by its date.
+        "payoff_sort": loan["payoff"].isoformat() if loan["payoff"] else None,
     }
 
 
@@ -441,41 +484,51 @@ def _raw(v) -> str:
     return "" if v is None else str(v)
 
 
+def _cell_class(values: dict, key: str, value: str) -> str:
+    """A cell's color: its own "<key>_class" (a stale As Of, a card used past
+    the highlight), else muted when blank, red when negative, else none."""
+    if values.get(f"{key}_class"):
+        return values[f"{key}_class"]
+    if value == _BLANK:
+        return _MUTED
+    if _is_display_negative(value):
+        return "text-red-600 dark:text-red-400"
+    return ""
+
+
 def _make_row(
     values,
     amount,
     type_value,
     institution,
-    today,
     source,
     ref,
-    cols,
+    group_key,
     col_fields,
     edit_raw,
     liability,
 ):
     """Assemble a row record: display cells, per-cell classes, edit metadata.
 
-    Every column in the group's `cols` list becomes a real <td>. The left accent
-    encodes the asset/liability split by the holding's *group* — Credit Cards
-    and Loans are liabilities (red) even at a zero balance; Cash and Assets are
-    green — rather than by the sign of the current amount.
+    Every spine column becomes a real <td> (`cells`, `cell_classes`, `fields`,
+    by position along the spine — the template still maps them by the group's
+    `col_keys`). The Details cell's fields come keyed in `details` (field key
+    -> {value, cls, field}), so the template places each by key. The left
+    accent encodes the asset/liability split by the holding's *group* — Credit
+    Cards and Loans are liabilities (red) even at a zero balance; Cash and
+    Assets are green — rather than by the sign of the current amount.
     """
-    keys = [k for k, _, _, _ in cols]
-    cells = [values.get(k, _BLANK) for k in keys]
-    cell_classes = []
-    for i, k in enumerate(keys):
-        v = cells[i]
-        # A value can carry its own cell color as "<key>_class" (a stale As
-        # Of, a card used past the highlight).
-        if values.get(f"{k}_class"):
-            cell_classes.append(values[f"{k}_class"])
-        elif v == _BLANK:
-            cell_classes.append(_MUTED)
-        elif _is_display_negative(v):
-            cell_classes.append("text-red-600 dark:text-red-400")
-        else:
-            cell_classes.append("")
+    keys = [k for k, _, _, _ in _SPINE]
+    cells = ["" if k == "details" else values.get(k, _BLANK) for k in keys]
+    details = {}
+    for k in _GROUP_DETAILS[group_key]["keys"]:
+        v = values.get(k, _BLANK)
+        details[k] = {
+            "value": v,
+            "cls": _cell_class(values, k, v),
+            "field": col_fields.get(k),
+            "sort": values.get(f"{k}_sort"),
+        }
     return {
         "source": source,
         "ref": ref,
@@ -484,8 +537,12 @@ def _make_row(
         "balance_side": "liability" if liability else "asset",
         "amount": amount,
         "cells": cells,
-        "cell_classes": cell_classes,
+        "cell_classes": [
+            "" if k == "details" else _cell_class(values, k, v)
+            for k, v in zip(keys, cells)
+        ],
         "fields": [col_fields.get(k) for k in keys],
+        "details": details,
         "edit_raw": edit_raw,
         "accent_side": "liability" if liability else "asset",
     }
@@ -497,6 +554,7 @@ def _account_row(a: dict, funding_by_id: dict, account_display: dict, today: dat
     pay_ref = a.get("paymentAccountRef")
     funding = funding_by_id.get(a.get("id"))
     group_key = _account_group_key(a)
+    is_credit = group_key == "credit"
     values = {
         "institution": a.get("institution") or _BLANK,
         "type": _type_label(a.get("type")) or _BLANK,
@@ -507,9 +565,12 @@ def _account_row(a: dict, funding_by_id: dict, account_display: dict, today: dat
         "available": _cc_available(a),  # computed, read-only (QA #10)
         **_usage_values(a),
         "statement": _money(a.get("statement_balance")),
-        "due": fmt_day_ordinal(due_day) if due_day else _BLANK,
+        # Due and Linked are card fields; cash rows show "-" in them.
+        "due": fmt_day_ordinal(due_day) if due_day and is_credit else _BLANK,
         # Linked holding: for a credit card, the account that pays it.
-        "linked": account_display.get(pay_ref, _BLANK) if pay_ref else _BLANK,
+        "linked": (
+            account_display.get(pay_ref, _BLANK) if pay_ref and is_credit else _BLANK
+        ),
         "reserve": _money(a.get("minimum_balance")),
         "funding": fmt_money(funding) if funding else _BLANK,  # None/0 -> blank
         "as_of": a.get("asOfDate") or _BLANK,
@@ -533,10 +594,9 @@ def _account_row(a: dict, funding_by_id: dict, account_display: dict, today: dat
         amount,
         a.get("type"),
         a.get("institution") or "",
-        today,
         "account",
         a.get("id"),
-        _GROUP_COLS[group_key],
+        group_key,
         _account_col_fields(a),
         edit_raw,
         liability=group_key in ("credit", "loan"),
@@ -632,10 +692,9 @@ def _asset_row(
         amount,
         e.get("type"),
         e.get("institution") or "",
-        today,
         "asset",
         e["id"],  # the holding id is the edit/delete handle
-        _GROUP_COLS[group_key],
+        group_key,
         _asset_col_fields(e),
         edit_raw,
         liability=group_key == "loan",
@@ -735,7 +794,7 @@ def _groups_ctx(
     so every band is drag-reorderable.
     """
     groups = []
-    for key, label, source, add_noun, cols in _GROUPS:
+    for key, label, source, add_noun in _GROUPS:
         grp_rows = rows_by_group.get(key, [])
         total = sum((r["amount"] for r in grp_rows), Decimal(0))
         # Distinct non-USD symbols in this group, for the band-level "refresh
@@ -750,7 +809,9 @@ def _groups_ctx(
                 "tone": _GROUP_TONES[key],
                 "source": source,
                 "add_noun": add_noun,
-                **group_columns(cols, _COL_TOOLTIPS),
+                **group_columns(
+                    _SPINE, _COL_TOOLTIPS, {"details": _GROUP_DETAILS[key]}
+                ),
                 "rows": grp_rows,
                 "total": fmt_money(total),
                 "reorderable": True,
@@ -775,8 +836,9 @@ def _groups_ctx(
     return groups, master
 
 
-# How many columns the footer's "since last month" note spans after Amount.
-_CHANGE_SPAN = 3
+# How many columns the footer's "since last month" note spans after Amount:
+# just Details, which is wide enough for it.
+_CHANGE_SPAN = 1
 
 
 def _shows_change(key: str, prior: dict) -> bool:
@@ -1163,7 +1225,7 @@ def reorder(filename: str, group: str):
     fixed, then persisted as a full table permutation.
     """
     snapshot_id = validate_snapshot(filename)
-    if group not in _GROUP_COLS:
+    if group not in _GROUP_TONES:
         abort(404)
     source = "account" if group in ("cash", "credit") else "asset"
     local_order = parse_order(request.form.get("order", ""))
@@ -1196,7 +1258,7 @@ def reorder(filename: str, group: str):
 def add(filename: str, group: str):
     """Add a blank holding to a group; the user then edits it inline."""
     snapshot_id = validate_snapshot(filename)
-    if group not in _GROUP_COLS:
+    if group not in _GROUP_TONES:
         abort(404)
     engine = current_app.config["engine"]
     today = _client_today()

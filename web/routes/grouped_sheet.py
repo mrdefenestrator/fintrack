@@ -39,11 +39,63 @@ from flask import request
 Column = tuple[str, str, bool, int]
 
 
+class SubField(NamedTuple):
+    """One labeled field inside a compound column (Holdings' Details)."""
+
+    key: str
+    label: str
+    right_align: bool
+
+
+def compound_column(
+    lines: Sequence[Sequence[SubField | None]],
+    widths: Sequence[str],
+    tooltips: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    """A compound column: several fields laid out in one cell as a CSS grid
+    with fixed track `widths`, one or more `lines` of fields (None leaves a
+    track empty). Every row's cell and the header's label cell use the same
+    template, so the fields line up down the band even though each row's grid
+    is its own. Fields are keyed, never positional: a row template looks each
+    one up by `key`, and the header labels sort by ``f-<key>`` (group-sort.js
+    reads the row's ``[data-sort-field]``)."""
+    tooltips = tooltips or {}
+    fields = []
+    for line_no, line in enumerate(lines):
+        if len(line) != len(widths):
+            raise ValueError("every line needs one entry per track")
+        for track, f in enumerate(line):
+            if f is None:
+                continue
+            fields.append(
+                {
+                    "key": f.key,
+                    "label": f.label,
+                    "right_align": f.right_align,
+                    "tooltip": tooltips.get(f.key, f.label),
+                    # 1-based CSS grid placement.
+                    "row": line_no + 1,
+                    "col": track + 1,
+                }
+            )
+    return {
+        "template": " ".join(widths),
+        "lines": len(lines),
+        "fields": fields,
+        "keys": [f["key"] for f in fields],
+    }
+
+
 def group_columns(
-    cols: Sequence[Column], tooltips: dict[str, str] | None = None
+    cols: Sequence[Column],
+    tooltips: dict[str, str] | None = None,
+    compound: Mapping[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """The column-header metadata a group dict carries for the header row
-    macro: keys, labels, hover tooltips, right-aligned indices, spans, count."""
+    macro: keys, labels, hover tooltips, right-aligned indices, spans, count.
+    `compound` maps a column key to its compound_column() layout; that
+    column's header renders the fields' labels on the same grid instead of a
+    single sortable label."""
     tooltips = tooltips or {}
     return {
         "col_keys": [k for k, _, _, _ in cols],
@@ -52,6 +104,7 @@ def group_columns(
         "right_align": [i for i, (_, _, ra, _) in enumerate(cols) if ra],
         "spans": [span for _, _, _, span in cols],
         "ncols": len(cols),
+        "compound": dict(compound or {}),
     }
 
 

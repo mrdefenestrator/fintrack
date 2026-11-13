@@ -24,9 +24,9 @@
     {{ cell_value }}</td>
 {% endmacro %}
 
-{# --- Edit cell: text input --- #}
-{% macro cell_edit_input(field, editing_value, right_align, update_url, display_url, tbody_id, inputmode, input_type='text', colspan=1) %}
-<td class="cell-editing {{ sheet.cell_class('text-right tabular-nums' if right_align else '') }}"{% if colspan > 1 %} colspan="{{ colspan }}"{% endif %}>
+{# --- Editor forms (no cell). The <td> macros below wrap them; Holdings'
+      Details fields wrap them in a grid item instead. --- #}
+{% macro edit_input_form(field, editing_value, right_align, update_url, display_url, tbody_id, inputmode, input_type='text') %}
     <form method="post" action="{{ update_url }}" class="inline"
         hx-get="{{ display_url }}"
         hx-trigger="focusout from:input delay:150ms" hx-swap="innerHTML"
@@ -45,12 +45,9 @@
             hx-trigger="focusout changed, keydown[keyCode==13]"
             hx-include="closest form" hx-swap="innerHTML" hx-target="#{{ tbody_id }}" autofocus />
     </form>
-</td>
 {% endmacro %}
 
-{# --- Edit cell: select dropdown --- #}
-{% macro cell_edit_select(field, editing_value, right_align, update_url, display_url, tbody_id, options, format_fn, colspan=1) %}
-<td class="cell-editing {{ sheet.cell_class('text-right tabular-nums' if right_align else '') }}"{% if colspan > 1 %} colspan="{{ colspan }}"{% endif %}>
+{% macro edit_select_form(field, right_align, update_url, display_url, tbody_id) %}
     <form method="post" action="{{ update_url }}" class="inline"
         hx-get="{{ display_url }}"
         hx-trigger="focusout from:select delay:150ms" hx-swap="innerHTML"
@@ -63,6 +60,20 @@
             {{ caller() }}
         </select>
     </form>
+{% endmacro %}
+
+{# --- Edit cell: text input --- #}
+{% macro cell_edit_input(field, editing_value, right_align, update_url, display_url, tbody_id, inputmode, input_type='text', colspan=1) %}
+<td class="cell-editing {{ sheet.cell_class('text-right tabular-nums' if right_align else '') }}"{% if colspan > 1 %} colspan="{{ colspan }}"{% endif %}>
+{{ edit_input_form(field, editing_value, right_align, update_url, display_url, tbody_id, inputmode, input_type) }}
+</td>
+{% endmacro %}
+
+{# --- Edit cell: select dropdown --- #}
+{% macro cell_edit_select(field, editing_value, right_align, update_url, display_url, tbody_id, options, format_fn, colspan=1) %}
+{% set _options = caller() %}
+<td class="cell-editing {{ sheet.cell_class('text-right tabular-nums' if right_align else '') }}"{% if colspan > 1 %} colspan="{{ colspan }}"{% endif %}>
+{% call edit_select_form(field, right_align, update_url, display_url, tbody_id) %}{{ _options }}{% endcall %}
 </td>
 {% endmacro %}
 

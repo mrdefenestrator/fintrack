@@ -1,7 +1,7 @@
-"""'Group by' on the Merchants and Budget vs Actual sheets (issue #137): the
+"""'Group by' on the Merchants and Budget sheets (issue #137): the
 flat list by default, or bands on the shared grouped-sheet layer — category
 bands in the taxonomy's order and colors (Uncategorized last, slate), plus
-Source (Merchants) and Status (Budget vs Actual) bands."""
+Source (Merchants) and Status (Budget) bands."""
 
 import re
 import uuid

@@ -1,5 +1,5 @@
-"""The unbanded ("flat") grouped sheets — Transactions, Merchants, Categories,
-Budget vs Actual (issue #48) — render on the shared grouped-sheet layer
+"""The unbanded ("flat") grouped sheets — Transactions, Merchants, Categories
+(issue #48) — render on the shared grouped-sheet layer
 (partials/grouped_sheet.html) without bands: the column header in a <thead>,
 one untoned ``sheet-group--flat`` body, and the pinned footer in its own
 trailing tbody. Every row spans the full grid, as on the banded sheets."""

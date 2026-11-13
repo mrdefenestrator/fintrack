@@ -570,8 +570,8 @@ rewrite earlier months as drift, and stopping a line doesn't erase it.
   month outside the entry's span, so every multi-month reader — projections
   (a scheduled raise shows up in its month), cash flow's Budgeted net, year in
   review — reads each month's plan with no changes of its own. Readers that
-  list entries for one month filter with `entry_active`: Budget vs Actual and
-  link suggestions (`reconcile._planned_entries`, each entry as of that
+  list entries for one month filter with `entry_active`: the Budget sheet's
+  actuals (`budget_actuals`) and link suggestions (`reconcile._planned_entries`, each entry as of that
   month, so drift compares a charge to the price it had), recurring matching
   (today's plan; a series linked to an ended entry still reads as linked),
   and the projection estimator's claimed categories (an ended line stops
@@ -644,9 +644,10 @@ Three things build on the link:
   `link_suggestion_dismissals`, and the transaction gets no further
   suggestions — it isn't re-offered its next-best entry (`transactions
   undismiss` brings them back, and manual linking is unaffected). On
-  the Budget vs Actual page each entry shows how many of the month's unlinked
-  transactions look like it; in edit mode a row under the entry lists them with
-  Apply / Dismiss. Only entries in that month's plan are candidates. The CLI has `transactions suggest [--apply]` (y / n / d per
+  the Budget sheet each entry's Status shows how many of the month's unlinked
+  transactions look like it, and the pager row counts them all; in edit mode a
+  detail row under the entry lists them with Apply / Dismiss (#143). Only
+  entries in that month's plan are candidates. The CLI has `transactions suggest [--apply]` (y / n / d per
   suggestion) and `transactions dismiss` / `undismiss`.
 - **Budget-vs-actual per entry** (`budget_actuals`) — for a month, each entry in
   that month's plan, as planned then (its version in effect; see "Budget
@@ -669,11 +670,13 @@ Three things build on the link:
   full expected amount. Figures are **signed** like the Budget sheet (income
   +, expenses −), and so is Delta (actual − expected, signed), so a + Delta
   beats the budget and the Net footer is the sum of the rows (#103). Surfaced
-  on its own
-  Budget vs Actual page (`/s/<snapshot>/budget/actual`, read-only apart from
-  the edit-mode link suggestions, in the
-  Spending nav group; month pager, Kind/Category/Status filters, and a net
-  income − expenses total row, laid out like the Transactions sheet) and `fintrack transactions budget-actual`.
+  as the Budget sheet's **Actual / Delta / Status** columns (#143; see "Budget
+  sheet"), the CLI `budget` / `income` / `expenses` tables, and
+  `fintrack transactions budget-actual` (the per-entry detail: N, Basis,
+  Reversed, Drift). It used to be its own Budget vs Actual page; that URL
+  (`/s/<snapshot>/budget/actual`) now redirects to the Budget sheet, keeping its
+  query (`?year=&month=` becomes `ym`, `view=recurring` opens the Recurring
+  view).
 - **Projection true-up** — in the current (partial) month, a budget flow already
   realized as a linked transaction is reflected in the starting balance, so the
   projection engine caps that month's remaining scheduled amount by what is
@@ -681,13 +684,15 @@ Three things build on the link:
   the day-based remainder and the category-exclusion estimator).
 
 Manual linking is available on the Transactions sheet (a Budget-entry picker per
-row) and via `fintrack transactions link/unlink`. The picker leads with the
+row) and via `fintrack transactions link/unlink`; its Budget filter
+(`?budget=<entry id>`, repeatable) lists the transactions linked to an entry —
+what the Budget sheet's Actual cell opens. The picker leads with the
 row's own kind (an expense → expense entries), the row's category first, with
 other same-kind entries below as an escape hatch (linking to one re-pins the
 category). Opposite-kind entries follow in separately labeled groups
 ("Refund · …" / "Clawback · …"), and a linked reversal reads e.g.
-"Rent (refund)" in the Budget cell. Budget vs Actual notes each line's netted
-reversals beside its actual; the CLI's `budget-actual` has a Reversed column.
+"Rent (refund)" in the Budget cell. The Budget sheet's Actual tooltip notes each
+line's netted reversals; the CLI's `budget-actual` has a Reversed column.
 
 **A linked entry pins the transaction's category.** Category and the budget link
 are two axes — classification vs. which planned line a transaction realizes —
@@ -725,7 +730,7 @@ is purely local — no transaction data goes to the Claude API.
 - **Price change.** When the latest run is a new price that started within
   ~3 months (two intervals for longer cadences), the series reports
   previous → current "since" that date, budgeted or not — the unlinked
-  complement to Budget vs Actual's per-entry drift.
+  complement to the Budget sheet's per-entry drift.
 - **Actions.** *Add to budget* creates an entry from the series (current price,
   cadence → recurrence, day of month / month from the last charge, category,
   usual account), planned from the month of its first charge (a recent price
@@ -734,8 +739,8 @@ is purely local — no transaction data goes to the Claude API.
   `unlinked` match; *Not recurring* stores the merchant in
   `recurring_dismissals` and hides it.
 
-Surfaced as Budget vs Actual's **Recurring** view (`?view=recurring`, a
-By month / Recurring toggle above the sheet): a flat grouped sheet of every
+Surfaced as the Budget sheet's **Recurring** view (`/budget?view=recurring`;
+#143 — a Plan / Recurring toggle leads the filter bar): a flat grouped sheet of every
 series — Merchant · Category · Typical · Every · N · Last · Next · Budget ·
 Price change — with Kind and Status filters (Status includes a "Price change"
 flag) and a rough per-month footer; in edit mode the actions cell offers
@@ -773,7 +778,7 @@ top bar carries only a nav toggle (`☰`), the current page name, and the always
 visible utility controls — the lock/edit toggle, Import, the theme cycle, and
 the snapshot picker. Primary navigation lives in a grouped outline
 (Overview first, above the groups; `Finances`: Holdings · Budget · Projections;
-`Spending`: Trends · Budget vs Actual · Transactions · Merchants · Categories —
+`Spending`: Trends · Transactions · Merchants · Categories —
 group headings are labels, only the destinations are links). On wide screens (≥`lg`, 1024px) that outline is a
 docked left sidebar;
 the `☰` collapses it to reclaim horizontal width for the dense sheets. Below the
@@ -888,8 +893,8 @@ sheet reuses them rather than copying Holdings:
   `remap_group_order()` maps a band's local drag permutation onto that band's
   own slots in the full stored ordering (other bands' rows stay put).
 
-**Selectable grouping (issue #137).** Budget, Transactions, Merchants, and
-Budget vs Actual let the user pick how a sheet is banded from a **Group by**
+**Selectable grouping (issue #137).** Budget, Transactions, and Merchants let
+the user pick how a sheet is banded from a **Group by**
 dropdown in its filter bar (`filter_controls.group_by_select`): a radio list named
 `group`, so the choice lives in `?group=` and rides along with the page's other
 controls, its pager, and Reset (it's a view, not a filter, so it adds no chip and
@@ -907,14 +912,16 @@ non-category grouping use `NEUTRAL_TONE` (slate). A band heading reads
 `label · row count` with the sheet's subtotals under their columns; the pinned
 footer still totals every row.
 
-- **Budget:** Category (default, as before) · Kind · Recurrence · None. Every
-  grouping keeps the same columns, heading subtotals, and Net footer, for the
-  viewed month (#136: a past month's Remaining is "—" in every grouping, and the
-  month pager keeps `group`). Kind and Recurrence bands are neutral and each row
-  carries its category's tone on its own rail; they don't drag-reorder (the
-  stored order is per category, so their drag handles are hidden), and their
-  "+ Add" buttons file the stub under the band's kind or recurrence. Recurrence
-  bands run weekly → annual, then one-time. **None** is a flat sheet
+- **Budget:** Category (default, as before) · Kind · Recurrence · Status ·
+  None. Every grouping keeps the same columns, heading subtotals, and Net
+  footer, for the viewed month (#136: the month pager keeps `group`; #143: a
+  future month's Actual / Delta are "—" in every grouping). Kind, Recurrence
+  and Status bands are neutral and each row carries its category's tone on its
+  own rail; they don't drag-reorder (the stored order is per category, so their
+  drag handles are hidden), and their "+ Add" buttons file the stub under the
+  band's kind or recurrence. Recurrence bands run weekly → annual, then
+  one-time; Status bands follow the Status filter's order (a future month's
+  entries share one "No actuals yet" band). The Recurring view has no grouping. **None** is a flat sheet
   (`flat_sheet("budget", …)`) reorderable as the whole viewed month's list
   (`/budget/reorder?all=1`; entries outside that month keep their slots).
 - **Transactions:** None (default, the flat list) · Category · Account · Month.
@@ -932,15 +939,11 @@ footer still totals every row.
 - **Merchants:** None (default) · Category · Source, with the Transactions count
   subtotaled. Recategorizing while grouped by category refreshes the table in
   place the same way (`#merchants-sheet`).
-- **Budget vs Actual:** None (default) · Category · Status, with Expected /
-  Actual / Delta subtotaled per band. Status bands follow the Status filter's
-  order. Link-suggestion actions post to the page's own query, so they keep the
-  grouping. The Recurring view has no grouping.
 - **Holdings** is deliberately not selectable yet: its bands have different
   trailing columns, so mixing groups in one band needs its own design.
 
 **Banding is optional — flat sheets (issue #48).** Transactions, Merchants,
-Categories, and Budget vs Actual are *flat* grouped sheets: the same layer with
+Categories, and Budget's Recurring view are *flat* grouped sheets: the same layer with
 no bands. `flat_sheet(key, cols, tooltips)` builds the column metadata (no
 label, no tone); the page renders `gs.flat_header()` (the shared sortable
 header row, in a `<thead>` so it pins to the top with no heading above it), one
@@ -948,11 +951,13 @@ header row, in a `<thead>` so it pins to the top with no heading above it), one
 `data-tone`, so no accent rail), and `gs.footer()` in its own trailing tbody
 (footer cells may be `{value, span, extra, title}` dicts so a count label can
 span narrow columns). `group-sort.js` sorts the flat body from the `<thead>`
-header (URL `sort_<key>_*`), carrying any `data-detail-row` (Budget vs
-Actual's link suggestions) with the row above it. A single row may still take a
+header (URL `sort_<key>_*`), carrying any `data-detail-row` (Budget's
+link suggestions) with the row above it — on banded sheets too, and
+`row-reorder.js` puts a detail row (`data-detail-of`) back under its row after
+a drag. A single row may still take a
 tone — a flagged possible-duplicate transaction is `data-tone="amber"`, so the
 rail marks just that row. The column specs (`TRANSACTIONS_SHEET`,
-`MERCHANTS_SHEET`, `CATEGORIES_SHEET`, `ACTUAL_SHEET`) are exposed to templates
+`MERCHANTS_SHEET`, `CATEGORIES_SHEET`, `RECURRING_SHEET`) are exposed to templates
 as the `flat_sheets` Jinja global, since their row partials are rendered by many
 row/cell-swap routes; rows map cells by column key like the banded sheets.
 Categories' mutations swap the whole `#categories-table` (so the footer count
@@ -1050,18 +1055,39 @@ Budget is a grouped sheet with **one band per category** (issue #51). Bands
 follow the category taxonomy's `sort_order`; categories an entry uses but the
 taxonomy lacks follow alphabetically, and entries with no category close the
 sheet as **Uncategorized**. Every band shares one column set —
-Category·Description·Amount·Recurrence·When·Remaining·This month·Per month·
-Annual·Auto account — so there is no ragged edge. **This month** is what's
-scheduled in the month shown (an annual bill due in another month is $0); **Per month** is the annual amount ÷ 12, the same figure as Trends'
+Category·Description·Amount·Recurrence·When·This month·Actual·Delta·Status·
+Per month·Annual·Auto account — so there is no ragged edge. **This month** is
+what's scheduled in the month shown (an annual bill due in another month is
+$0); **Per month** is the annual amount ÷ 12, the same figure as Trends'
 Budget/mo (#103). Category stays a column, always shown (as
 Holdings keeps Type), because editing it is how an entry moves between bands.
 There is **no Kind column**: kind isn't editable on the sheet (the add buttons
 set it) and the amount's sign already shows it (expenses are negative). The
 CLI's `budget` table keeps its Kind column.
 
+- **Plan against actual** (issue #143, which folded the Budget vs Actual page
+  into the sheet). **Actual**, **Delta** and **Status** are the viewed month's
+  `reconcile.budget_actuals` for each entry (see "Transaction–budget
+  association"): a past month is the plan as it was against what happened,
+  this month its progress, and a later month the plan only, with the three
+  cells "—". Delta (actual − expected, signed) replaced the old Remaining
+  column: + beats the budget, and it works for any month. Status reads
+  Matched / Over / Under / On pace / Missing / Upcoming / Not linked / Not due
+  (an entry with nothing scheduled that month), colored by its tone, with the
+  pace beside a mid-month variable line. These cells aren't editable and read
+  the same in view and edit mode. **Actual links** to the month's
+  transactions behind it — Transactions filtered by the entry (`?budget=<id>`)
+  or, for a category-measured variable line, by its category — and its
+  tooltip gives the count, the last one seen and netted refunds; a purple dot
+  marks price drift (the linked charge vs the budgeted amount). In view mode
+  Status also shows how many link suggestions wait; in edit mode they sit in a
+  detail row under the entry, with Apply / Dismiss
+  (`/budget/suggestion/link|dismiss`, which re-render the sheet for the month).
+  A Status filter joins Kind / Category / Recurrence, and Group by offers
+  Status.
 - **Totals.** Each band heading carries its signed (income +, expense −)
-  Remaining / This month / Per month / Annual subtotals under those columns; the pinned footer
-  is a single **Net** row over every shown entry.
+  This month / Actual / Delta / Per month / Annual subtotals under those
+  columns; the pinned footer is a single **Net** row over every shown entry.
 - **Color by category.** Each category gets its own band hue, cycling the
   shared 12-hue palette (`_CATEGORY_TONES`) in category order — the taxonomy,
   then other used categories — so neighbouring bands differ. Colors index the
@@ -1076,12 +1102,16 @@ CLI's `budget` table keeps its Kind column.
 - **One month's plan** (issue #136, "Budget history"). A month pager on the
   pager row (default this month, `?ym=YYYY-MM`; full-page links that keep the
   filters and edit mode; later months are open too) picks the month; the sheet
-  shows only entries in that month's plan, each as planned then. This month's
-  Remaining is the rest of the month, a later month's the full month, and a
-  past month's "—". Beside the pager: what the view is ("Edits apply from
-  <month> until the next change" in edit mode, "The plan as it was in
-  <month>" for a past month) and a link to Budget vs Actual for the month
-  (which links back with "Edit the plan for <month>").
+  shows only entries in that month's plan, each as planned then. Beside the
+  pager: what the view is ("Edits apply from <month> until the next change"
+  in edit mode, "The plan as it was in <month>" for a past month), then the
+  month's findings — how many tracked entries are missing, how many drift, and
+  how many link suggestions wait (opening edit mode). An edit swap refreshes
+  the findings out-of-band (`partials/budget_findings.html`, wrapped in a
+  `<template>` so it parses inside the table response).
+- **Recurring view** (`?view=recurring`; see "Recurring charges"). A Plan /
+  Recurring toggle leads both views' filter bars (`partials/budget_views.html`),
+  full-page links that keep `ym` and edit mode.
 - **Edits land in the viewed month.** Every sheet URL carries `ym`
   (`budget.py` `_add_viewed_month`, a blueprint `url_defaults` hook, so
   cell-nav.js's `htmx.ajax` saves carry it too). Amount and schedule edits
@@ -1129,7 +1159,7 @@ hasn't shipped are simply absent.
 | Net worth / Liquid | both now; their actual change since the month-end a year back ("since Nov 2025", like for like: summed over the holdings with a value then, `*` when some had none; "No history back to …" when none did); and their projected change by the end of the 12 months | Projections' timeline over that past year and the next (`?months=24&from=YYYY-MM`), or `?months=12` with no history that far back; the whole card is the link |
 | Cash flow | this month's savings rate, income, spending, and net so far; the average rate, net, and income over Trailing 12's completed months | Trends (`?period=trailing12`) |
 | Debt and cards | total owed on loans, interest this month and total scheduled payments, the next payoff; total card usage (owed ÷ limit, amber past 30%) and owed of limit | Holdings at the Loans band (`#holdings-loan`), or the Credit Cards band without loans |
-| Needs attention | how many findings ("All clear" when none), then one line each, first five: recurring charges not in the budget ("Spotify: $11.99/mo, not in budget"), recurring price changes ("Netflix: $15.49 → $17.99 since Oct"), stale balances ("Chase Checking: last updated 41 days ago"), and accounts overdue for a statement ("Chase Checking: no statement imported in 51 days") | what the card leads with: Budget vs Actual's Recurring view filtered to those (`?view=recurring&status=not_budgeted&status=price_change`), or Holdings for stale data |
+| Needs attention | how many findings ("All clear" when none), then one line each, first five: recurring charges not in the budget ("Spotify: $11.99/mo, not in budget"), recurring price changes ("Netflix: $15.49 → $17.99 since Oct"), stale balances ("Chase Checking: last updated 41 days ago"), and accounts overdue for a statement ("Chase Checking: no statement imported in 51 days") | what the card leads with: Budget's Recurring view filtered to those (`/budget?view=recurring&status=not_budgeted&status=price_change`), or Holdings for stale data |
 | Spending alerts | status ("All clear" / how many things to look at), one line per spending alert (five, then "+N more") | Transactions (`?all_months=true&status=flagged`): the flagged charges and this month's rows in hot categories, each dismissable |
 | Projection warnings | status ("All clear" / how many accounts dip below their minimum), the low point, each below-minimum account, loan payoffs | Projections opened on the low point's month breakdown (`?months=12&month=YYYY-MM`); below-minimum cells are marked in the grid |
 
@@ -1193,13 +1223,13 @@ Every sheet page puts its controls in the same two places, with one look:
 
 - **Pager row** (`nav.pager_row`): the time pager (◀ label ▶ Latest/Now)
   alone on a row above the sheet, left-aligned, followed only by status for
-  that window (Budget vs Actual's badges, Projections' summary). A view
+  that window (Budget's findings badges, Projections' summary). A view
   without a pager keeps the row (Transactions' All time names itself; the
   Recurring view says "Last 13 months") so the sheet doesn't jump. The pager
   never goes in the filter bar.
 - **Filter bar** (`sheet_filter_bar.filter_bar`), fused to the sheet's top:
   the page's view toggles first as its `lead` (`nav.segmented`: Month / Year /
-  All time, By month / Recurring, Trends' period + Highlight, Projections'
+  All time, Budget's Plan / Recurring, Trends' period + Highlight, Projections'
   window + Balances / Changes + Estimate), then the filter dropdowns and
   search, then Reset. Everything is the same compact text-xs control. On a
   phone it stays one row — lead toggles (with `short` labels where needed),
@@ -1232,6 +1262,12 @@ project    [--from YYYY-MM] [--months N] [--estimate] [--changes] [--month YYYY-
 migrate-legacy …
 serve      [--port]
 ```
+
+`budget`, `income` and `expenses` print the Budget sheet's columns for the
+month (`--month`, default this month): This month, then that month's Actual,
+Delta and Status (`-` for a later month), Per month, Annual, with a total row
+(#143). `transactions budget-actual` keeps the per-entry detail behind them
+(N, Basis, Reversed, Drift), with the same status text.
 
 ## Legacy migration
 

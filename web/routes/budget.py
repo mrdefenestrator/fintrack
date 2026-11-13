@@ -63,8 +63,10 @@ from .crud import (
 )
 from .grouped_sheet import (
     NEUTRAL_TONE,
+    Band,
     GroupBy,
     band_key,
+    category_bands,
     category_order,
     category_tones,
     flat_sheet,
@@ -638,6 +640,56 @@ ACTUAL_STATUSES = {
 }
 
 
+# Budget vs Actual "Group by" (issue #137); the first (a flat list) is the
+# default. Category bands follow the taxonomy in their category's color;
+# Status bands follow ACTUAL_STATUSES' order, neutral. Each band heading shows
+# its entry count and Expected / Actual / Delta subtotals.
+ACTUAL_GROUPS = [
+    GroupBy("none", "None"),
+    GroupBy("category", "Category"),
+    GroupBy("status", "Status"),
+]
+
+
+def _actual_bands(shown: list, group: str) -> list[dict] | None:
+    """The bands of `group` over the shown entries (None when ungrouped)."""
+    if group == "none":
+        return None
+    if group == "category":
+        bands = category_bands(
+            shown, lambda a: a.entry.get("category"), _category_names(), "act-cat"
+        )
+    else:
+        bands = [
+            Band(f"act-status-{s}", label, NEUTRAL_TONE, rows)
+            for s, label in ACTUAL_STATUSES.items()
+            if (rows := [a for a in shown if a.status == s])
+        ]
+        # Statuses the filter list doesn't name (none today) close the sheet.
+        known = set(ACTUAL_STATUSES)
+        for s in sorted({a.status for a in shown} - known):
+            rows = [a for a in shown if a.status == s]
+            bands.append(Band(f"act-status-{s}", s, NEUTRAL_TONE, rows))
+
+    def net(rows: list, attr: str) -> Decimal:
+        return sum((getattr(a, f"signed_{attr}") for a in rows), Decimal(0))
+
+    return [
+        {
+            **ACTUAL_SHEET,
+            "key": b.key,
+            "flat": False,
+            "label": b.label,
+            "tone": b.tone,
+            "rows": b.rows,
+            "net_expected": net(b.rows, "expected"),
+            "net_actual": net(b.rows, "actual"),
+            "net_delta": net(b.rows, "actual") - net(b.rows, "expected"),
+        }
+        for b in bands
+    ]
+
+
 def _valid_month(year: int, month: int, default: date) -> date:
     try:
         return date(year, month, 1)
@@ -834,9 +886,13 @@ def _render_actual(filename: str, snapshot_id: int):
 
     prev = date(viewed.year - (viewed.month == 1), (viewed.month - 2) % 12 + 1, 1)
     nxt = date(viewed.year + (viewed.month == 12), viewed.month % 12 + 1, 1)
+    group = selected_group(ACTUAL_GROUPS)
     ctx.update(
         view="month",
         budget_actuals=shown,
+        group=group,
+        group_options=ACTUAL_GROUPS,
+        bands=_actual_bands(shown, group),
         missing_count=sum(a.status == "missing" for a in active),
         drift_count=sum(bool(a.drift_amount) for a in active),
         suggestions_by_entry=suggestions_by_entry,

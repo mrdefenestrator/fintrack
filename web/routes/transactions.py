@@ -31,12 +31,9 @@ from web.routes.common import snapshot_scoped
 from web.routes.grouped_sheet import (
     NEUTRAL_TONE,
     GroupBy,
-    band_key,
-    category_order,
-    category_tones,
+    category_bands,
     flat_sheet,
     selected_group,
-    unique_keys,
 )
 
 bp = snapshot_scoped(Blueprint("transactions", __name__, url_prefix="/s/<filename>"))
@@ -79,7 +76,6 @@ TRANSACTION_GROUPS = [
     GroupBy("account", "Account"),
     GroupBy("month", "Month"),
 ]
-_UNCATEGORIZED = "Uncategorized"
 
 
 def _band(key: str, label: str, tone: str, rows: list[dict]) -> dict:
@@ -101,25 +97,11 @@ def _transaction_bands(
     """Split the listed transactions into the bands of `group` (not
     ``none``), keeping each band's rows in list (date) order."""
     if group == "category":
-        by: dict[str, list[dict]] = {}
-        for t in txns:
-            c = t.get("category") or _UNCATEGORIZED
-            by.setdefault(c, []).append(t)
-        # Taxonomy order, then other used categories; Uncategorized closes.
-        order = [
-            c for c in category_order(categories, by) if c in by and c != _UNCATEGORIZED
-        ]
-        tones = category_tones(category_order(categories, by))
-        order += [_UNCATEGORIZED] if _UNCATEGORIZED in by else []
-        keys = unique_keys(band_key("txn-cat", c) for c in order)
         return [
-            _band(
-                k,
-                c,
-                NEUTRAL_TONE if c == _UNCATEGORIZED else tones[c],
-                by[c],
+            _band(b.key, b.label, b.tone, b.rows)
+            for b in category_bands(
+                txns, lambda t: t.get("category"), categories, "txn-cat"
             )
-            for c, k in zip(order, keys)
         ]
     if group == "month":
         by_month: dict[date, list[dict]] = {}

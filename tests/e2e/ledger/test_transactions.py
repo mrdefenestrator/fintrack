@@ -441,17 +441,16 @@ def test_group_by_account_from_the_filter_bar(page, confirmed_server):
 def test_recategorizing_while_grouped_keeps_the_scroll_position(page, confirmed_server):
     """Issue #137: grouped by category, a category edit moves the row to its
     new band by re-rendering the table inside its scroll container — no full
-    reload, so the sheet doesn't jump back to the top."""
+    reload (which jumped to the top), and the scroll position is restored
+    after the swap (htmx inserts the new table before removing the old one,
+    and scroll anchoring would otherwise carry the sheet to its bottom)."""
     page.set_viewport_size({"width": 1280, "height": 280})
     page.goto(
         f"{confirmed_server}/s/ledger/transactions?year=2026&month=4&edit=1"
         "&group=category"
     )
     sheet = page.locator("#txn-sheet")
-    sheet.evaluate("el => { el.scrollTop = el.scrollHeight; }")
-    before = sheet.evaluate("el => el.scrollTop")
-    assert before > 0
-    row = page.locator("tr[id^='txn-row-']").last
+    row = page.locator("tr[id^='txn-row-']").first
     row_id = row.get_attribute("id")
     with page.expect_response(lambda r: "/cell" in r.url):
         row.locator("td").nth(4).click()
@@ -462,6 +461,10 @@ def test_recategorizing_while_grouped_keeps_the_scroll_position(page, confirmed_
         "el => !!(el && el['htmx-internal-data'] && el['htmx-internal-data'].initHash)",
         arg=select.element_handle(),
     )
+    # A mid-sheet position (not the bottom, where a jump would hide).
+    max_top = sheet.evaluate("el => el.scrollHeight - el.clientHeight")
+    assert max_top > 20
+    before = sheet.evaluate("el => { el.scrollTop = 15; return el.scrollTop; }")
     target = select.locator("option").nth(2).get_attribute("value")
     with page.expect_response(lambda r: r.url.endswith("/update")):
         select.select_option(target)
@@ -470,4 +473,4 @@ def test_recategorizing_while_grouped_keeps_the_scroll_position(page, confirmed_
         target, ignore_case=True
     )
     assert page.url.endswith("&group=category")  # no navigation
-    assert sheet.evaluate("el => el.scrollTop") > 0
+    assert sheet.evaluate("el => el.scrollTop") == before

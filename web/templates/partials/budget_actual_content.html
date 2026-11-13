@@ -17,7 +17,8 @@
    survive the re-render.
    The table is an unbanded grouped sheet (partials/grouped_sheet.html): the
    header, rows, sorting (group-sort.js, URL sort_actual_*) and pinned footer
-   of Holdings/Budget/Projections, with no bands. Columns come from
+   of Holdings/Budget/Projections, with no bands — or, with "Group by"
+   (issue #137), banded by category or status. Columns come from
    ACTUAL_SHEET (web/routes/budget.py); cells map by column key. #}
 {% import "partials/sheet.html" as sheet %}
 {% import "partials/grouped_sheet.html" as gs %}
@@ -49,9 +50,9 @@
 {% for s, label in actual_statuses.items() %}{% set _ = status_opts.append({'value': s, 'display': label, 'checked': s in include_statuses}) %}{% endfor %}
 
 {# filter_qs carries the filters (and edit mode) across the month-pager links. #}
-{% set filter_qs %}{% for k in include_kinds %}&kind={{ k }}{% endfor %}{% for c in include_categories %}&category={{ c | urlencode }}{% endfor %}{% for s in include_statuses %}&status={{ s }}{% endfor %}{% if edit_mode %}&edit=1{% endif %}{% endset %}
+{% set filter_qs %}{% for k in include_kinds %}&kind={{ k }}{% endfor %}{% for c in include_categories %}&category={{ c | urlencode }}{% endfor %}{% for s in include_statuses %}&status={{ s }}{% endfor %}{% if group != group_options[0].key %}&group={{ group }}{% endif %}{% if edit_mode %}&edit=1{% endif %}{% endset %}
 {% set _active = (include_kinds | length) + (include_categories | length) + (include_statuses | length) %}
-{% set _reset = "%s?year=%s&month=%s%s" | format(_url, year, month, '&edit=1' if edit_mode else '') %}
+{% set _reset = "%s?year=%s&month=%s%s%s" | format(_url, year, month, '&group=' ~ group if group != group_options[0].key else '', '&edit=1' if edit_mode else '') %}
 
 {# Pager row (nav.pager_row, as on every page with a pager): the month pager,
    then that month's missing / drift / suggested-link badges and a link to
@@ -89,6 +90,7 @@
 {% set _lead %}{{ views.view_toggle('month', filename, edit_mode) }}{% endset %}
 {% call fb.filter_bar(active_count=_active, reset_url=_reset, lead=_lead) %}
     {% if edit_mode %}<input type="hidden" name="edit" value="1">{% endif %}
+    {{ fc.group_by_select(group_options, group, _url) }}
     {{ fc.multi_select('kind', 'Kind', kind_opts, _url) }}
     {{ fc.multi_select('category', 'Category', cat_opts, _url) }}
     {{ fc.multi_select('status', 'Status', status_opts, _url) }}
@@ -97,13 +99,8 @@
 {% endcall %}
 
 {% set a_sheet = flat_sheets.actual %}
-<div class="table-scroll-container rounded-b-lg border-l border-b border-r border-gray-300 dark:border-gray-600 shadow-sm" data-sheet-scroll>
-<table id="budget-actual-table" class="grouped-sheet w-full text-sm border-collapse bg-white dark:bg-gray-800" style="white-space:nowrap">
-    {# Read-only: no actions column, even in edit mode (edit only reveals the
-       suggestion rows). #}
-    {{ gs.flat_header(a_sheet, false) }}
-    <tbody {{ gs.group_attrs(a_sheet) }}>
-        {% for a in budget_actuals %}
+{# One entry's row, plus (edit mode) its link-suggestion detail row. #}
+{% macro actual_row(a) %}
         {% set _sugs = suggestions_by_entry.get(a.entry_ref, []) %}
         <tr class="{{ gs.row_class() }}">
             {% for key in a_sheet.col_keys %}
@@ -175,10 +172,39 @@
             </td>
         </tr>
         {% endif %}
+{% endmacro %}
+
+<div class="table-scroll-container rounded-b-lg border-l border-b border-r border-gray-300 dark:border-gray-600 shadow-sm" data-sheet-scroll>
+<table id="budget-actual-table" class="grouped-sheet w-full text-sm border-collapse bg-white dark:bg-gray-800" style="white-space:nowrap">
+    {# Read-only: no actions column, even in edit mode (edit only reveals the
+       suggestion rows). #}
+    {% if bands %}
+    {# Grouped (issue #137): one band per category or status — heading with
+       the entry count and the Expected / Actual / Delta subtotals, its own
+       sortable header. #}
+    {% set _expected_at = a_sheet.col_keys.index('expected') %}
+    {% for band in bands %}
+    <tbody {{ gs.group_attrs(band) }}>
+        {% call gs.heading(band.label ~ ' · ' ~ band.rows | length, _expected_at) %}
+        {% for v in (band.net_expected, band.net_actual, band.net_delta) %}
+        <td class="px-1.5 py-1.5 text-right tabular-nums text-sm font-semibold {{ _sign_color(v) }}">{{ _signed(v) }}</td>
+        {% endfor %}
+        <td colspan="{{ a_sheet.ncols - _expected_at - 3 }}"></td>
+        {% endcall %}
+        {{ gs.header_row(band, a_sheet.ncols, false) }}
+        {% for a in band.rows %}{{ actual_row(a) }}{% endfor %}
+    </tbody>
+    {% endfor %}
+    {% else %}
+    {{ gs.flat_header(a_sheet, false) }}
+    <tbody {{ gs.group_attrs(a_sheet) }}>
+        {% for a in budget_actuals %}
+        {{ actual_row(a) }}
         {% else %}
         {{ gs.empty_row(a_sheet.ncols, 'No %s budget entries for %s.' | format('matching' if _active else 'active', month_label)) }}
         {% endfor %}
     </tbody>
+    {% endif %}
     {# Pinned net total (income − expenses), under Expected / Actual / Delta. #}
     {% if budget_actuals %}
     {% set _n = budget_actuals | length %}

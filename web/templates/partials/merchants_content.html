@@ -9,8 +9,10 @@
     {'value': 'manual', 'display': 'Manual'}] %}
 {% set _active = (1 if selected_category else 0) + (1 if selected_source else 0) + (1 if search else 0) %}
 
-{% call fb.filter_bar(active_count=_active, reset_url=_url ~ ('?edit=1' if edit_mode else '')) %}
+{% set _reset_qs = (['edit=1'] if edit_mode else []) + (['group=' ~ group] if group != group_options[0].key else []) %}
+{% call fb.filter_bar(active_count=_active, reset_url=_url ~ ('?' ~ _reset_qs | join('&') if _reset_qs else '')) %}
     {% if edit_mode %}<input type="hidden" name="edit" value="1">{% endif %}
+    {{ fc.group_by_select(group_options, group, _url) }}
     {{ fc.single_select('category', 'Category', category_opts, selected_category or '', _url, any_label='Any category') }}
     {{ fc.single_select('source', 'Source', source_opts, selected_source or '', _url, any_label='Any source') }}
     <input type="search" id="merchant-search" name="search" value="{{ search }}" placeholder="Search merchants..."
@@ -19,6 +21,6 @@
            class="w-56 bg-white dark:bg-gray-700 px-2 py-1 rounded border border-gray-200 dark:border-gray-600 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500">
 {% endcall %}
 
-<div class="table-scroll-container rounded-b-lg border-l border-b border-r border-gray-300 dark:border-gray-600 shadow-sm" data-sheet-scroll>
+<div id="merchants-sheet" class="table-scroll-container rounded-b-lg border-l border-b border-r border-gray-300 dark:border-gray-600 shadow-sm" data-sheet-scroll>
     {% include "partials/merchant_rows.html" %}
 </div>

@@ -888,34 +888,54 @@ sheet reuses them rather than copying Holdings:
   `remap_group_order()` maps a band's local drag permutation onto that band's
   own slots in the full stored ordering (other bands' rows stay put).
 
-**Selectable grouping (issue #137).** Budget and Transactions let the user pick
-how a sheet is banded from a **Group by** dropdown in its filter bar
-(`filter_controls.group_by_select`): a radio list named `group`, so the choice
-lives in `?group=` and rides along with the page's other controls, the
-Transactions pager, and Reset (it's a view, not a filter, so it adds no chip and
+**Selectable grouping (issue #137).** Budget, Transactions, Merchants, and
+Budget vs Actual let the user pick how a sheet is banded from a **Group by**
+dropdown in its filter bar (`filter_controls.group_by_select`): a radio list named
+`group`, so the choice lives in `?group=` and rides along with the page's other
+controls, its pager, and Reset (it's a view, not a filter, so it adds no chip and
 no active-filter count). On a phone it sits in the Filters panel, keeping the bar
 one row. Each sheet declares its choices as a `GroupBy(key, label)` list (first =
-default) and reads the active one with `grouped_sheet.selected_group()`, which
-falls back to the `HX-Current-URL` query on htmx edit swaps so a re-rendered body
-keeps the page's grouping. `band_key()`/`unique_keys()` make band keys, and
-`category_order()`/`category_tones()`/`CATEGORY_TONES` give a category the same
-hue on every sheet; bands of a non-category grouping use `NEUTRAL_TONE` (slate).
+default) and reads the active one with `grouped_sheet.selected_group()` — from
+the request, falling back to the `HX-Current-URL` query on htmx edit swaps so a
+re-rendered body keeps the page's grouping, or from an explicit query (`args`).
+`category_bands()` is the shared "Group by: Category" of the ledger sheets: the
+taxonomy's order (other used categories alphabetically, Uncategorized — none or
+the literal — last, slate), each band in its category's hue. `band_key()`/
+`unique_keys()` make band keys, and `category_order()`/`category_tones()`/
+`CATEGORY_TONES` give a category the same hue on every sheet; bands of a
+non-category grouping use `NEUTRAL_TONE` (slate). A band heading reads
+`label · row count` with the sheet's subtotals under their columns; the pinned
+footer still totals every row.
 
 - **Budget:** Category (default, as before) · Kind · Recurrence · None. Every
-  grouping keeps the same columns, heading subtotals, and Net footer. Kind and
-  Recurrence bands are neutral and each row carries its category's tone on its
-  own rail; they don't drag-reorder (the stored order is per category, so their
-  drag handles are hidden), and their "+ Add" buttons file the stub under the
-  band's kind or recurrence. Recurrence bands run weekly → annual, then one-time.
-  **None** is a flat sheet (`flat_sheet("budget", …)`) reorderable as the whole
-  list (`/budget/reorder?all=1`).
-- **Transactions:** None (default, the flat list) · Category · Account. Each band
-  heading shows `label · row count` with the Amount subtotal under Amount; the
-  footer still totals every row. Category bands follow the taxonomy (other used
-  categories alphabetically, Uncategorized last, slate); Account bands follow
-  the account list. Rows still swap one at a time; when grouped by category, an
-  edit that can move a row (a category correction or a budget link, which pins
-  the category) answers `HX-Redirect` so the row lands in its new band.
+  grouping keeps the same columns, heading subtotals, and Net footer, for the
+  viewed month (#136: a past month's Remaining is "—" in every grouping, and the
+  month pager keeps `group`). Kind and Recurrence bands are neutral and each row
+  carries its category's tone on its own rail; they don't drag-reorder (the
+  stored order is per category, so their drag handles are hidden), and their
+  "+ Add" buttons file the stub under the band's kind or recurrence. Recurrence
+  bands run weekly → annual, then one-time. **None** is a flat sheet
+  (`flat_sheet("budget", …)`) reorderable as the whole viewed month's list
+  (`/budget/reorder?all=1`; entries outside that month keep their slots).
+- **Transactions:** None (default, the flat list) · Category · Account · Month.
+  Account bands follow the account list; Month bands run newest first (for the
+  Year / All time windows), neutral. Rows still swap one at a time. Edits that
+  change more than that row — a category correction or budget link (which pins
+  the category) while grouped by category, apply-to-merchant, or dismissing a
+  running-hot alert — re-render the whole table **in place**: the route renders
+  `transaction_rows.html` for the page's own query (`HX-Current-URL`) and
+  answers `HX-Retarget: #txn-sheet` + `HX-Reswap: innerHTML`, so the scroll
+  container stays put (a full reload jumped back to the top). `base.html`
+  restores the container's scroll position after any swap into a
+  `[data-sheet-scroll]`: htmx inserts the new table before removing the old
+  one, and scroll anchoring would otherwise carry the sheet to its bottom.
+- **Merchants:** None (default) · Category · Source, with the Transactions count
+  subtotaled. Recategorizing while grouped by category refreshes the table in
+  place the same way (`#merchants-sheet`).
+- **Budget vs Actual:** None (default) · Category · Status, with Expected /
+  Actual / Delta subtotaled per band. Status bands follow the Status filter's
+  order. Link-suggestion actions post to the page's own query, so they keep the
+  grouping. The Recurring view has no grouping.
 - **Holdings** is deliberately not selectable yet: its bands have different
   trailing columns, so mixing groups in one band needs its own design.
 

@@ -176,3 +176,39 @@ def category_tones(categories: Sequence[str]) -> dict[str, str]:
     return {
         c: CATEGORY_TONES[i % len(CATEGORY_TONES)] for i, c in enumerate(categories)
     }
+
+
+UNCATEGORIZED = "Uncategorized"
+
+
+class Band(NamedTuple):
+    """One band of a grouping: its DOM/URL key, heading label, tone, rows."""
+
+    key: str
+    label: str
+    tone: str
+    rows: list
+
+
+def category_bands(
+    items: Iterable[Any],
+    category_of: Callable[[Any], str | None],
+    taxonomy: Sequence[str],
+    prefix: str,
+) -> list[Band]:
+    """Split `items` into one band per category, in the category taxonomy's
+    order (other used categories alphabetically, Uncategorized — no category,
+    or the literal "Uncategorized" — last), each in its category's hue and
+    Uncategorized neutral. Items keep their order within a band. The shared
+    "Group by: Category" of the ledger sheets (Transactions, Merchants,
+    Budget vs Actual); Budget builds its own (per-band add/reorder)."""
+    by: dict[str, list] = {}
+    for item in items:
+        by.setdefault(category_of(item) or UNCATEGORIZED, []).append(item)
+    named = category_order(taxonomy, (c for c in by if c != UNCATEGORIZED))
+    tones = category_tones(named)
+    order = [c for c in named if c in by] + (
+        [UNCATEGORIZED] if UNCATEGORIZED in by else []
+    )
+    keys = unique_keys(band_key(prefix, c) for c in order)
+    return [Band(k, c, tones.get(c, NEUTRAL_TONE), by[c]) for c, k in zip(order, keys)]

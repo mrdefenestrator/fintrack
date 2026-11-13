@@ -1,17 +1,9 @@
-{# Budget actions cell: history toggle, end / resume (issue #136), then the
-   shared drag handle + delete. `row.ends_here` = the entry's last planned
-   month is the one shown (offer Resume instead of End); `row.history` = its
-   history row is open. Their URLs carry the viewed month (ym). #}
+{# Budget actions cell: end / resume (issue #136), then the shared drag
+   handle + delete. `row.ends_here` = the entry's last planned month is the
+   one shown (offer Resume instead of End). Their URLs carry the viewed month
+   (ym). #}
 {% set _btn = 'table-action-btn shrink-0 text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700' %}
-{% set _open = row is defined and row.history %}
 {% set extra_actions %}
-<button type="button" class="{{ _btn }}" data-budget-history
-    title="{{ 'Hide history' if _open else 'History: start, end, and past amounts' }}"
-    aria-pressed="{{ 'true' if _open else 'false' }}"
-    hx-get="{{ url_for('budget.history', filename=filename, index=index, close=1 if _open else none) }}"
-    hx-target="#budget-table" hx-swap="innerHTML">
-    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" stroke-width="2" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 7v5l3 2" /></svg>
-</button>
 {% if row is defined and row.ends_here %}
 <button type="button" class="{{ _btn }}" data-budget-resume
     title="Resume: keep it in the plan after this month"

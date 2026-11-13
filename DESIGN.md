@@ -1038,14 +1038,19 @@ CLI's `budget` table keeps its Kind column.
   every month; a stub added from a band starts that month. Drag-reorder moves
   only the rows shown, leaving entries outside the month in their slots.
 - **Markers.** A dot on Amount when the entry's amount/schedule changed in the
-  viewed month (tooltip: what it was), and on Description when it starts or
-  ends then — empty spans, so sorting still reads the cell text.
-- **History / End.** The actions cell (wider here: four buttons) adds a
-  history toggle and **End** (stop after the viewed month; **Resume** in its
-  last month). The history row (a `data-detail-row` under the entry, with its
-  own actions cell so it spans the full grid) has Starts / Ends-after month
-  inputs and one line per version — from month (a link to it), amount
-  (correctable in place), recurrence, when, and × to remove a change.
+  viewed month — its tooltip lists the whole history, one line per version
+  ("Until Jul 2026: ($45.00) Monthly, 2nd" / "From Aug 2026: ($49.00) …") —
+  and on Description when it starts or ends then. Empty spans, so sorting
+  still reads the cell text.
+- **End / Resume.** The actions cell (wider here: three buttons) adds **End**
+  (stop after the viewed month; **Resume** in its last month) before drag and
+  delete.
+- **Correcting the past is ordinary editing**, not a separate history editor
+  (a nested history row was tried and dropped as more machinery than it
+  earns). Edit in the month a change started to fix that change in place;
+  set a value back to the previous version's to remove the change (identical
+  neighbours collapse). The CLI keeps `history` and `edit --version` for
+  listing and correcting versions directly.
 
 ### Overview
 

@@ -170,62 +170,28 @@ def test_end_and_resume(client, db_engine):
     assert "Rent" in _page(client)
 
 
-def test_history_row_lists_versions(client, db_engine):
+def test_change_dot_tooltip_lists_the_history(client, db_engine):
     with db_engine.connect() as conn:
         update_budget_entry(conn, 1, 0, {"amount": 2100}, effective=PREV)
-    body = client.get(f"/s/home/budget/history/0?ym={_ym(NOW)}").get_data(as_text=True)
-    history = body.split('data-history-for="0"')[1].split("</tr>")[0]
-    assert re.findall(r'data-version="([^"]+)"', history) == ["base", _ym(PREV)]
-    assert 'value="2000.00"' in history and 'value="2100.00"' in history
-    closed = client.get(f"/s/home/budget/history/0?ym={_ym(NOW)}&close=1")
-    assert "data-history-for" not in closed.get_data(as_text=True)
+        update_budget_entry(conn, 1, 0, {"amount": 2200}, effective=NEXT)
+    body = _page(client, PREV)
+    title = re.search(r'data-budget-mark="changed" title="([^"]*)"', body).group(1)
+    assert title.split("\n") == [
+        f"Changed in {PREV:%b %Y}",
+        f"Until {PREV2:%b %Y}: ($2,000.00) Monthly, 1st",
+        f"{PREV:%b %Y} – {NOW:%b %Y}: ($2,100.00) Monthly, 1st",
+        f"From {NEXT:%b %Y}: ($2,200.00) Monthly, 1st",
+    ]
+    # No dot in a month without a change.
+    assert 'data-budget-mark="changed"' not in _page(client, NOW)
 
 
-def test_history_corrects_and_removes_versions(client, db_engine):
-    with db_engine.connect() as conn:
-        update_budget_entry(conn, 1, 0, {"amount": 2100}, effective=PREV)
-    resp = client.post(
-        f"/s/home/budget/version/0?ym={_ym(NOW)}",
-        data={"from": "base", "amount": "1950"},
-    )
-    assert resp.status_code == 200
-    assert _rent(db_engine, PREV2)["amount"] == 1950
-    assert _rent(db_engine, NOW)["amount"] == 2100
-    resp = client.post(
-        f"/s/home/budget/version/0/delete?ym={_ym(NOW)}", data={"from": _ym(PREV)}
-    )
-    assert resp.status_code == 200
-    assert _rent(db_engine, NOW)["amount"] == 1950
-    # The base version can't be removed; junk amounts are rejected.
-    bad = client.post(
-        f"/s/home/budget/version/0/delete?ym={_ym(NOW)}", data={"from": "base"}
-    )
-    assert bad.status_code == 422
-    bad = client.post(
-        f"/s/home/budget/version/0?ym={_ym(NOW)}", data={"from": "base", "amount": "x"}
-    )
-    assert bad.status_code == 422
-
-
-def test_span_sets_start_and_end(client, db_engine):
-    resp = client.post(
-        f"/s/home/budget/span/0?ym={_ym(NOW)}",
-        data={"start": _ym(PREV), "end": _ym(NEXT)},
-    )
-    assert resp.status_code == 200
-    rent = _rent(db_engine, NOW)
-    assert (rent["startMonth"], rent["endMonth"]) == (
-        PREV.isoformat(),
-        NEXT.isoformat(),
-    )
-    bad = client.post(
-        f"/s/home/budget/span/0?ym={_ym(NOW)}",
-        data={"start": _ym(NEXT), "end": _ym(PREV)},
-    )
-    assert bad.status_code == 422
-    client.post(f"/s/home/budget/span/0?ym={_ym(NOW)}", data={"start": "", "end": ""})
-    rent = _rent(db_engine, NOW)
-    assert "startMonth" not in rent and "endMonth" not in rent
+def test_the_history_row_is_gone(client):
+    """Issue #136 review: no history row; a past amount is fixed by editing
+    that month."""
+    body = _page(client, edit=True)
+    assert "data-budget-history" not in body
+    assert client.get("/s/home/budget/history/0").status_code == 404
 
 
 def test_reorder_moves_only_the_viewed_months_rows(client, db_engine):

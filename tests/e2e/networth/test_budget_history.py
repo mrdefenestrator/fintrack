@@ -1,5 +1,5 @@
 """E2E: Budget history (issue #136) — the month pager, an edit made in a past
-month applying until the next change, ending an entry, and the history row."""
+month applying until the next change, and ending an entry."""
 
 from datetime import date, datetime
 
@@ -75,7 +75,7 @@ def test_past_edit_applies_until_the_next_change(page, flask_server):
     assert "($2,100.00)" in _rent_row(page).inner_text()
 
 
-def test_end_and_history(page, flask_server):
+def test_end_and_resume(page, flask_server):
     now = _this_month()
     base = f"{flask_server}/s/test_finances/budget"
     page.goto(base)
@@ -85,13 +85,7 @@ def test_end_and_history(page, flask_server):
         _rent_row(page).locator("[data-budget-end]").click()
     page.wait_for_load_state("networkidle")
     assert _rent_row(page).locator("[data-budget-resume]").is_visible()
-
-    with page.expect_response(lambda r: "/budget/history/" in r.url):
-        _rent_row(page).locator("[data-budget-history]").click()
-    history = page.locator("tr[data-history-for]")
-    history.wait_for(state="visible")
-    assert history.locator("[data-version='base']").is_visible()
-    assert history.locator("input[name='end']").input_value() == f"{now:%Y-%m}"
+    assert _rent_row(page).locator("[data-budget-mark='ends']").count() == 1
 
     page.goto(f"{base}?ym={_shift(now, 1):%Y-%m}")
     assert _rent_row(page).count() == 0

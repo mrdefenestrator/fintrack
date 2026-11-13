@@ -82,6 +82,6 @@
     <input type="hidden" name="all_months" value="{{ 'true' if all_months else ('year' if this_year else '') }}">
 {% endcall %}
 
-<div class="table-scroll-container rounded-b-lg border-l border-b border-r border-gray-300 dark:border-gray-600 shadow-sm" data-sheet-scroll>
+<div id="txn-sheet" class="table-scroll-container rounded-b-lg border-l border-b border-r border-gray-300 dark:border-gray-600 shadow-sm" data-sheet-scroll>
     {% include "partials/transaction_rows.html" %}
 </div>

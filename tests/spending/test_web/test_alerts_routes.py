@@ -204,13 +204,16 @@ def test_flagged_shows_a_hot_categorys_rows_without_the_rail(client, hot):
     assert rows and not any("data-tone=" in r for r in rows)
 
 
-def test_dismissing_a_hot_row_hides_the_category_and_reloads(client, hot):
+def test_dismissing_a_hot_row_hides_the_category_and_refreshes(client, hot):
     url = f"/s/ledger/transactions/{hot[0]}/alert"
     current = "/s/ledger/transactions?all_months=true&status=flagged"
     resp = client.post(
         url, data={"action": "dismiss"}, headers={"HX-Current-URL": current}
     )
-    assert resp.status_code == 204
-    assert resp.headers["HX-Redirect"] == current
+    # The whole table re-renders in place for the page's own query (here the
+    # Flagged filter, which now matches nothing).
+    assert resp.status_code == 200
+    assert resp.headers["HX-Retarget"] == "#txn-sheet"
+    assert "data-alert=" not in resp.get_data(as_text=True)
     html = client.get(current).get_data(as_text=True)
     assert "data-alert=" not in html

@@ -29,7 +29,7 @@ group-by plumbing above.
 """
 
 import re
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from typing import Any, NamedTuple
 from urllib.parse import parse_qs, urlsplit
 
@@ -100,14 +100,20 @@ class GroupBy(NamedTuple):
     label: str
 
 
-def selected_group(options: Sequence[GroupBy]) -> str:
+def selected_group(
+    options: Sequence[GroupBy], args: Mapping[str, str] | None = None
+) -> str:
     """The sheet's active grouping: ``?group=`` if it names one of `options`,
-    else the default (the first option).
+    else the default (the first option). `args` reads another query instead of
+    the request's (e.g. the page URL's, for an in-place refresh).
 
     An edit swap (an htmx cell/row request) doesn't carry the page's query, so
     the param falls back to the page URL htmx sends as ``HX-Current-URL`` —
     the swapped-in body keeps the grouping the page shows."""
     keys = [o.key for o in options]
+    if args is not None:
+        raw = args.get("group")
+        return raw if raw in keys else keys[0]
     raw = request.args.get("group")
     if raw is None and request.headers.get("HX-Request"):
         query = parse_qs(urlsplit(request.headers.get("HX-Current-URL", "")).query)

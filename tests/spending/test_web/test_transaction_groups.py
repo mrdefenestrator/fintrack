@@ -10,6 +10,7 @@ from html.parser import HTMLParser
 import pytest
 from sqlalchemy import create_engine
 
+from fintrack.budget.repository import add_budget_entry, get_budget_entries
 from fintrack.core.db import init_db
 from fintrack.ledger.repository.accounts import add_account
 from fintrack.ledger.repository.categories import add_category
@@ -187,17 +188,103 @@ def test_every_row_spans_the_full_grid(client, group, edit):
     assert len(set(parser.rows)) == 1, parser.rows
 
 
-def test_recategorizing_reloads_when_grouped_by_category(client, db_engine):
+def _regrouped(resp) -> str:
+    """The in-place table refresh an edit answers with while grouped by
+    category: the whole table, retargeted into the scroll container."""
+    assert resp.status_code == 200
+    assert resp.headers["HX-Retarget"] == "#txn-sheet"
+    assert resp.headers["HX-Reswap"] == "innerHTML"
+    assert "HX-Redirect" not in resp.headers
+    return resp.get_data(as_text=True)
+
+
+def test_recategorizing_regroups_the_table_in_place(client, db_engine):
+    """No full reload (it would jump back to the top): the table re-renders
+    into its scroll container for the page's own filters and window."""
     txn = _txn_id(db_engine, "MYSTERY SHOP", 5)
     page = f"http://localhost{_URL}&group=category&edit=1"
-    resp = client.post(
-        f"/s/home/transactions/{txn}/update",
-        data={"field": "category", "value": "Dining"},
-        headers={"HX-Request": "true", "HX-Current-URL": page},
+    body = _regrouped(
+        client.post(
+            f"/s/home/transactions/{txn}/update",
+            data={"field": "category", "value": "Dining"},
+            headers={"HX-Request": "true", "HX-Current-URL": page},
+        )
     )
-    assert resp.status_code == 204
-    assert resp.headers["HX-Redirect"] == page
-    assert "Dining · 2" in _get(client, "&group=category")
+    assert "<html" not in body
+    assert _headings(body) == ["Groceries · 2", "Dining · 2"]
+    assert f'id="txn-row-{txn}"' in _band(body, "txn-cat-dining")
+    assert "data-group-by" not in body  # just the table, not the filter bar
+
+
+def test_regroup_keeps_the_page_filters(client, db_engine):
+    txn = _txn_id(db_engine, "MYSTERY SHOP", 5)
+    page = f"http://localhost{_URL}&group=category&q=MYSTERY"
+    body = _regrouped(
+        client.post(
+            f"/s/home/transactions/{txn}/update",
+            data={"field": "category", "value": "Dining"},
+            headers={"HX-Request": "true", "HX-Current-URL": page},
+        )
+    )
+    assert _headings(body) == ["Dining · 1"]
+
+
+def test_budget_link_regroups_when_grouped_by_category(client, db_engine):
+    """A budget link pins the transaction's category to the entry's, so it
+    moves bands too."""
+    with db_engine.connect() as conn:
+        add_budget_entry(
+            conn,
+            1,
+            {
+                "kind": "expense",
+                "description": "Eating out",
+                "amount": 50,
+                "recurrence": "monthly",
+                "category": "Dining",
+            },
+        )
+        ref = get_budget_entries(conn, 1)[0]["_db_id"]
+    txn = _txn_id(db_engine, "MYSTERY SHOP", 5)
+    body = _regrouped(
+        client.post(
+            f"/s/home/transactions/{txn}/link",
+            data={"budget_entry_ref": str(ref)},
+            headers={
+                "HX-Request": "true",
+                "HX-Current-URL": f"http://localhost{_URL}&group=category&edit=1",
+            },
+        )
+    )
+    assert f'id="txn-row-{txn}"' in _band(body, "txn-cat-dining")
+    assert "Uncategorized" not in _headings(body)
+
+
+def test_group_by_month_bands_newest_first(client, db_engine):
+    # A February row joins January's four; the Year window shows both months.
+    with db_engine.connect() as conn:
+        imp = create_import(conn, account_id=1, filename="feb.ofx", file_hash="hf")
+        confirm_import(conn, imp)
+        insert_transactions(
+            conn,
+            import_id=imp,
+            account_id=1,
+            transactions_data=[
+                {
+                    "date": date(2024, 2, 9),
+                    "amount": Decimal("-8.00"),
+                    "raw_description": "CHIPOTLE",
+                    "normalized_merchant": "CHIPOTLE",
+                    "fingerprint": "fp-feb",
+                }
+            ],
+        )
+    body = client.get(
+        "/s/home/transactions?year=2024&month=1&all_months=year&group=month"
+    ).get_data(as_text=True)
+    assert _headings(body) == ["Feb 2024 · 1", "Jan 2024 · 4"]
+    assert "-$8.00" in _band(body, "txn-month-2024-02")
+    assert "-$117.00" in _band(body, "txn-month-2024-01")
 
 
 def test_recategorizing_swaps_the_row_when_not_grouped_by_category(client, db_engine):

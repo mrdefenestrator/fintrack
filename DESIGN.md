@@ -772,9 +772,14 @@ Navigation is a **single-row top bar plus a collapsible side navigation**. The
 top bar carries only a nav toggle (`☰`), the current page name, and the always-
 visible utility controls — the lock/edit toggle, Import, the theme cycle, and
 the snapshot picker. Primary navigation lives in a grouped outline
-(Overview first, above the groups; `Finances`: Holdings · Budget · Projections;
-`Spending`: Trends · Budget vs Actual · Transactions · Merchants · Categories —
-group headings are labels, only the destinations are links). On wide screens (≥`lg`, 1024px) that outline is a
+(Overview first, above the groups; `Net worth`: Holdings · Projections;
+`Cash flow`: Budget · Budget vs Actual · Transactions · Trends; `Setup`:
+Merchants · Categories — group headings are labels, only the destinations are
+links). Each read-only view sits with the sheet it extends over time:
+Projections is Holdings going forward, Trends is spending going back by
+category, so Cash flow drills down Trends → Budget → Transactions; Setup holds
+the rules you rarely change (#141). Budget vs Actual leaves the outline once it
+merges into Budget (#143). On wide screens (≥`lg`, 1024px) that outline is a
 docked left sidebar;
 the `☰` collapses it to reclaim horizontal width for the dense sheets. Below the
 breakpoint it collapses to a hamburger that opens the same outline as an overlay

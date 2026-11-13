@@ -3,11 +3,14 @@ Parameters:
 - delete_confirm_url: URL for delete confirmation (hx-get)
 - edit_mode: boolean, whether in edit mode (enables the handle + delete)
 - reorderable: boolean (default true), whether to show the drag handle
+- extra_actions: optional markup for more buttons, before the drag handle
+  (Budget's history / end / resume)
 Row drag is wired by web/static/js/row-reorder.js (SortableJS); the handle is
 hidden while a column sort is active (see base.html) so sorting and manual
 order don't fight. #}
 <td class="table-actions-cell px-1.5 py-0.5 border-r border-gray-100 dark:border-gray-700 text-center align-middle">
     <span class="table-actions-inner">
+        {% if extra_actions is defined and extra_actions %}{{ extra_actions }}{% endif %}
         {% if reorderable is not defined or reorderable %}
         {% if edit_mode %}
         <button type="button" class="drag-handle table-action-btn text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-grab shrink-0"

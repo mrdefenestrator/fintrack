@@ -35,13 +35,14 @@ from typing import Any
 from sqlalchemy import Connection
 
 from fintrack.budget.reconcile import _measured_by_category, link_transaction
-from fintrack.budget.recurrence import money
+from fintrack.budget.recurrence import entry_active, money
 from fintrack.budget.repository import (
     add_budget_entry,
     add_recurring_dismissal,
     get_budget_entries,
     get_recurring_dismissals,
     remove_recurring_dismissal,
+    update_budget_entry_by_id,
 )
 from fintrack.ledger.repository.transactions import get_transactions
 
@@ -264,12 +265,14 @@ def _classify(
     links: Counter,
     entries: list[dict[str, Any]],
     claims: Counter,
+    described: dict[int, str | None] | None = None,
 ) -> None:
-    by_ref = {e["_db_id"]: e for e in entries}
+    if described is None:
+        described = {e["_db_id"]: e.get("description") for e in entries}
     if links:
         ref = links.most_common(1)[0][0]
         charge.status, charge.entry_ref = "linked", ref
-        charge.entry_description = by_ref.get(ref, {}).get("description")
+        charge.entry_description = described.get(ref)
         return
     for entry in entries:
         if _entry_matches(charge, entry) and not _measured_by_category(entry, claims):
@@ -318,7 +321,11 @@ def _scan(
             continue
         groups.setdefault(key, []).append(txn)
 
-    entries = get_budget_entries(conn, snapshot_id)
+    # Matched against today's plan (issue #136): an entry that ended or hasn't
+    # started can't cover a series, though a series linked to one still says so.
+    entries = get_budget_entries(conn, snapshot_id, as_of=today)
+    described = {e["_db_id"]: e.get("description") for e in entries}
+    entries = [e for e in entries if entry_active(e, today.year, today.month)]
     claims = Counter(e["category"] for e in entries if e.get("category"))
     found: list[RecurringCharge] = []
     for (merchant, kind), txns in groups.items():
@@ -344,7 +351,7 @@ def _scan(
         links = Counter(
             t["budget_entry_ref"] for t in txns if t.get("budget_entry_ref") is not None
         )
-        _classify(charge, links, entries, claims)
+        _classify(charge, links, entries, claims, described)
         found.append(charge)
     return found, {key: len(txns) for key, txns in groups.items()}
 
@@ -466,13 +473,15 @@ def get_recurring(
 
 def entry_for(charge: RecurringCharge) -> dict[str, Any]:
     """The budget entry a series would become: its current price, cadence,
-    day, category and usual account."""
+    day, category and usual account, planned from the month of its first
+    charge (issue #136) so the charges it links fall in its months."""
     last = charge.pattern.last_date
     entry: dict[str, Any] = {
         "kind": charge.kind,
         "description": charge.merchant,
         "amount": charge.pattern.amount,
         "recurrence": charge.cadence.recurrence,
+        "startMonth": charge.pattern.first_date.replace(day=1).isoformat(),
     }
     if charge.category:
         entry["category"] = charge.category
@@ -505,9 +514,29 @@ def add_to_budget(
     today: date | None = None,
 ) -> int:
     """Create a budget entry for a recurring series (``entry_for``) and link
-    its transactions to it. Returns the new entry's id."""
+    its transactions to it. Returns the new entry's id. A recent price change
+    becomes the entry's history: the previous price from the first charge,
+    the current one from the month it changed."""
     charge = get_recurring(conn, snapshot_id, merchant, kind, today=today)
-    entry_ref = add_budget_entry(conn, snapshot_id, entry_for(charge))
+    entry = entry_for(charge)
+    since = charge.pattern.price_change_since
+    previous = charge.pattern.previous_amount
+    split = (
+        previous is not None
+        and since is not None
+        and since.replace(day=1) > charge.pattern.first_date.replace(day=1)
+    )
+    if split:
+        entry["amount"] = previous
+    entry_ref = add_budget_entry(conn, snapshot_id, entry)
+    if split:
+        update_budget_entry_by_id(
+            conn,
+            snapshot_id,
+            entry_ref,
+            {"amount": charge.pattern.amount},
+            effective=since,
+        )
     _link_series(conn, snapshot_id, charge, entry_ref)
     return entry_ref
 

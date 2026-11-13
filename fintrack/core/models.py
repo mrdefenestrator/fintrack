@@ -516,6 +516,13 @@ budget_entries = Table(
     Column("continuous", Boolean, nullable=True),
     Column("auto_account_ref", Integer, nullable=True),
     Column("sort_order", Integer, nullable=False, default=0),
+    # The months the entry is in the plan (issue #136), each the 1st of its
+    # month, both inclusive. NULL start = every earlier month (entries from
+    # before #136); NULL end = open-ended. The schedule columns above are the
+    # entry's *base* version, in effect from start_month until the first
+    # budget_entry_versions row.
+    Column("start_month", Date, nullable=True),
+    Column("end_month", Date, nullable=True),
     CheckConstraint("kind IN ('income', 'expense')", name="ck_budget_kind"),
     CheckConstraint(
         "recurrence IN ('one_time', 'monthly', 'weekly', 'biweekly',"
@@ -530,6 +537,37 @@ budget_entries = Table(
         ["holdings.id", "holdings.snapshot_id"],
         name="fk_budget_auto_account",
     ),
+)
+
+# A dated change to a budget entry's amount and schedule (issue #136): in
+# effect from `effective_from` (the 1st of a month) until the entry's next
+# version. Each row holds the full versioned field set, not a diff. What isn't
+# versioned (kind, description, category, auto account, order) lives on the
+# entry and applies to every month. Cascades with its entry.
+budget_entry_versions = Table(
+    "budget_entry_versions",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column(
+        "entry_id",
+        Integer,
+        ForeignKey("budget_entries.id", ondelete="CASCADE"),
+        nullable=False,
+    ),
+    Column("effective_from", Date, nullable=False),
+    Column("amount", Numeric(12, 2), nullable=False),
+    Column("recurrence", String, nullable=False),
+    Column("date", Date, nullable=True),
+    Column("day_of_month", Integer, nullable=True),
+    Column("month", Integer, nullable=True),
+    Column("day_of_year", Integer, nullable=True),
+    Column("continuous", Boolean, nullable=True),
+    CheckConstraint(
+        "recurrence IN ('one_time', 'monthly', 'weekly', 'biweekly',"
+        " 'quarterly', 'semiannual', 'annual')",
+        name="ck_budget_version_recurrence",
+    ),
+    UniqueConstraint("entry_id", "effective_from", name="uq_budget_version_month"),
 )
 
 price_cache = Table(

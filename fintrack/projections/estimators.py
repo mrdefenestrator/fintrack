@@ -13,6 +13,7 @@ from typing import Any
 
 from sqlalchemy import Connection
 
+from fintrack.budget.recurrence import as_month
 from fintrack.ledger.repository.aggregations import get_rolling_average
 
 # Internal movements (credit-card payments, account-to-account transfers)
@@ -32,7 +33,15 @@ def unscheduled_spend_by_category(
     trailing `months_back` full months, keeping only net-spend categories
     that no budget entry claims."""
     today = today or datetime.now().astimezone().date()
-    claimed = {e.get("category") for e in budget if e.get("category")}
+    # An entry that ended before this month no longer claims its category
+    # (issue #136): its spending is unscheduled again.
+    this_month = today.replace(day=1)
+    claimed = {
+        e.get("category")
+        for e in budget
+        if e.get("category")
+        and (not e.get("endMonth") or as_month(e["endMonth"]) >= this_month)
+    }
     averages = get_rolling_average(
         conn,
         year=today.year,

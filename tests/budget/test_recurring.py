@@ -274,6 +274,45 @@ def test_add_to_budget_creates_entry_and_links(conn, snapshot_id, seeder, accoun
     assert c.status == "linked"
 
 
+def test_added_entry_starts_with_its_first_charge(conn, snapshot_id, seeder):
+    """Issue #136: the entry is planned from the first charge's month, so the
+    charges it links fall inside its months."""
+    seed_monthly(seeder, "Spotify", "11.99", "Entertainment", start=(2026, 5))
+    add_to_budget(conn, snapshot_id, "Spotify", today=TODAY)
+    [entry] = get_budget_entries(conn, snapshot_id)
+    assert entry["startMonth"] == "2026-05-01"
+    assert "_versions" not in entry
+
+
+def test_added_entry_keeps_a_recent_price_change_as_history(conn, snapshot_id, seeder):
+    """Issue #136: the old price until the change, the new one from then, so
+    Budget vs Actual shows no phantom drift in the earlier months."""
+    seed_monthly(seeder, "Netflix", "15.49", "Entertainment", months=4)
+    seed_monthly(seeder, "Netflix", "17.99", "Entertainment", months=2, start=(2026, 9))
+    add_to_budget(conn, snapshot_id, "Netflix", today=TODAY)
+    [entry] = get_budget_entries(conn, snapshot_id, as_of=date(2026, 6, 1))
+    assert entry["amount"] == D("15.49")
+    assert [(v["from"], v["amount"]) for v in entry["_versions"]] == [
+        (None, D("15.49")),
+        ("2026-09-01", D("17.99")),
+    ]
+    [entry] = get_budget_entries(conn, snapshot_id, as_of=date(2026, 10, 1))
+    assert entry["amount"] == D("17.99")
+
+
+def test_ended_entry_no_longer_covers_a_series(conn, snapshot_id, seeder):
+    """An entry that ended can't be the unlinked match for a live series."""
+    from fintrack.budget.repository import end_budget_entry
+
+    make_entry(conn, snapshot_id, description="Spotify", amount=11.99)
+    seed_monthly(seeder, "Spotify", "11.99", "Entertainment")
+    [c] = find_recurring(conn, snapshot_id, today=TODAY)
+    assert c.status == "unlinked"
+    end_budget_entry(conn, snapshot_id, 0, date(2026, 8, 1))
+    [c] = find_recurring(conn, snapshot_id, today=TODAY)
+    assert c.status == "not_budgeted"
+
+
 def test_add_weekly_and_annual(conn, snapshot_id, seeder):
     start = date(2026, 10, 5)
     for i in range(5):

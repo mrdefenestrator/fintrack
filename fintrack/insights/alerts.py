@@ -10,7 +10,7 @@ from datetime import date
 
 from sqlalchemy.engine import Connection
 
-from fintrack.budget.recurrence import budget_entry_in_month
+from fintrack.budget.recurrence import budget_entry_in_month, entry_active
 from fintrack.budget.repository import get_budget_entries
 from fintrack.ledger.alerts import (
     Alert,
@@ -120,10 +120,12 @@ def _budget_by_category(
     """Each category's planned spending for today's month, split like Budget
     vs Actual: continuous monthly lines accrue, every other line is fixed."""
     budget: dict[str, CategoryBudget] = {}
-    for entry in get_budget_entries(conn, snapshot_id):
+    for entry in get_budget_entries(conn, snapshot_id, as_of=today):
         category = entry.get("category")
         if entry.get("kind") != "expense" or not category:
             continue
+        if not entry_active(entry, today.year, today.month):
+            continue  # not in this month's plan (issue #136)
         amount = float(budget_entry_in_month(entry, today.year, today.month))
         plan = budget.setdefault(category, {"fixed": 0.0, "variable": 0.0})
         continuous = entry.get("recurrence") == "monthly" and entry.get("continuous")

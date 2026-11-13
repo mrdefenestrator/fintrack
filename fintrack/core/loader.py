@@ -1,19 +1,25 @@
 """Load finances data from SQLite database."""
 
 import logging
+from datetime import date
 from typing import Any
 
 logger = logging.getLogger(__name__)
 
 
-def load_finances_from_db(conn, snapshot_id: int) -> dict[str, Any]:
-    """Load finances data from DB into a plain dict (same shape as the old YAML structure)."""
+def load_finances_from_db(
+    conn, snapshot_id: int, budget_as_of: date | None = None
+) -> dict[str, Any]:
+    """Load finances data from DB into a plain dict (same shape as the old YAML structure).
+
+    Budget entries carry their fields as of ``budget_as_of``'s month (default:
+    this month; see budget.repository)."""
     from fintrack.accounts.repository import get_accounts
     from fintrack.budget.repository import get_budget_entries
     from fintrack.networth.repository import get_asset_entries
 
     raw_accounts = get_accounts(conn, snapshot_id)
-    raw_budget = get_budget_entries(conn, snapshot_id)
+    raw_budget = get_budget_entries(conn, snapshot_id, as_of=budget_as_of)
     raw_assets = get_asset_entries(conn, snapshot_id)
 
     # Strip internal _db_id keys before returning

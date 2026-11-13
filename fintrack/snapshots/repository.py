@@ -3,7 +3,12 @@
 from sqlalchemy import Connection, delete, insert, select, update
 
 from fintrack.core.holdings import DETAIL_TABLES
-from fintrack.core.models import budget_entries, holdings, snapshots
+from fintrack.core.models import (
+    budget_entries,
+    budget_entry_versions,
+    holdings,
+    snapshots,
+)
 
 # Snapshot used by ledger flows that predate snapshot awareness (the spending
 # CLI and web UI). migrate-legacy reassigns accounts to real snapshots.
@@ -110,7 +115,21 @@ def copy_snapshot(conn: Connection, from_id: int, to_name: str) -> int:
         data["snapshot_id"] = new_id
         if data.get("auto_account_ref") in id_map:
             data["auto_account_ref"] = id_map[data["auto_account_ref"]]
-        conn.execute(insert(budget_entries).values(**data))
+        new_entry = conn.execute(
+            insert(budget_entries).values(**data)
+        ).inserted_primary_key[0]
+        # ...with its dated versions (issue #136).
+        for version in (
+            conn.execute(
+                select(budget_entry_versions).where(
+                    budget_entry_versions.c.entry_id == row["id"]
+                )
+            )
+            .mappings()
+            .all()
+        ):
+            v = {k: val for k, val in version.items() if k not in ("id", "entry_id")}
+            conn.execute(insert(budget_entry_versions).values(entry_id=new_entry, **v))
 
     conn.commit()
     return new_id

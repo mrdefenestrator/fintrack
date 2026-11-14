@@ -6,6 +6,7 @@
 
 {% import "partials/grouped_sheet.html" as gs %}
 {% import "partials/sheet_filter_bar.html" as fb %}
+{% import "partials/filter_controls.html" as fc %}
 
 {# Pager row (nav.pager_row, as on every page with a pager): the ◀ window ▶ +
    Now pager, then a one-line summary of where liquid and net worth end up
@@ -98,9 +99,12 @@
 </div><!-- end top band -->
 {% endif %}
 
-{# The grid's view controls lead its filter bar (no filters here): window
-   size (6M / 1Y / 2Y on phones), Balances / Changes, and the opt-in estimate
-   of unscheduled spend. #}
+{# The grid's view controls lead its filter bar: window size (6M / 1Y / 2Y on
+   phones) and Balances / Changes. Then the opt-in estimate of unscheduled
+   spend, Group by, and Holdings' Type / Balance / Institution filters (#144),
+   in a GET form that carries the rest of the page state as hidden inputs. The
+   bar is `compact` so the lead + an icon-only Filters trigger fit one phone
+   row; there the estimate, filters and Reset drop into the Filters panel. #}
 {% set _month_opts = [] %}
 {% for choice in month_choices %}
 {% set _ = _month_opts.append({'url': proj_url(months=choice, month=none), 'label': choice ~ ' mo',
@@ -112,20 +116,31 @@
         {'url': proj_url(view=none), 'label': 'Balances', 'active': view == 'balances'},
         {'url': proj_url(view='change'), 'label': 'Changes', 'active': view == 'change'},
     ], use_htmx=false, attrs='data-view-toggle') }}
-    {{ nav.segmented([{
-        'url': proj_url(estimate=none if estimate else 1),
-        'label': 'Estimate unscheduled spend', 'short': 'Estimate',
-        'title': "Turn off" if estimate else "Add last 3 months' spending in categories the budget doesn't cover",
-        'active': estimate,
-        'attrs': 'data-estimate-toggle aria-pressed="%s"' | format('true' if estimate else 'false')}],
-        use_htmx=false) }}
 {% endset %}
-{{ fb.filter_bar(lead=_lead, filters=false) }}
+<form id="projections-filter-form" method="get" action="{{ url_for('projections.projections_view', filename=filename) }}" class="shrink-0">
+    {% for k, v in hidden_params.items() %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}
+    {% call fb.filter_bar(lead=_lead, active_count=active_count,
+        reset_url=proj_url(type=none, balance=none, institution=none), use_htmx=false,
+        compact=true) %}
+        {{ nav.segmented([{
+            'url': proj_url(estimate=none if estimate else 1),
+            'label': 'Estimate unscheduled spend', 'short': 'Estimate',
+            'title': "Turn off" if estimate else "Add last 3 months' spending in categories the budget doesn't cover",
+            'active': estimate,
+            'attrs': 'data-estimate-toggle aria-pressed="%s"' | format('true' if estimate else 'false')}],
+            use_htmx=false) }}
+        {{ fc.group_by_select(group_options, group, form_id='projections-filter-form') }}
+        {{ fc.multi_select('type', 'Type', type_opts, form_id='projections-filter-form') }}
+        {{ fc.multi_select('balance', 'Balance', balance_opts, form_id='projections-filter-form') }}
+        {{ fc.multi_select('institution', 'Institution', institution_opts, form_id='projections-filter-form') }}
+    {% endcall %}
+</form>
 
 {# Accounts × months grid: a grouped sheet (partials/grouped_sheet.html, shared
    with Holdings/Budget) — one always-open band per holding group with its own
    sticky heading (subtotals) and sortable column header, then the pinned
-   Liquid / Net worth footer. Columns are Account, then one per month in the
+   Liquid / Net worth footer (Group by: None is one flat body under a pinned
+   column header instead). Columns are Account, then one per month in the
    window: actual month-ends for past months, the projection from the current
    month on (tinted, italic), with "Now" (Balances view only) at the divider.
    view=change shows each month's change instead.
@@ -174,8 +189,10 @@
 </style>
 <div class="table-scroll-container rounded-b-lg border-l border-b border-r border-gray-300 dark:border-gray-600 shadow-sm" data-sheet-scroll>
 <table id="projections-table" data-projection-table data-view="{{ view }}" class="grouped-sheet w-full text-sm border-collapse bg-white dark:bg-gray-800" style="white-space:nowrap">
+    {% if groups and groups[0].flat %}{{ gs.flat_header(groups[0], false, _month_links) }}{% endif %}
     {% for group in groups %}
     <tbody {{ gs.group_attrs(group) }}>
+        {% if not group.flat %}
         {% call gs.heading(group.label, 1) %}
             {% for c in group.cells %}
             {%- set _sub -%}{{ amount(c.value) }}{{ partial_mark(c) }}{%- endset -%}
@@ -183,6 +200,7 @@
             {% endfor %}
         {% endcall %}
         {{ gs.header_row(group, max_cols, false, _month_links) }}
+        {% endif %}
         {% for row in group.rows %}
         <tr class="{{ gs.row_class() }}" data-reorder-index="{{ loop.index0 }}">
             {% if row.account %}
@@ -210,6 +228,8 @@
         </tr>
         {% endfor %}
     </tbody>
+    {% else %}
+    <tbody>{{ gs.empty_row(max_cols, 'No holdings match these filters.') }}</tbody>
     {% endfor %}
     {% set _liquid = ['Liquid change' if changes else 'Liquid total'] %}
     {% set _net = ['Net worth change' if changes else 'Net worth'] %}

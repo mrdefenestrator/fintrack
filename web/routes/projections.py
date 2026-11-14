@@ -15,6 +15,13 @@ and Budget): one always-open band per holding group — the same group keys and
 tones as Holdings — each with its own sortable header, plus an Unassigned band
 for budget flows with no account, and the Liquid / Net worth totals pinned in
 the shared footer.
+
+Filters and grouping (#144): Holdings' Type / Balance / Institution filters
+(web/routes/holding_filters.py; ?type= ?balance= ?institution=) narrow the
+rows and band subtotals, and a "Group by" choice (?group=) re-bands them by
+holding group (the default), liquidity tier, institution or type — or None, a
+flat sheet. The Unassigned flows match no filter, so they hide while one is
+on. The Liquid / Net worth footer and the summary line stay snapshot-wide.
 """
 
 from decimal import Decimal
@@ -22,9 +29,23 @@ from typing import Any
 
 from flask import Blueprint, current_app, render_template, request, url_for
 
+from fintrack.core.types import HOLDING_TYPE_LABELS, HOLDING_TYPE_VALUES
+from fintrack.networth.calculations import account_tier, asset_tier
 from fintrack.projections import engine, timeline
 from web.routes.common import get_common_context, validate_snapshot
-from web.routes.grouped_sheet import Column, group_columns
+from web.routes.grouped_sheet import (
+    CATEGORY_TONES,
+    NEUTRAL_TONE,
+    Band,
+    Column,
+    GroupBy,
+    band_key,
+    flat_sheet,
+    group_columns,
+    selected_group,
+    unique_keys,
+)
+from web.routes.holding_filters import read_filters
 
 projections_bp = Blueprint("projections", __name__)
 
@@ -40,6 +61,25 @@ _PROJECTION_GROUPS = [
 ]
 _UNASSIGNED = ("unassigned", "Unassigned", "slate")
 
+# "Group by" choices (#144); the first (Holdings' bands) is the default.
+PROJECTION_GROUPS = [
+    GroupBy("holding", "Holding group"),
+    GroupBy("tier", "Liquidity"),
+    GroupBy("institution", "Institution"),
+    GroupBy("type", "Type"),
+    GroupBy("none", "None"),
+]
+_TIERS = [
+    ("liquid", "Liquid", "emerald"),
+    ("semi_liquid", "Semi-liquid", "cyan"),
+    ("illiquid", "Illiquid", "indigo"),
+]
+_NO_INSTITUTION = "(no institution)"
+# Page state the filter form carries along as hidden inputs (its own dropdowns
+# supply group and the filters).
+_CARRIED = ("from", "months", "estimate", "view", "edit", "month")
+_NO_TYPE = "(no type)"
+
 _TOOLTIPS = {
     "account": "Account or holding name",
     "now": "Current balance (start of projection)",
@@ -54,6 +94,22 @@ def _row_group_key(row: dict) -> str:
     # Account rows are only cash or credit cards; loans come through as debt
     # entries (the _source == "debt" branch above), not account rows.
     return "credit" if row["account"].get("type") == "credit_card" else "cash"
+
+
+def _row_meta(row: dict) -> dict:
+    """What the filters and groupings read off a timeline row: its holding
+    group, type, institution, balance side (by group, as on Holdings: cards
+    and loans are liabilities even at zero) and liquidity tier."""
+    acc = row["account"]
+    group = _row_group_key(row)
+    is_account = row.get("_source") is None
+    return {
+        "group_key": group,
+        "type_value": acc.get("type") or ("loan" if group == "loan" else None),
+        "institution": acc.get("institution") or "",
+        "balance_side": "liability" if group in ("credit", "loan") else "asset",
+        "tier": account_tier(acc) if is_account else asset_tier(acc),
+    }
 
 
 def _column_kinds(tl: dict, view: str) -> list[str]:
@@ -127,32 +183,97 @@ def _band(key: str, label: str, tone: str, rows: list[dict]) -> dict:
     }
 
 
-def _group_rows(tl: dict, view: str) -> list[dict]:
-    grouped: dict[str, list] = {key: [] for key, _, _ in _PROJECTION_GROUPS}
-    for row in tl["rows"]:
-        key = _row_group_key(row)
-        if key in grouped:
-            grouped[key].append(row)
+def _bands(rows: list[dict], group: str) -> list[Band]:
+    """Split filtered rows into the bands of `group` (not "none"), in band
+    order, dropping empty ones. Rows keep their timeline order in a band."""
 
-    groups = []
-    for key, label, tone in _PROJECTION_GROUPS:
-        rows = grouped[key]
-        if not rows:
-            continue
-        band_rows = [
-            {**r, "cells": _display(tl, r["cells"], r["start"], r["opening"], view)}
-            for r in rows
+    def split(key_of, order, label_of, tone_of, prefix):
+        by: dict[str, list] = {}
+        for r in rows:
+            by.setdefault(key_of(r), []).append(r)
+        present = [k for k in order if k in by]
+        keys = unique_keys(band_key(prefix, k) for k in present)
+        return [
+            Band(bk, label_of(k), tone_of(k), by[k])
+            for k, bk in zip(present, keys, strict=True)
         ]
-        groups.append(_band(key, label, tone, band_rows))
 
-    if tl["unassigned"] is not None:
+    if group == "tier":
+        labels = {k: (lbl, tone) for k, lbl, tone in _TIERS}
+        return split(
+            lambda r: r["tier"],
+            [k for k, _, _ in _TIERS],
+            lambda k: labels[k][0],
+            lambda k: labels[k][1],
+            "tier",
+        )
+    if group == "institution":
+        named = sorted({r["institution"] for r in rows if r["institution"]})
+        tones = {
+            k: CATEGORY_TONES[i % len(CATEGORY_TONES)] for i, k in enumerate(named)
+        }
+        return split(
+            lambda r: r["institution"],
+            [*named, ""],
+            lambda k: k or _NO_INSTITUTION,
+            lambda k: tones.get(k, NEUTRAL_TONE),
+            "inst",
+        )
+    if group == "type":
+        # Tones index the full type list, so a type keeps its color whatever
+        # else is shown.
+        tones = {
+            k: CATEGORY_TONES[i % len(CATEGORY_TONES)]
+            for i, k in enumerate(HOLDING_TYPE_VALUES)
+        }
+        return split(
+            lambda r: r["type_value"] or "",
+            [*HOLDING_TYPE_VALUES, ""],
+            lambda k: HOLDING_TYPE_LABELS.get(k, _NO_TYPE),
+            lambda k: tones.get(k, NEUTRAL_TONE),
+            "type",
+        )
+    # Holding group: Holdings' own keys, labels and tones.
+    return [
+        Band(key, label, tone, [r for r in rows if r["group_key"] == key])
+        for key, label, tone in _PROJECTION_GROUPS
+        if any(r["group_key"] == key for r in rows)
+    ]
+
+
+def _group_rows(tl: dict, view: str, group: str, flt) -> list[dict]:
+    """The grid's bodies: one band per `group` value over the rows `flt`
+    keeps (plus Unassigned while no filter is on), or for "none" a single
+    flat body."""
+    rows = flt.apply({**r, **_row_meta(r)} for r in tl["rows"])
+    shown = [
+        {**r, "cells": _display(tl, r["cells"], r["start"], r["opening"], view)}
+        for r in rows
+    ]
+    unassigned = None
+    if tl["unassigned"] is not None and not flt.active:
         # Budget flows with no account set: not a holding, but money the
-        # projection moves, so it gets its own (neutral) band.
+        # projection moves, so it gets its own (neutral) band. It has no type,
+        # institution or side, so any filter hides it.
         u = tl["unassigned"]
         cells = _display(tl, u["cells"], Decimal(0), u["opening"], view)
-        groups.append(_band(*_UNASSIGNED, [{"account": None, "cells": cells}]))
+        unassigned = {"account": None, "cells": cells}
 
-    meta = group_columns(_columns(tl, view), _TOOLTIPS)
+    cols = _columns(tl, view)
+    if group == "none":
+        flat_rows = shown + ([unassigned] if unassigned else [])
+        if not flat_rows:
+            return []
+        return [{**flat_sheet("projections", cols, _TOOLTIPS), "rows": flat_rows}]
+
+    by_id = {id(r): s for r, s in zip(rows, shown, strict=True)}
+    groups = [
+        _band(b.key, b.label, b.tone, [by_id[id(r)] for r in b.rows])
+        for b in _bands(rows, group)
+    ]
+    if unassigned:
+        groups.append(_band(*_UNASSIGNED, [unassigned]))
+    meta = group_columns(cols, _TOOLTIPS)
     return [{**g, **meta} for g in groups]
 
 
@@ -195,6 +316,8 @@ def projections_view(filename):
         )
     result = tl["projection"]
     at_now = tl["start"] == tl["current"]
+    flt = read_filters((_row_meta(r) for r in tl["rows"]), request.args)
+    group = selected_group(PROJECTION_GROUPS)
 
     # ?month=YYYY-MM: a projected month in the window (past months have no
     # breakdown yet).
@@ -226,6 +349,8 @@ def projections_view(filename):
         "view": "change" if view == "change" else None,
         "edit": 1 if edit_mode else None,
         "month": open_month["key"] if open_month else None,
+        "group": None if group == PROJECTION_GROUPS[0].key else group,
+        **flt.params(),
     }
 
     def proj_url(**overrides):
@@ -249,7 +374,14 @@ def projections_view(filename):
         active_tab="projections",
         tl=tl,
         result=result,
-        groups=_group_rows(tl, view),
+        groups=_group_rows(tl, view, group, flt),
+        group=group,
+        group_options=PROJECTION_GROUPS,
+        filters_active=flt.active,
+        hidden_params={
+            k: v for k, v in params.items() if v is not None and k in _CARRIED
+        },
+        **flt.context(),
         footer=_footer(tl, view),
         col_kinds=_column_kinds(tl, view),
         summary=tl["summary"],

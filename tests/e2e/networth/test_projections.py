@@ -178,10 +178,54 @@ def test_projections_timeline_pager(page, flask_server):
 
 @pytest.mark.parametrize("width", PHONE_WIDTHS)
 def test_projections_controls_fit_one_row_on_phones(page, flask_server, width):
-    """Pager above; window size (6M/1Y/2Y), Balances/Changes and Estimate
-    share the filter bar's one row on a phone."""
+    """Pager above; window size (6M/1Y/2Y), Balances/Changes and the
+    icon-only Filters trigger share the filter bar's one row on a phone, with
+    Estimate, Group by, the filters and Reset in its panel (#144)."""
     page.set_viewport_size({"width": width, "height": 800})
     page.goto(f"{flask_server}/s/test_finances/projections")
     assert_controls_layout(page, width)
     assert page.locator("[data-window-size] a", has_text="1Y").is_visible()
+    assert not page.locator("[data-estimate-toggle]").is_visible()
+    page.locator("[data-filter-toggle]").click()
     assert page.locator("[data-estimate-toggle]").is_visible()
+    assert page.locator("[data-group-by]").is_visible()
+    assert page.locator("[data-filter-reset]").is_visible()
+
+
+def test_projections_balance_filter(page, flask_server):
+    """Issue #144: Holdings' Balance filter narrows the grid to liabilities,
+    hides the Unassigned band, and survives paging the window."""
+    page.goto(f"{flask_server}/s/test_finances/projections")
+    page.locator(
+        "[data-filter-panel] button.filter-dropdown-trigger:has-text('Balance')"
+    ).click()
+    page.locator("[data-filter-panel] input[name='balance'][value='liability']").click()
+    page.wait_for_url("**/projections**balance=liability**")
+    tbl = page.locator("[data-projection-table]")
+    groups = tbl.locator("tbody.sheet-group").evaluate_all(
+        "els => els.map(e => e.dataset.group)"
+    )
+    assert groups and set(groups) <= {"credit", "loan"}
+    # The Liquid / Net worth footer stays.
+    assert tbl.get_by_text("Net worth", exact=True).is_visible()
+    page.locator("[data-proj-window] a[title='Later']").click()
+    page.wait_for_url("**from=**")
+    assert "balance=liability" in page.url
+
+
+def test_projections_group_by_tier(page, flask_server):
+    """Issue #144: Group by Liquidity rebands the grid by tier and keeps the
+    choice in the URL and across the view toggles."""
+    page.goto(f"{flask_server}/s/test_finances/projections")
+    page.locator("[data-group-by] button").click()
+    page.locator("[data-group-by] input[value='tier']").check()
+    page.wait_for_url("**group=tier**")
+    assert page.locator("[data-group-by-label]").inner_text() == "Liquidity"
+    groups = page.locator("tbody.sheet-group").evaluate_all(
+        "els => els.map(e => e.dataset.group)"
+    )
+    assert groups[0] == "tier-liquid"
+    assert all(g.startswith("tier-") or g == "unassigned" for g in groups)
+    page.locator("[data-view-toggle] a", has_text="Changes").click()
+    page.wait_for_url("**view=change**")
+    assert "group=tier" in page.url

@@ -30,13 +30,28 @@ def test_due_linked_as_of_line_up_across_bands(page, flask_server):
         assert len(xs) == 1, (col, xs)
 
 
-def test_details_label_lines_up_with_its_field(page, flask_server):
-    page.goto(f"{flask_server}/s/test_finances/holdings")
-    label = page.locator('#holdings-credit [data-sort-key="f-statement"]')
-    field = page.locator(f'{CARD_ROW} [data-sort-field="statement"]')
-    lb, fb = label.bounding_box(), field.bounding_box()
-    assert lb["x"] == pytest.approx(fb["x"], abs=0.5)
-    assert lb["width"] == pytest.approx(fb["width"], abs=0.5)
+@pytest.mark.parametrize("edit", [False, True])
+def test_details_label_lines_up_with_its_field(page, flask_server, edit):
+    """Every Details label sits exactly over its field in every band. The
+    track widths are in `ch`, so header and rows must resolve them against
+    the same font (the header cell is bolder)."""
+    page.goto(f"{flask_server}/s/test_finances/holdings{'?edit=1' if edit else ''}")
+    pairs = page.evaluate(
+        """() => [...document.querySelectorAll('tbody.sheet-group')].flatMap(band => {
+            const row = band.querySelector('tr.sheet-group-row');
+            if (!row) return [];
+            return [...band.querySelectorAll('.sheet-compound-label')].map(label => {
+                const key = label.dataset.sortKey.slice(2);
+                const field = row.querySelector(`[data-sort-field="${key}"]`);
+                const l = label.getBoundingClientRect(), f = field.getBoundingClientRect();
+                return [band.dataset.group, key, l.left, f.left, l.width, f.width];
+            });
+        })"""
+    )
+    assert len(pairs) >= 20
+    for group, key, lx, fx, lw, fw in pairs:
+        assert lx == pytest.approx(fx, abs=0.5), (group, key)
+        assert lw == pytest.approx(fw, abs=0.5), (group, key)
 
 
 def test_details_field_edits_in_place_and_tabs_on(page, flask_server):

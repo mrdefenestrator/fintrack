@@ -196,11 +196,48 @@ def test_details_labels_each_bands_own_fields(client):
         "est_return",
         "contribution",
     ]
-    # Loans wrap onto two lines of five.
+    # Loans: all ten fields on one line, one field per column.
     loan = _details_labels(body, "loan")
-    assert len(loan) == 10 and loan[0] == "interest" and loan[5] == "term"
+    assert loan == [
+        "interest",
+        "month_interest",
+        "payment",
+        "progress",
+        "payoff",
+        "original",
+        "term",
+        "originated",
+        "equity",
+        "ltv",
+    ]
     loan_th = body[body.index("sheet-compound-th", body.index('data-group="loan"')) :]
-    assert "grid-row: 2" in loan_th[: loan_th.index("</th>")]
+    assert "grid-row: 2" not in loan_th[: loan_th.index("</th>")]
+
+
+def _track_template(body: str, group: str) -> str:
+    start = body.index(f'data-group="{group}"')
+    th = body[body.index("sheet-compound-th", start) :]
+    return re.search(r"grid-template-columns: ([^\"]+)", th).group(1)
+
+
+def test_details_tracks_fit_the_values_shown(client, db_engine):
+    """Track widths come from the data, so a big number widens its field
+    (nothing clips) and the header uses the rows' template."""
+    before = _track_template(
+        client.get("/s/finances/holdings").get_data(as_text=True), "credit"
+    )
+    from fintrack.accounts.repository import update_account
+
+    visa = _account_by_name(db_engine, "Visa")
+    with db_engine.connect() as conn:
+        update_account(conn, 1, visa["id"], {"limit": 123456789})
+    body = client.get("/s/finances/holdings").get_data(as_text=True)
+    after = _track_template(body, "credit")
+    assert after != before
+    # Limit's track grew to "$123,456,789.00" (15 characters).
+    assert after.split(") ")[0] == "calc(15ch + 0.5rem"
+    row = _row_html(body, f"holding-row-account-{visa['id']}")
+    assert "$123,456,789.00" in row
 
 
 def test_assets_show_as_of_and_their_loans(client, db_engine):

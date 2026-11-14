@@ -826,15 +826,22 @@ independently drag-reorderable; debt↔asset equity/LTV pairing
   "-" there (Cash has no Due or Linked; Assets no Due). Linked is a card's
   payment account, a loan's secured asset, or, on an asset row, the loans
   secured against it. Assets show As Of like the other bands.
-  **Details** is a *compound column*: one cell holding the band's own fields
-  on a CSS grid with fixed track widths, and the band's column header carries
+  **Details** is a *compound column*: one cell holding the band's own fields,
+  one per grid track on a single line, and the band's column header carries
   the matching labels on the same `grid-template-columns`, so a field and its
-  label line up row to row (each row's grid is independent, so tracks can't be
-  content-sized). Cash: Reserve·Funding. Credit Cards:
-  Limit·Available·Used·Rewards·Statement. Assets: Unit Price·Qty·Source·Est.
-  Return·Mo. Contrib. Loans wrap their ten fields onto two lines, stacked so
-  each track holds one kind of value: Interest·Mo. Interest·P&I·Paid·Payoff
-  over Term·Original·Equity·LTV·Originated. Equity and LTV show on the
+  label line up row to row. Each row's grid is independent, so the browser
+  can't size a track from its contents; the server does, on every render
+  (`grouped_sheet.fit_track_widths()`): each track is as wide as the longest
+  value the band shows in it or its label (with room for the sort arrow), in
+  `ch`, so a big number widens its field instead of being clipped. Cash:
+  Reserve·Funding. Credit Cards: Limit·Available·Used·Rewards·Statement.
+  Assets: Unit Price·Qty·Source·Est. Return·Mo. Contrib. Loans:
+  Interest·Mo. Interest·P&I·Paid·Payoff·Original·Term·Originated·Equity·LTV,
+  all on one line. (A first cut stacked Loans' fields on two lines to keep
+  Details narrow; reading down a track then alternated between two fields,
+  so comparing loans was harder, and width is cheap on these sheets. The
+  cost of one line is that Details is as wide as Loans' ten fields, so the
+  narrower bands leave room before Due.) Equity and LTV show on the
   **loan** row (the debt side of a secured pair). Original, Term, and
   Originated capture loan origination inputs; P&I and Paid are derived
   amortization values.
@@ -917,7 +924,8 @@ sheet reuses them rather than copying Holdings:
   `sort_<band>_col/_dir` URL params, honours a cell's `data-sort-value`;
   a sorted band's drag-reorder is disabled);
 - compound columns — `grouped_sheet.compound_column()` lays several keyed
-  fields (`SubField`) on a fixed-track grid in one cell (`.sheet-compound`);
+  fields (`SubField`) on a grid in one cell (`.sheet-compound`), with track
+  widths from `fit_track_widths()` so they fit the data;
   `group_columns(…, compound={key: layout})` makes `header_row` render that
   column's labels on the same grid, each sortable by `f-<field>`. Holdings'
   Details is the one user so far;
@@ -1083,7 +1091,7 @@ of its group. `web/static/js/sheet-scroll.js` pins the total(s) to the bottom
 with a faint grid canvas and drives the four edge scroll-shadows (the side
 shadows cover the column header but stop at the group title band). The top
 shadow sits under the column header of the band pinned at the top, which can
-be taller in one band (Holdings' Loans labels Details on two lines).
+be taller in one band (a compound column with fields on two lines).
 
 ### Budget sheet
 

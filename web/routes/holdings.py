@@ -66,6 +66,7 @@ from .crud import ACCOUNTS_COERCION, ASSETS_COERCION, coerce_value, handle_delet
 from .grouped_sheet import (
     SubField,
     compound_column,
+    fit_track_widths,
     group_columns,
     parse_order,
     remap_group_order,
@@ -103,10 +104,10 @@ _BALANCE_LABELS: dict[str, str] = {"asset": "Assets", "liability": "Liabilities"
 #   Institution · Type · Name · Amount · Details · Due · Linked · As Of
 #
 # so Due, Linked, and As Of line up across bands (a band they don't apply to
-# shows "-"). Details is a compound column: each band's own fields on a
-# fixed-track CSS grid (grouped_sheet.compound_column), labeled by the band's
-# header on the same template. Loans' ten fields wrap onto two lines, stacked
-# so each track holds one kind of value (rate, money, money, percent, date).
+# shows "-"). Details is a compound column: each band's own fields on one
+# line of a CSS grid (grouped_sheet.compound_column), labeled by the band's
+# header on the same template. Its track widths are sized from the values
+# shown on each render (grouped_sheet.fit_track_widths), so nothing clips.
 # ---------------------------------------------------------------------------
 _SPINE: list[tuple[str, str, bool, int]] = [
     ("institution", "Institution", False, 1),
@@ -125,56 +126,41 @@ def _f(key: str, label: str, right_align: bool = True) -> SubField:
     return SubField(key, label, right_align)
 
 
-# Each band's Details: (lines of fields, track widths).
-_DETAILS: dict[str, tuple[list[list[SubField | None]], list[str]]] = {
-    "cash": (
-        [[_f("reserve", "Reserve"), _f("funding", "Funding")]],
-        ["7rem", "7rem"],
-    ),
-    "credit": (
-        [
-            [
-                _f("limit", "Limit"),
-                _f("available", "Available"),
-                _f("usage", "Used"),
-                _f("rewards", "Rewards"),
-                _f("statement", "Statement"),
-            ]
-        ],
-        ["6.5rem", "6.5rem", "3.5rem", "5.5rem", "6.5rem"],
-    ),
-    "loan": (
-        [
-            [
-                _f("interest", "Interest"),
-                _f("month_interest", "Mo. Interest"),
-                _f("payment", "P&I"),
-                _f("progress", "Paid"),
-                _f("payoff", "Payoff", False),
-            ],
-            [
-                _f("term", "Term"),
-                _f("original", "Original"),
-                _f("equity", "Equity"),
-                _f("ltv", "LTV"),
-                _f("originated", "Originated", False),
-            ],
-        ],
-        ["4.5rem", "7rem", "7rem", "3.5rem", "6rem"],
-    ),
-    "asset": (
-        [
-            [
-                _f("unit_price", "Unit Price"),
-                _f("qty", "Qty"),
-                _f("source", "Source", False),
-                _f("est_return", "Est. Return"),
-                _f("contribution", "Mo. Contrib."),
-            ]
-        ],
-        ["8.5rem", "4rem", "5rem", "5.5rem", "6.5rem"],
-    ),
+# Each band's Details fields, in order, on one line (CLAUDE.md: width is
+# cheap, and one field per column keeps each one scannable down the band).
+_DETAILS: dict[str, list[SubField]] = {
+    "cash": [_f("reserve", "Reserve"), _f("funding", "Funding")],
+    "credit": [
+        _f("limit", "Limit"),
+        _f("available", "Available"),
+        _f("usage", "Used"),
+        _f("rewards", "Rewards"),
+        _f("statement", "Statement"),
+    ],
+    # Payment and payoff, then origination, then the secured pair.
+    "loan": [
+        _f("interest", "Interest"),
+        _f("month_interest", "Mo. Interest"),
+        _f("payment", "P&I"),
+        _f("progress", "Paid"),
+        _f("payoff", "Payoff", False),
+        _f("original", "Original"),
+        _f("term", "Term"),
+        _f("originated", "Originated", False),
+        _f("equity", "Equity"),
+        _f("ltv", "LTV"),
+    ],
+    "asset": [
+        _f("unit_price", "Unit Price"),
+        _f("qty", "Qty"),
+        _f("source", "Source", False),
+        _f("est_return", "Est. Return"),
+        _f("contribution", "Mo. Contrib."),
+    ],
 }
+# Room for the price-refresh button beside a symbol's price.
+_DETAILS_EXTRA_CH = {"unit_price": 2.5}
+
 
 _COL_TOOLTIPS: dict[str, str] = {
     "institution": "Financial institution or brokerage",
@@ -218,11 +204,19 @@ _GROUPS: list[tuple[str, str, str, str]] = [
     ("loan", "Loans", "asset", "loan"),
     ("asset", "Assets", "asset", "asset"),
 ]
-# Each band's Details layout, as the compound-column metadata the header and
-# rows render from.
-_GROUP_DETAILS = {
-    key: compound_column(*_DETAILS[key], _COL_TOOLTIPS) for key, *_ in _GROUPS
-}
+
+
+def _details_layout(key: str, rows: list[dict]) -> dict:
+    """A band's Details layout for the header and rows to render from, its
+    tracks sized to the values these rows show."""
+    lines = [_DETAILS[key]]
+    values = {
+        f.key: [r["details"][f.key]["value"] for r in rows] for f in _DETAILS[key]
+    }
+    widths = fit_track_widths(lines, values, _DETAILS_EXTRA_CH)
+    return compound_column(lines, widths, _COL_TOOLTIPS)
+
+
 # Band tone (partials/grouped_sheet.css palette), temperature-coded: cool = you own it,
 # warm = you owe it.
 _GROUP_TONES = {"cash": "emerald", "credit": "rose", "loan": "amber", "asset": "blue"}
@@ -521,7 +515,7 @@ def _make_row(
     keys = [k for k, _, _, _ in _SPINE]
     cells = ["" if k == "details" else values.get(k, _BLANK) for k in keys]
     details = {}
-    for k in _GROUP_DETAILS[group_key]["keys"]:
+    for k in (f.key for f in _DETAILS[group_key]):
         v = values.get(k, _BLANK)
         details[k] = {
             "value": v,
@@ -810,7 +804,7 @@ def _groups_ctx(
                 "source": source,
                 "add_noun": add_noun,
                 **group_columns(
-                    _SPINE, _COL_TOOLTIPS, {"details": _GROUP_DETAILS[key]}
+                    _SPINE, _COL_TOOLTIPS, {"details": _details_layout(key, grp_rows)}
                 ),
                 "rows": grp_rows,
                 "total": fmt_money(total),

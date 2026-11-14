@@ -118,3 +118,26 @@ def test_band_keys_and_category_tones():
     assert category_order(["Z", "A"], ["B", None, "A", ""]) == ["Z", "A", "B"]
     tones = category_tones([f"c{i}" for i in range(len(CATEGORY_TONES) + 1)])
     assert tones["c0"] == tones[f"c{len(CATEGORY_TONES)}"] == CATEGORY_TONES[0]
+
+
+def test_fit_track_widths_takes_the_longest_label_or_value():
+    """Each track fits its longest value, or its label (padded for the sort
+    arrow and heavier weight), never under the minimum; a field's extra room
+    (a button) counts too, and a track shared by two lines fits both."""
+    from web.routes.grouped_sheet import fit_track_widths
+
+    lines = [
+        [SubField("a", "A", True), SubField("b", "Limit", True)],
+        [SubField("c", "C", True), None],
+    ]
+    widths = fit_track_widths(
+        lines,
+        {"a": ["$1.00"], "b": ["$123,456.00", "-"], "c": ["$12,345.00"]},
+        extra_ch={"a": 3},
+    )
+    # a: 5 chars + 3 extra = 8, c: 10 chars -> 10; b: 11 chars beats its label.
+    assert widths == ["calc(10ch + 0.5rem)", "calc(11ch + 0.5rem)"]
+    # A short field keeps the minimum, a long label its own width.
+    narrow = fit_track_widths([[SubField("x", "Mo. Interest", True)]], {"x": ["1"]})
+    assert narrow == ["calc(16ch + 0.5rem)"]  # ceil(12 * 1.1) + 2
+    assert fit_track_widths([[SubField("y", "Q", True)]], {}) == ["calc(5ch + 0.5rem)"]

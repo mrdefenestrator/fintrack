@@ -4,9 +4,10 @@
        Institution · Type · Name · Amount · Details · Due · Linked · As Of
 
    so Due, Linked, and As Of line up down the whole sheet. Details is a
-   compound column: each band's own fields on a fixed-track CSS grid, labeled
-   by the band's header on the same template (grouped_sheet.compound_column,
-   built in web/routes/holdings.py). Every row spans the same eight columns
+   compound column: each band's own fields on one line of a CSS grid whose
+   track widths fit the values shown, labeled by the band's header on the same
+   template (grouped_sheet.compound_column / fit_track_widths, built in
+   web/routes/holdings.py). Every row spans the same eight columns
    (plus the actions column in edit mode), so no row needs a filler cell.
    Cells map by column key (group.col_keys) and Details fields by field key —
    never by position. #}

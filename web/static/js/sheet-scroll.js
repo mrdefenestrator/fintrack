@@ -81,8 +81,8 @@
             // of the band pinned at the top form the pinned top region. The
             // column header sticks just below the heading, so publish the
             // heading height too (its CSS `top`). Headings share one height,
-            // but a column header can be taller in one band (Holdings' Loans
-            // labels its Details fields on two lines), so measure the header
+            // but a column header can be taller in one band (a compound
+            // column with fields on two lines), so measure the header
             // of the band currently pinned: the last band starting at or
             // above the container's top edge (the first band at the top).
             var heading = container.querySelector(".sheet-group-heading");

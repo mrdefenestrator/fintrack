@@ -28,6 +28,7 @@ local drag-reorder onto the band's slots in the full, stored ordering, and the
 group-by plumbing above.
 """
 
+import math
 import re
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from typing import Any, NamedTuple
@@ -53,8 +54,8 @@ def compound_column(
     tooltips: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """A compound column: several fields laid out in one cell as a CSS grid
-    with fixed track `widths`, one or more `lines` of fields (None leaves a
-    track empty). Every row's cell and the header's label cell use the same
+    with explicit track `widths` (fit_track_widths() sizes them from the
+    data), one or more `lines` of fields (None leaves a track empty). Every row's cell and the header's label cell use the same
     template, so the fields line up down the band even though each row's grid
     is its own. Fields are keyed, never positional: a row template looks each
     one up by `key`, and the header labels sort by ``f-<key>`` (group-sort.js
@@ -84,6 +85,36 @@ def compound_column(
         "fields": fields,
         "keys": [f["key"] for f in fields],
     }
+
+
+def fit_track_widths(
+    lines: Sequence[Sequence[SubField | None]],
+    values: Mapping[str, Iterable[str]],
+    extra_ch: Mapping[str, float] | None = None,
+    min_ch: float = 5,
+) -> list[str]:
+    """Track widths for compound_column() that fit what the band shows: each
+    track as wide as the longest label or value of any field placed in it, in
+    `ch` (tabular digits are 1ch each), plus the field's padding. Every row's
+    grid is its own, so the browser can't size a track from its contents; the
+    server does it on each render instead, so nothing clips and the header
+    still lines up. A label reserves room for its sort arrow (so sorting
+    doesn't reflow the band) and runs ~10% wider for its heavier weight;
+    `extra_ch` adds room for a field's controls (a refresh button); `min_ch`
+    leaves an editor room to type in a field whose values are short."""
+    extra_ch = extra_ch or {}
+    widths = [min_ch] * max((len(line) for line in lines), default=0)
+    for line in lines:
+        for track, f in enumerate(line):
+            if f is None:
+                continue
+            label = math.ceil(len(f.label) * 1.1) + 2
+            # Stripped: HTML collapses fmt_money()'s alignment padding.
+            longest = max(
+                (len(str(v).strip()) for v in values.get(f.key, ())), default=0
+            )
+            widths[track] = max(widths[track], label, longest + extra_ch.get(f.key, 0))
+    return [f"calc({w:g}ch + 0.5rem)" for w in widths]
 
 
 def group_columns(

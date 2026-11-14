@@ -161,9 +161,11 @@ degrades to a warning without it).
   Loans · Assets — using a shared Institution·Type·Name·Amount·Details·Due·
   Linked·As Of spine (#142), so Due/Linked/As Of line up across bands ("-"
   where they don't apply). Details is a **compound column**
-  (`grouped_sheet.compound_column()`): the band's own fields on a fixed-track
-  CSS grid, labeled in the band's header on the same template (Loans wrap to
-  two lines). Its fields stay keyed and individually click-to-edit
+  (`grouped_sheet.compound_column()`): the band's own fields on one line of a
+  CSS grid, labeled in the band's header on the same template, with track
+  widths sized server-side from the values shown (`fit_track_widths()`; the
+  rows' grids are independent, so CSS can't). Its fields stay keyed and
+  individually click-to-edit
   (`data-cell-key="f-<field>"` for cell-nav), and each label sorts the band by
   its field (`f-<field>`; the Details cell itself doesn't sort). Change a
   band's fields in `_DETAILS` (`web/routes/holdings.py`). Each band maps to one

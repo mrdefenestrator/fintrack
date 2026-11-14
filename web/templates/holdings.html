@@ -60,10 +60,10 @@
 </form>
 
 <div class="table-scroll-container rounded-b-lg border-l border-b border-r border-gray-300 dark:border-gray-600 shadow-sm" data-sheet-scroll{% if edit_mode %} data-sticky-actions{% endif %}>
-{# One grouped sheet (partials/grouped_sheet.html), four type-based groups. The
-   first four columns (Institution, Type, Name, Amount) are shared; each group
-   appends its own trailing columns as real <td> cells, giving a ragged right
-   edge with native table auto-sizing. Headers are per-group rows inside the
+{# One grouped sheet (partials/grouped_sheet.html), four type-based groups on
+   one shared column spine — Institution · Type · Name · Amount · Details ·
+   Due · Linked · As Of — with each group's own fields in the compound Details
+   column (partials/holdings_tbody.html). Headers are per-group rows inside the
    tbody, so there is no global thead. The sticky actions column (drag + delete)
    renders only in edit mode. #}
 <table id="holdings-table" class="grouped-sheet editable-table w-full text-sm border-collapse bg-white dark:bg-gray-800" data-cell-nav="holdings-table" style="white-space:nowrap">

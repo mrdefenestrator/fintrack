@@ -15,8 +15,11 @@
  * tbody.  For per-row tables (merchants), set data-cell-nav-swap="outerHTML"
  * and saves will use the field's own hx-target.
  *
- * Editable display cells: any td with hx-get containing "/cell" or "/edit".
- * Holdings detail cells (.holding-detail-edit) are also supported.
+ * Editable display cells: any td with hx-get containing "/cell" or "/edit",
+ * plus the click-to-edit fields inside a compound cell (Holdings' Details),
+ * which carry `data-cell-key="f-<field>"`. A field is its own stop, in
+ * document order (so Tab walks a Details cell's fields before moving on),
+ * and Enter/Shift+Enter move to the same field in the next row.
  */
 (function () {
     "use strict";
@@ -49,12 +52,15 @@
     function editableCells(row) {
         return Array.prototype.slice.call(
             row.querySelectorAll(
-                ':scope > td[hx-get*="/cell"], :scope > td[hx-get*="/edit"]'
+                ':scope > td[hx-get*="/cell"], :scope > td[hx-get*="/edit"], ' +
+                    ':scope > td [data-cell-key][hx-get]'
             )
         );
     }
 
     function cellKey(el, row) {
+        var field = el && el.closest("[data-cell-key]");
+        if (field && row.contains(field)) return field.getAttribute("data-cell-key");
         var td = el && el.closest("td");
         return td ? "c" + Array.prototype.indexOf.call(row.children, td) : null;
     }

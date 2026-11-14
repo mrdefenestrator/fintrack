@@ -78,11 +78,21 @@
         var headerH = thead ? thead.offsetHeight : 0;
         if (!thead) {
             // Grouped sheet (no thead): the sticky heading + column-header rows
-            // form the pinned top region (same height for every group). The
+            // of the band pinned at the top form the pinned top region. The
             // column header sticks just below the heading, so publish the
-            // heading height too (its CSS `top`).
+            // heading height too (its CSS `top`). Headings share one height,
+            // but a column header can be taller in one band (a compound
+            // column with fields on two lines), so measure the header
+            // of the band currently pinned: the last band starting at or
+            // above the container's top edge (the first band at the top).
             var heading = container.querySelector(".sheet-group-heading");
             var header = container.querySelector(".sheet-group-header");
+            var top = container.getBoundingClientRect().top;
+            var bands = container.querySelectorAll("tbody.sheet-group");
+            for (var i = 1; i < bands.length; i++) {
+                if (bands[i].getBoundingClientRect().top > top + 1) break;
+                header = bands[i].querySelector(":scope > .sheet-group-header") || header;
+            }
             var headingH = heading ? heading.offsetHeight : 0;
             headerH = headingH + (header ? header.offsetHeight : 0);
             frame.style.setProperty("--sheet-heading-h", headingH + "px");

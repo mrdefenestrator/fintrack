@@ -68,15 +68,40 @@ sheet-group-row {{ sheet.row_class() }}
 <td class="px-1.5 py-1.5 text-right tabular-nums text-sm font-semibold text-gray-900 dark:text-gray-100 {% if value | display_is_negative %}!text-red-600 dark:!text-red-400{% endif %}">{{ value }}</td>
 {% endmacro %}
 
+{# Compound columns (grouped_sheet.compound_column(); Holdings' Details): one
+   cell holding several fields on a fixed-track CSS grid. Rows and the header
+   open the same grid, so fields line up down the band. Each field is placed
+   explicitly (row/col), so the markup order never decides where it lands. #}
+{%- macro compound_grid_open(compound) -%}
+<div class="sheet-compound" style="grid-template-columns: {{ compound.template }}">
+{%- endmacro -%}
+{%- macro compound_place(field) -%}
+grid-row: {{ field.row }}; grid-column: {{ field.col }}
+{%- endmacro -%}
+
 {# The band's own sortable column header. Blank header slots render as empty
    cells; a band narrower than the table pads out to `max_cols`. Sorting is
    per band (group-sort.js reads data-sort-key). `links` (optional, per column:
-   none or {url, title, active}) adds sheet.header_link() icons. #}
+   none or {url, title, active}) adds sheet.header_link() icons. A compound
+   column's header shows its fields' labels, each sortable on its own. #}
 {% macro header_row(group, max_cols, edit_mode, links=[]) %}
 <tr class="sheet-group-header bg-gray-100 dark:bg-gray-700">
     {% for h in group.headers %}
     {% set colspan = group.spans[loop.index0] %}
-    {% if h %}
+    {% set _compound = group.compound[group.col_keys[loop.index0]] if group.compound and group.col_keys else none %}
+    {% if _compound %}
+    {# A compound column (Holdings' Details): its fields' labels on the same
+       grid the rows use, each its own sort control (sort key f-<field>). #}
+    <th class="sheet-compound-th px-1.5 py-0.5 font-medium text-gray-800 dark:text-gray-100 text-left"{% if colspan > 1 %} colspan="{{ colspan }}"{% endif %}>
+        {{ compound_grid_open(_compound) }}
+        {% for f in _compound.fields %}
+        <span class="sortable-th sheet-compound-label cursor-pointer select-none rounded hover:bg-gray-200 dark:hover:bg-gray-600 {% if f.right_align %}text-right{% else %}text-left{% endif %}"
+              style="{{ compound_place(f) }}" data-sort-key="f-{{ f.key }}" role="button" tabindex="0" title="{{ f.tooltip }}">
+            {{- f.label }} <span class="sort-indicator"></span></span>
+        {% endfor %}
+        </div>
+    </th>
+    {% elif h %}
     <th class="sortable-th px-1.5 py-0.5 font-medium text-gray-800 dark:text-gray-100 cursor-pointer select-none hover:bg-gray-200 dark:hover:bg-gray-600 {% if loop.index0 in group.right_align %}text-right{% else %}text-left{% endif %}"
         {% if colspan > 1 %}colspan="{{ colspan }}" {% endif %}data-sort-key="c{{ loop.index0 }}" role="button" tabindex="0" title="{{ group.tooltips[loop.index0] if group.tooltips and loop.index0 < group.tooltips | length else h }}">
         {%- set _link = links[loop.index0] if loop.index0 < links | length else none -%}

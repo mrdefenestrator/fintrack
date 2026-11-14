@@ -137,9 +137,155 @@ def test_holdings_grouped_layout(client):
     # Group-specific columns appear, proving per-group headers.
     assert "Unit Price" in body  # Assets
     assert "Equity" in body  # Loans
-    # Each group has its own column headers as real <th> cells.
+    # Each group has its own column headers as real <th> cells; a Details
+    # field's label sorts on its own key.
     assert 'data-group="cash"' in body
-    assert 'data-sort-key="c4"' in body
+    assert 'data-sort-key="c5"' in body  # Due
+    assert 'data-sort-key="f-reserve"' in body
+
+
+def _header_labels(body: str, group: str) -> list[str]:
+    """A band's spine headers: the <th> labels of its column-header row
+    (the Details cell, a grid of field labels, reads as "Details")."""
+    start = body.index(f'data-group="{group}"')
+    row = body[body.index("sheet-group-header", start) :]
+    row = row[: row.index("</tr>")]
+    labels = []
+    for th in re.findall(r"<th\b([^>]*)>(.*?)</th>", row, re.DOTALL):
+        attrs, inner = th
+        if "sheet-compound-th" in attrs:
+            labels.append("Details")
+        elif "table-actions-cell" not in attrs:
+            labels.append(re.sub(r"<[^>]+>", "", inner).strip())
+    return labels
+
+
+@pytest.mark.parametrize("edit", [False, True])
+def test_every_band_shares_the_column_spine(client, edit):
+    """Issue #142: Due, Linked, and As Of sit in the same column in every
+    band, after one Details column holding the band's own fields."""
+    body = client.get(f"/s/finances/holdings{'?edit=1' if edit else ''}").get_data(
+        as_text=True
+    )
+    spine = ["Institution", "Type", "Name", "Amount", "Details", "Due", "Linked"]
+    for group in ("cash", "credit", "loan", "asset"):
+        assert _header_labels(body, group) == spine + ["As Of"], group
+
+
+def _details_labels(body: str, group: str) -> list[str]:
+    start = body.index(f'data-group="{group}"')
+    th = body[body.index("sheet-compound-th", start) :]
+    th = th[: th.index("</th>")]
+    return re.findall(r'data-sort-key="f-([a-z_]+)"', th)
+
+
+def test_details_labels_each_bands_own_fields(client):
+    body = client.get("/s/finances/holdings").get_data(as_text=True)
+    assert _details_labels(body, "cash") == ["reserve", "funding"]
+    assert _details_labels(body, "credit") == [
+        "limit",
+        "available",
+        "usage",
+        "rewards",
+        "statement",
+    ]
+    assert _details_labels(body, "asset") == [
+        "unit_price",
+        "qty",
+        "source",
+        "est_return",
+        "contribution",
+    ]
+    # Loans: all ten fields on one line, one field per column.
+    loan = _details_labels(body, "loan")
+    assert loan == [
+        "interest",
+        "month_interest",
+        "payment",
+        "progress",
+        "payoff",
+        "original",
+        "term",
+        "originated",
+        "equity",
+        "ltv",
+    ]
+    loan_th = body[body.index("sheet-compound-th", body.index('data-group="loan"')) :]
+    assert "grid-row: 2" not in loan_th[: loan_th.index("</th>")]
+
+
+def _track_template(body: str, group: str) -> str:
+    start = body.index(f'data-group="{group}"')
+    th = body[body.index("sheet-compound-th", start) :]
+    return re.search(r"grid-template-columns: ([^\"]+)", th).group(1)
+
+
+def test_details_tracks_fit_the_values_shown(client, db_engine):
+    """Track widths come from the data, so a big number widens its field
+    (nothing clips) and the header uses the rows' template."""
+    before = _track_template(
+        client.get("/s/finances/holdings").get_data(as_text=True), "credit"
+    )
+    from fintrack.accounts.repository import update_account
+
+    visa = _account_by_name(db_engine, "Visa")
+    with db_engine.connect() as conn:
+        update_account(conn, 1, visa["id"], {"limit": 123456789})
+    body = client.get("/s/finances/holdings").get_data(as_text=True)
+    after = _track_template(body, "credit")
+    assert after != before
+    # Limit's track grew to "$123,456,789.00" (15 characters).
+    assert after.split(") ")[0] == "calc(15ch + 0.5rem"
+    row = _row_html(body, f"holding-row-account-{visa['id']}")
+    assert "$123,456,789.00" in row
+
+
+def test_assets_show_as_of_and_their_loans(client, db_engine):
+    """Assets gain As Of (#142), and Linked names the loans secured against
+    an asset (a loan's Linked names its asset)."""
+    with db_engine.connect() as conn:
+        house = add_asset_entry(
+            conn,
+            1,
+            {
+                "kind": "asset",
+                "name": "House",
+                "value": Decimal(300000),
+                "asOfDate": "2026-01-02",
+            },
+        )
+        add_asset_entry(
+            conn,
+            1,
+            {
+                "kind": "debt",
+                "type": "loan",
+                "name": "Mortgage",
+                "balance": Decimal(200000),
+                "assetRef": house,
+            },
+        )
+    body = client.get("/s/finances/holdings").get_data(as_text=True)
+    row = _row_html(body, f"holding-row-asset-{house}")
+    assert ">2026-01-02</td>" in row
+    assert ">Mortgage</td>" in row
+
+
+def test_details_fields_are_click_to_edit(client, db_engine):
+    """In edit mode each editable Details field opens its own editor, which
+    renders inside the Details grid; read-only fields (Available) stay
+    plain."""
+    visa = _account_by_name(db_engine, "Visa")["id"]
+    body = client.get("/s/finances/holdings?edit=1").get_data(as_text=True)
+    row = _row_html(body, f"holding-row-account-{visa}")
+    assert f"/holdings/cell/account/{visa}?field=limit" in row
+    assert 'data-cell-key="f-limit"' in row
+    assert "field=available" not in row
+    resp = client.get(f"/s/finances/holdings/cell/account/{visa}?field=limit")
+    row = _row_html(resp.get_data(as_text=True), f"holding-row-account-{visa}")
+    details = row[row.index("holdings-details") :]
+    assert 'class="cell-editing' in details
+    assert 'name="value" value="1000' in details
 
 
 def test_holdings_view_reuses_shared_filter_bar(client):
@@ -991,7 +1137,7 @@ def test_cards_show_usage_amber_past_30_percent(client, db_engine):
     body = client.get("/s/finances/holdings").get_data(as_text=True)
     visa = _account_by_name(db_engine, "Visa")["id"]
     row = _row_html(body, f"holding-row-account-{visa}")
-    assert ">40%</td>" in row
+    assert ">40%</span>" in row
     assert "text-amber-600" in row
     assert 'id="holdings-loan"' in body and 'id="holdings-credit"' in body
 
@@ -1019,4 +1165,6 @@ def test_loans_show_monthly_interest_and_payoff(client, db_engine):
     assert "$60.00" in row  # 12,000 × 6% ÷ 12
     # About 34 payments of $386.66 from today.
     payoff = debt.loan_summary(_asset_by_name(db_engine, "Car"), today)["payoff"]
-    assert payoff and f">{payoff:%b %Y}</td>" in row
+    assert payoff and f">{payoff:%b %Y}</span>" in row
+    # Payoff sorts by its date, not its "Mon YYYY" text.
+    assert f'data-sort-value="{payoff.isoformat()}"' in row

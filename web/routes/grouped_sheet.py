@@ -28,6 +28,7 @@ local drag-reorder onto the band's slots in the full, stored ordering, and the
 group-by plumbing above.
 """
 
+import math
 import re
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from typing import Any, NamedTuple
@@ -39,11 +40,93 @@ from flask import request
 Column = tuple[str, str, bool, int]
 
 
+class SubField(NamedTuple):
+    """One labeled field inside a compound column (Holdings' Details)."""
+
+    key: str
+    label: str
+    right_align: bool
+
+
+def compound_column(
+    lines: Sequence[Sequence[SubField | None]],
+    widths: Sequence[str],
+    tooltips: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    """A compound column: several fields laid out in one cell as a CSS grid
+    with explicit track `widths` (fit_track_widths() sizes them from the
+    data), one or more `lines` of fields (None leaves a track empty). Every row's cell and the header's label cell use the same
+    template, so the fields line up down the band even though each row's grid
+    is its own. Fields are keyed, never positional: a row template looks each
+    one up by `key`, and the header labels sort by ``f-<key>`` (group-sort.js
+    reads the row's ``[data-sort-field]``)."""
+    tooltips = tooltips or {}
+    fields = []
+    for line_no, line in enumerate(lines):
+        if len(line) != len(widths):
+            raise ValueError("every line needs one entry per track")
+        for track, f in enumerate(line):
+            if f is None:
+                continue
+            fields.append(
+                {
+                    "key": f.key,
+                    "label": f.label,
+                    "right_align": f.right_align,
+                    "tooltip": tooltips.get(f.key, f.label),
+                    # 1-based CSS grid placement.
+                    "row": line_no + 1,
+                    "col": track + 1,
+                }
+            )
+    return {
+        "template": " ".join(widths),
+        "lines": len(lines),
+        "fields": fields,
+        "keys": [f["key"] for f in fields],
+    }
+
+
+def fit_track_widths(
+    lines: Sequence[Sequence[SubField | None]],
+    values: Mapping[str, Iterable[str]],
+    extra_ch: Mapping[str, float] | None = None,
+    min_ch: float = 5,
+) -> list[str]:
+    """Track widths for compound_column() that fit what the band shows: each
+    track as wide as the longest label or value of any field placed in it, in
+    `ch` (tabular digits are 1ch each), plus the field's padding. Every row's
+    grid is its own, so the browser can't size a track from its contents; the
+    server does it on each render instead, so nothing clips and the header
+    still lines up. A label reserves room for its sort arrow (so sorting
+    doesn't reflow the band) and runs ~10% wider for its heavier weight;
+    `extra_ch` adds room for a field's controls (a refresh button); `min_ch`
+    leaves an editor room to type in a field whose values are short."""
+    extra_ch = extra_ch or {}
+    widths = [min_ch] * max((len(line) for line in lines), default=0)
+    for line in lines:
+        for track, f in enumerate(line):
+            if f is None:
+                continue
+            label = math.ceil(len(f.label) * 1.1) + 2
+            # Stripped: HTML collapses fmt_money()'s alignment padding.
+            longest = max(
+                (len(str(v).strip()) for v in values.get(f.key, ())), default=0
+            )
+            widths[track] = max(widths[track], label, longest + extra_ch.get(f.key, 0))
+    return [f"calc({w:g}ch + 0.5rem)" for w in widths]
+
+
 def group_columns(
-    cols: Sequence[Column], tooltips: dict[str, str] | None = None
+    cols: Sequence[Column],
+    tooltips: dict[str, str] | None = None,
+    compound: Mapping[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """The column-header metadata a group dict carries for the header row
-    macro: keys, labels, hover tooltips, right-aligned indices, spans, count."""
+    macro: keys, labels, hover tooltips, right-aligned indices, spans, count.
+    `compound` maps a column key to its compound_column() layout; that
+    column's header renders the fields' labels on the same grid instead of a
+    single sortable label."""
     tooltips = tooltips or {}
     return {
         "col_keys": [k for k, _, _, _ in cols],
@@ -52,6 +135,7 @@ def group_columns(
         "right_align": [i for i, (_, _, ra, _) in enumerate(cols) if ra],
         "spans": [span for _, _, _, span in cols],
         "ncols": len(cols),
+        "compound": dict(compound or {}),
     }
 
 

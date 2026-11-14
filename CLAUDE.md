@@ -158,7 +158,9 @@ degrades to a warning without it).
   exist to expose known data for entry, editing, and checking completeness/
   consistency, so favor showing fields over hiding them behind expand/detail
   drawers. Information density is not a concern and horizontal scroll is fine;
-  be prudent about what data is *relevant*, not about decluttering.
+  be prudent about what data is *relevant*, not about decluttering. In edit
+  mode every field that can't be edited is greyed (`sheet.readonly()`, #147),
+  on every sheet alike — give any new read-only cell the same treatment.
 - **Holdings direction.** Holdings unifies the Accounts and Assets sheets into
   one spreadsheet, split into four **group-based** bands — Cash · Credit Cards ·
   Loans · Assets — using a shared Institution·Type·Name·Amount·Details·Due·

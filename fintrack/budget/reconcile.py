@@ -742,3 +742,23 @@ def budget_actuals(
             )
         )
     return results
+
+
+def budget_actuals_by_index(
+    conn: Connection,
+    snapshot_id: int,
+    *,
+    year: int,
+    month: int,
+    today: date | None = None,
+) -> dict[int, EntryActual]:
+    """``budget_actuals`` keyed by each entry's position in the full budget
+    list — the index the Budget sheet and the CLI address entries by (issue
+    #143: the sheet and the ``budget`` table show each entry's actual)."""
+    position = {
+        e["_db_id"]: i for i, e in enumerate(get_budget_entries(conn, snapshot_id))
+    }
+    return {
+        position[a.entry_ref]: a
+        for a in budget_actuals(conn, snapshot_id, year=year, month=month, today=today)
+    }

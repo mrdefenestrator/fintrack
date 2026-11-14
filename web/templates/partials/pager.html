@@ -14,7 +14,7 @@
    disables the next arrow too. #}
 {# Shared segmented control: a row of joined pills where exactly one is active
    (or a single on/off pill), used for every view toggle that isn't the time
-   pager — Transactions (Month / Year / All time), Budget vs Actual (By month /
+   pager — Transactions (Month / Year / All time), Budget (Plan /
    Recurring), Trends (period, Highlight), Projections (window, Balances /
    Changes, Estimate). These live in the sheet's filter bar as its `lead`
    (partials/sheet_filter_bar.html), so they share the bar's compact text-xs
@@ -48,8 +48,8 @@
 
 
 {# The row that holds a page's time pager, directly above its sheet: the pager
-   first (left), then anything about that window (Budget vs Actual's missing /
-   drift badges, Projections' end-of-window summary). Every page with a pager
+   first (left), then anything about that window (Budget's missing /
+   drift / suggested-link badges, Projections' end-of-window summary). Every page with a pager
    uses it so the pager sits in the same spot everywhere; min-h-8 keeps the
    sheet from jumping on a view with no pager (Transactions' All time, Budget
    vs Actual's Recurring). Use with {% call nav.pager_row() %}. #}

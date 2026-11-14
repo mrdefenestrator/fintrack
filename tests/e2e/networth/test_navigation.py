@@ -21,9 +21,8 @@ def test_nav_links(page, flask_server):
     page.wait_for_url("**/budget**")
     assert "Budget" in page.title()
 
-    page.click("[data-nav-sidebar] >> text='Budget vs Actual'")
-    page.wait_for_url("**/budget/actual**")
-    assert "Budget vs Actual" in page.title()
+    # Budget vs Actual is part of the Budget sheet now (#143).
+    assert page.locator("[data-nav-sidebar] >> text='Budget vs Actual'").count() == 0
 
     page.click("[data-nav-sidebar] >> text=Projections")
     page.wait_for_url("**/projections**")
@@ -49,9 +48,10 @@ def test_sidebar_marks_active_page(page, flask_server):
     active = page.locator("[data-nav-sidebar] a[aria-current='page']")
     assert active.inner_text().strip() == "Budget"
 
-    page.goto(f"{flask_server}/s/test_finances/budget/actual")
+    # The Recurring view is still the Budget page.
+    page.goto(f"{flask_server}/s/test_finances/budget?view=recurring")
     active = page.locator("[data-nav-sidebar] a[aria-current='page']")
-    assert active.inner_text().strip() == "Budget vs Actual"
+    assert active.inner_text().strip() == "Budget"
 
 
 def test_tab_row_height_stable_across_tabs(page, flask_server):
@@ -100,7 +100,7 @@ def test_lock_scoped_to_edit_pages(page, flask_server):
     for path in (
         "holdings",
         "budget",
-        "budget/actual",
+        "budget?view=recurring",
         "merchants",
         "categories",
         "transactions",

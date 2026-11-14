@@ -49,7 +49,7 @@ def _sid(engine, name="home"):
 
 
 def test_recurring_view_lists_series(client):
-    body = client.get("/s/home/budget/actual?view=recurring").get_data(as_text=True)
+    body = client.get("/s/home/budget?view=recurring").get_data(as_text=True)
     assert 'data-recurring="Spotify"' in body
     assert 'data-recurring="Gym Co"' in body
     assert "1 not in budget" in body
@@ -60,29 +60,44 @@ def test_recurring_view_lists_series(client):
 
 
 def test_recurring_status_filter(client):
-    body = client.get(
-        "/s/home/budget/actual?view=recurring&status=not_budgeted"
-    ).get_data(as_text=True)
+    body = client.get("/s/home/budget?view=recurring&status=not_budgeted").get_data(
+        as_text=True
+    )
     assert 'data-recurring="Spotify"' in body
     assert 'data-recurring="Gym Co"' not in body
 
 
-def test_month_view_has_the_toggle(client):
-    body = client.get("/s/home/budget/actual").get_data(as_text=True)
-    assert "data-actual-views" in body
+def test_plan_view_has_the_toggle(client):
+    """Issue #143: Recurring is the Budget sheet's second view; the Plan /
+    Recurring toggle leads both views' filter bars and keeps the month and
+    edit mode."""
+    body = client.get("/s/home/budget?ym=2025-01&edit=1").get_data(as_text=True)
+    toggle = body.split("data-budget-views")[1].split("</div>")[0]
+    assert 'data-view="plan" href' in toggle
+    assert 'href="/s/home/budget?view=recurring&amp;ym=2025-01&amp;edit=1"' in toggle
     assert "recurring-table" not in body
+    body = client.get("/s/home/budget?view=recurring&ym=2025-01").get_data(as_text=True)
+    toggle = body.split("data-budget-views")[1].split("</div>")[0]
+    assert 'href="/s/home/budget?ym=2025-01"' in toggle
+    assert 'aria-current="page">Budget</a>' in body
+
+
+def test_old_recurring_url_redirects(client):
+    resp = client.get("/s/home/budget/actual?view=recurring&status=not_budgeted")
+    assert resp.status_code == 302
+    assert (
+        resp.headers["Location"] == "/s/home/budget?view=recurring&status=not_budgeted"
+    )
 
 
 def test_edit_mode_actions(client, db_engine):
-    body = client.get("/s/home/budget/actual?view=recurring&edit=1").get_data(
-        as_text=True
-    )
+    body = client.get("/s/home/budget?view=recurring&edit=1").get_data(as_text=True)
     assert "data-recurring-add" in body  # Spotify
     assert "data-recurring-link" in body  # Gym Co → its entry by name
     assert body.count("data-recurring-dismiss") == 2
 
     resp = client.post(
-        "/s/home/budget/actual/recurring/add?view=recurring&edit=1",
+        "/s/home/budget/recurring/add?view=recurring&edit=1",
         data={"merchant": "Spotify", "kind": "expense"},
         headers={"HX-Request": "true"},
     )
@@ -98,7 +113,7 @@ def test_link_and_dismiss_actions(client, db_engine):
     with db_engine.connect() as conn:
         gym = get_budget_entries(conn, _sid(db_engine))[0]["_db_id"]
     resp = client.post(
-        "/s/home/budget/actual/recurring/link?view=recurring",
+        "/s/home/budget/recurring/link?view=recurring",
         data={"merchant": "Gym Co", "kind": "expense", "budget_entry_ref": gym},
     )
     assert resp.status_code == 200
@@ -108,7 +123,7 @@ def test_link_and_dismiss_actions(client, db_engine):
     )
 
     resp = client.post(
-        "/s/home/budget/actual/recurring/dismiss?view=recurring",
+        "/s/home/budget/recurring/dismiss?view=recurring",
         data={"merchant": "Spotify", "kind": "expense"},
     )
     assert 'data-recurring="Spotify"' not in resp.get_data(as_text=True)
@@ -117,7 +132,7 @@ def test_link_and_dismiss_actions(client, db_engine):
 
 
 def test_bad_action_posts_are_rejected(client):
-    url = "/s/home/budget/actual/recurring"
+    url = "/s/home/budget/recurring"
     assert client.post(f"{url}/add", data={"merchant": "Nobody"}).status_code == 422
     assert client.post(f"{url}/add", data={}).status_code == 422
     assert client.post(f"{url}/link", data={"merchant": "Gym Co"}).status_code == 422
@@ -131,7 +146,7 @@ def test_overview_needs_attention_card(client):
     assert "Spotify: $11.99/mo, not in budget" in card
     assert "Gym Co" not in card  # matched to its entry: not news
     assert (
-        'href="/s/home/budget/actual?view=recurring&amp;status=not_budgeted'
+        'href="/s/home/budget?view=recurring&amp;status=not_budgeted'
         '&amp;status=price_change"' in card
     )
 

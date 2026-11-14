@@ -1,7 +1,7 @@
 /**
  * Per-band column sorting for grouped sheets (Holdings, Budget, Projections —
  * see templates/partials/grouped_sheet.html), and for flat (unbanded) sheets
- * (Transactions, Merchants, Categories, Budget vs Actual), whose one
+ * (Transactions, Merchants, Categories, Budget's Recurring view), whose one
  * `tbody.sheet-group--flat` is sorted from the header row in the table's
  * <thead>.
  *

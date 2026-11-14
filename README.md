@@ -49,7 +49,7 @@ mise run serve    # http://localhost:5003
 The root URL is the snapshot picker; every page lives under
 `/s/<snapshot>/<section>`:
 
-`Overview · Holdings · Budget · Projections · Trends · Budget vs Actual · Transactions · Merchants · Categories · Import`
+`Overview · Holdings · Budget · Projections · Trends · Transactions · Merchants · Categories · Import`
 
 Overview (`/s/<snapshot>`) is the landing page: read-only cards for net worth,
 liquid, and projection warnings, each linking to the view behind it. Holdings

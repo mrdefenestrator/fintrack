@@ -183,7 +183,7 @@ def test_overview_of_an_empty_snapshot(page, flask_server):
 
 def test_needs_attention_card_opens_recurring(page, flask_server, _db_path):
     """A recurring charge not in the budget gets one line; the whole card
-    opens Budget vs Actual's Recurring view filtered to what needs attention."""
+    opens the Budget sheet's Recurring view filtered to what needs attention."""
     from tests.e2e.networth.test_budget_actual import _add_monthly_series
 
     page.goto(f"{flask_server}/s/test_finances")
@@ -198,7 +198,9 @@ def test_needs_attention_card_opens_recurring(page, flask_server, _db_path):
         == "StreamCo: $12.99/mo, not in budget"
     )
     card.click()
-    page.wait_for_url("**view=recurring&status=not_budgeted&status=price_change")
+    page.wait_for_url(
+        "**/budget?view=recurring&status=not_budgeted&status=price_change"
+    )
     assert page.locator("#recurring-table tr[data-recurring='StreamCo']").is_visible()
 
 

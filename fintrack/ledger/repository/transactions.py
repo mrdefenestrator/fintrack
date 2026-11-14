@@ -51,6 +51,7 @@ def get_transactions(
     amount: str | None = None,
     import_id: int | None = None,
     transaction_ids: Collection[int] | None = None,
+    budget_entry_refs: Collection[int] | None = None,
     snapshot_id: int | None = None,
 ) -> list[dict]:
     """Get transactions with resolved category and merchant.
@@ -64,6 +65,8 @@ def get_transactions(
     possible_duplicate (open flags) / duplicate (rows marked duplicate — the
     only view that includes them; issue #82). `transaction_ids` limits the
     rows to those ids (the "Flagged" view passes the alerted ids, issue #101).
+    `budget_entry_refs` keeps the rows linked to any of those budget entries
+    (the Budget sheet's Actual cell opens this, issue #143).
     """
     from fintrack.core.models import transactions
 
@@ -103,6 +106,9 @@ def get_transactions(
 
     if cat_filter:
         stmt = stmt.where(subq.c.category.in_(cat_filter))
+
+    if budget_entry_refs:
+        stmt = stmt.where(subq.c.budget_entry_ref.in_(list(budget_entry_refs)))
 
     if search:
         pattern = f"%{search}%"

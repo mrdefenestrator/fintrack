@@ -155,7 +155,8 @@ def test_overview_is_the_first_nav_item(client):
 
 def test_sidebar_groups_net_worth_cash_flow_setup(client):
     """Issue #141: Overview, then Net worth · Cash flow · Setup, each group's
-    headings followed by its destinations in order."""
+    headings followed by its destinations in order (Budget vs Actual merged
+    into Budget, #143)."""
     html = client.get("/s/home/holdings").get_data(as_text=True)
     nav = re.search(r"<nav aria-label=\"Sections\".*?</nav>", html, re.DOTALL)
     items = [
@@ -169,7 +170,6 @@ def test_sidebar_groups_net_worth_cash_flow_setup(client):
         "Projections",
         "Cash flow",
         "Budget",
-        "Budget vs Actual",
         "Transactions",
         "Trends",
         "Setup",

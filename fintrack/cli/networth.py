@@ -8,6 +8,7 @@ import click
 from fintrack.accounts import repository as repo_accounts
 from fintrack.accounts.balance_history import get_balance_history
 from fintrack.budget import repository as repo_budget
+from fintrack.budget.reconcile import budget_actuals_by_index
 from fintrack.budget.recurrence import as_month, entry_active
 from fintrack.cli.helpers import (
     drop_separator_rows,
@@ -51,15 +52,21 @@ from fintrack.networth.calculations import (
 from fintrack.snapshots import repository as repo_snapshots
 
 _ACCOUNTS_COLALIGN = ("left", "left", "left", "right", "right", "right", "right")
+# tables.BUDGET_HEADERS: Kind Category Description Amount Recurrence When
+# This month Actual Delta Status Per month Annual Auto account.
 _BUDGET_COLALIGN = (
     "left",
     "left",
     "left",
     "right",
+    "left",
+    "left",
+    "right",
     "right",
     "right",
     "left",
-    "left",
+    "right",
+    "right",
     "left",
 )
 _ASSETS_COLALIGN = (
@@ -112,32 +119,43 @@ _MONTH_OPTION = click.option(
 )
 
 
+def _month_actuals(conn, snapshot_id: int, month: date, budget: list) -> dict | None:
+    """Each entry's budget-vs-actual for ``month`` (issue #143), keyed by the
+    identity of its dict in ``budget`` (the loaded list, which filters and
+    sorts keep), or None for a future month, which has no actuals yet."""
+    today = datetime.now().astimezone().date()
+    if month > today.replace(day=1):
+        return None
+    by_index = budget_actuals_by_index(
+        conn, snapshot_id, year=month.year, month=month.month, today=today
+    )
+    return {id(budget[i]): a for i, a in by_index.items() if i < len(budget)}
+
+
 def _planned_budget_table(
     entries: list,
     indices: list[int],
     month: date,
     accounts: list,
     show_id: bool,
+    actuals: dict | None,
 ):
     """The budget table for ``month``'s plan: only entries in it, each as
-    planned then; Remaining is today's for this month, the full month for a
-    later one, and "-" for a past one."""
+    planned then, with that month's Actual / Delta / Status (``actuals`` from
+    ``_month_actuals``; "-" for a future month)."""
     keep = [
         (i, e)
         for i, e in zip(indices, entries)
         if entry_active(e, month.year, month.month)
     ]
-    today = datetime.now().astimezone().date()
-    current = today.replace(day=1)
     return _build_budget_table(
         [e for _, e in keep],
         month.year,
         month.month,
-        today.day if month == current else 0,
         account_display_by_id=_account_display_by_id(accounts),
         show_index=show_id,
         indices=[i for i, _ in keep],
-        past=month < current,
+        actuals=None if actuals is None else [actuals.get(id(e)) for _, e in keep],
     )
 
 
@@ -517,11 +535,14 @@ def budget(
     sort_dir,
     show_id,
 ):
-    """Income and expenses together, with subtotals for this month (or the
-    plan for --month: only entries in it, each as planned then)."""
+    """Income and expenses together for this month (or the plan for --month:
+    only entries in it, each as planned then): what's scheduled, the month's
+    actual, delta (+ beats the budget) and status, with totals — the Budget
+    sheet's columns."""
     month = _parse_month(plan_month, "--month") or repo_budget.this_month()
     with cli.connect() as conn:
-        _, data = _load(cli, conn, budget_as_of=month)
+        snapshot_id, data = _load(cli, conn, budget_as_of=month)
+        actuals = _month_actuals(conn, snapshot_id, month, data.get("budget") or [])
     entries = apply_budget_filters(
         data.get("budget") or [],
         include_kinds=list(include_kinds) or None,
@@ -540,6 +561,7 @@ def budget(
         month,
         data.get("accounts") or [],
         show_id,
+        actuals,
     )
     echo_table(rows, headers, _BUDGET_COLALIGN, show_id)
 
@@ -623,7 +645,8 @@ def make_budget_kind_group(kind: str, label: str) -> click.Group:
         cli = ctx.obj
         month = _parse_month(plan_month, "--month") or repo_budget.this_month()
         with cli.connect() as conn:
-            _, data = _load(cli, conn, budget_as_of=month)
+            snapshot_id, data = _load(cli, conn, budget_as_of=month)
+            actuals = _month_actuals(conn, snapshot_id, month, data.get("budget") or [])
         # Indices stay each entry's position among all of this kind, so they
         # address the same entry in edit/delete/end whatever month is shown.
         indexed = list(enumerate(_kind_entries(data.get("budget") or [], kind)))
@@ -637,6 +660,7 @@ def make_budget_kind_group(kind: str, label: str) -> click.Group:
             month,
             data.get("accounts") or [],
             show_id,
+            actuals,
         )
         rows = drop_separator_rows(rows)
         if not rows:

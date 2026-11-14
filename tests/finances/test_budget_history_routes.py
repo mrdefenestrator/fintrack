@@ -107,11 +107,27 @@ def test_pager_links_keep_filters_and_edit_mode(client):
     assert 'href="/s/home/budget?edit=1"' in pager
 
 
-def test_past_month_has_no_remaining(client):
+def test_past_month_shows_the_plan_against_its_actuals(client):
+    """Issue #143: a past month reads the plan as it was against what
+    happened — Rent was never linked, so nothing realized and Not linked."""
     body = _page(client, PREV)
-    table = body.split('id="budget-table"')[1]
-    assert "—" in table
+    row = body.split('id="budget-row-0"')[1].split("</tr>")[0]
+    assert "Not linked" in row
+    assert "data-actual" in row
     assert "The plan as it was in" in body
+    assert "Remaining" not in body
+
+
+def test_future_month_has_no_actuals(client):
+    """Issue #143: a later month is the plan only — Actual, Delta and Status
+    are blank ("—"), in the rows, the band subtotals and the Net footer."""
+    body = _page(client, NEXT)
+    row = body.split('id="budget-row-0"')[1].split("</tr>")[0]
+    assert row.count('title="No actuals for a future month">—</td>') == 3
+    (heading,) = _heading_cells(body)
+    assert heading[1:4] == ["($2,040.00)", "—", "—"]
+    footer = body.split('class="total-row')[1].split("</tr>")[0]
+    assert footer.count(">—</td>") == 2
 
 
 def test_sheet_urls_carry_the_viewed_month(client):
@@ -219,15 +235,6 @@ def test_reorder_moves_only_the_viewed_months_rows(client, db_engine):
     assert names == ["Old", "Gym", "Rent"]
 
 
-def test_budget_and_budget_actual_link_to_each_others_month(client):
-    body = _page(client, PREV)
-    assert f"/budget/actual?year={PREV.year}&amp;month={PREV.month}" in body
-    actual = client.get(
-        f"/s/home/budget/actual?year={PREV.year}&month={PREV.month}"
-    ).get_data(as_text=True)
-    assert f"/budget?ym={_ym(PREV)}&amp;edit=1" in actual
-
-
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
@@ -266,6 +273,24 @@ def test_cli_edit_from_a_month_and_list_any_month(db_path):
     assert "($2,000.00)" in _cli(db_path, "budget", "--month", _ym(PREV2))
     assert "($2,100.00)" in _cli(db_path, "budget", "--month", _ym(PREV))
     assert "($2,100.00)" in _cli(db_path, "expenses", "--month", _ym(NOW))
+
+
+def test_cli_budget_table_shows_the_month_actuals(db_path):
+    """Issue #143: the budget table matches the sheet — Actual, Delta and
+    Status for the month shown (Rent was never linked) instead of Remaining;
+    a later month has no actuals yet ("-")."""
+    for cmd in ("budget", "expenses"):
+        out = _cli(db_path, cmd, "--month", _ym(PREV))
+        header = out.splitlines()[0]
+        assert "Remaining" not in header
+        assert header.index("This month") < header.index("Actual")
+        assert header.index("Delta") < header.index("Status")
+        assert "not linked" in out
+        total = out.splitlines()[-1]
+        assert total.startswith("Total") and "$2,000.00" in total
+    future = _cli(db_path, "budget", "--month", _ym(NEXT))
+    rent = next(line for line in future.splitlines() if "Rent" in line)
+    assert "not linked" not in rent and " - " in rent
 
 
 def test_cli_history_and_version_fix(db_path):
@@ -325,20 +350,28 @@ def _heading_cells(body: str) -> list[list[str]]:
     ]
 
 
-@pytest.mark.parametrize("group", ["kind", "recurrence"])
-def test_past_month_grouped_has_no_remaining(client, group):
-    """A past month's bands, in any grouping, show "—" for Remaining (and only
-    that month's plan: Gym starts this month)."""
+@pytest.mark.parametrize("group", ["kind", "recurrence", "status"])
+def test_past_month_grouped_subtotals(client, group):
+    """A past month's bands, in any grouping, carry This month / Actual /
+    Delta / Per month / Annual subtotals under their columns (and only that
+    month's plan: Gym starts this month). Rent wasn't realized, so Actual is
+    $0 and the signed Delta +$2,000."""
     body = client.get(f"/s/home/budget?ym={_ym(PREV)}&group={group}").get_data(
         as_text=True
     )
     (heading,) = _heading_cells(body)
-    assert heading[0] in ("Expense", "Monthly")
-    assert heading[1] == "—"
-    assert heading[2] == "($2,000.00)"
+    assert heading[0] in ("Expense", "Monthly", "Not linked")
+    assert heading[1:7] == [
+        "($2,000.00)",
+        "$0.00",
+        "$2,000.00",
+        "",
+        "($2,000.00)",
+        "($24,000.00)",
+    ]
     assert "Gym" not in body
     footer = body.split('class="total-row')[1]
-    assert "—" in footer
+    assert "Net" in footer and "$2,000.00" in footer
 
 
 def test_pager_and_reset_keep_the_grouping(client):

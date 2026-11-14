@@ -40,6 +40,19 @@
         });
     }
 
+    // A row's detail row (Budget's link suggestions: `data-detail-row` with
+    // `data-detail-of` naming the row's id) isn't draggable, so a drop can
+    // leave it behind or land between a row and its detail; put each back
+    // right under its row.
+    function reattachDetailRows(tbody) {
+        tbody.querySelectorAll("tr[data-detail-of]").forEach(function (detail) {
+            var owner = document.getElementById(detail.getAttribute("data-detail-of"));
+            if (owner && owner.parentNode === tbody) {
+                tbody.insertBefore(detail, owner.nextSibling);
+            }
+        });
+    }
+
     function postOrder(tbody) {
         var url = tbody.getAttribute("data-reorder-url");
         if (!url) return;
@@ -95,7 +108,10 @@
                     r.classList.contains("total-row")
                 );
             },
-            onEnd: function () { postOrder(tbody); },
+            onEnd: function () {
+                reattachDetailRows(tbody);
+                postOrder(tbody);
+            },
         });
     }
 

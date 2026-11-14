@@ -1,0 +1,22 @@
+{# The Budget sheet's month findings (issue #143), on the pager row: how many
+   tracked entries are missing, how many linked charges drift from the
+   budgeted price, and how many link suggestions wait. The suggested-links
+   badge opens the same month in edit mode, where each suggestion sits under
+   the entry it would realize. Always rendered (empty when there's nothing),
+   so an edit swap can replace it out-of-band (budget_tbody.html). #}
+{% macro findings(missing_count, drift_count, suggestion_count, edit_mode, edit_url, oob=false) %}
+{% set _badge = 'px-1.5 py-0.5 rounded' %}
+<div id="budget-findings" class="flex flex-wrap items-center gap-1.5 text-xs"{% if oob %} hx-swap-oob="true"{% endif %}>
+    {% if missing_count %}<span data-actuals-missing class="{{ _badge }} bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300">{{ missing_count }} missing</span>{% endif %}
+    {% if drift_count %}<span data-actuals-drift class="{{ _badge }} bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">{{ drift_count }} drift</span>{% endif %}
+    {% if suggestion_count %}
+    {% set _label %}{{ suggestion_count }} suggested link{{ 's' if suggestion_count != 1 }}{% endset %}
+    {% set _neutral = _badge ~ ' bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300' %}
+    {% if edit_mode or not edit_url %}
+    <span data-actuals-suggested class="{{ _neutral }}">{{ _label }}</span>
+    {% else %}
+    <a data-actuals-suggested href="{{ edit_url }}" class="{{ _neutral }} hover:underline" title="Review in edit mode">{{ _label }}</a>
+    {% endif %}
+    {% endif %}
+</div>
+{% endmacro %}

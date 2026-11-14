@@ -10,7 +10,10 @@
  * data rows (carrying data-reorder-index), and an add-row. Clicking a header
  * cell sorts only that band's data rows (asc -> desc -> none), re-inserting them
  * ahead of the add-row so the heading and header stay put. A cell's
- * `data-sort-value` (e.g. Budget's recurrence rank) overrides its text. State is
+ * `data-sort-value` (e.g. Budget's recurrence rank) overrides its text. A
+ * compound column (Holdings' Details) has no sort of its own: each of its
+ * field labels is a `.sortable-th` keyed `f-<field>`, sorting by the row's
+ * `[data-sort-field]` element (and its `data-sort-value`). State is
  * persisted in the URL (sort_<group>_col / sort_<group>_dir) so it survives
  * reloads and table swaps. Data rows are the band's `.sheet-group-row`s (and
  * any carrying data-reorder-index); a `data-detail-row` right after a data row
@@ -55,10 +58,20 @@
             : null;
     }
 
+    // A sort key is "c<n>" (the row's nth cell) or "f-<field>" (one field of
+    // a compound column, e.g. Holdings' Details: the row's [data-sort-field]).
     function rowSortText(row, key) {
-        var col = parseInt((key || "").slice(1), 10);
-        var cell = row.cells[col];
+        var cell;
+        if ((key || "").indexOf("f-") === 0) {
+            cell = row.querySelector('[data-sort-field="' + key.slice(2) + '"]');
+        } else {
+            cell = row.cells[parseInt((key || "").slice(1), 10)];
+        }
         if (!cell) return undefined;
+        // A cell being edited holds an input: sort by what it holds, so the
+        // row doesn't jump to the band's end the moment its editor opens.
+        var input = cell.querySelector("input.table-cell-input");
+        if (input) return input.value;
         var v = cell.getAttribute("data-sort-value");
         return v !== null ? v : cell.textContent;
     }
@@ -113,7 +126,7 @@
         var params = new URL(window.location).searchParams;
         var key = params.get("sort_" + group + "_col");
         var dir = params.get("sort_" + group + "_dir");
-        if (!/^c\d+$/.test(key || "") || (dir !== "asc" && dir !== "desc")) return null;
+        if (!/^(c\d+|f-[\w-]+)$/.test(key || "") || (dir !== "asc" && dir !== "desc")) return null;
         return { key: key, dir: dir };
     }
 
@@ -123,7 +136,12 @@
         if (!headerRow) return;
 
         // Re-apply a persisted sort (fresh load, or after a tbody swap).
+        // Only a key this band's header still offers (a link saved before a
+        // column moved into Details names a slot that no longer sorts).
         var saved = readUrl(group);
+        if (saved && !headerRow.querySelector('.sortable-th[data-sort-key="' + saved.key + '"]')) {
+            saved = null;
+        }
         if (saved) {
             groupTbody._sortKey = saved.key;
             groupTbody._sortDir = saved.dir;

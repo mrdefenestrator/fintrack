@@ -154,3 +154,39 @@
    drag handles (row-reorder.js also refuses to drag it). */
 .grouped-sheet tbody[data-sorted] .drag-handle { display: none; }
 
+
+/* ---- Compound column (Holdings' Details) ---------------------------------------
+   One cell holding several labeled fields on a fixed-track CSS grid
+   (grouped_sheet.compound_column()); the header cell carries the labels on the
+   same template, so a band's fields line up row to row. Each row's grid is
+   independent, so the browser can't size a track from its contents: the
+   server sets each track's width from the longest value or label it holds
+   (grouped_sheet.fit_track_widths). Fields placed on a second grid line just
+   add a grid row. */
+.grouped-sheet .sheet-compound {
+    display: grid;
+    column-gap: 0.5rem;
+    align-items: baseline;
+    /* Track widths are in `ch`, which resolves against THIS element's font:
+       pin one weight on every grid (the header cell is medium, rows normal)
+       so header and rows get identical tracks; labels set their own weight. */
+    font-weight: 400;
+}
+.grouped-sheet .sheet-compound > .sheet-compound-label { font-weight: 500; }
+.grouped-sheet .sheet-compound > * {
+    min-width: 0;
+    padding: 0 0.25rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+/* A field being edited: its input fills the track like a whole-cell editor. */
+.grouped-sheet .sheet-compound > .cell-editing { padding: 0; overflow: visible; }
+.grouped-sheet .sheet-compound > .cell-editing:has(.table-cell-input:focus),
+.grouped-sheet .sheet-compound > .cell-editing:has(.table-cell-select:focus) {
+    box-shadow: inset 0 0 0 2px rgb(59 130 246);
+    border-radius: 0.125rem;
+}
+.dark .grouped-sheet .sheet-compound > .cell-editing:has(.table-cell-input:focus),
+.dark .grouped-sheet .sheet-compound > .cell-editing:has(.table-cell-select:focus) {
+    box-shadow: inset 0 0 0 2px rgb(96 165 250);
+}

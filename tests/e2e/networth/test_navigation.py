@@ -29,7 +29,7 @@ def test_nav_links(page, flask_server):
     page.wait_for_url("**/projections**")
     assert "Projections" in page.title()
 
-    # Spending destinations live in the same sidebar (cross-group is one click)
+    # Other groups' destinations live in the same sidebar (cross-group is one click)
     page.click("[data-nav-sidebar] >> text=Trends")
     page.wait_for_url("**/trends**")
     assert "Trends" in page.title()

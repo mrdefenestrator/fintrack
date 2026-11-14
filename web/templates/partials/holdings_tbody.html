@@ -84,6 +84,8 @@
                   hx-get="{{ url_for('holdings.cell_edit', filename=filename, source=row.source, ref=row.ref, field=field) }}"
                   hx-trigger="click" hx-swap="innerHTML" hx-target="#holdings-table"
                   data-cell-key="f-{{ f.key }}" role="button" tabindex="0">{{ d.value }}</span>
+            {% elif edit_mode %}
+            <span class="{{ sheet.readonly() }}">{{ d.value }}</span>
             {% else %}
             <span class="{{ stale_cls }}">{{ d.value }}</span>
             {% endif %}
@@ -100,8 +102,7 @@
               hx-trigger="click" hx-swap="innerHTML" hx-target="#holdings-table"
               data-cell-key="f-{{ f.key }}" role="button" tabindex="0" title="{{ f.label }}">{{ d.value }}</span>
     {% elif edit_mode %}
-        {% set neg = d.value | display_is_negative %}
-        <span class="{{ align }} {{ 'text-red-400 dark:text-red-500' if neg else 'text-gray-400 dark:text-gray-500' }}" {{ attrs }}>{{ d.value }}</span>
+        <span class="{{ align }} {{ sheet.readonly(d.value | display_is_negative) }}" {{ attrs }}>{{ d.value }}</span>
     {% else %}
         <span class="{{ align }} {{ d.cls }}" {{ attrs }}>{{ d.value }}</span>
     {% endif %}

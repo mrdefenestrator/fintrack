@@ -44,7 +44,7 @@
        #82) adds a line naming the row it resembles, with Duplicate / Not
        duplicate actions (Undo once marked); the actions re-render this row. #}
     {% if dup_open or txn_alert or alert_undo %}
-    <td class="{{ sheet.cell_class('', 'text-gray-400 dark:text-gray-500' if edit_mode else '') }}">
+    <td class="{{ sheet.cell_class('', sheet.readonly() if edit_mode else '') }}">
         {{ sheet.clip(txn.raw_description, desc_max) }}
         {% if dup_open %}
         <div class="dup-badge mt-0.5 flex flex-wrap items-center gap-1 text-xs text-amber-700 dark:text-amber-300"
@@ -119,8 +119,8 @@
        Unlink (Budget column) to edit the category directly. #}
     {% set cat_inherited = txn.budget_entry_ref is not none and txn.linked_category %}
     {% if edit_mode and cat_inherited %}
-        <td class="{{ sheet.cell_class() }}" title="Category inherited from the linked budget entry — unlink to edit">
-            <span class="italic text-gray-500 dark:text-gray-400">{{ txn.category }}</span>
+        <td class="{{ sheet.cell_class('', sheet.readonly()) }}" title="Category inherited from the linked budget entry — unlink to edit">
+            <span class="italic">{{ txn.category }}</span>
         </td>
     {% elif edit_mode and editing_field is defined and editing_field == 'category' %}
         {% call select_edit('category', txn.category, categories, base ~ "/update", row_id) %}

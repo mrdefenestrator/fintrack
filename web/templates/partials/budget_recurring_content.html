@@ -6,7 +6,8 @@
    In edit mode each row's actions cell offers + (add a pre-filled budget
    entry and link the series) or a chain (link it to the entry that looks like
    it), and × ("not recurring": stop showing it). Actions post to this view's own query
-   string so its filters survive the re-render.
+   string so its filters survive the re-render. No cell here is editable, so
+   edit mode greys them all (sheet.readonly, issue #147); the actions stay live.
    An unbanded flat grouped sheet; columns come from
    RECURRING_SHEET (web/routes/budget.py) and cells map by column key. #}
 {% import "partials/sheet.html" as sheet %}
@@ -60,33 +61,37 @@
         {% for c in recurring %}
         {% set p = c.pattern %}
         {% set _vals = {'merchant': c.merchant, 'kind': c.kind} %}
+        {% set _ro = sheet.readonly() if edit_mode else '' %}
+        {# A secondary note inside a cell: lighter when locked; when unlocked
+           the whole cell is already greyed, so it takes the cell's grey. #}
+        {% set _note = '' if edit_mode else 'text-gray-500 dark:text-gray-400' %}
         <tr class="{{ gs.row_class() }}" data-recurring="{{ c.merchant }}" data-recurring-kind="{{ c.kind }}" data-status="{{ c.status }}">
             {% for key in r_sheet.col_keys %}
             {% if key == 'merchant' %}
-            <td class="{{ sheet.cell_class() }}">
+            <td class="{{ sheet.cell_class('', _ro) }}">
                 <a class="hover:underline" href="{{ url_for('transactions.index', filename=filename, search=c.merchant, all_months='true') }}" title="This merchant's transactions">{{ sheet.clip(c.merchant, '16rem') }}</a>
                 {% if c.kind == 'income' %}<span class="ml-1 text-xs text-gray-400 dark:text-gray-500">income</span>{% endif %}
             </td>
             {% elif key == 'category' %}
-            <td class="{{ sheet.cell_class(extra='text-gray-500 dark:text-gray-400') }}">{{ c.category or '—' }}</td>
+            <td class="{{ sheet.cell_class(extra=_ro or 'text-gray-500 dark:text-gray-400') }}">{{ c.category or '—' }}</td>
             {% elif key == 'amount' %}
-            <td class="{{ sheet.cell_class('text-right tabular-nums', sheet.neg(c.amount < 0)) }}" data-sort-value="{{ c.amount }}">{{ '-' if c.amount < 0 }}${{ c.amount | abs | money }}</td>
+            <td class="{{ sheet.cell_class('text-right tabular-nums', sheet.readonly(c.amount < 0) if edit_mode else sheet.neg(c.amount < 0)) }}" data-sort-value="{{ c.amount }}">{{ '-' if c.amount < 0 }}${{ c.amount | abs | money }}</td>
             {% elif key == 'every' %}
-            <td class="{{ sheet.cell_class() }}" data-sort-value="{{ '%07.2f' | format(c.cadence.days) }}">{{ recurring_every[c.cadence.key] }}</td>
+            <td class="{{ sheet.cell_class('', _ro) }}" data-sort-value="{{ '%07.2f' | format(c.cadence.days) }}">{{ recurring_every[c.cadence.key] }}</td>
             {% elif key == 'count' %}
-            <td class="{{ sheet.cell_class('text-right tabular-nums') }}">{{ p.count }}</td>
+            <td class="{{ sheet.cell_class('text-right tabular-nums', _ro) }}">{{ p.count }}</td>
             {% elif key == 'last' %}
-            <td class="{{ sheet.cell_class(extra='tabular-nums') }}">{{ p.last_date }}</td>
+            <td class="{{ sheet.cell_class(extra=('tabular-nums ' ~ _ro) | trim) }}">{{ p.last_date }}</td>
             {% elif key == 'next' %}
-            <td class="{{ sheet.cell_class(extra='tabular-nums text-gray-500 dark:text-gray-400') }}">{{ p.next_date }}</td>
+            <td class="{{ sheet.cell_class(extra='tabular-nums ' ~ (_ro or 'text-gray-500 dark:text-gray-400')) }}">{{ p.next_date }}</td>
             {% elif key == 'budget' %}
-            <td class="{{ sheet.cell_class() }}">
-                <span class="px-1.5 py-0.5 rounded text-xs {{ _badge[c.status] }}">{{ recurring_statuses[c.status] }}</span>
-                {% if c.entry_description %}<span class="ml-1 text-gray-500 dark:text-gray-400">{{ sheet.clip(c.entry_description, '12rem') }}</span>{% endif %}
+            <td class="{{ sheet.cell_class('', _ro) }}">
+                <span class="sheet-badge px-1.5 py-0.5 rounded text-xs {{ _badge[c.status] }}">{{ recurring_statuses[c.status] }}</span>
+                {% if c.entry_description %}<span class="ml-1 {{ _note }}">{{ sheet.clip(c.entry_description, '12rem') }}</span>{% endif %}
             </td>
             {% elif key == 'change' %}
-            <td class="{{ sheet.cell_class('tabular-nums') }}">
-                {% if c.price_changed %}<span data-price-change>${{ p.previous_amount | money }} → ${{ p.amount | money }} <span class="text-gray-500 dark:text-gray-400">since {{ p.price_change_since.strftime('%b %-d') }}</span></span>{% else %}—{% endif %}
+            <td class="{{ sheet.cell_class('tabular-nums', _ro) }}">
+                {% if c.price_changed %}<span data-price-change>${{ p.previous_amount | money }} → ${{ p.amount | money }} <span class="{{ _note }}">since {{ p.price_change_since.strftime('%b %-d') }}</span></span>{% else %}—{% endif %}
             </td>
             {% endif %}
             {% endfor %}

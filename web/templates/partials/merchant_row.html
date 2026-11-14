@@ -9,7 +9,9 @@
 <tr id="{{ row_id }}" class="{{ gs.row_class() }}">
     {% for key in flat_sheets.merchants.col_keys %}
     {% if key == 'merchant' %}
-    <td class="{{ sheet.cell_class('', 'font-medium') }}">
+    {# The name links to its transactions but isn't editable: greyed in edit
+       mode like the other read-only cells (issue #147). #}
+    <td class="{{ sheet.cell_class('', 'font-medium' ~ (' ' ~ sheet.readonly() if edit_mode else '')) }}">
         <a class="text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
            href="/s/{{ filename }}/transactions?search={{ m.merchant_name | urlencode }}">{{ sheet.clip(m.merchant_name, '18rem') }}</a>
     </td>

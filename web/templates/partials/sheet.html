@@ -36,6 +36,16 @@ border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gra
 <span class="cell-clip" data-clip style="max-width:{{ max }}" title="{{ value }}">{{ value }}</span>
 {%- endmacro -%}
 
+{# A read-only field on an unlocked sheet (issue #147): greyed out, so what
+   can't be clicked to edit reads differently from what can. Every sheet's
+   read-only cells and Holdings' read-only Details fields take this in edit
+   mode (macros/table.html cell_non_editable wraps it for a whole <td>). Signed
+   values keep a muted red / green. `cell-readonly` is the shared hook:
+   grouped_sheet.css greys links and badges inside it too. #}
+{%- macro readonly(is_negative=false, is_positive=false) -%}
+cell-readonly {% if is_negative %}text-red-400 dark:text-red-500{% elif is_positive %}text-green-400 dark:text-green-500{% else %}text-gray-400 dark:text-gray-500{% endif %}
+{%- endmacro -%}
+
 {# Negative-amount colour token (empty string when not negative). #}
 {%- macro neg(is_negative) -%}
 {% if is_negative %}text-red-600 dark:text-red-400{% endif %}

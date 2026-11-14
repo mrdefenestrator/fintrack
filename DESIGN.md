@@ -1090,6 +1090,18 @@ Two invariants keep the grid sound:
   `col_keys`), never by position, so adding or removing a column can't silently
   shift which field a click edits.
 
+One convention keeps edit mode legible (issue #147): **on an unlocked sheet,
+every field that can't be edited is greyed out**, on every sheet alike —
+computed and imported cells, Holdings' read-only Details fields, Budget's
+Actual · Delta · Status, a linked transaction's pinned Category, the Merchants
+name link, and every cell of Budget's Recurring view (its actions stay live).
+They all take `sheet.readonly()` (`partials/sheet.html`; whole cells via
+`macros/table.html` `cell_non_editable`): muted gray, or muted red / green for a
+signed value, plus a `cell-readonly` hook under which `grouped_sheet.css` greys
+links and dims `sheet-badge` status badges. Locked sheets keep their colors.
+`tests/finances/test_readonly_cells.py` renders each unlockable sheet from the
+dense seed and requires every data cell to be click-to-edit or greyed.
+
 **Sticky spreadsheet chrome — the border invariant.** These sheets use
 `border-collapse`, whose borders are painted in the *table's* own layer. When a
 row is `position: sticky` — the group heading bands, the column-header rows, the
@@ -1132,8 +1144,8 @@ CLI's `budget` table keeps its Kind column.
   column: + beats the budget, and it works for any month. Status reads
   Matched / Over / Under / On pace / Missing / Upcoming / Not linked / Not due
   (an entry with nothing scheduled that month), colored by its tone, with the
-  pace beside a mid-month variable line. These cells aren't editable and read
-  the same in view and edit mode. **Actual links** to the month's
+  pace beside a mid-month variable line. These cells aren't editable, so edit
+  mode greys them like every read-only cell (badges dim). **Actual links** to the month's
   transactions behind it — Transactions filtered by the entry (`?budget=<id>`)
   or, for a category-measured variable line, by its category — and its
   tooltip gives the count, the last one seen and netted refunds; a purple dot

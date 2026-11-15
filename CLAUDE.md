@@ -93,6 +93,14 @@ degrades to a warning without it).
   Dependabot bumps the Dockerfiles but not `mise.toml`, so bump uv and Node
   there by hand, in step with the Dockerfiles.
 
+## Sessions
+
+- When a session starts work on a GitHub issue, rename the session right away
+  to `#<issue> <short description>` (about 50 characters, the issue title
+  shortened), e.g. `#69 Self-host front-end assets`. Several issues: list each
+  number first (`#69 #92 Preview static files`). No issue: just the
+  description. Rename again if the work moves to a different issue.
+
 ## Pull Requests
 
 - Every PR description names each issue it resolves with a closing keyword,

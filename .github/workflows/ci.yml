@@ -21,6 +21,20 @@ jobs:
       - name: Install mise
         uses: jdx/mise-action@v4
 
+      - name: Cache npm downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: npm-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: npm-${{ runner.os }}-
+
+      # Front-end assets (web/static/dist/) are built, never committed. Built
+      # up front so a broken Tailwind config fails fast.
+      - name: Build front-end assets
+        run: |
+          npm ci --no-audit --no-fund
+          mise run assets
+
       - name: Format check
         run: mise run format-check
 
@@ -35,6 +49,32 @@ jobs:
 
       - name: E2E tests
         run: mise run test-e2e
+
+  # Pull requests never reach build-and-push, so build both images here (one
+  # architecture, no push) to catch Dockerfile breakage before merge.
+  docker-build:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        dockerfile: [Dockerfile, Dockerfile.lambda]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build ${{ matrix.dockerfile }}
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64
+          push: false
+          cache-from: type=gha,scope=${{ matrix.dockerfile }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.dockerfile }}
 
   build-and-push:
     needs: ci

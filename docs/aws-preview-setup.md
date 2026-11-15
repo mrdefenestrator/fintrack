@@ -95,7 +95,11 @@ aws iam create-role --role-name fintrack-pr-preview-deployer \
 ```
 
 Attach the permissions policy. ECR resources are scoped to the preview repo.
-Lambda resources are scoped to the `fintrack-pr-*` function name prefix:
+Lambda resources are scoped to the `fintrack-pr-*` function name prefix, which
+covers both functions each PR gets: `fintrack-pr-N` (the app, reserved
+concurrency 1 so its SQLite DB in `/tmp` stays consistent) and
+`fintrack-pr-N-static` (the same image serving only `/static`, with no
+reserved concurrency so a page's parallel script/CSS requests aren't 429ed):
 
 ```bash
 aws iam put-role-policy --role-name fintrack-pr-preview-deployer \

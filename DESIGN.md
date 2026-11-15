@@ -920,9 +920,7 @@ sheet reuses them rather than copying Holdings:
   `heading`/`subtotal_cell`, `header_row`, `row_class`, `empty_row`,
   `add_row`/`add_button`, `footer`); each page keeps its own cell rendering;
 - look — `templates/partials/grouped_sheet.css`, inlined into every page by
-  `base.html` (not a `<link>`ed static file: the PR-preview Lambda runs at
-  reserved concurrency 1 and 429s parallel subresource requests, which dropped
-  the stylesheet): the tone palette (emerald · rose ·
+  `base.html`: the tone palette (emerald · rose ·
   amber · blue · slate; a band, or a single row, picks one via `data-tone`),
   accent rail, sticky heading/header, sticky edit-mode actions column, footer;
 - per-band sorting — `static/js/group-sort.js` (asc → desc → none, state in

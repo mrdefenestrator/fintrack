@@ -12,7 +12,10 @@ pytestmark = pytest.mark.e2e
 def _batch(page, server):
     base, import_id = server
     page.goto(f"{base}/s/ledger/import")
-    return page.locator(f"#batch-{import_id}")
+    batch = page.locator(f"#batch-{import_id}")
+    # The batch's rows arrive by htmx (hx-trigger="load") after page load.
+    batch.locator("table").wait_for()
+    return batch
 
 
 def test_flagged_rows_show_the_original_and_why(page, duplicates_server):

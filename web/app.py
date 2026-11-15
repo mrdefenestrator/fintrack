@@ -35,6 +35,54 @@ except ImportError:
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
+# Built by `npm run build` (mise run assets); gitignored, never committed.
+COMPILED_CSS = Path(__file__).resolve().parent / "static" / "dist" / "tailwind.css"
+
+# Static files that stay on the app's own origin even when FINTRACK_STATIC_URL
+# is set: the manifest's start_url and scope ("/") resolve against the
+# manifest's URL, so serving it from another host would point an installed
+# app at that host.
+_SAME_ORIGIN_STATIC = frozenset({"manifest.webmanifest"})
+
+
+class FintrackFlask(Flask):
+    """Flask with an optional separate origin for static files.
+
+    When ``static_host`` is set (from FINTRACK_STATIC_URL), every
+    ``url_for('static', ...)`` — in Python and in templates — is built on that
+    host instead of the app's. Only the PR preview sets it: its app Lambda
+    answers one request at a time and returns 429 for the rest, so the page's
+    parallel script/CSS requests go to a second, stateless function instead.
+    """
+
+    static_host: str | None = None
+
+    def url_for(self, endpoint: str, *args, **values) -> str:
+        url = super().url_for(endpoint, *args, **values)
+        if (
+            self.static_host
+            and endpoint == "static"
+            and not values.get("_external")
+            and values.get("filename") not in _SAME_ORIGIN_STATIC
+        ):
+            return self.static_host + url
+        return url
+
+
+def _warn_if_assets_missing(app: Flask) -> None:
+    """Log loudly when the front-end build hasn't run.
+
+    Without it every page renders unstyled and Alpine/htmx controls are dead,
+    which looks like an app bug. A warning (not an error) so CLI-only and
+    test setups that never render pages aren't blocked.
+    """
+    if not COMPILED_CSS.exists():
+        app.logger.warning(
+            "Front-end assets not built: %s is missing. Pages will render "
+            "unstyled. Run `mise run assets` (or `npm ci && npm run build`).",
+            COMPILED_CSS.relative_to(PROJECT_ROOT),
+        )
+
 
 def _display_is_negative(value):
     """True if value is a number < 0 or a string that looks like a negative (e.g. ($1.00) or -1)."""
@@ -92,7 +140,9 @@ def _register_filters(app: Flask) -> None:
 def create_app(db_path: str | None = None) -> Flask:
     """Application factory. Creates the engine, initialises the schema, and
     wires up filters, blueprints, and error handlers."""
-    app = Flask(__name__)
+    app = FintrackFlask(__name__)
+    app.static_host = os.environ.get("FINTRACK_STATIC_URL", "").rstrip("/") or None
+    _warn_if_assets_missing(app)
 
     if db_path is None:
         db_path = os.environ.get("FINTRACK_DB") or str(PROJECT_ROOT / "fintrack.db")

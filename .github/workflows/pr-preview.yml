@@ -28,6 +28,9 @@ env:
   ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY || 'fintrack-preview' }}
   FUNCTION_NAME: fintrack-pr-${{ github.event.number }}
   STATIC_FUNCTION_NAME: fintrack-pr-${{ github.event.number }}-static
+  # Cap on the public static function so a flood of requests can't run up
+  # cost. A page loads ~12 static files in parallel; 20 leaves headroom.
+  STATIC_RESERVED_CONCURRENCY: 20
 
 jobs:
   deploy:
@@ -75,9 +78,9 @@ jobs:
           shopt -s inherit_errexit
 
           # deploy NAME ENV_JSON RESERVED MEMORY
-          # Create or update one function from the image, set its environment,
-          # and make sure it has a public Function URL. RESERVED is the
-          # reserved concurrency ("" for none). Prints the Function URL.
+          # Create or update one function from the image, set its environment
+          # and reserved concurrency, and make sure it has a public Function
+          # URL. Prints the Function URL.
           deploy() {
             local name=$1 env_json=$2 reserved=$3 memory=$4
             if aws lambda get-function --function-name "$name" >/dev/null 2>&1; then
@@ -103,13 +106,14 @@ jobs:
                 --timeout 30 \
                 --environment "$env_json" \
                 --query 'FunctionArn' --output text >/dev/null
-              if [ -n "$reserved" ]; then
-                aws lambda put-function-concurrency \
-                  --function-name "$name" \
-                  --reserved-concurrent-executions "$reserved" >/dev/null
-              fi
               aws lambda wait function-active --function-name "$name"
             fi
+
+            # Every deploy, not only on create, so a changed value reaches
+            # functions that already exist.
+            aws lambda put-function-concurrency \
+              --function-name "$name" \
+              --reserved-concurrent-executions "$reserved" >/dev/null
 
             # Ensure Function URL exists (idempotent — skips if already configured)
             if ! aws lambda get-function-url-config --function-name "$name" >/dev/null 2>&1; then
@@ -137,11 +141,12 @@ jobs:
           }
 
           # Static files (scripts, CSS, icons) come from a second function
-          # running the same image. It keeps no state, so it has NO reserved
-          # concurrency and answers the page's parallel requests at once;
-          # the app function below would 429 all but one of them.
+          # running the same image. It keeps no state, so it runs many copies
+          # (up to STATIC_RESERVED_CONCURRENCY) and answers the page's parallel
+          # requests at once; the app function below would 429 all but one.
           STATIC_URL=$(deploy "$STATIC_FUNCTION_NAME" \
-            '{"Variables":{"FINTRACK_STATIC_ONLY":"1"}}' "" 512)
+            '{"Variables":{"FINTRACK_STATIC_ONLY":"1"}}' \
+            "$STATIC_RESERVED_CONCURRENCY" 512)
           echo "Static URL: $STATIC_URL"
 
           # The app itself. Reserved concurrency 1 forces every request into
@@ -197,6 +202,23 @@ jobs:
               aws lambda delete-function --function-name "$name"
             else
               echo "No Lambda function named ${name}; nothing to delete."
+            fi
+          done
+
+      # Lambda creates these on first invocation and never deletes them.
+      # Best effort: needs logs:DeleteLogGroup (docs/aws-preview-setup.md).
+      - name: Delete preview log groups (best effort)
+        continue-on-error: true
+        run: |
+          for name in "$FUNCTION_NAME" "$STATIC_FUNCTION_NAME"; do
+            group="/aws/lambda/${name}"
+            if aws logs delete-log-group --log-group-name "$group" 2>err.txt; then
+              echo "Deleted log group ${group}"
+            elif grep -q ResourceNotFoundException err.txt; then
+              echo "No log group ${group}; nothing to delete."
+            else
+              cat err.txt >&2
+              echo "::warning::Couldn't delete ${group}; see docs/aws-preview-setup.md (logs:DeleteLogGroup)."
             fi
           done
 

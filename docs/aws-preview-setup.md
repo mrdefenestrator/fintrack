@@ -98,8 +98,12 @@ Attach the permissions policy. ECR resources are scoped to the preview repo.
 Lambda resources are scoped to the `fintrack-pr-*` function name prefix, which
 covers both functions each PR gets: `fintrack-pr-N` (the app, reserved
 concurrency 1 so its SQLite DB in `/tmp` stays consistent) and
-`fintrack-pr-N-static` (the same image serving only `/static`, with no
-reserved concurrency so a page's parallel script/CSS requests aren't 429ed):
+`fintrack-pr-N-static` (the same image serving only `/static`, reserved
+concurrency 20 so a page's parallel script/CSS requests aren't 429ed but a
+flood of requests can't run up cost). Each open PR therefore reserves 21 of
+the account's Lambda concurrency, and AWS keeps at least 100 unreserved: with
+the default limit of 1,000 that's room for about 40 open PRs. The `Logs`
+statement lets teardown delete each PR's two CloudWatch log groups:
 
 ```bash
 aws iam put-role-policy --role-name fintrack-pr-preview-deployer \
@@ -126,6 +130,9 @@ aws iam put-role-policy --role-name fintrack-pr-preview-deployer \
           "lambda:DeleteFunctionUrlConfig",
           "lambda:AddPermission", "lambda:RemovePermission",
           "lambda:PutFunctionConcurrency", "lambda:DeleteFunctionConcurrency" ] },
+      { "Sid": "Logs", "Effect": "Allow",
+        "Action": "logs:DeleteLogGroup",
+        "Resource": "arn:aws:logs:<REGION>:<ACCOUNT_ID>:log-group:/aws/lambda/fintrack-pr-*" },
       { "Sid": "PassLambdaRole", "Effect": "Allow",
         "Action": "iam:PassRole",
         "Resource": "arn:aws:iam::<ACCOUNT_ID>:role/fintrack-lambda-preview" }
@@ -231,6 +238,15 @@ aws lambda list-functions --region <REGION> \
   --query "Functions[?starts_with(FunctionName, 'fintrack-pr-')].FunctionName" \
   --output text | tr '\t' '\n' | while read fn; do
     aws lambda delete-function --function-name "$fn" --region <REGION>
+  done
+
+# Delete their CloudWatch log groups (also clears any left by PRs closed
+# before teardown deleted them)
+aws logs describe-log-groups --region <REGION> \
+  --log-group-name-prefix /aws/lambda/fintrack-pr- \
+  --query 'logGroups[].logGroupName' --output text | tr '\t' '\n' |
+  while read lg; do
+    aws logs delete-log-group --log-group-name "$lg" --region <REGION>
   done
 
 # ECR repository (force-deletes all images)

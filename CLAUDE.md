@@ -319,7 +319,7 @@ degrades to a warning without it).
   concurrent requests with 429 instead of queueing; browsers don't retry
   subresources. So `pr-preview.yml` also deploys the same image as
   `fintrack-pr-N-static` (`FINTRACK_STATIC_ONLY=1`: serves only `/static`, no
-  DB, no reserved concurrency), and the app's `FINTRACK_STATIC_URL` points every
+  DB, many copies — capped at 20 to bound cost), and the app's `FINTRACK_STATIC_URL` points every
   `url_for('static', …)` at it (`FintrackFlask` in `web/app.py`; the manifest
   stays on the app's origin). Static files can live in their own files again.
   htmx requests still go to the app function: one that gets a 429 is retried

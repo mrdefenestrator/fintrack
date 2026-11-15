@@ -1,8 +1,11 @@
+# uv binary, as a named stage so Dependabot (which updates FROM lines) bumps it.
+FROM ghcr.io/astral-sh/uv:0.13.8 AS uv
+
 # Front-end assets (Tailwind CSS + vendored JS). Output is plain CSS/JS that's
 # identical on every architecture, so build it once on the native build
 # platform instead of under QEMU emulation for each target arch. The npm ci
 # layer is only rebuilt when package*.json change.
-FROM --platform=$BUILDPLATFORM node:22-slim AS assets
+FROM --platform=$BUILDPLATFORM node:22.23.5-slim AS assets
 
 WORKDIR /app
 
@@ -15,17 +18,17 @@ COPY web/ ./web/
 RUN npm run build
 
 
-FROM python:3.14-slim AS builder
+FROM python:3.14.10-slim AS builder
 
 WORKDIR /app
 
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+COPY --from=uv /uv /usr/local/bin/uv
 
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev
 
 
-FROM python:3.14-slim
+FROM python:3.14.10-slim
 
 WORKDIR /app
 

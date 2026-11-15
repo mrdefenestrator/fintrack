@@ -1,6 +1,9 @@
+# Exact versions, never "latest" or a bare major. Dependabot doesn't read this
+# file: bump by hand, keeping uv and Node in step with the Dockerfiles
+# (ghcr.io/astral-sh/uv:<ver>, node:<ver>-slim), which Dependabot does update.
 [tools]
-uv = "latest"
-node = "22"  # build-time only: compiles Tailwind and vendors front-end JS
+uv = "0.13.8"
+node = "22.23.5"  # build-time only: compiles Tailwind and vendors front-end JS
 
 [tasks.setup]
 run = ["uv sync", "npm ci", "npm run build"]

@@ -88,6 +88,10 @@ degrades to a warning without it).
 - Front-end library upgrades come through Dependabot (`npm` ecosystem); a
   manual one is `npm install <pkg>@<ver>` then `mise run test`. Tailwind stays
   on v3 (v4 is a separate migration).
+- Pin every version exactly — no `latest`, no bare majors: tools in
+  `mise.toml`, Docker base images (by full tag), CI runners (`ubuntu-24.04`).
+  Dependabot bumps the Dockerfiles but not `mise.toml`, so bump uv and Node
+  there by hand, in step with the Dockerfiles.
 
 ## Key Architecture Decisions
 

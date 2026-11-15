@@ -33,7 +33,7 @@ jobs:
   deploy:
     # Build/deploy on open, reopen, and new commits — but not on close.
     if: ${{ github.event.action != 'closed' && vars.AWS_DEPLOY_ROLE_ARN != '' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -180,7 +180,7 @@ jobs:
   teardown:
     # Delete the preview when the PR closes (merged or not).
     if: ${{ github.event.action == 'closed' && vars.AWS_DEPLOY_ROLE_ARN != '' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4

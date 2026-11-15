@@ -13,7 +13,8 @@
    before). The change dot's tooltip lists the entry's whole history.
    Budget vs actual (issue #143): Actual / Delta / Status come from
    `row.actual` (reconcile.EntryActual; none for a future month) and read the
-   same in view and edit mode — they aren't editable. Actual links to the
+   same in view and edit mode — they aren't editable, so edit mode greys them
+   like every read-only cell (sheet.readonly, issue #147). Actual links to the
    transactions behind it; its tooltip says how many, the last one seen, and
    any refunds netted in, and a purple dot marks price drift. In edit mode a
    detail row under the entry lists the month's link suggestions for it, with
@@ -46,7 +47,7 @@
 } %}
 {% macro _actual_cell(key, value) %}
 {% if _a is none %}
-<td class="{{ sheet.cell_class('text-right tabular-nums' if key != 'status' else '', _muted) }}" title="No actuals for a future month">—</td>
+<td class="{{ sheet.cell_class('text-right tabular-nums' if key != 'status' else '', sheet.readonly() if edit_mode else _muted) }}" title="No actuals for a future month">—</td>
 {% elif key == 'actual' %}
 {% set _refunds = 'refunds' if kind == 'expense' else 'clawbacks' %}
 {% set _tip = [] %}
@@ -59,7 +60,7 @@
 {% set _href = url_for('transactions.index', filename=filename, year=viewed_year, month=viewed_month, budget=_a.entry_ref) if _a.count or _a.reversed_amount else none %}
 {% endif %}
 {% if _a.last_linked %}{% set _ = _tip.append('Last seen %s' | format(_a.last_linked)) %}{% endif %}
-<td class="{{ sheet.cell_class('text-right tabular-nums', sheet.neg(value | display_is_negative)) }}" title="{{ _tip | join('
+<td class="{{ sheet.cell_class('text-right tabular-nums', sheet.readonly(value | display_is_negative) if edit_mode else sheet.neg(value | display_is_negative)) }}" title="{{ _tip | join('
 ') }}" data-actual{% if _a.reversed_amount %} data-actual-reversed{% endif %}>
 {%- if _a.drift_amount and (_a.drift_amount > 0 or _a.drift_amount < 0) -%}
 {{ _mark('drift', 'Price drift: %s$%s per charge vs the budgeted amount' | format('+' if _a.drift_amount > 0 else '-', _a.drift_amount | abs | money), leading=true) }}
@@ -68,10 +69,11 @@
 </td>
 {% elif key == 'delta' %}
 {# A pace line's Delta is against the full month, so it isn't judged yet. #}
-<td class="{{ sheet.cell_class('text-right tabular-nums', _tone_text[_a.tone if _a.pace is none else 'neutral']) }}" data-delta>{{ value }}</td>
+{% set _dtone = _a.tone if _a.pace is none else 'neutral' %}
+<td class="{{ sheet.cell_class('text-right tabular-nums', sheet.readonly(_dtone == 'bad', _dtone == 'good') if edit_mode else _tone_text[_dtone]) }}" data-delta>{{ value }}</td>
 {% else %}
 {% set _label = actual_statuses.get(_a.status, _a.status) %}
-<td class="{{ sheet.cell_class() }}" data-status="{{ _a.status }}"><span class="px-1.5 py-0.5 rounded text-xs {{ _badge[_a.tone] }}"{% if _a.pace is not none %} data-pace title="Month in progress: judged against pace, ${{ _a.pace | money }} expected by today"{% endif %}>{{ _label }}{% if _a.pace is not none and _a.status in ('over', 'under') %} pace{% endif %}</span>
+<td class="{{ sheet.cell_class('', sheet.readonly() if edit_mode else '') }}" data-status="{{ _a.status }}"><span class="sheet-badge px-1.5 py-0.5 rounded text-xs {{ _badge[_a.tone] }}"{% if _a.pace is not none %} data-pace title="Month in progress: judged against pace, ${{ _a.pace | money }} expected by today"{% endif %}>{{ _label }}{% if _a.pace is not none and _a.status in ('over', 'under') %} pace{% endif %}</span>
 {%- if _a.pace is not none %}<span class="ml-1 text-xs {{ _muted }}">${{ _a.pace | money }} by today</span>{% endif -%}
 {%- if row.suggestions and not edit_mode %}<span class="ml-1 px-1 rounded text-xs {{ _badge['neutral'] }}" data-suggested-count title="Unlinked transactions this month that look like this entry: review them in edit mode">{{ row.suggestions | length }} suggested</span>{% endif -%}
 </td>

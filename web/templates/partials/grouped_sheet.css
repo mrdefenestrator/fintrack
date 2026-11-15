@@ -152,6 +152,14 @@
     box-shadow: inset 4px 0 0 var(--accent), inset -1px 0 0 #4b5563, inset 0 -2px 0 #4b5563;
 }
 
+/* ---- Read-only fields in edit mode (issue #147) --------------------------------
+   A cell (or Holdings Details field) that can't be clicked to edit carries
+   .cell-readonly (partials/sheet.html readonly()) and is greyed. Anything
+   colored inside it follows: a link takes the cell's muted color, a status
+   badge dims. (Outranks a Tailwind text color on the inner element.) */
+.grouped-sheet .cell-readonly a { color: inherit; }
+.grouped-sheet .cell-readonly .sheet-badge { opacity: 0.55; }
+
 /* A sorted band's DOM order no longer matches its stored order, so hide its
    drag handles (row-reorder.js also refuses to drag it). */
 .grouped-sheet tbody[data-sorted] .drag-handle { display: none; }

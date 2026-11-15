@@ -21,10 +21,13 @@ the architecture and data model.
 ## Setup
 
 Tooling is managed by [mise](https://mise.jdx.dev/) and
-[uv](https://docs.astral.sh/uv/):
+[uv](https://docs.astral.sh/uv/). mise also installs Node 22, used only at
+build time to compile Tailwind CSS and vendor the front-end JS into
+`web/static/dist/` (gitignored; no CDNs, so the app works offline):
 
 ```bash
-mise run setup                # uv sync — installs everything into .venv
+mise run setup                # uv sync + npm ci + build front-end assets
+mise run assets               # rebuild front-end assets (serve/test do this too)
 mise run test                 # format check, lint, unit tests, e2e tests
 mise run playwright-install   # one-time: browser binaries for e2e tests
 ```
@@ -35,6 +38,7 @@ Configuration is via environment variables:
 |----------|---------|---------|
 | `FINTRACK_DB` | `fintrack.db` in the repo root | SQLite database path |
 | `FINTRACK_PORT` | `5003` | Web server port |
+| `FINTRACK_STATIC_URL` | — | Serve `/static` files from this origin instead (set only by the PR preview) |
 | `ANTHROPIC_API_KEY` | — | Enables merchant classification (optional; imports work without it, classification is skipped with a warning) |
 
 **Privacy:** only normalized merchant names are ever sent to the Claude API —

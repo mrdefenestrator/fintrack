@@ -3,6 +3,11 @@
 Translates Lambda Function URL events to WSGI and back, so the Flask app
 serves directly with no ASGI adapter layer. On cold start, runs migrations
 and seeds the demo households into an ephemeral SQLite database in /tmp.
+
+The same image also runs as the preview's static-file function
+(FINTRACK_STATIC_ONLY=1): it serves only /static/..., needs no database, and
+has no reserved concurrency, so the page's parallel script/CSS requests all
+get answered. The app function points at it with FINTRACK_STATIC_URL.
 """
 
 import io
@@ -15,6 +20,8 @@ from base64 import b64decode, b64encode
 os.environ.setdefault("FINTRACK_DB", "/tmp/fintrack.db")
 
 from web.app import create_app
+
+_STATIC_ONLY = os.environ.get("FINTRACK_STATIC_ONLY") == "1"
 
 _app = None
 _initialized = False
@@ -49,12 +56,19 @@ def _cold_start():
 def handler(event, context):
     """Lambda entry point — translates Function URL events to WSGI."""
     global _app
-    _cold_start()
-    if _app is None:
-        _app = create_app()
+    http_ctx = event.get("requestContext", {}).get("http", {})
+    if _STATIC_ONLY:
+        if not http_ctx.get("path", "/").startswith("/static/"):
+            return {"statusCode": 404, "headers": {}, "body": "Not Found"}
+        if _app is None:
+            # Static files need no data: skip the migrate + seed cold start.
+            _app = create_app(db_path=":memory:")
+    else:
+        _cold_start()
+        if _app is None:
+            _app = create_app()
 
     # Build the WSGI environ from the Lambda Function URL event
-    http_ctx = event.get("requestContext", {}).get("http", {})
     headers = event.get("headers", {})
 
     body = event.get("body", "") or ""

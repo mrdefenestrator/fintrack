@@ -1,9 +1,21 @@
+# Exact versions, never "latest" or a bare major. Dependabot doesn't read this
+# file: bump by hand, keeping uv and Node in step with the Dockerfiles
+# (ghcr.io/astral-sh/uv:<ver>, node:<ver>-slim), which Dependabot does update.
 [tools]
-uv = "latest"
+uv = "0.13.8"
+node = "22.23.5"  # build-time only: compiles Tailwind and vendors front-end JS
 
 [tasks.setup]
-run = "uv sync"
-description = "Install all dependencies into .venv"
+run = ["uv sync", "npm ci", "npm run build"]
+description = "Install Python + front-end dependencies and build front-end assets"
+
+[tasks.assets]
+run = "npm run build"
+description = "Build front-end assets (Tailwind CSS, vendored JS) into web/static/dist/"
+
+[tasks.assets-watch]
+run = "npm run watch:css"
+description = "Rebuild Tailwind CSS whenever templates change"
 
 [tasks.format]
 run = "uv run ruff format fintrack/ web/ tests/ fintrack.py"
@@ -22,7 +34,7 @@ run = "uv run ruff check --fix fintrack/ web/ tests/ fintrack.py"
 description = "Fix lint issues with ruff"
 
 [tasks.test]
-depends = ["format-check", "lint"]
+depends = ["format-check", "lint", "assets"]
 run = [
     "uv run pytest tests/ -v --cov=fintrack --cov-report=term-missing -m 'not e2e'",
     "uv run pytest tests/ -v -m e2e",
@@ -34,6 +46,7 @@ run = "uv run pytest tests/ -v --cov=fintrack --cov-report=term-missing -m 'not 
 description = "Run unit tests for both apps with coverage"
 
 [tasks.test-e2e]
+depends = ["assets"]
 run = "uv run pytest tests/ -v -m e2e"
 description = "Run e2e browser tests with Playwright (run playwright-install first)"
 
@@ -46,5 +59,6 @@ run = "uv run alembic upgrade head"
 description = "Run database migrations to latest"
 
 [tasks.serve]
+depends = ["assets"]
 run = "uv run python -m web.app"
 description = "Start the fintrack web server (port 5003)"

@@ -27,12 +27,16 @@ env:
   AWS_REGION: ${{ vars.AWS_REGION }}
   ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY || 'fintrack-preview' }}
   FUNCTION_NAME: fintrack-pr-${{ github.event.number }}
+  STATIC_FUNCTION_NAME: fintrack-pr-${{ github.event.number }}-static
+  # Cap on the public static function so a flood of requests can't run up
+  # cost. A page loads ~12 static files in parallel; 20 leaves headroom.
+  STATIC_RESERVED_CONCURRENCY: 20
 
 jobs:
   deploy:
     # Build/deploy on open, reopen, and new commits — but not on close.
     if: ${{ github.event.action != 'closed' && vars.AWS_DEPLOY_ROLE_ARN != '' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -62,71 +66,95 @@ jobs:
           docker push "$IMAGE_URI"
           echo "image_uri=$IMAGE_URI" >> "$GITHUB_OUTPUT"
 
-      - name: Deploy Lambda function
+      - name: Deploy Lambda functions
         id: deploy
         env:
           IMAGE_URI: ${{ steps.build.outputs.image_uri }}
           LAMBDA_ROLE_ARN: ${{ vars.LAMBDA_EXECUTION_ROLE_ARN }}
         run: |
           set -euo pipefail
+          # deploy() runs inside $(...); without this a failed step in it
+          # wouldn't stop the job.
+          shopt -s inherit_errexit
 
-          # Create or update the function
-          if aws lambda get-function --function-name "$FUNCTION_NAME" >/dev/null 2>&1; then
-            echo "Updating Lambda function ${FUNCTION_NAME}"
-            aws lambda update-function-code \
-              --function-name "$FUNCTION_NAME" \
-              --image-uri "$IMAGE_URI" \
-              --query 'FunctionArn' --output text >/dev/null
+          # deploy NAME ENV_JSON RESERVED MEMORY
+          # Create or update one function from the image, set its environment
+          # and reserved concurrency, and make sure it has a public Function
+          # URL. Prints the Function URL.
+          deploy() {
+            local name=$1 env_json=$2 reserved=$3 memory=$4
+            if aws lambda get-function --function-name "$name" >/dev/null 2>&1; then
+              echo "Updating Lambda function ${name}" >&2
+              aws lambda update-function-code \
+                --function-name "$name" \
+                --image-uri "$IMAGE_URI" \
+                --query 'FunctionArn' --output text >/dev/null
+              aws lambda wait function-updated --function-name "$name"
+              aws lambda update-function-configuration \
+                --function-name "$name" \
+                --environment "$env_json" \
+                --query 'FunctionArn' --output text >/dev/null
+              aws lambda wait function-updated --function-name "$name"
+            else
+              echo "Creating Lambda function ${name}" >&2
+              aws lambda create-function \
+                --function-name "$name" \
+                --package-type Image \
+                --code "ImageUri=${IMAGE_URI}" \
+                --role "$LAMBDA_ROLE_ARN" \
+                --memory-size "$memory" \
+                --timeout 30 \
+                --environment "$env_json" \
+                --query 'FunctionArn' --output text >/dev/null
+              aws lambda wait function-active --function-name "$name"
+            fi
 
-            echo "Waiting for update to complete..."
-            aws lambda wait function-updated --function-name "$FUNCTION_NAME"
-          else
-            echo "Creating Lambda function ${FUNCTION_NAME}"
-            aws lambda create-function \
-              --function-name "$FUNCTION_NAME" \
-              --package-type Image \
-              --code "ImageUri=${IMAGE_URI}" \
-              --role "$LAMBDA_ROLE_ARN" \
-              --memory-size 1024 \
-              --timeout 30 \
-              --environment "Variables={FINTRACK_DB=/tmp/fintrack.db}" \
-              --query 'FunctionArn' --output text >/dev/null
-
-            # Force all requests to the same execution environment so the
-            # ephemeral SQLite DB in /tmp persists across requests.
+            # Every deploy, not only on create, so a changed value reaches
+            # functions that already exist.
             aws lambda put-function-concurrency \
-              --function-name "$FUNCTION_NAME" \
-              --reserved-concurrent-executions 1 >/dev/null
+              --function-name "$name" \
+              --reserved-concurrent-executions "$reserved" >/dev/null
 
-            echo "Waiting for function to be active..."
-            aws lambda wait function-active --function-name "$FUNCTION_NAME"
-          fi
+            # Ensure Function URL exists (idempotent — skips if already configured)
+            if ! aws lambda get-function-url-config --function-name "$name" >/dev/null 2>&1; then
+              echo "Creating Function URL for ${name}..." >&2
+              aws lambda create-function-url-config \
+                --function-name "$name" \
+                --auth-type NONE \
+                --invoke-mode BUFFERED >/dev/null
+              aws lambda add-permission \
+                --function-name "$name" \
+                --statement-id FunctionURLPublicAccess \
+                --action lambda:InvokeFunctionUrl \
+                --principal "*" \
+                --function-url-auth-type NONE >/dev/null
+              aws lambda add-permission \
+                --function-name "$name" \
+                --statement-id FunctionURLPublicInvoke \
+                --action lambda:InvokeFunction \
+                --principal "*" >/dev/null
+            fi
 
-          # Ensure Function URL exists (idempotent — skips if already configured)
-          if ! aws lambda get-function-url-config --function-name "$FUNCTION_NAME" >/dev/null 2>&1; then
-            echo "Creating Function URL..."
-            aws lambda create-function-url-config \
-              --function-name "$FUNCTION_NAME" \
-              --auth-type NONE \
-              --invoke-mode BUFFERED >/dev/null
+            aws lambda get-function-url-config \
+              --function-name "$name" \
+              --query 'FunctionUrl' --output text
+          }
 
-            echo "Adding public invoke permissions..."
-            aws lambda add-permission \
-              --function-name "$FUNCTION_NAME" \
-              --statement-id FunctionURLPublicAccess \
-              --action lambda:InvokeFunctionUrl \
-              --principal "*" \
-              --function-url-auth-type NONE >/dev/null
-            aws lambda add-permission \
-              --function-name "$FUNCTION_NAME" \
-              --statement-id FunctionURLPublicInvoke \
-              --action lambda:InvokeFunction \
-              --principal "*" >/dev/null
-          fi
+          # Static files (scripts, CSS, icons) come from a second function
+          # running the same image. It keeps no state, so it runs many copies
+          # (up to STATIC_RESERVED_CONCURRENCY) and answers the page's parallel
+          # requests at once; the app function below would 429 all but one.
+          STATIC_URL=$(deploy "$STATIC_FUNCTION_NAME" \
+            '{"Variables":{"FINTRACK_STATIC_ONLY":"1"}}' \
+            "$STATIC_RESERVED_CONCURRENCY" 512)
+          echo "Static URL: $STATIC_URL"
 
-          URL=$(aws lambda get-function-url-config \
-            --function-name "$FUNCTION_NAME" \
-            --query 'FunctionUrl' --output text)
+          # The app itself. Reserved concurrency 1 forces every request into
+          # the same execution environment, so the ephemeral SQLite DB in
+          # /tmp persists across requests.
+          APP_ENV=$(jq -cn --arg static "${STATIC_URL%/}" \
+            '{Variables: {FINTRACK_DB: "/tmp/fintrack.db", FINTRACK_STATIC_URL: $static}}')
+          URL=$(deploy "$FUNCTION_NAME" "$APP_ENV" 1 1024)
           echo "url=$URL" >> "$GITHUB_OUTPUT"
           echo "Preview URL: $URL"
 
@@ -157,7 +185,7 @@ jobs:
   teardown:
     # Delete the preview when the PR closes (merged or not).
     if: ${{ github.event.action == 'closed' && vars.AWS_DEPLOY_ROLE_ARN != '' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
@@ -165,15 +193,34 @@ jobs:
           role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Delete Lambda function
+      - name: Delete Lambda functions
         run: |
           set -euo pipefail
-          if aws lambda get-function --function-name "$FUNCTION_NAME" >/dev/null 2>&1; then
-            echo "Deleting Lambda function ${FUNCTION_NAME}"
-            aws lambda delete-function --function-name "$FUNCTION_NAME"
-          else
-            echo "No Lambda function named ${FUNCTION_NAME}; nothing to delete."
-          fi
+          for name in "$FUNCTION_NAME" "$STATIC_FUNCTION_NAME"; do
+            if aws lambda get-function --function-name "$name" >/dev/null 2>&1; then
+              echo "Deleting Lambda function ${name}"
+              aws lambda delete-function --function-name "$name"
+            else
+              echo "No Lambda function named ${name}; nothing to delete."
+            fi
+          done
+
+      # Lambda creates these on first invocation and never deletes them.
+      # Best effort: needs logs:DeleteLogGroup (docs/aws-preview-setup.md).
+      - name: Delete preview log groups (best effort)
+        continue-on-error: true
+        run: |
+          for name in "$FUNCTION_NAME" "$STATIC_FUNCTION_NAME"; do
+            group="/aws/lambda/${name}"
+            if aws logs delete-log-group --log-group-name "$group" 2>err.txt; then
+              echo "Deleted log group ${group}"
+            elif grep -q ResourceNotFoundException err.txt; then
+              echo "No log group ${group}; nothing to delete."
+            else
+              cat err.txt >&2
+              echo "::warning::Couldn't delete ${group}; see docs/aws-preview-setup.md (logs:DeleteLogGroup)."
+            fi
+          done
 
       - name: Delete preview images from ECR (best effort)
         continue-on-error: true

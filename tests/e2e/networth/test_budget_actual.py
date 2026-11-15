@@ -14,7 +14,7 @@ import pytest
 from sqlalchemy import create_engine, insert, select
 
 from fintrack.core.models import holdings, imports, snapshots, transactions
-from tests.e2e.controls import PHONE_WIDTHS, assert_controls_layout
+from tests.e2e.controls import PHONE_WIDTHS, assert_controls_layout, open_row_menu
 from tests.e2e.networth.conftest import enable_edit_mode
 
 pytestmark = pytest.mark.e2e
@@ -180,7 +180,7 @@ def test_suggestion_row_stays_under_its_entry_when_sorted(page, flask_server, _d
 
 def test_suggestion_row_follows_its_entry_when_dragged(page, flask_server, _db_path):
     """A suggestion detail row isn't draggable itself; after a drag,
-    row-reorder.js puts it back under its entry. (The reorder POST is
+    row-actions.js puts it back under its entry. (The reorder POST is
     intercepted so the shared fixture's order stays put.)"""
     _add_rent_charge(_db_path)
     page.route("**/budget/reorder**", lambda r: r.fulfill(status=204, body=""))
@@ -263,7 +263,7 @@ def test_add_recurring_to_budget(page, flask_server, _db_path):
     page.goto(f"{flask_server}{_URL}?view=recurring")
     assert page.locator("[data-recurring-add]").count() == 0
     enable_edit_mode(page)
-    _recurring_row(page).locator("[data-recurring-add]").click()
+    open_row_menu(_recurring_row(page)).locator("[data-recurring-add]").click()
     _recurring_row(page, status="linked").wait_for()
     assert _recurring_row(page).get_by_text("In budget").is_visible()
     page.goto(f"{flask_server}{_URL}")
@@ -273,7 +273,7 @@ def test_add_recurring_to_budget(page, flask_server, _db_path):
 def test_dismiss_recurring(page, flask_server, _db_path):
     _add_monthly_series(_db_path)
     page.goto(f"{flask_server}{_URL}?view=recurring&edit=1")
-    _recurring_row(page).locator("[data-recurring-dismiss]").click()
+    open_row_menu(_recurring_row(page)).locator("[data-recurring-dismiss]").click()
     _recurring_row(page).wait_for(state="detached")
     assert "No recurring charges found" in page.locator("#recurring-table").inner_text()
 
@@ -299,7 +299,7 @@ def test_dropped_action_is_retried(page, flask_server, _db_path):
     _add_monthly_series(_db_path)
     page.goto(f"{flask_server}{_URL}?view=recurring&edit=1")
     _fail_recurring_posts(page, "add", 429, 1)
-    _recurring_row(page).locator("[data-recurring-add]").click()
+    open_row_menu(_recurring_row(page)).locator("[data-recurring-add]").click()
     _recurring_row(page, status="linked").wait_for()
     assert page.locator("#request-error").is_hidden()
 
@@ -308,7 +308,7 @@ def test_failed_action_says_so(page, flask_server, _db_path):
     _add_monthly_series(_db_path)
     page.goto(f"{flask_server}{_URL}?view=recurring&edit=1")
     _fail_recurring_posts(page, "dismiss", 500, 99)
-    _recurring_row(page).locator("[data-recurring-dismiss]").click()
+    open_row_menu(_recurring_row(page)).locator("[data-recurring-dismiss]").click()
     page.locator("#request-error").wait_for(state="visible")
     assert "nothing changed" in page.locator("#request-error").inner_text()
     assert _recurring_row(page).is_visible()

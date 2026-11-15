@@ -5,6 +5,7 @@ from datetime import date, datetime
 
 import pytest
 
+from tests.e2e.controls import open_row_menu
 from tests.e2e.networth.conftest import enable_edit_mode
 
 pytestmark = pytest.mark.e2e
@@ -82,9 +83,9 @@ def test_end_and_resume(page, flask_server):
     enable_edit_mode(page)
 
     with page.expect_response(lambda r: "/budget/end/" in r.url):
-        _rent_row(page).locator("[data-budget-end]").click()
+        open_row_menu(_rent_row(page)).locator("[data-budget-end]").click()
     page.wait_for_load_state("networkidle")
-    assert _rent_row(page).locator("[data-budget-resume]").is_visible()
+    assert open_row_menu(_rent_row(page)).locator("[data-budget-resume]").is_visible()
     assert _rent_row(page).locator("[data-budget-mark='ends']").count() == 1
 
     page.goto(f"{base}?ym={_shift(now, 1):%Y-%m}")

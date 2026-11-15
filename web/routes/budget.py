@@ -481,6 +481,7 @@ def _sheet_ctx(
                 "figures": figures,
                 "marks": _marks(e, viewed),
                 "ends_here": e.get("endMonth") == viewed.isoformat(),
+                "label": e.get("description") or category or "this entry",
                 # The month's budget-vs-actual (None for a future month) and
                 # the unlinked transactions that look like this entry.
                 "actual": actual,
@@ -876,13 +877,18 @@ def delete_btn(filename: str, index: int):
     if index < 0 or index >= len(budget):
         abort(404)
     entry = budget[index]
+    viewed = _viewed_month()
     return render_template(
-        "partials/budget_delete_icon.html",
+        "partials/budget_actions_cell.html",
         filename=filename,
         kind=entry.get("kind", "income"),
         index=index,
         edit_mode=True,
-        row={"ends_here": entry.get("endMonth") == _viewed_month().isoformat()},
+        viewed_label=f"{viewed:%b %Y}",
+        row={
+            "ends_here": entry.get("endMonth") == viewed.isoformat(),
+            "label": entry.get("description") or entry.get("category") or "",
+        },
         # Kind / Recurrence bands don't drag-reorder (see BUDGET_GROUPS).
         reorderable=selected_group(BUDGET_GROUPS) in ("category", "none"),
     )

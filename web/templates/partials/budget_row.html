@@ -18,10 +18,11 @@
    transactions behind it; its tooltip says how many, the last one seen, and
    any refunds netted in, and a purple dot marks price drift. In edit mode a
    detail row under the entry lists the month's link suggestions for it, with
-   Apply / Dismiss (group-sort.js and row-reorder.js keep it under its row). #}
+   Apply / Dismiss (group-sort.js and row-actions.js keep it under its row). #}
 {% from "macros/table.html" import cell_display, cell_non_editable, cell_edit_input, cell_edit_select %}
 {% import "partials/sheet.html" as sheet %}
 {% import "partials/grouped_sheet.html" as gs %}
+{% import "partials/row_actions.html" as ra %}
 {% set index = row.index %}
 {% set kind = row.kind %}
 {% set row_cells = row.cells %}
@@ -234,7 +235,7 @@
     {# Drag handle only where the band reorders (category bands, or the
        ungrouped list); Kind / Recurrence bands don't. #}
     {% set reorderable = group.reorder is not none %}
-    {% include "partials/budget_delete_icon.html" %}
+    {% include "partials/budget_actions_cell.html" %}
     {% endif %}
 </tr>
 {% if edit_mode and row.suggestions %}
@@ -271,6 +272,6 @@
             {% endfor %}
         </ul>
     </td>
-    <td class="table-actions-cell px-1.5 py-1"></td>
+    {{ ra.blank_cell() }}
 </tr>
 {% endif %}

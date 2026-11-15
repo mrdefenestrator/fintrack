@@ -1,7 +1,4 @@
-{# Budget delete confirm - delegates to shared template #}
-{% with
-delete_url=url_for('budget.delete', filename=filename, index=index),
-cancel_url=url_for('budget.delete_btn', filename=filename, index=index)
-%}
-{% include "partials/editable_table_delete_confirm.html" %}
-{% endwith %}
+{# Budget delete confirm (partials/row_actions.html confirm_cell). #}
+{% import "partials/row_actions.html" as ra %}
+{{ ra.confirm_cell(url_for('budget.delete', filename=filename, index=index),
+                   url_for('budget.delete_btn', filename=filename, index=index)) }}

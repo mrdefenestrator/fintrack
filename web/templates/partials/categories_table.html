@@ -1,6 +1,7 @@
 {# Categories sheet contents (the inside of #categories-table): an unbanded
    grouped sheet (partials/grouped_sheet.html) with one "Category" column —
-   click-to-edit rename, an edit-mode actions column (inline delete confirm),
+   click-to-edit rename, an edit-mode actions column (partials/row_actions.html:
+   a menu whose Delete confirms in place),
    a trailing add row, and the pinned count footer. Every add / rename / delete
    re-renders this whole partial (hx-target #categories-table, innerHTML), so
    the footer count stays current; an error (duplicate name, in-use delete)
@@ -38,9 +39,7 @@
     {% endif %}
     {% endfor %}
     {% if edit_mode %}
-    {% with delete_confirm_url=url_for('categories.delete_confirm', filename=filename, category_id=c.id), reorderable=false %}
-    {% include "partials/editable_table_delete_icon.html" %}
-    {% endwith %}
+    {% with category_id=c.id, row_label=c.name %}{% include "partials/categories_actions_cell.html" %}{% endwith %}
     {% endif %}
 </tr>
 {% else %}

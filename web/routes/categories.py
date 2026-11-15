@@ -16,7 +16,7 @@ contents plus an inline error row (base.html's htmx:beforeSwap hook swaps
 non-empty 422 bodies in).
 """
 
-from flask import Blueprint, current_app, g, render_template, request, url_for
+from flask import Blueprint, current_app, g, render_template, request
 
 from fintrack.ledger.repository.categories import (
     add_category,
@@ -122,13 +122,11 @@ def rename(category_id):
 
 @bp.route("/categories/<int:category_id>/delete-btn")
 def delete_btn(category_id):
-    """Cancel the delete confirmation — restore the plain delete icon cell."""
+    """Cancel the delete confirmation — restore the row's actions cell."""
     return render_template(
-        "partials/editable_table_delete_icon.html",
-        delete_confirm_url=url_for(
-            "categories.delete_confirm",
-            category_id=category_id,
-        ),
+        "partials/categories_actions_cell.html",
+        filename=g.filename,
+        category_id=category_id,
         edit_mode=True,
     )
 

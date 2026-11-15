@@ -18,7 +18,7 @@
  * reloads and table swaps. Data rows are the band's `.sheet-group-row`s (and
  * any carrying data-reorder-index); a `data-detail-row` right after a data row
  * belongs to it and moves with it. While a band is sorted its tbody gets `data-sorted`,
- * which disables that band's drag-reorder (see row-reorder.js).
+ * which disables that band's drag-reorder (see row-actions.js).
  */
 (function () {
     "use strict";

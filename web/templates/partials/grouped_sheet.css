@@ -78,19 +78,143 @@
     left: 0.625rem;
 }
 
-/* ---- Sticky actions column ----------------------------------------------------
-   Edit mode only. Sticks to the right edge; data scrolls behind it. A uniform
-   background (it is chrome, not data) keeps scrolled cells from showing through;
-   the frame's --right scroll shadow sits just left of it (data-sticky-actions +
-   --sheet-right-h in sheet-scroll.js). */
+/* ---- Row actions column (issue #148) -------------------------------------------
+   Edit mode only; markup in partials/row_actions.html, behavior in
+   static/js/row-actions.js. Sticks to the right edge; data scrolls behind it. A
+   uniform background (it is chrome, not data) keeps scrolled cells from showing
+   through; the frame's --right scroll shadow sits just left of it
+   (data-sticky-actions + --sheet-right-h in sheet-scroll.js).
+   Every sheet's column is the same two slots — grip, ⋯ — so it is the same
+   width everywhere. A slot is one row tall; on a touch screen it widens to a
+   finger-sized target (the row height stays put: density is a feature). */
+.grouped-sheet { --row-action: 1.375rem; }
+@media (pointer: coarse) { .grouped-sheet { --row-action: 2rem; } }
 .grouped-sheet .table-actions-cell {
     position: sticky;
     right: 0;
     z-index: 6;
-    width: 2.75rem;
+    width: calc(2 * var(--row-action) + 0.375rem);
+    min-width: calc(2 * var(--row-action) + 0.375rem);
+    max-width: calc(2 * var(--row-action) + 0.375rem);
+    padding: 0 0.1875rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-align: center;
+    vertical-align: middle;
     background: #ffffff;
 }
 .dark .grouped-sheet .table-actions-cell { background: #1f2937; }  /* gray-800 */
+.grouped-sheet .table-actions-inner {
+    display: inline-flex;
+    align-items: center;
+    vertical-align: middle;
+}
+.grouped-sheet .table-action-btn {
+    width: var(--row-action);
+    height: 1.5rem;
+    padding: 0;
+    margin: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    border: 0;
+    border-radius: 0.25rem;
+    background: transparent;
+    color: #6b7280;                                   /* gray-500 */
+    cursor: pointer;
+}
+.dark .grouped-sheet .table-action-btn { color: #9ca3af; }  /* gray-400 */
+.grouped-sheet .table-action-btn svg { width: 1rem; height: 1rem; }
+.grouped-sheet .row-action-slot { cursor: default; }
+@media (hover: hover) {
+    .grouped-sheet button.table-action-btn:hover { background: #f3f4f6; color: #1f2937; }
+    .dark .grouped-sheet button.table-action-btn:hover { background: #374151; color: #f3f4f6; }
+}
+.grouped-sheet .table-action-btn:focus-visible { outline: 2px solid #3b82f6; outline-offset: -2px; }
+.grouped-sheet .row-menu-btn.is-open { background: #e5e7eb; color: #111827; }
+.dark .grouped-sheet .row-menu-btn.is-open { background: #4b5563; color: #f9fafb; }
+
+/* Grip: lighter than ⋯ (it's a handle, not a command). touch-action: none lets
+   a finger drag it instead of scrolling the sheet. While the rows shown aren't
+   the stored order — a column sort, a sorted band, or a filter hiding rows
+   (data-reorder-locked) — it is hidden but keeps its slot, so ⋯ doesn't move;
+   row-actions.js refuses to reorder then too. */
+.grouped-sheet .drag-handle { color: #9ca3af; cursor: grab; touch-action: none; }
+.dark .grouped-sheet .drag-handle { color: #6b7280; }
+.grouped-sheet .drag-handle:active { cursor: grabbing; }
+table[data-sort-dir="asc"] .drag-handle,
+table[data-sort-dir="desc"] .drag-handle,
+table[data-reorder-locked] .drag-handle,
+.grouped-sheet tbody[data-sorted] .drag-handle { visibility: hidden; }
+.row-reorder-ghost { opacity: 0.4; }
+.row-reorder-chosen { background: rgba(59, 130, 246, 0.08); }
+/* A row just moved with the keyboard flashes so the eye can follow it. */
+@keyframes row-moved { from { background: rgba(59, 130, 246, 0.18); } }
+.grouped-sheet tr.row-moved > td { animation: row-moved 0.6s ease-out; }
+
+/* Delete confirmation: the same two slots, tinted red — ✓ deletes, ✗ restores. */
+.grouped-sheet .row-actions-cell--confirm,
+.grouped-sheet .total-row .row-actions-cell--confirm { background: #fef2f2; }  /* red-50 */
+.dark .grouped-sheet .row-actions-cell--confirm { background: #3b1d1f; }
+.grouped-sheet .row-confirm-btn {
+    height: 1.25rem;
+    width: calc(var(--row-action) - 0.125rem);
+    margin: 0 0.0625rem;
+    border: 1px solid #d1d5db;                        /* gray-300 */
+    background: #ffffff;
+    color: #4b5563;                                   /* gray-600 */
+}
+.grouped-sheet .row-confirm-btn--yes { border-color: #fca5a5; color: #b91c1c; }  /* red-300 / red-700 */
+.dark .grouped-sheet .row-confirm-btn { border-color: #4b5563; background: #374151; color: #d1d5db; }
+.dark .grouped-sheet .row-confirm-btn--yes { border-color: #b91c1c; color: #f87171; }
+.grouped-sheet .row-confirm-btn svg { width: 0.875rem; height: 0.875rem; }
+
+/* The row menu: a popover in the top layer, so neither the scroll container nor
+   the sticky footer clips it. row-actions.js anchors it beside ⋯ (below, or
+   above when there's no room); without the script it falls back to the
+   browser's centered popover, still usable. Labeled items with a one-line hint:
+   a phone has no tooltips. A destructive item sits last, ruled off, in red. */
+.row-menu {
+    min-width: 12rem;
+    max-width: min(22rem, calc(100vw - 1rem));
+    padding: 0.25rem;
+    border: 1px solid #e5e7eb;                        /* gray-200 */
+    border-radius: 0.5rem;
+    background: #ffffff;
+    color: #111827;                                   /* gray-900 */
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    white-space: normal;
+    box-shadow: 0 10px 25px -5px rgb(0 0 0 / 0.15), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+}
+.row-menu.row-menu--anchored { inset: auto; margin: 0; }
+.dark .row-menu { border-color: #4b5563; background: #1f2937; color: #f3f4f6; }
+.row-menu-item {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    width: 100%;
+    padding: 0.375rem 0.625rem;
+    border: 0;
+    border-radius: 0.375rem;
+    background: transparent;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+@media (pointer: coarse) { .row-menu-item { padding: 0.625rem 0.75rem; } }
+.row-menu-item:hover, .row-menu-item:focus-visible { background: #f3f4f6; outline: none; }
+.dark .row-menu-item:hover, .dark .row-menu-item:focus-visible { background: #374151; }
+.row-menu-label { font-weight: 500; }
+.row-menu-hint { font-size: 0.75rem; line-height: 1rem; color: #6b7280; }
+.dark .row-menu-hint { color: #9ca3af; }
+.row-menu-item--danger { color: #dc2626; }           /* red-600 */
+.dark .row-menu-item--danger { color: #f87171; }
+.row-menu-item--danger:hover, .row-menu-item--danger:focus-visible { background: #fef2f2; }
+.dark .row-menu-item--danger:hover, .dark .row-menu-item--danger:focus-visible { background: rgb(127 29 29 / 0.3); }
+.row-menu-item--danger:not(:first-child) { margin-top: 0.5rem; box-shadow: 0 -0.3125rem 0 -0.25rem #e5e7eb; }
+.dark .row-menu-item--danger:not(:first-child) { box-shadow: 0 -0.3125rem 0 -0.25rem #4b5563; }
 
 /* ---- Pinned footer ------------------------------------------------------------
    The sticky total row(s) (z-7) sit above the sticky actions column (z-6) so data
@@ -160,9 +284,6 @@
 .grouped-sheet .cell-readonly a { color: inherit; }
 .grouped-sheet .cell-readonly .sheet-badge { opacity: 0.55; }
 
-/* A sorted band's DOM order no longer matches its stored order, so hide its
-   drag handles (row-reorder.js also refuses to drag it). */
-.grouped-sheet tbody[data-sorted] .drag-handle { display: none; }
 
 
 /* ---- Compound column (Holdings' Details) ---------------------------------------

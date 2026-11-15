@@ -309,7 +309,7 @@ def test_delete_account_referenced_by_budget(conn):
             "autoAccountRef": acc_id,
         },
     )
-    with pytest.raises(ValueError, match="referenced by a budget entry"):
+    with pytest.raises(ValueError, match="linked from budget entry Direct Deposit"):
         delete_account(c, snap_id, acc_id)
 
 
@@ -496,7 +496,7 @@ def test_delete_asset_entry_asset(conn):
 
 def test_delete_asset_entry_referenced_by_debt(conn):
     c, snap_id = conn
-    with pytest.raises(ValueError, match="referenced by a debt"):
+    with pytest.raises(ValueError, match=r"Home: .*Mortgage \(secured asset\)"):
         delete_asset_entry(c, snap_id, _eid(c, snap_id, "Home"))  # Mortgage secures it
 
 

@@ -61,7 +61,7 @@ from fintrack.networth.repository import (
 )
 
 from .common import account_field_editable, get_common_context, validate_snapshot
-from .crud import ACCOUNTS_COERCION, ASSETS_COERCION, coerce_value, handle_delete
+from .crud import ACCOUNTS_COERCION, ASSETS_COERCION, coerce_value
 from .grouped_sheet import (
     SubField,
     compound_column,
@@ -1150,14 +1150,20 @@ def delete(filename: str, source: str, ref: int):
     if source not in ("account", "asset"):
         abort(404)
     engine = current_app.config["engine"]
-
-    def _do(conn):
-        if source == "account":
-            delete_account(conn, snapshot_id, ref)
-        else:
-            delete_asset_entry(conn, snapshot_id, ref)
-
-    return handle_delete(_do, engine)
+    try:
+        with engine.connect() as conn:
+            if source == "account":
+                delete_account(conn, snapshot_id, ref)
+            else:
+                delete_asset_entry(conn, snapshot_id, ref)
+    except ValueError as e:
+        # Blocked (still linked from a card, loan, or budget entry) or gone:
+        # re-render the sheet with the reason in its error row (#157); an
+        # empty 422 left the confirm sitting there with no feedback.
+        return _render_tbody(snapshot_id, filename, error=str(e)), 422
+    resp = current_app.make_response("")
+    resp.headers["HX-Refresh"] = "true"
+    return resp
 
 
 @holdings_bp.route("/<filename>/holdings/reorder/<group>", methods=["POST"])

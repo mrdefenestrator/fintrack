@@ -109,6 +109,14 @@
                 evt.detail.isError = false;
             }
         });
+        // A sheet's error row sits at the top of its table, so an error from a
+        // row further down (a blocked delete, #157) would land out of sight and
+        // the click would seem to do nothing: bring it into view.
+        document.addEventListener('htmx:afterSwap', (evt) => {
+            if (evt.detail.xhr.status !== 422) return;
+            const row = evt.detail.target.querySelector('[data-sheet-error]');
+            if (row) row.scrollIntoView({ block: 'nearest' });
+        });
         // The PR preview answers overlapping requests with 429 instead of
         // queueing them (see CLAUDE.md), and a failed htmx request used to do
         // nothing visible: a filter box stayed ticked with no pill, a tapped

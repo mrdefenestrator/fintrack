@@ -1,4 +1,7 @@
-{# Holdings delete confirm (partials/row_actions.html confirm_cell). #}
+{# Holdings delete confirm (partials/row_actions.html confirm_cell). The
+   delete re-renders #holdings-table, so a blocked delete (holding still linked
+   from a card, loan, or budget entry) can surface its error row in the sheet. #}
 {% import "partials/row_actions.html" as ra %}
 {{ ra.confirm_cell(url_for('holdings.delete', filename=filename, source=source, ref=ref),
-                   url_for('holdings.delete_btn', filename=filename, source=source, ref=ref)) }}
+                   url_for('holdings.delete_btn', filename=filename, source=source, ref=ref),
+                   target='#holdings-table', swap='innerHTML') }}

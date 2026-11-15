@@ -50,14 +50,12 @@ jobs:
       - name: E2E tests
         run: mise run test-e2e
 
-  # Pull requests never reach build-and-push, so build both images here (one
+  # Pull requests never reach build-and-push, so build the image here (one
   # architecture, no push) to catch Dockerfile breakage before merge.
+  # Dockerfile.lambda isn't built here: the PR preview's deploy job builds it.
   docker-build:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
-    strategy:
-      matrix:
-        dockerfile: [Dockerfile, Dockerfile.lambda]
 
     steps:
       - name: Checkout
@@ -66,15 +64,14 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
-      - name: Build ${{ matrix.dockerfile }}
+      - name: Build Dockerfile
         uses: docker/build-push-action@v7
         with:
           context: .
-          file: ${{ matrix.dockerfile }}
           platforms: linux/amd64
           push: false
-          cache-from: type=gha,scope=${{ matrix.dockerfile }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.dockerfile }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
   build-and-push:
     needs: ci

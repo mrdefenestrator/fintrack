@@ -209,6 +209,14 @@ degrades to a warning without it).
   re-renders the table into its scroll container (`HX-Retarget`), not a full
   reload, so the scroll position survives. See DESIGN.md "Holdings sheet" / "Budget
   sheet" / "Selectable grouping".
+- **Row actions** (#148, DESIGN.md "Row actions"): every sheet's edit-mode
+  actions column is the same two slots — grip (drag, or focus + ↑/↓; blank
+  where rows don't reorder) and a ⋯ menu of labeled items, destructive last,
+  confirming in place. Build any new row action as a menu item via
+  `partials/row_actions.html` (`ra.cell` / `ra.item` / `ra.delete_item`),
+  never as another icon in the cell; behavior lives in
+  `static/js/row-actions.js`. In e2e tests open a row's menu with
+  `tests/e2e/controls.open_row_menu(row)` and pick items by data attribute.
 - **Page controls** (DESIGN.md "Page controls"): the time pager sits alone on
   the pager row above a sheet (`nav.pager_row`), never in the filter bar;
   every other control (view toggles via `nav.segmented`, filters, Reset) goes

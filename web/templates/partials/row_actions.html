@@ -1,0 +1,107 @@
+{# Row actions (issue #148): the one framework for a sheet row's edit-mode
+   actions column, on every sheet that has one (Holdings, Budget and its
+   Recurring view, Categories).
+
+   The column is pinned to the right edge (grouped_sheet.css) and always holds
+   the same two slots, so it is the same width on every sheet:
+
+       [ grip ][ ⋯ ]
+
+   - grip: drag (mouse or touch) to reorder, or focus it and press ↑/↓. Only
+     where the rows reorder; otherwise the slot is blank, so ⋯ never moves.
+     Hidden (not removed) while a sort or filter makes the order shown not the
+     stored one.
+   - ⋯: opens the row's menu, a popover (top layer, so the scroll container
+     can't clip it) placed beside the button by row-actions.js. Every action
+     is a labeled item with an optional one-line hint, so nothing depends on a
+     tooltip a phone never shows. Destructive items go last, in red, and
+     confirm in place (confirm_cell) before anything is removed.
+
+   A sheet renders a row's cell with:
+
+       {% call ra.cell('row-menu-budget-3', reorderable=true, label='Rent') %}
+           {{ ra.item('End after Nov 2026', {'hx-post': …, 'hx-target': …},
+                      hint='Drop it from later months; keep its history') }}
+           {{ ra.delete_item(url_for(…delete_confirm…)) }}
+       {% endcall %}
+
+   `menu_id` must be unique on the page (it ties ⋯ to its popover). Rows that
+   aren't data rows (band heading, column header, footer, detail rows) close
+   with blank_cell() so every row spans the full grid. #}
+
+{% macro grip() %}
+<button type="button" class="drag-handle table-action-btn row-action-grip"
+    title="Drag to reorder (or focus and press ↑/↓)" aria-label="Reorder: drag, or press Up or Down"
+    aria-keyshortcuts="ArrowUp ArrowDown">
+    <svg fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="9" cy="6" r="1.6" /><circle cx="15" cy="6" r="1.6" />
+        <circle cx="9" cy="12" r="1.6" /><circle cx="15" cy="12" r="1.6" />
+        <circle cx="9" cy="18" r="1.6" /><circle cx="15" cy="18" r="1.6" />
+    </svg>
+</button>
+{% endmacro %}
+
+{% macro slot() %}<span class="table-action-btn row-action-slot" aria-hidden="true"></span>{% endmacro %}
+
+{# A data row's actions cell. The caller renders the menu's items; with none,
+   the ⋯ slot is left blank. #}
+{% macro cell(menu_id, reorderable=false, label='this row') %}
+{% set items = caller() %}
+<td class="table-actions-cell row-actions-cell">
+    <span class="table-actions-inner">
+        {% if reorderable %}{{ grip() }}{% else %}{{ slot() }}{% endif %}
+        {% if items | trim %}
+        <button type="button" class="table-action-btn row-menu-btn" popovertarget="{{ menu_id }}"
+            aria-haspopup="menu" aria-label="Actions for {{ label }}" title="Actions">
+            <svg fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="5.5" cy="12" r="1.8" /><circle cx="12" cy="12" r="1.8" /><circle cx="18.5" cy="12" r="1.8" />
+            </svg>
+        </button>
+        <div id="{{ menu_id }}" popover class="row-menu" role="menu" aria-label="Actions for {{ label }}">
+            {{ items }}
+        </div>
+        {% else %}{{ slot() }}{% endif %}
+    </span>
+</td>
+{% endmacro %}
+
+{# One menu item. `attrs` are its htmx/data attributes; every value is
+   escaped, Markup included (tojson output carries raw quotes, which xmlattr
+   would let through). Choosing it closes the menu. #}
+{% macro item(label, attrs, hint=none, danger=false) %}
+<button type="button" role="menuitem" class="row-menu-item{% if danger %} row-menu-item--danger{% endif %}"
+    {%- for k, v in attrs.items() %} {{ k }}="{{ v | forceescape }}"{% endfor %}>
+    <span class="row-menu-label">{{ label }}</span>
+    {% if hint %}<span class="row-menu-hint">{{ hint }}</span>{% endif %}
+</button>
+{% endmacro %}
+
+{# The standard last item: swaps the actions cell for confirm_cell(). #}
+{% macro delete_item(confirm_url, hint=none) %}
+{{ item('Delete…', {'hx-get': confirm_url, 'hx-target': 'closest td', 'hx-swap': 'outerHTML', 'data-row-delete': ''}, hint=hint, danger=true) }}
+{% endmacro %}
+
+{# In-place delete confirmation: the actions cell turns red with ✓ (delete) and
+   ✗ (put the actions back), in the same two slots. ✗ takes focus
+   (row-actions.js), so a stray Enter cancels. `target`/`swap` say what the delete re-renders (the row by
+   default). #}
+{% macro confirm_cell(delete_url, cancel_url, target='closest tr', swap='outerHTML') %}
+<td class="table-actions-cell row-actions-cell row-actions-cell--confirm">
+    <span class="table-actions-inner">
+        <button type="button" class="table-action-btn row-confirm-btn row-confirm-btn--yes"
+            hx-post="{{ delete_url }}" hx-target="{{ target }}" hx-swap="{{ swap }}"
+            title="Confirm delete" aria-label="Confirm delete">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 12.5l4.5 4.5L19 7.5" /></svg>
+        </button>
+        <button type="button" class="table-action-btn row-confirm-btn" data-row-cancel
+            hx-get="{{ cancel_url }}" hx-target="closest td" hx-swap="outerHTML"
+            title="Cancel delete" aria-label="Cancel delete">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-width="2.5" d="M6 6l12 12M18 6L6 18" /></svg>
+        </button>
+    </span>
+</td>
+{% endmacro %}
+
+{# The actions column's cell on a row that has no actions (band heading,
+   header, footer, detail row). #}
+{% macro blank_cell(tag='td', extra='') %}<{{ tag }} class="table-actions-cell{% if extra %} {{ extra }}{% endif %}"></{{ tag }}>{% endmacro %}

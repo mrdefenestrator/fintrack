@@ -5,6 +5,7 @@ from urllib.parse import parse_qs
 import pytest
 from playwright.sync_api import expect
 
+from tests.e2e.controls import open_row_menu
 from tests.e2e.networth.conftest import enable_edit_mode
 
 pytestmark = pytest.mark.e2e
@@ -174,9 +175,9 @@ def test_budget_delete(page, flask_server):
     page.goto(f"{flask_server}/s/test_finances/budget")
     enable_edit_mode(page)
 
-    # Find the Salary row and click delete
+    # Find the Salary row and choose Delete from its actions menu
     salary_row = page.locator("#budget-table tr:has-text('Salary')").first
-    salary_row.locator("button[title='Delete']").click()
+    open_row_menu(salary_row).locator("[data-row-delete]").click()
 
     # Confirm delete
     confirm_btn = salary_row.locator("button[title='Confirm delete']")

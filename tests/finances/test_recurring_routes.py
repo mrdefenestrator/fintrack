@@ -1,6 +1,9 @@
 """Budget vs Actual's Recurring view and the Overview Needs attention card
 (issue #100)."""
 
+import html
+import json
+import re
 from datetime import datetime, timedelta
 
 import pytest
@@ -95,6 +98,12 @@ def test_edit_mode_actions(client, db_engine):
     assert "data-recurring-add" in body  # Spotify
     assert "data-recurring-link" in body  # Gym Co → its entry by name
     assert body.count("data-recurring-dismiss") == 2
+    # They're labeled items in each row's ⋯ menu (issue #148), and their
+    # hx-vals survive the attribute escaping as JSON.
+    assert body.count('role="menuitem"') == 4
+    vals = [html.unescape(v) for v in re.findall(r'hx-vals="([^"]*)"', body)]
+    assert len(vals) == 4
+    assert all(json.loads(v)["merchant"] for v in vals)
 
     resp = client.post(
         "/s/home/budget/recurring/add?view=recurring&edit=1",

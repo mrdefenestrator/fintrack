@@ -21,3 +21,14 @@ def assert_controls_layout(page, width: int) -> None:
     assert len({round(b["y"] + b["height"] / 2) for b in boxes}) == 1
     assert max(b["x"] + b["width"] for b in boxes) <= width - 16
     assert bar["x"] + bar["width"] <= width
+
+
+def open_row_menu(row):
+    """Open a sheet row's ⋯ actions menu (partials/row_actions.html, issue
+    #148) and return it: the row's popover, now showing. Pick an item from it
+    by its data attribute (`[data-budget-end]`, `[data-row-delete]`, …) or by
+    role and name."""
+    row.locator(".row-menu-btn").click()
+    menu = row.locator(".row-menu")
+    menu.wait_for(state="visible")
+    return menu

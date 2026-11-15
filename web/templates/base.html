@@ -413,77 +413,12 @@
             min-height: 0;
         }
 
-        /* Action column: small iconic buttons so row height is not stretched */
-        table tbody td .table-action-btn {
-            width: 1.25rem;
-            height: 1.25rem;
-            min-width: 1.25rem;
-            min-height: 1.25rem;
-            padding: 0;
-            margin: 0;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            border: none;
-            background: transparent;
-            cursor: pointer;
-            border-radius: 0.25rem;
-        }
-
-        table tbody td .table-action-btn svg {
-            width: 1rem;
-            height: 1rem;
-        }
-
-        /* Hide the drag-reorder handle when the row order shown isn't the full,
-           canonical order — i.e. while a column sort is applied, or while a
-           filter hides some rows (dragging then would reorder against the
-           wrong positions). row-reorder.js also disables dragging in these
-           states. `data-reorder-locked` is set by the page when a filter is
-           active. */
-        table[data-sort-dir="asc"] .drag-handle,
-        table[data-sort-dir="desc"] .drag-handle,
-        table[data-reorder-locked] .drag-handle {
-            display: none;
-        }
-
-        /* SortableJS drag feedback for reorderable rows. */
-        .drag-handle { cursor: grab; }
-        .drag-handle:active { cursor: grabbing; }
-        .row-reorder-ghost { opacity: 0.4; }
-        .row-reorder-chosen { background: rgba(59, 130, 246, 0.08); }
-
-        /* Action column: no wrap, no overflow, fixed width for icon row. Holds
-           two 1.25rem icons (drag handle + delete, or the ✓/✗ delete-confirm
-           pair) — sized snug at 2.75rem with tight side padding (QA #4). */
-        table .table-actions-cell {
-            width: 1%;
-            min-width: 2.75rem;
-            max-width: 2.75rem;
-            white-space: nowrap;
-            overflow: hidden;
-            padding-left: 0.125rem;
-            padding-right: 0.125rem;
-        }
-
-        table .table-actions-cell .table-actions-inner {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            flex-wrap: nowrap;
-            gap: 0;
-        }
+        /* Row actions column (grip + ⋯ menu, issue #148): styled in
+           partials/grouped_sheet.css "Row actions". */
 
         table.editable-table thead th,
         table.editable-table tbody td {
             white-space: nowrap;
-        }
-
-        /* Actions column: fixed width to stay compact */
-        table.editable-table .table-actions-cell,
-        table.editable-table thead th.table-actions-cell {
-            width: 2.75rem;
-            min-width: 2.75rem;
         }
 
         /* Scrollable table container: data rows scroll, header/footer rows stick */
@@ -1097,7 +1032,7 @@
     <script src="{{ url_for('static', filename='js/sortable.js') }}"></script>
     <script src="{{ url_for('static', filename='js/group-sort.js') }}"></script>
     <script src="{{ url_for('static', filename='js/cell-nav.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/row-reorder.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/row-actions.js') }}"></script>
     <script src="{{ url_for('static', filename='js/ledger.js') }}"></script>
     <script src="{{ url_for('static', filename='js/sheet-scroll.js') }}"></script>
     <script src="{{ url_for('static', filename='js/shortcuts.js') }}"></script>

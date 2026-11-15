@@ -743,8 +743,8 @@ Surfaced as the Budget sheet's **Recurring** view (`/budget?view=recurring`;
 #143 — a Plan / Recurring toggle leads the filter bar): a flat grouped sheet of every
 series — Merchant · Category · Typical · Every · N · Last · Next · Budget ·
 Price change — with Kind and Status filters (Status includes a "Price change"
-flag) and a rough per-month footer; in edit mode the actions cell offers
-+ (add) or a chain (link), and × (not recurring). The Overview's Needs
+flag) and a rough per-month footer; in edit mode each row's ⋯ menu offers
+*Add to budget* or *Link to <entry>*, then *Not recurring*. The Overview's Needs
 attention card and `fintrack recurring` show the same findings.
 
 **Feeding link suggestions** (#119). `suggest_links` also reads the detected
@@ -1009,7 +1009,7 @@ header row, in a `<thead>` so it pins to the top with no heading above it), one
 span narrow columns). `group-sort.js` sorts the flat body from the `<thead>`
 header (URL `sort_<key>_*`), carrying any `data-detail-row` (Budget's
 link suggestions) with the row above it — on banded sheets too, and
-`row-reorder.js` puts a detail row (`data-detail-of`) back under its row after
+`row-actions.js` puts a detail row (`data-detail-of`) back under its row after
 a drag. A single row may still take a
 tone — a flagged possible-duplicate transaction is `data-tone="amber"`, so the
 rail marks just that row. The column specs (`TRANSACTIONS_SHEET`,
@@ -1071,9 +1071,9 @@ out; each links to its transactions). Net worth follows the Holdings footer's
 rule: a holding with no value before the year counts at its end value, and the
 change only shows once most holdings have a starting value.
 
-The actions column (drag + delete) renders only in edit mode. Edits swap the
-table's whole body (colgroup included), so a row whose edit changes its band
-simply re-renders in the new band.
+The actions column renders only in edit mode (see "Row actions" below). Edits
+swap the table's whole body (colgroup included), so a row whose edit changes its
+band simply re-renders in the new band.
 
 Two invariants keep the grid sound:
 
@@ -1082,13 +1082,49 @@ Two invariants keep the grid sound:
   their own sticky actions cell (the `heading` macro adds it in edit mode;
   callers size their filler from `max_cols`): heading cells stack above the
   pinned actions column (z-7 vs z-6), so a heading whose last cell spanned into
-  the actions slot painted its figures over the drag/delete column when the
+  the actions slot painted its figures over the grip/menu column when the
   sheet scrolled sideways. `test_every_row_spans_the_full_grid` checks both
   sheets in view and edit mode (and Projections in each view, and the four
   flat sheets in `tests/spending/test_web/test_flat_sheets.py`).
 - **Row templates map cells to fields by column key** (the group's
   `col_keys`), never by position, so adding or removing a column can't silently
   shift which field a click edits.
+
+**Row actions (issue #148).** Every sheet with row actions — Holdings,
+Budget and its Recurring view, Categories — builds them on one framework,
+`templates/partials/row_actions.html` (markup), the "Row actions" section of
+`grouped_sheet.css` (look) and `static/js/row-actions.js` (behavior). The
+actions column is pinned to the right edge in edit mode and always holds the
+same two slots, so it is the same width on every sheet and ⋯ sits at the same
+spot on every row:
+
+- **Grip** — drag to reorder (SortableJS, mouse or touch), or focus it and
+  press ↑/↓. Only where the rows reorder (Holdings' bands, Budget's category
+  bands or ungrouped list); otherwise the slot is blank. While a column sort, a
+  sorted band, or a filter makes the rows shown not the stored order, the grip
+  is hidden but keeps its slot. Moves renumber `data-reorder-index` at once and
+  queue their POSTs, so quick successive moves each send an order relative to
+  the last; a failed POST reloads.
+- **⋯ menu** — a native popover (top layer: the scroll container and sticky
+  footer can't clip or cover it), anchored beside ⋯ by `row-actions.js`
+  (below, or above when there's no room; closed when the sheet scrolls). Every
+  action is a labeled item with a one-line hint — a phone shows no tooltips,
+  so an icon alone (Budget's old ■/▶ End/Resume) explained nothing there. A
+  destructive item goes last, in red, ruled off; **Delete…** swaps the cell
+  for an in-place ✓/✗ confirm (`confirm_cell`, ✗ focused) in the same two
+  slots. Holdings' Delete warns that an account's imported transactions go
+  with it.
+- **Touch** — on a coarse pointer the slots widen to 2rem and menu items to
+  ≥44px tall; the row height stays put (density is a feature).
+
+A sheet renders a row's cell with `{% call ra.cell(menu_id, reorderable,
+label) %}…ra.item(label, attrs, hint)… ra.delete_item(confirm_url){% endcall
+%}`; non-data rows close with `ra.blank_cell()` (or the grouped-sheet macros'
+own blank cell). `tests/finances/test_row_actions.py` checks every sheet's rows
+against this, and that no template hand-rolls an actions button. Flag
+resolutions inside a cell (Transactions' Duplicate / Not duplicate / Dismiss,
+Budget's suggestion Apply / Dismiss) are not row actions: they belong to the
+flag they resolve, show in view mode too, and stay inline text buttons.
 
 One convention keeps edit mode legible (issue #147): **on an unlocked sheet,
 every field that can't be edited is greyed out**, on every sheet alike —
@@ -1195,9 +1231,9 @@ CLI's `budget` table keeps its Kind column.
   away from its cell's alignment edge (before an amount, after a
   description), so values stay aligned; empty spans, so sorting still reads
   the cell text.
-- **End / Resume.** The actions cell (wider here: three buttons) adds **End**
-  (stop after the viewed month; **Resume** in its last month) before drag and
-  delete.
+- **End / Resume.** Each row's ⋯ menu leads with **End after <month>** (stop
+  after the viewed month; **Resume** in its last month), above Delete — End is
+  the usual way to stop a line, and Delete's hint says what it loses.
 - **Correcting the past is ordinary editing**, not a separate history editor
   (a nested history row was tried and dropped as more machinery than it
   earns). Edit in the month a change started to fix that change in place;

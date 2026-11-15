@@ -1,0 +1,8 @@
+{# Categories row actions cell (partials/row_actions.html). Categories don't
+   reorder, so the grip slot is blank; the menu's one item is Delete. Also
+   rendered alone by categories.delete_btn, the cancel of a delete confirm. #}
+{% import "partials/row_actions.html" as ra %}
+{% call ra.cell('row-menu-category-' ~ category_id, label=row_label | default('this category')) %}
+{{ ra.delete_item(url_for('categories.delete_confirm', filename=filename, category_id=category_id),
+                  hint='Only when no merchant or transaction uses it') }}
+{% endcall %}

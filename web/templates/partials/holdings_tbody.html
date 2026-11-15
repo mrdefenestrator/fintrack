@@ -175,7 +175,7 @@
             <td class="{{ sheet.cell_class('text-right tabular-nums' if right else '', (sheet.neg(cell | display_is_negative) ~ ' ' ~ row.cell_classes[i]) | trim) }}">{{ cell }}</td>
         {% endif %}
         {% endfor %}
-        {% if edit_mode %}{% with source=row.source, ref=row.ref %}{% include "partials/holdings_actions_cell.html" %}{% endwith %}{% endif %}
+        {% if edit_mode %}{% with source=row.source, ref=row.ref, row_label=row.edit_raw.name or 'this holding' %}{% include "partials/holdings_actions_cell.html" %}{% endwith %}{% endif %}
     </tr>
     {% else %}
     {{ gs.empty_row(span, ("No " ~ group.label | lower ~ " match the current filters.") if filters_active else ("No " ~ group.label | lower ~ " yet.")) }}

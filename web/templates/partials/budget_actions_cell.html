@@ -1,0 +1,21 @@
+{# Budget row actions cell (partials/row_actions.html): the grip where the band
+   reorders (category bands, or the ungrouped list; Kind / Recurrence bands
+   don't — `reorderable`), and a menu: End after the viewed month, or Resume
+   when the entry's last planned month is the one shown (`row.ends_here`,
+   issue #136), then Delete. End is the usual way to stop a line (it keeps the
+   entry's history and links); Delete says what it loses. Their URLs carry
+   the viewed month (ym). Also rendered alone by budget.delete_btn, the cancel
+   of a delete confirm. #}
+{% import "partials/row_actions.html" as ra %}
+{% set _month = viewed_label | default('this month') %}
+{% call ra.cell('row-menu-budget-' ~ index, reorderable=reorderable | default(true), label=(row.label if row is defined and row.label else 'this entry')) %}
+{% if row is defined and row.ends_here %}
+{{ ra.item('Resume', {'hx-post': url_for('budget.resume', filename=filename, index=index), 'hx-target': '#budget-table', 'hx-swap': 'innerHTML', 'data-budget-resume': ''},
+           hint='Keep it in the plan after ' ~ _month) }}
+{% else %}
+{{ ra.item('End after ' ~ _month, {'hx-post': url_for('budget.end', filename=filename, index=index), 'hx-target': '#budget-table', 'hx-swap': 'innerHTML', 'data-budget-end': ''},
+           hint='Drop it from later months; keep its history') }}
+{% endif %}
+{{ ra.delete_item(url_for('budget.delete_confirm', filename=filename, index=index),
+                  hint='Remove it from every month, with its history and links') }}
+{% endcall %}

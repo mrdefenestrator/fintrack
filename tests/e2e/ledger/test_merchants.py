@@ -14,6 +14,8 @@ been injected yet.
 
 import pytest
 
+from tests.e2e.controls import open_row_menu
+
 pytestmark = pytest.mark.e2e
 
 
@@ -305,7 +307,7 @@ def test_categories_blocked_delete_shows_breakdown(page, confirmed_server):
     page.goto(f"{confirmed_server}/s/ledger/categories?edit=1")
     row = page.locator("#categories-tbody tr", has_text="ProtectedCat")
     with page.expect_response(lambda r: "/delete-confirm" in r.url):
-        row.get_by_title("Delete").click()
+        open_row_menu(row).locator("[data-row-delete]").click()
     with page.expect_response(
         lambda r: r.url.endswith("/delete") and r.request.method == "POST"
     ) as resp_info:

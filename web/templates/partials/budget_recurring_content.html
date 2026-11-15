@@ -3,9 +3,9 @@
    and how it sits in the budget — not in budget, not linked to the entry that
    looks like it, covered by a variable category line, or in budget — plus any
    recent price change. Detection is local (fintrack/budget/recurring.py).
-   In edit mode each row's actions cell offers + (add a pre-filled budget
-   entry and link the series) or a chain (link it to the entry that looks like
-   it), and × ("not recurring": stop showing it). Actions post to this view's own query
+   In edit mode each row's actions menu offers Add to budget (a pre-filled
+   entry, linking the series) or Link (to the entry that looks like it), and
+   Not recurring (stop showing it). Actions post to this view's own query
    string so its filters survive the re-render. No cell here is editable, so
    edit mode greys them all (sheet.readonly, issue #147); the actions stay live.
    An unbanded flat grouped sheet; columns come from
@@ -16,6 +16,7 @@
 {% import "partials/pager.html" as nav %}
 {% import "partials/sheet_filter_bar.html" as fb %}
 {% import "partials/budget_views.html" as views %}
+{% import "partials/row_actions.html" as ra %}
 {% set _url = url_for('budget.budget_view', filename=filename) %}
 {% set _ym = request.args.get('ym') %}
 {% set _badge = {
@@ -96,42 +97,21 @@
             {% endif %}
             {% endfor %}
             {% if edit_mode %}
-            {# Two icons, like the shared actions cell: the row's primary
-               action (+ add to budget, or link to the entry that looks like
-               it; a blank slot otherwise, so × lines up) and × not recurring. #}
-            <td class="table-actions-cell px-1.5 py-0.5 border-r border-gray-100 dark:border-gray-700 text-center align-middle">
-                <span class="table-actions-inner">
-                {% if c.status == 'not_budgeted' %}
-                {% set _t = 'Add to budget: a %s %s of $%s, and link these transactions' | format(c.cadence.recurrence, c.kind, p.amount | money) %}
-                <button type="button" data-recurring-add
-                        hx-post="{{ url_for('budget.recurring_add', filename=filename) }}?{{ self_query }}"
-                        hx-vals='{{ _vals | tojson }}' hx-target="#content"
-                        title="{{ _t }}" aria-label="{{ _t }}"
-                        class="table-action-btn text-blue-600 dark:text-blue-400 shrink-0 hover:bg-blue-50 dark:hover:bg-blue-900/30">
-                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-width="2" d="M12 5v14M5 12h14" /></svg>
-                </button>
-                {% elif c.status == 'unlinked' %}
-                {% set _t = 'Link these transactions to %s' | format(c.entry_description) %}
-                <button type="button" data-recurring-link
-                        hx-post="{{ url_for('budget.recurring_link', filename=filename) }}?{{ self_query }}"
-                        hx-vals='{{ {'merchant': c.merchant, 'kind': c.kind, 'budget_entry_ref': c.entry_ref} | tojson }}' hx-target="#content"
-                        title="{{ _t }}" aria-label="{{ _t }}"
-                        class="table-action-btn text-blue-600 dark:text-blue-400 shrink-0 hover:bg-blue-50 dark:hover:bg-blue-900/30">
-                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14a4 4 0 005.66 0l3-3a4 4 0 00-5.66-5.66l-1 1M14 10a4 4 0 00-5.66 0l-3 3a4 4 0 005.66 5.66l1-1" /></svg>
-                </button>
-                {% else %}
-                <span class="table-action-btn shrink-0" aria-hidden="true"></span>
-                {% endif %}
-                {% set _t = 'Not recurring: stop showing %s' | format(c.merchant) %}
-                <button type="button" data-recurring-dismiss
-                        hx-post="{{ url_for('budget.recurring_dismiss', filename=filename) }}?{{ self_query }}"
-                        hx-vals='{{ _vals | tojson }}' hx-target="#content"
-                        title="{{ _t }}" aria-label="{{ _t }}"
-                        class="table-action-btn text-gray-500 dark:text-gray-400 shrink-0 hover:text-gray-800 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
-                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-width="2" d="M6 6l12 12M18 6L6 18" /></svg>
-                </button>
-                </span>
-            </td>
+            {# Row actions (partials/row_actions.html): no reordering here, so
+               the grip slot is blank; the menu offers the row's next step —
+               Add to budget (a pre-filled entry, linking the series) or Link
+               to the entry that looks like it — then Not recurring. #}
+            {% call ra.cell('row-menu-recurring-' ~ loop.index, label=c.merchant) %}
+            {% if c.status == 'not_budgeted' %}
+            {{ ra.item('Add to budget', {'hx-post': url_for('budget.recurring_add', filename=filename) ~ '?' ~ self_query, 'hx-vals': _vals | tojson, 'hx-target': '#content', 'data-recurring-add': ''},
+                       hint='A %s %s of $%s; links these transactions' | format(c.cadence.recurrence, c.kind, p.amount | money)) }}
+            {% elif c.status == 'unlinked' %}
+            {{ ra.item('Link to ' ~ c.entry_description, {'hx-post': url_for('budget.recurring_link', filename=filename) ~ '?' ~ self_query, 'hx-vals': {'merchant': c.merchant, 'kind': c.kind, 'budget_entry_ref': c.entry_ref} | tojson, 'hx-target': '#content', 'data-recurring-link': ''},
+                       hint='Links these transactions to that entry') }}
+            {% endif %}
+            {{ ra.item('Not recurring', {'hx-post': url_for('budget.recurring_dismiss', filename=filename) ~ '?' ~ self_query, 'hx-vals': _vals | tojson, 'hx-target': '#content', 'data-recurring-dismiss': ''},
+                       hint='Stop showing ' ~ c.merchant) }}
+            {% endcall %}
             {% endif %}
         </tr>
         {% else %}

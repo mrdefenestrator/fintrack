@@ -93,6 +93,15 @@ degrades to a warning without it).
   Dependabot bumps the Dockerfiles but not `mise.toml`, so bump uv and Node
   there by hand, in step with the Dockerfiles.
 
+## Pull Requests
+
+- Every PR description names each issue it resolves with a closing keyword,
+  one per line (`Closes #69`, then `Closes #92`), so GitHub closes them on
+  merge. The keyword must come before **each** number — `Closes #69, #92`
+  closes only #69 — and it must be in the description (a title like
+  "Fix footer (#92)" closes nothing). Issues a PR only touches get a plain
+  `Related: #N` instead.
+
 ## Key Architecture Decisions
 
 - Snapshots scope all household data (accounts directly; imports/transactions/

@@ -506,7 +506,13 @@ icon in each projected month's header (`?month=YYYY-MM`, CLI `--month
 YYYY-MM`) opens that month's breakdown above the grid: its flows by account
 (`month_breakdown()`), with money in, money out, card autopay, and asset/loan
 totals. Past months have no breakdown yet (listing their actual transactions
-per account is a possible follow-up).
+per account is a possible follow-up). On a phone (narrower than `sm`, or a
+landscape phone under 500px tall) there's no room for a panel above the grid,
+so the breakdown is a sheet docked to the bottom edge instead (#114): at most
+45% of the screen in portrait, everything under the app header in landscape,
+with a toggle that collapses it to its title bar. The page reserves the
+sheet's height below the grid (`--breakdown-h`), so the grid and its pinned
+totals sit above the sheet, never under it.
 
 ### Timeline
 

@@ -22,7 +22,8 @@
 
    options: list of {url, label, active, short?, attrs?}. The first pill has no
    left border; each later pill draws a divider, so they read as one control.
-   - short: replaces `label` below the sm breakpoint so a bar's controls fit
+   - short: replaces `label` on phones (narrow, or short: `wide:` in
+     tailwind.config.js) so a bar's controls fit
      one row on a phone (the full label stays as the title/accessible name).
    - attrs: extra raw attributes for that pill (data hooks, role/aria).
    - title: tooltip (defaults to the full label when there's a short label).
@@ -40,7 +41,7 @@
        class="{{ _seg }} {{ '' if loop.first else 'border-l border-gray-200 dark:border-gray-600' }} {{ _seg_on if o.active else _seg_off }}"
        {%- if _title %} title="{{ _title }}"{% endif %}
        {%- if o.short %} aria-label="{{ o.label }}">
-       <span class="sm:hidden">{{ o.short }}</span><span class="hidden sm:inline">{{ o.label }}</span>
+       <span class="wide:hidden">{{ o.short }}</span><span class="hidden wide:inline">{{ o.label }}</span>
        {%- else %}>{{ o.label }}{% endif %}</a>
     {% endfor %}
 </div>
@@ -54,7 +55,7 @@
    sheet from jumping on a view with no pager (Transactions' All time, Budget
    vs Actual's Recurring). Use with {% call nav.pager_row() %}. #}
 {%- macro pager_row(attrs='') -%}
-<div class="shrink-0 mb-2 min-h-8 flex flex-wrap items-center gap-x-4 gap-y-2" data-pager-row {{ attrs | safe }}>
+<div class="shrink-0 mb-2 min-h-8 phone:mb-1.5 phone:min-h-7 flex flex-wrap items-center gap-x-4 gap-y-2 phone:gap-x-3 phone:gap-y-1" data-pager-row {{ attrs | safe }}>
     {{ caller() }}
 </div>
 {%- endmacro -%}
@@ -66,8 +67,8 @@
    of the projection horizon (independent of is_latest, which there only
    disables the Now button). #}
 {% set _next_off = is_latest if next_disabled is none else next_disabled %}
-{% set _btn = 'h-8 w-8 flex items-center justify-center rounded-md border border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer' %}
-{% set _btn_off = 'h-8 w-8 flex items-center justify-center rounded-md border border-gray-200 dark:border-gray-700 text-gray-300 dark:text-gray-600 cursor-not-allowed' %}
+{% set _btn = 'h-8 w-8 phone:h-7 phone:w-7 flex items-center justify-center rounded-md border border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer' %}
+{% set _btn_off = 'h-8 w-8 phone:h-7 phone:w-7 flex items-center justify-center rounded-md border border-gray-200 dark:border-gray-700 text-gray-300 dark:text-gray-600 cursor-not-allowed' %}
 {% macro _hx(url) %}{% if use_htmx %} hx-get="{{ url }}" hx-target="{{ target }}" hx-push-url="true"{% endif %}{% endmacro %}
 <div class="flex items-center gap-2" data-pager>
     {% if prev_url is none %}
@@ -76,7 +77,7 @@
     <a href="{{ prev_url }}"{{ _hx(prev_url) }}
        title="Earlier" class="{{ _btn }}">&#9664;</a>
     {% endif %}
-    <span class="h-8 flex items-center justify-center px-2 {{ label_width }} text-center text-sm font-medium text-gray-700 dark:text-gray-200 whitespace-nowrap overflow-hidden" data-pager-label>{{ label }}</span>
+    <span class="h-8 phone:h-7 flex items-center justify-center px-2 {{ label_width }} text-center text-sm font-medium text-gray-700 dark:text-gray-200 whitespace-nowrap overflow-hidden" data-pager-label>{{ label }}</span>
     {% if _next_off %}
     <span title="{{ 'Already at the latest window' if next_disabled is none else 'End of the projection' }}" aria-disabled="true" class="{{ _btn_off }}">&#9654;</span>
     {% else %}
@@ -86,10 +87,10 @@
     {% if latest_url is not none %}
     {% if is_latest %}
     <span aria-disabled="true" title="Already at the {{ 'current' if latest_label == 'Now' else 'latest' }} window"
-       class="px-3 h-8 flex items-center text-sm rounded-md border border-gray-200 dark:border-gray-700 text-gray-300 dark:text-gray-600 cursor-not-allowed">{{ latest_label }}</span>
+       class="px-3 h-8 phone:px-2 phone:h-7 flex items-center text-sm rounded-md border border-gray-200 dark:border-gray-700 text-gray-300 dark:text-gray-600 cursor-not-allowed">{{ latest_label }}</span>
     {% else %}
     <a href="{{ latest_url }}"{{ _hx(latest_url) }} data-pager-latest
-       class="px-3 h-8 flex items-center text-sm rounded-md border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer">{{ latest_label }}</a>
+       class="px-3 h-8 phone:px-2 phone:h-7 flex items-center text-sm rounded-md border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer">{{ latest_label }}</a>
     {% endif %}
     {% endif %}
 </div>

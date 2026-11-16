@@ -5,7 +5,7 @@ from datetime import date, datetime
 
 import pytest
 
-from tests.e2e.controls import PHONE_WIDTHS, assert_controls_layout
+from tests.e2e.controls import PHONE_IDS, PHONE_VIEWPORTS, assert_controls_layout
 
 pytestmark = pytest.mark.e2e
 
@@ -247,12 +247,13 @@ def test_projections_timeline_pager(page, flask_server):
     assert window.locator("[data-pager-label]").inner_text() == now_label
 
 
-@pytest.mark.parametrize("width", PHONE_WIDTHS)
-def test_projections_controls_fit_one_row_on_phones(page, flask_server, width):
+@pytest.mark.parametrize("viewport", PHONE_VIEWPORTS, ids=PHONE_IDS)
+def test_projections_controls_fit_one_row_on_phones(page, flask_server, viewport):
     """Pager above; window size (6M/1Y/2Y), Balances/Changes and the
     icon-only Filters trigger share the filter bar's one row on a phone, with
     Estimate, Group by, the filters and Reset in its panel (#144)."""
-    page.set_viewport_size({"width": width, "height": 800})
+    width, height = viewport
+    page.set_viewport_size({"width": width, "height": height})
     page.goto(f"{flask_server}/s/test_finances/projections")
     assert_controls_layout(page, width)
     assert page.locator("[data-window-size] a", has_text="1Y").is_visible()

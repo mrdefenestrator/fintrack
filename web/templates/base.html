@@ -255,6 +255,46 @@
         .table-scroll-container select,
         .table-scroll-container textarea { touch-action: auto; }
 
+        /* Sizes the layout shares (issue #146). A "phone" is a narrow screen
+           OR a short one (a landscape phone): the same queries as the
+           `phone:` / `wide:` screens in tailwind.config.js — keep them in step.
+           --header-h: the app header; --row-h: one sheet row (data, band
+           heading, column header, footer; sheet-scroll.js reads it too);
+           --sheet-inset-b: extra space under a sheet's bottom-pinned total
+           row, so on a phone the sheet runs to the screen's bottom edge, under
+           the iOS home indicator, with the totals sitting just above it. */
+        :root { --header-h: 3rem; --row-h: 1.75rem; --sheet-inset-b: 0px; }
+        @media (max-width: 639px), (max-height: 500px) and (max-width: 1023px) {
+            /* Denser sheets: shorter rows, 13px text, slimmer cell padding
+               (the first cell keeps its accent-rail clearance). */
+            :root { --row-h: 1.5rem; --sheet-inset-b: env(safe-area-inset-bottom, 0px); }
+            .table-scroll-container table { font-size: 0.8125rem; }
+            .table-scroll-container td,
+            .table-scroll-container th { padding-left: 0.25rem; padding-right: 0.25rem; }
+            .table-scroll-container .sheet-group-heading > td { padding-top: 0.125rem; padding-bottom: 0.125rem; }
+            /* Run the sheet to the bottom edge: no gutter under it and no
+               bottom border/rounding on its frame. Its last pinned total row
+               grows by the bottom safe-area inset and keeps its text in the
+               top --row-h (padding shrinks the cell's content box, and
+               vertical-align: middle centres within that). */
+            main:has([data-sheet-scroll]) { padding-bottom: 0; }
+            main [data-sheet-scroll] {
+                border-bottom-width: 0;
+                border-bottom-left-radius: 0;
+                border-bottom-right-radius: 0;
+            }
+            .table-scroll-container tr.total-row:not(.total-upper) {
+                height: calc(var(--row-h) + var(--sheet-inset-b));
+            }
+            .table-scroll-container tr.total-row:not(.total-upper) > td {
+                padding-bottom: var(--sheet-inset-b);
+            }
+        }
+        /* A landscape phone has height to spare nowhere: a slimmer header. */
+        @media (max-height: 500px) and (max-width: 1023px) {
+            :root { --header-h: 2.5rem; }
+        }
+
         /* Base main padding — overridden by the @supports block below when the
            browser supports safe-area insets.  Declared as a plain element rule
            (not a Tailwind utility class) so the safe-area @supports block can
@@ -275,7 +315,7 @@
            (end of <head>), so bare [attr] selectors at (0,1,0) would lose to
            e.g. .inset-0 at equal specificity. */
         nav[data-nav-sidebar],
-        div[data-nav-scrim] { top: 3rem; }
+        div[data-nav-scrim] { top: var(--header-h); }
 
         @supports (padding: env(safe-area-inset-top)) {
             #main-header {
@@ -285,7 +325,7 @@
             }
             nav[data-nav-sidebar],
             div[data-nav-scrim] {
-                top: calc(3rem + env(safe-area-inset-top));
+                top: calc(var(--header-h) + env(safe-area-inset-top));
             }
             nav[data-nav-sidebar] {
                 padding-left: env(safe-area-inset-left);
@@ -323,7 +363,7 @@
         }
 
         table tbody tr {
-            height: 1.75rem;
+            height: var(--row-h);
         }
 
         /* Footer rows in a scroll-container sheet (e.g. the Projections
@@ -334,7 +374,7 @@
            between the pinned totals. The grid-filler tr is sized by JS, so it's
            excluded. */
         .table-scroll-container tfoot tr:not(.sheet-grid-filler) {
-            height: 1.75rem;
+            height: var(--row-h);
         }
 
         table tbody td {
@@ -483,7 +523,7 @@
            bottom-pinned total (the Holdings Liquid/Net-worth footer, and the
            Projections Liquid total / Net worth footer). */
         .table-scroll-container tr.total-row.total-upper {
-            bottom: 1.75rem;
+            bottom: calc(var(--row-h) + var(--sheet-inset-b));
         }
         /* Total-row inter-column dividers are drawn as a box-shadow, not a
            border-collapse border: the row is sticky, and a collapsed border on a
@@ -640,14 +680,14 @@
         .sheet-grid-filler-cell {
             padding: 0;
             background-image: repeating-linear-gradient(to bottom,
-                transparent 0, transparent calc(1.75rem - 1px),
-                rgba(0, 0, 0, 0.05) calc(1.75rem - 1px), rgba(0, 0, 0, 0.05) 1.75rem);
+                transparent 0, transparent calc(var(--row-h) - 1px),
+                rgba(0, 0, 0, 0.05) calc(var(--row-h) - 1px), rgba(0, 0, 0, 0.05) var(--row-h));
         }
 
         .dark .sheet-grid-filler-cell {
             background-image: repeating-linear-gradient(to bottom,
-                transparent 0, transparent calc(1.75rem - 1px),
-                rgba(255, 255, 255, 0.06) calc(1.75rem - 1px), rgba(255, 255, 255, 0.06) 1.75rem);
+                transparent 0, transparent calc(var(--row-h) - 1px),
+                rgba(255, 255, 255, 0.06) calc(var(--row-h) - 1px), rgba(255, 255, 255, 0.06) var(--row-h));
         }
 
         /* Import submit button busy state: while htmx is uploading (hx-indicator
@@ -772,7 +812,7 @@
         {% set _edit_honoring = _cur_tab in ('holdings', 'budget', 'merchants', 'categories', 'transactions') %}
         {% set _page_names = {'overview':'Overview','holdings':'Holdings','budget':'Budget','projections':'Projections','trends':'Trends','transactions':'Transactions','merchants':'Merchants','categories':'Categories','import':'Import'} %}
         {% set _page_name = _page_names.get(_cur_tab, '') %}
-        <div class="flex items-center h-12 px-2 gap-1">
+        <div class="flex items-center px-2 gap-1" style="height: var(--header-h)">
             {% if filename %}
             <button type="button" @click="navOpen = !navOpen" data-nav-toggle title="Menu"
                 aria-label="Toggle navigation" :aria-expanded="navOpen ? 'true' : 'false'"

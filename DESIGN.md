@@ -506,8 +506,8 @@ icon in each projected month's header (`?month=YYYY-MM`, CLI `--month
 YYYY-MM`) opens that month's breakdown above the grid: its flows by account
 (`month_breakdown()`), with money in, money out, card autopay, and asset/loan
 totals. Past months have no breakdown yet (listing their actual transactions
-per account is a possible follow-up). On a phone (narrower than `sm`, or a
-landscape phone under 500px tall) there's no room for a panel above the grid,
+per account is a possible follow-up). On a phone (narrow, or a landscape phone
+— see [Phones](#phones)) there's no room for a panel above the grid,
 so the breakdown is a sheet docked to the bottom edge instead (#114): at most
 45% of the screen in portrait, everything under the app header in landscape,
 with a toggle that collapses it to its title bar. The page reserves the
@@ -1280,8 +1280,9 @@ hasn't shipped are simply absent.
 Cards are terse: whole dollars (`fmt_money_whole`), changes as ▲/▼ amounts
 (`fmt_change_whole`), one short line per item; exact figures and detail live on
 the sheets they link to. Each card is one link (the whole card) to one view;
-no per-line links or footer links. The breakdown the warnings card opens still
-crowds the grid on phones (#114).
+no per-line links or footer links. On a phone the breakdown the warnings card
+opens is a sheet docked to the bottom edge, so it no longer crowds the grid
+(#114; see [Projections](#projections)).
 
 Needs attention is fed by `needs_attention()` in `overview.py`: a list of
 `{source, text}` items that each feature appends to: recurring charges
@@ -1367,6 +1368,37 @@ Every sheet page puts its controls in the same two places, with one look:
   trigger, so its bar is `compact`: on a phone the Filters button is just its
   funnel icon (+ count badge; the label stays for screen readers) and Reset
   moves into the panel, next to Estimate, Group by, and the filters.
+
+### Phones
+
+A **phone** is a narrow screen (below `sm`, 640px) **or a short one** — a
+landscape phone (under 500px tall and narrower than `lg`), which width
+breakpoints alone treat as a desktop even though it has the least room of all
+(#146). Tailwind has two screens for it (`tailwind.config.js`): `phone:` and
+its exact opposite `wide:`, which replaces `sm:` in mobile-first markup that
+should switch for both. Hand-written CSS (`base.html`, `projections.html`)
+repeats the same media queries; keep them in step. On a phone:
+
+- **Controls**: the filter bar collapses behind its Filters button and
+  segmented toggles use their `short` labels in landscape too, so the bar is
+  one row in either orientation (`tests/e2e/controls.py` checks both). The
+  pager row is a little tighter.
+- **Denser sheets**: rows are 24px instead of 28px (`--row-h`; band
+  headings and column headers follow, and `sheet-scroll.js` reads it for the
+  grid canvas), table text is 13px, and cells have 4px side padding (the
+  first cell keeps its accent-rail clearance).
+- **Bottom edge**: a sheet runs to the bottom of the screen, under the iOS
+  home indicator — no gutter, no bottom border or rounding. Its last pinned
+  total row grows by the bottom safe-area inset (`--sheet-inset-b`), with its
+  text in the top `--row-h`, so the totals sit just above the indicator; a
+  two-line footer's upper row offsets by the same amount. Where the inset is
+  0 (Android, a Safari tab with its toolbar) the sheet simply ends at the
+  edge. When Projections' month breakdown is docked there instead, the inset
+  goes to the breakdown and the sheet ends above it.
+- **Landscape**: the app header is 40px instead of 48px (`--header-h`, which
+  also places the nav drawer); Projections' summary drops its "By <month>:"
+  lead and its cents so it fits beside the pager.
+- **Overview**: slightly tighter page and card padding.
 
 ## CLI
 

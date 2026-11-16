@@ -115,7 +115,16 @@
         frame.style.setProperty("--sheet-right-h", rightW + "px");
     }
 
-    var ROW_H = 28; // 1.75rem data-row height
+    // One data row's height: the --row-h CSS variable (base.html; shorter on
+    // phones, #146), in px.
+    function rowHeight() {
+        var probe = document.createElement("div");
+        probe.style.cssText = "position:absolute;visibility:hidden;height:var(--row-h, 1.75rem)";
+        document.body.appendChild(probe);
+        var h = probe.offsetHeight || 28;
+        probe.remove();
+        return h;
+    }
 
     // Inject (once) a single filler row and grow it to push the total row to the
     // sheet's bottom (QA item 17), with a grid canvas filling the gap. It sits
@@ -164,7 +173,7 @@
         var table = container.querySelector("table");
         var contentH = table ? table.offsetHeight : 0;
         var gap = container.clientHeight - contentH;
-        if (gap >= ROW_H) {
+        if (gap >= rowHeight()) {
             filler.firstChild.style.height = gap + "px";
             filler.style.display = "";
         }

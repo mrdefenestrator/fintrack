@@ -27,6 +27,7 @@ from sqlalchemy.exc import IntegrityError
 from fintrack.accounts.balance_history import latest_point, record_balance
 from fintrack.core.coerce import to_date
 from fintrack.core.holdings import (
+    blocked_delete_message,
     delete_holding,
     get_holding,
     insert_holding,
@@ -339,10 +340,7 @@ def delete_asset_entry(conn: Connection, snapshot_id: int, holding_id: int) -> N
         # NO ACTION foreign key: this asset is still referenced by a debt
         # (assetRef) or the holding by a budget entry.
         conn.rollback()
-        raise ValueError(
-            f"Asset id {holding_id} is referenced by a debt; "
-            "remove or change assetRef first"
-        ) from e
+        raise ValueError(blocked_delete_message(conn, snapshot_id, holding_id)) from e
     if deleted == 0:
         raise ValueError(f"Asset/debt id {holding_id} not found")
     conn.commit()

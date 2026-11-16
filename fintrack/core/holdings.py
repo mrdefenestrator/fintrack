@@ -16,6 +16,7 @@ from sqlalchemy import Connection, Table, delete, func, insert, select, update
 
 from fintrack.core.models import (
     asset_details,
+    budget_entries,
     cash_details,
     credit_card_details,
     holdings,
@@ -203,6 +204,61 @@ def delete_holding(
         )
     )
     return result.rowcount
+
+
+# How many links blocked_delete_message() names before "and N more".
+_MAX_NAMED_LINKS = 5
+
+
+def holding_links(conn: Connection, snapshot_id: int, holding_id: int) -> list[str]:
+    """What still points at a holding (the NO ACTION refs that block deleting
+    it), one label per link, e.g. "Visa (payment account)"."""
+    links: list[str] = []
+    for table, ref_col, role in (
+        (credit_card_details, "payment_account_ref", "payment account"),
+        (loan_details, "payment_account_ref", "payment account"),
+        (loan_details, "secured_asset_ref", "secured asset"),
+    ):
+        names = conn.execute(
+            select(holdings.c.name)
+            .select_from(table.join(holdings, holdings.c.id == table.c.holding_id))
+            .where(
+                table.c[ref_col] == holding_id,
+                table.c.snapshot_id == snapshot_id,
+            )
+            .order_by(holdings.c.sort_order, holdings.c.id)
+        ).scalars()
+        links += [f"{name} ({role})" for name in names]
+    descriptions = conn.execute(
+        select(budget_entries.c.description)
+        .where(
+            budget_entries.c.auto_account_ref == holding_id,
+            budget_entries.c.snapshot_id == snapshot_id,
+        )
+        .order_by(budget_entries.c.sort_order, budget_entries.c.id)
+    ).scalars()
+    links += [f"budget entry {d}" for d in descriptions]
+    return links
+
+
+def blocked_delete_message(conn: Connection, snapshot_id: int, holding_id: int) -> str:
+    """The error for a delete refused because other rows still link to the
+    holding: names the holding and what links to it, so the user knows what
+    to change."""
+    name = conn.execute(
+        select(holdings.c.name).where(
+            holdings.c.id == holding_id, holdings.c.snapshot_id == snapshot_id
+        )
+    ).scalar()
+    links = holding_links(conn, snapshot_id, holding_id)
+    shown = links[:_MAX_NAMED_LINKS]
+    if len(links) > len(shown):
+        shown.append(f"{len(links) - len(shown)} more")
+    what = ", ".join(shown) if shown else "other records"
+    return (
+        f"Can't delete {name or f'holding {holding_id}'}: it's still linked from "
+        f"{what}. Change or remove those links first."
+    )
 
 
 def _ordered_ids_with_groups(

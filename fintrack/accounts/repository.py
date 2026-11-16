@@ -21,6 +21,7 @@ from sqlalchemy.exc import IntegrityError
 
 from fintrack.core.coerce import to_date
 from fintrack.core.holdings import (
+    blocked_delete_message,
     delete_holding,
     get_holding,
     insert_holding,
@@ -235,10 +236,7 @@ def delete_account(conn: Connection, snapshot_id: int, account_id: int) -> None:
         # NO ACTION foreign key: the account is still referenced by a budget
         # entry (auto_account_ref) or a credit card's paymentAccountRef.
         conn.rollback()
-        raise ValueError(
-            f"Account id {account_id} is referenced by a budget entry or a "
-            "credit card's paymentAccountRef; remove or change the reference first"
-        ) from e
+        raise ValueError(blocked_delete_message(conn, snapshot_id, account_id)) from e
     if deleted == 0:
         raise ValueError(f"Account id {account_id} not found")
     conn.commit()

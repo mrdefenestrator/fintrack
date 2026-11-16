@@ -726,6 +726,51 @@ def test_holdings_delete_account_dispatches(client, db_engine):
     assert "Checking" not in names
 
 
+def test_holdings_delete_blocked_shows_why(client, db_engine):
+    """A delete refused because the holding is still linked (#157) re-renders
+    the sheet with the reason in its error row, instead of an empty 422 that
+    left the confirm sitting there with no feedback."""
+    from fintrack.accounts.repository import get_accounts, update_account
+    from fintrack.budget.repository import add_budget_entry
+
+    checking = _account_by_name(db_engine, "Checking")
+    visa = _account_by_name(db_engine, "Visa")
+    with db_engine.connect() as conn:
+        update_account(conn, 1, visa["id"], {"paymentAccountRef": checking["id"]})
+        add_budget_entry(
+            conn,
+            1,
+            {
+                "kind": "income",
+                "description": "Paycheck",
+                "amount": 100,
+                "recurrence": "monthly",
+                "autoAccountRef": checking["id"],
+            },
+        )
+
+    resp = client.post(f"/s/finances/holdings/delete/account/{checking['id']}")
+    assert resp.status_code == 422
+    assert "HX-Refresh" not in resp.headers
+    body = resp.get_data(as_text=True)
+    assert 'id="holdings-error-row"' in body
+    assert "Can&#39;t delete Checking" in body
+    assert "Visa (payment account)" in body
+    assert "budget entry Paycheck" in body
+    with db_engine.connect() as conn:
+        assert "Checking" in [a["name"] for a in get_accounts(conn, 1)]
+
+
+def test_holdings_delete_confirm_targets_the_sheet(client, db_engine):
+    """The confirm's ✓ swaps the whole sheet, so a blocked delete's error row
+    has somewhere to show."""
+    acc = _account_by_name(db_engine, "Checking")
+    resp = client.get(f"/s/finances/holdings/delete-confirm/account/{acc['id']}")
+    body = resp.get_data(as_text=True)
+    assert 'hx-target="#holdings-table"' in body
+    assert 'hx-swap="innerHTML"' in body
+
+
 def test_holdings_reorder_accounts_dispatches(client, db_engine):
     from fintrack.accounts.repository import add_account, get_accounts
 

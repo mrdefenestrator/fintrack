@@ -13,6 +13,7 @@ from sqlalchemy.exc import IntegrityError
 
 from fintrack.core.holdings import (
     DETAIL_TABLES,
+    blocked_delete_message,
     delete_holding,
     insert_holding,
     update_holding,
@@ -202,7 +203,6 @@ def delete_account(conn: Connection, account_id: int) -> None:
         # source (payment_account_ref) or by a budget entry (auto_account_ref).
         conn.rollback()
         raise ValueError(
-            f"Account id {account_id} is referenced by a budget entry or a "
-            "credit card's paymentAccountRef; remove or change the reference first"
+            blocked_delete_message(conn, row.snapshot_id, account_id)
         ) from e
     conn.commit()

@@ -1111,7 +1111,11 @@ spot on every row:
   destructive item goes last, in red, ruled off; **Delete…** swaps the cell
   for an in-place ✓/✗ confirm (`confirm_cell`, ✗ focused) in the same two
   slots. Holdings' Delete warns that an account's imported transactions go
-  with it.
+  with it. A delete the repository refuses (a holding still linked from a
+  card's or loan's payment account, a loan's secured asset, or a budget entry;
+  a category in use) must say why: ✓ re-renders the sheet with the reason in
+  its `data-sheet-error` row, which `base.html` scrolls into view after a 422
+  swap — never an empty 422 that leaves the confirm sitting there (#157).
 - **Touch** — on a coarse pointer the slots widen to 2rem and menu items to
   ≥44px tall; the row height stays put (density is a feature).
 

@@ -248,7 +248,7 @@ table[data-reorder-locked] .drag-handle,
 .dark .grouped-sheet .sheet-group-heading > td:first-child { color: var(--label-dark); }
 .grouped-sheet .sheet-group-header > th {
     position: sticky;
-    top: var(--sheet-heading-h, 1.75rem);
+    top: var(--sheet-heading-h, var(--row-h));
     z-index: 7;
     background: #f3f4f6;   /* gray-100 */
     box-shadow: inset 0 -2px 0 #d1d5db;   /* gray-300 underline */

@@ -21,22 +21,23 @@
         label_width='w-44', use_htmx=false, latest_label='Now',
         next_disabled=not tl.can_go_forward) }}
     </div>
-    <p data-summary="line" class="flex flex-wrap gap-x-5 gap-y-1 px-1 text-sm text-gray-600 dark:text-gray-300">
+    <p data-summary="line" class="flex flex-wrap gap-x-5 gap-y-1 px-1 text-sm phone:gap-x-3 phone:gap-y-0 phone:text-xs text-gray-600 dark:text-gray-300">
     {# Liquid and net worth at the end of the window: projected (change from
-       now) or, for a window ending in the past, actual (and the change since). #}
-    <span>{% if summary.past %}End of {{ summary.end_label }}:{% else %}By {{ summary.end_label }}:{% endif %}</span>
+       now) or, for a window ending in the past, actual (and the change since).
+       On a phone (#146) it drops the "By <month>:" lead (the pager beside it
+       names the window) and the cents, so it fits beside the pager in
+       landscape. #}
+    <span class="phone:hidden">{% if summary.past %}End of {{ summary.end_label }}:{% else %}By {{ summary.end_label }}:{% endif %}</span>
     {% for name, t, testid in [('Liquid', summary.liquid, 'liquid'), ('Net worth', summary.net_worth, 'net-worth')] %}
     <span data-summary="{{ testid }}">{{ name }}
-        <span class="font-medium tabular-nums {% if t.end < 0 %}text-red-600 dark:text-red-400{% else %}text-gray-800 dark:text-gray-100{% endif %}">{{ t.end | fmt_money_header }}</span>{% if t.partial %}<span title="Partial: some holdings have no value recorded yet" class="text-gray-400">*</span>{% endif %}
-        <span class="tabular-nums {% if t.change < 0 %}text-red-600 dark:text-red-400{% elif t.change > 0 %}text-emerald-600 dark:text-emerald-400{% endif %}">({{ t.change | fmt_change }}{% if summary.past %} since{% endif %})</span></span>
+        <span class="font-medium tabular-nums {% if t.end < 0 %}text-red-600 dark:text-red-400{% else %}text-gray-800 dark:text-gray-100{% endif %}"><span class="phone:hidden">{{ t.end | fmt_money_header }}</span><span class="hidden phone:inline">{{ t.end | fmt_money_whole }}</span></span>{% if t.partial %}<span title="Partial: some holdings have no value recorded yet" class="text-gray-400">*</span>{% endif %}
+        <span class="tabular-nums {% if t.change < 0 %}text-red-600 dark:text-red-400{% elif t.change > 0 %}text-emerald-600 dark:text-emerald-400{% endif %}">(<span class="phone:hidden">{{ t.change | fmt_change }}</span><span class="hidden phone:inline">{{ '+' if t.change > 0 else ('-' if t.change < 0 else '') }}{{ t.change | abs | fmt_money_whole }}</span>{% if summary.past %} since{% endif %})</span></span>
     {% endfor %}
 </p>
 {% endcall %}
 
-{% if result.estimate is not none or breakdown %}
-<div class="shrink-0 mb-2 space-y-2" data-projection-summary>
-
 {% if result.estimate is not none %}
+<div class="shrink-0 mb-2" data-projection-summary>
 <details data-summary="estimate" class="px-3 py-1.5 rounded-lg text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600">
     <summary class="cursor-pointer select-none text-gray-600 dark:text-gray-300">
         Estimated unscheduled spend: <span class="font-medium tabular-nums">{{ result.estimate.monthly | abs | fmt_money_header }}</span>/mo
@@ -52,31 +53,103 @@
     <p class="mt-1 text-gray-500">No unbudgeted spending in the last 3 months.</p>
     {% endif %}
 </details>
+</div>
 {% endif %}
 
 {% if breakdown %}
 {# Month breakdown (?month=I): every money movement the projection applies that
-   month, by account, with totals. Opened from the icon in a month's header. #}
+   month, by account, with totals. Opened from the icon in a month's header (or
+   a Projection warning on Overview).
+
+   Wide screens: a panel above the grid whose list scrolls inside max-h-64.
+   Phones (issue #114) — portrait, or landscape, where the screen is too short
+   for a panel and a grid both: a sheet docked to the bottom edge, over the
+   page, with a collapse toggle (data-breakdown-toggle) that shrinks it to its
+   title bar. The page reserves the sheet's height below the grid
+   (--breakdown-h, kept in step by the script below), so the grid and its
+   pinned totals stay in view above it rather than under it. Portrait caps the
+   sheet at 45% of the screen; landscape lets it fill everything under the app
+   header, and collapsing it gives the grid the screen back. The media query
+   is the `phone:` screen (tailwind.config.js) and must match PHONE_SHEET in
+   the script. #}
 {% macro signed(v) %}<span class="tabular-nums {% if v < 0 %}text-red-600 dark:text-red-400{% elif v > 0 %}text-emerald-700 dark:text-emerald-400{% endif %}">{{ v | fmt_change }}</span>{% endmacro %}
-<section data-month-breakdown class="rounded-lg bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 shadow-sm text-sm">
-    <div class="flex flex-wrap items-center gap-x-5 gap-y-1 px-3 py-1.5 border-b border-gray-200 dark:border-gray-700">
+<style>
+@media (max-width: 639px), (max-height: 500px) and (max-width: 1023px) {
+    .month-breakdown {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 25;  /* over the filter bar (z-20), under the nav scrim (z-30) */
+        margin: 0;
+        display: flex;
+        flex-direction: column;
+        max-height: 45dvh;
+        border-width: 1px 0 0;
+        border-radius: 0.75rem 0.75rem 0 0;
+        padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+        box-shadow: 0 -8px 20px -6px rgb(0 0 0 / 0.2);
+    }
+    /* Title row as a grid, so the arrows + title and the buttons always share
+       one line (a flex-wrap row wrapped them on a 360px phone, or with a
+       wider fallback font); the title truncates instead, and the totals take
+       their own line below. */
+    .month-breakdown .breakdown-head {
+        flex-shrink: 0;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        column-gap: 0.5rem;
+    }
+    .month-breakdown .breakdown-head [data-proj-nav] { min-width: 0; }
+    .month-breakdown .breakdown-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .month-breakdown .breakdown-btn { width: 2rem; height: 2rem; }  /* finger-sized */
+    .month-breakdown .breakdown-totals { order: 3; grid-column: 1 / -1; }
+    .month-breakdown .breakdown-body { flex: 1 1 auto; min-height: 0; max-height: none; }
+    .month-breakdown[data-collapsed="true"] .breakdown-totals,
+    .month-breakdown[data-collapsed="true"] .breakdown-body { display: none; }
+    .month-breakdown[data-collapsed="true"] .breakdown-head { border-bottom-width: 0; }
+    /* The sheet takes the bottom edge: the grid ends above it. */
+    main:has([data-month-breakdown]) { padding-bottom: var(--breakdown-h, 0px); }
+}
+@media (max-height: 500px) and (max-width: 1023px) {
+    .month-breakdown { max-height: calc(100dvh - var(--header-h) - env(safe-area-inset-top)); }
+}
+@media (min-width: 640px) and (min-height: 501px), (min-width: 1024px) {
+    .month-breakdown [data-breakdown-toggle] { display: none; }
+}
+</style>
+<section data-month-breakdown aria-label="What happens in {{ breakdown.label }}"
+    x-data="{ collapsed: false }" :data-collapsed="collapsed"
+    class="month-breakdown shrink-0 mb-2 rounded-lg bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 shadow-sm text-sm">
+    <div class="breakdown-head flex flex-wrap items-center gap-x-5 gap-y-1 px-3 py-1.5 border-b border-gray-200 dark:border-gray-700">
         <div class="flex items-center gap-1.5" data-proj-nav>
-            {% set _arrow = 'w-6 h-6 flex items-center justify-center rounded text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700' %}
+            {% set _arrow = 'breakdown-btn w-6 h-6 flex items-center justify-center rounded text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700' %}
             {% if breakdown_prev %}<a href="{{ proj_url(month=breakdown_prev) }}" title="Previous month" class="{{ _arrow }}">&#9664;</a>{% else %}<span class="{{ _arrow }} opacity-30">&#9664;</span>{% endif %}
-            <span class="font-semibold text-gray-800 dark:text-gray-100">What happens in {{ breakdown.label }}</span>
+            <span class="breakdown-title font-semibold text-gray-800 dark:text-gray-100">What happens in {{ breakdown.label }}</span>
             {% if breakdown_next %}<a href="{{ proj_url(month=breakdown_next) }}" title="Next month" class="{{ _arrow }}">&#9654;</a>{% else %}<span class="{{ _arrow }} opacity-30">&#9654;</span>{% endif %}
         </div>
-        <div class="flex flex-wrap gap-x-4 text-gray-600 dark:text-gray-300" data-breakdown-totals>
+        <div class="breakdown-totals flex flex-wrap gap-x-4 text-gray-600 dark:text-gray-300" data-breakdown-totals>
             <span>Money in {{ signed(breakdown.money_in) }}</span>
             <span>Money out {{ signed(breakdown.money_out) }}</span>
             {% if breakdown.autopay %}<span title="Moves money between your own accounts; doesn't change the totals">Card autopay <span class="tabular-nums">{{ breakdown.autopay | fmt_money_header }}</span></span>{% endif %}
             {% if breakdown.holdings_change %}<span title="Asset growth and contributions, loan interest and scheduled payments">Assets &amp; loans {{ signed(breakdown.holdings_change) }}</span>{% endif %}
         </div>
-        <a href="{{ proj_url(month=none) }}" data-breakdown-close title="Close" aria-label="Close"
-           class="ml-auto w-6 h-6 flex items-center justify-center rounded text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700">&times;</a>
+        <div class="ml-auto flex items-center gap-1">
+            <button type="button" data-breakdown-toggle @click="collapsed = !collapsed"
+                :aria-expanded="(!collapsed).toString()" aria-expanded="true"
+                :title="collapsed ? 'Show the breakdown' : 'Collapse to show the grid'" title="Collapse to show the grid"
+                class="breakdown-btn w-6 h-6 flex items-center justify-center rounded text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700">
+                <svg class="w-4 h-4 transition-transform duration-150" :class="{ 'rotate-180': collapsed }" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                </svg>
+                <span class="sr-only">Collapse breakdown</span>
+            </button>
+            <a href="{{ proj_url(month=none) }}" data-breakdown-close title="Close" aria-label="Close"
+               class="breakdown-btn w-6 h-6 flex items-center justify-center rounded text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700">&times;</a>
+        </div>
     </div>
     {% if breakdown.groups %}
-    <div class="max-h-64 overflow-auto px-3 py-2 grid gap-x-8 gap-y-3 sm:grid-cols-2 xl:grid-cols-3">
+    <div class="breakdown-body max-h-64 overflow-auto px-3 py-2 grid gap-x-8 gap-y-3 sm:grid-cols-2 xl:grid-cols-3" data-breakdown-body>
         {% for g in breakdown.groups %}
         <div data-breakdown-group>
             <div class="flex justify-between gap-3 font-medium text-gray-800 dark:text-gray-100 border-b border-gray-200 dark:border-gray-700 pb-0.5 mb-0.5">
@@ -91,12 +164,24 @@
         {% endfor %}
     </div>
     {% else %}
-    <p class="px-3 py-2 text-gray-500 dark:text-gray-400">Nothing changes this month.</p>
+    <p class="breakdown-body px-3 py-2 text-gray-500 dark:text-gray-400" data-breakdown-body>Nothing changes this month.</p>
     {% endif %}
 </section>
-{% endif %}
-
-</div><!-- end top band -->
+<script>
+    // Reserve the docked sheet's height below the grid on phones (see above).
+    (function () {
+        var PHONE_SHEET = '(max-width: 639px), (max-height: 500px) and (max-width: 1023px)';
+        var el = document.querySelector('[data-month-breakdown]');
+        var mq = window.matchMedia(PHONE_SHEET);
+        var root = document.documentElement;
+        function reserve() {
+            root.style.setProperty('--breakdown-h', mq.matches ? el.offsetHeight + 'px' : '0px');
+        }
+        if (window.ResizeObserver) new ResizeObserver(reserve).observe(el);
+        mq.addEventListener('change', reserve);
+        reserve();
+    })();
+</script>
 {% endif %}
 
 {# The grid's view controls lead its filter bar: window size (6M / 1Y / 2Y on

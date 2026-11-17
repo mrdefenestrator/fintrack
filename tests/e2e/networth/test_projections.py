@@ -5,7 +5,7 @@ from datetime import date, datetime
 
 import pytest
 
-from tests.e2e.controls import PHONE_WIDTHS, assert_controls_layout
+from tests.e2e.controls import PHONE_IDS, PHONE_VIEWPORTS, assert_controls_layout
 
 pytestmark = pytest.mark.e2e
 
@@ -150,6 +150,77 @@ def test_projections_month_breakdown(page, flask_server):
     assert page.locator("[data-month-breakdown]").count() == 0
 
 
+def _month_key() -> str:
+    return datetime.now().astimezone().date().strftime("%Y-%m")
+
+
+@pytest.mark.parametrize(
+    "viewport",
+    [(360, 780), (390, 844), (844, 390)],
+    ids=["phone-portrait-360", "phone-portrait", "phone-landscape"],
+)
+def test_projections_month_breakdown_on_phones(page, flask_server, viewport):
+    """Issue #114: on a phone the month breakdown is a sheet docked to the
+    bottom edge. It stays on screen and readable, the grid above it is never
+    hidden under it, and collapsing it to its title bar gives the grid the
+    room back."""
+    width, height = viewport
+    page.set_viewport_size({"width": width, "height": height})
+    page.goto(f"{flask_server}/s/test_finances/projections?month={_month_key()}")
+
+    sheet = page.locator("[data-month-breakdown]")
+    grid = page.locator("[data-sheet-scroll]")
+    assert sheet.evaluate("e => getComputedStyle(e).position") == "fixed"
+    box = sheet.bounding_box()
+    assert box["x"] == 0 and box["width"] == width
+    assert box["y"] + box["height"] == pytest.approx(height, abs=1)
+    # Readable: the title, the totals and the first account's flows show.
+    assert sheet.locator("[data-breakdown-totals]").is_visible()
+    assert sheet.locator("[data-breakdown-group]").first.is_visible()
+    # Portrait keeps the grid in view above the sheet, never under it.
+    if height > width:
+        assert box["height"] <= height * 0.46
+        g = grid.bounding_box()
+        assert g["height"] > 100
+        assert g["y"] + g["height"] <= box["y"]
+
+    # Collapse: just the title bar, and the grid (with its totals) above it.
+    toggle = sheet.locator("[data-breakdown-toggle]")
+    assert toggle.get_attribute("aria-expanded") == "true"
+    toggle.click()
+    assert toggle.get_attribute("aria-expanded") == "false"
+    assert not sheet.locator("[data-breakdown-body]").is_visible()
+    assert not sheet.locator("[data-breakdown-totals]").is_visible()
+    bar = sheet.bounding_box()
+    assert bar["height"] < 60
+    g = grid.bounding_box()
+    assert g["y"] + g["height"] <= bar["y"]
+    assert page.locator("[data-projection-table] tr.total-row").first.is_visible()
+
+    # Expanding brings it back; the month arrows and close still work.
+    toggle.click()
+    assert sheet.locator("[data-breakdown-body]").is_visible()
+    sheet.locator("a[title='Next month']").click()
+    page.wait_for_url(lambda url: _month_key() not in url and "month=" in url)
+    page.locator("[data-breakdown-close]").click()
+    page.wait_for_url(lambda url: "month=" not in url)
+    assert page.locator("[data-month-breakdown]").count() == 0
+
+
+def test_projections_month_breakdown_inline_on_desktop(page, flask_server):
+    """On a wide screen the breakdown stays a panel above the grid, with no
+    collapse toggle."""
+    page.set_viewport_size({"width": 1280, "height": 800})
+    page.goto(f"{flask_server}/s/test_finances/projections?month={_month_key()}")
+    sheet = page.locator("[data-month-breakdown]")
+    assert sheet.evaluate("e => getComputedStyle(e).position") == "static"
+    assert not sheet.locator("[data-breakdown-toggle]").is_visible()
+    assert (
+        sheet.bounding_box()["y"]
+        < page.locator("[data-sheet-scroll]").bounding_box()["y"]
+    )
+
+
 def test_projections_timeline_pager(page, flask_server):
     """A window in the past shows actual month-ends (no Now column, an
     "End of" summary); ▶ slides forward and Now returns to the current
@@ -176,12 +247,13 @@ def test_projections_timeline_pager(page, flask_server):
     assert window.locator("[data-pager-label]").inner_text() == now_label
 
 
-@pytest.mark.parametrize("width", PHONE_WIDTHS)
-def test_projections_controls_fit_one_row_on_phones(page, flask_server, width):
+@pytest.mark.parametrize("viewport", PHONE_VIEWPORTS, ids=PHONE_IDS)
+def test_projections_controls_fit_one_row_on_phones(page, flask_server, viewport):
     """Pager above; window size (6M/1Y/2Y), Balances/Changes and the
     icon-only Filters trigger share the filter bar's one row on a phone, with
     Estimate, Group by, the filters and Reset in its panel (#144)."""
-    page.set_viewport_size({"width": width, "height": 800})
+    width, height = viewport
+    page.set_viewport_size({"width": width, "height": height})
     page.goto(f"{flask_server}/s/test_finances/projections")
     assert_controls_layout(page, width)
     assert page.locator("[data-window-size] a", has_text="1Y").is_visible()

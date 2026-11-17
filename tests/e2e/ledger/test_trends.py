@@ -2,7 +2,7 @@
 
 import pytest
 
-from tests.e2e.controls import PHONE_WIDTHS, assert_controls_layout
+from tests.e2e.controls import PHONE_IDS, PHONE_VIEWPORTS, assert_controls_layout
 
 pytestmark = pytest.mark.e2e
 
@@ -260,11 +260,12 @@ def test_trends_paged_window_still_shows_seeded_data(page, confirmed_server):
     assert page.locator("table tfoot").get_by_text("Net (kept)").is_visible()
 
 
-@pytest.mark.parametrize("width", PHONE_WIDTHS)
-def test_trends_controls_fit_one_row_on_phones(page, flask_server, width):
+@pytest.mark.parametrize("viewport", PHONE_VIEWPORTS, ids=PHONE_IDS)
+def test_trends_controls_fit_one_row_on_phones(page, flask_server, viewport):
     """Pager above; the period pills and Highlight toggle share the filter
-    bar's one row on a phone (short labels below sm)."""
-    page.set_viewport_size({"width": width, "height": 800})
+    bar's one row on a phone (short labels there)."""
+    width, height = viewport
+    page.set_viewport_size({"width": width, "height": height})
     page.goto(f"{flask_server}/s/ledger/trends")
     assert_controls_layout(page, width)
     assert (

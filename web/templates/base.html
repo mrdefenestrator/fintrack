@@ -48,6 +48,9 @@
         (function() {
             if (!(window.navigator.standalone || window.matchMedia('(display-mode: standalone)').matches)) return;
             var root = document.documentElement;
+            // Flag it for CSS too: only the installed app runs a sheet to the
+            // screen's bottom edge (#146; see the phone rules below).
+            root.setAttribute('data-standalone', '');
             function fit() {
                 root.style.height = '';
                 var visible = window.innerHeight;
@@ -261,36 +264,51 @@
            --header-h: the app header; --row-h: one sheet row (data, band
            heading, column header, footer; sheet-scroll.js reads it too);
            --sheet-inset-b: extra space under a sheet's bottom-pinned total
-           row, so on a phone the sheet runs to the screen's bottom edge, under
-           the iOS home indicator, with the totals sitting just above it. */
+           row, so on a phone in the installed app the sheet runs to the
+           screen's bottom edge, under the iOS home indicator, with the totals
+           sitting just above it. */
         :root { --header-h: 3rem; --row-h: 1.75rem; --sheet-inset-b: 0px; }
         @media (max-width: 639px), (max-height: 500px) and (max-width: 1023px) {
             /* Denser sheets: shorter rows, 13px text, slimmer cell padding
                (the first cell keeps its accent-rail clearance). */
-            :root { --row-h: 1.5rem; --sheet-inset-b: env(safe-area-inset-bottom, 0px); }
+            :root { --row-h: 1.5rem; }
             .table-scroll-container table { font-size: 0.8125rem; }
             .table-scroll-container td,
             .table-scroll-container th { padding-left: 0.25rem; padding-right: 0.25rem; }
             .table-scroll-container .sheet-group-heading > td { padding-top: 0.125rem; padding-bottom: 0.125rem; }
-            /* Run the sheet to the bottom edge — but only when there's a
-               bottom safe-area inset to fill (the installed app, landscape):
-               then no gutter under it and no bottom border/rounding on its
-               frame. With no inset (a Safari tab) it keeps its gutter and
-               border: iOS 26 Safari tints the area around its floating
-               toolbar from whatever touches the bottom edge, and a sheet's
-               grey footer there turned that whole area grey. CSS can't test
-               env() directly, so each value is "full size minus 100x the
-               inset", floored at 0: the base size with no inset, 0 with any.
-               The last pinned total row grows by the inset and keeps its text
-               in the top --row-h (padding shrinks the cell's content box, and
-               vertical-align: middle centres within that). */
-            main:has([data-sheet-scroll]) {
+            /* Run the sheet to the bottom edge — in the installed app only
+               (html[data-standalone], set in <head>), and only when there's a
+               bottom safe-area inset to fill: then no gutter under it and no
+               bottom border/rounding on its frame. A Safari tab keeps main's
+               own gutter and the frame's border: its insets come and go with
+               its toolbar (in landscape the inset shows only while the
+               toolbar does), so the footer grew and shrank as you scrolled,
+               and iOS 26 tints the area around its toolbar from whatever
+               touches the bottom edge, so a footer there turned it grey. CSS
+               can't branch on env(), so each value is "full size minus 100x
+               the inset", floored at 0: the base size with no inset (a phone
+               with a home button), 0 with any. The last pinned total row
+               grows by the inset and keeps its text in the top --row-h
+               (padding shrinks the cell's content box, and vertical-align:
+               middle centres within that). */
+            html[data-standalone] { --sheet-inset-b: env(safe-area-inset-bottom, 0px); }
+            html[data-standalone] main:has([data-sheet-scroll]) {
                 padding-bottom: max(0px, calc(0.5rem - env(safe-area-inset-bottom, 0px) * 100));
             }
-            main [data-sheet-scroll] {
+            html[data-standalone] main [data-sheet-scroll] {
                 border-bottom-width: max(0px, calc(1px - env(safe-area-inset-bottom, 0px) * 100));
                 border-bottom-left-radius: max(0px, calc(0.5rem - env(safe-area-inset-bottom, 0px) * 100));
                 border-bottom-right-radius: max(0px, calc(0.5rem - env(safe-area-inset-bottom, 0px) * 100));
+            }
+            /* Overview's cards scroll in their own box, which ends at the
+               visible bottom edge (in a Safari tab, just above its toolbar),
+               so a card running past it was sliced off at a hard line. Fade
+               the box's last 1.5rem instead; the content's extra bottom
+               padding (overview.html) lets the last card scroll clear of the
+               fade. */
+            [data-overview] {
+                -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 1.5rem), transparent);
+                mask-image: linear-gradient(to bottom, #000 calc(100% - 1.5rem), transparent);
             }
             .table-scroll-container tr.total-row:not(.total-upper) {
                 height: calc(var(--row-h) + var(--sheet-inset-b));

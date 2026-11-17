@@ -1,8 +1,8 @@
 """Phone layout (issue #146): a phone is a narrow screen or a short one (a
-landscape phone), and both get the same denser sheets — 24px rows, a sheet
-that runs to the screen's bottom edge with its totals above the home
-indicator, and (landscape) a slimmer header. Wider screens keep 28px rows and
-the bottom gutter."""
+landscape phone), and both get the same denser sheets — 24px rows, (in the
+installed app) a sheet that runs to the screen's bottom edge with its totals
+above the home indicator, and (landscape) a slimmer header. Wider screens keep
+28px rows and the bottom gutter."""
 
 import pytest
 
@@ -13,12 +13,19 @@ LANDSCAPE = (844, 390)
 DESKTOP = (1280, 800)
 
 
-def _open(page, flask_server, viewport, path="holdings", inset_bottom=None):
+def _open(
+    page, flask_server, viewport, path="holdings", inset_bottom=None, standalone=False
+):
     """Open a sheet at `viewport`. With `inset_bottom`, emulate an iPhone's
     home-indicator safe area first; returns whether the browser could (the
-    override is a recent DevTools command)."""
+    override is a recent DevTools command). `standalone` fakes the installed
+    web app (navigator.standalone, as iOS reports it)."""
     width, height = viewport
     page.set_viewport_size({"width": width, "height": height})
+    if standalone:
+        page.add_init_script(
+            "Object.defineProperty(navigator, 'standalone', { get: () => true });"
+        )
     emulated = False
     if inset_bottom is not None:
         cdp = page.context.new_cdp_session(page)
@@ -61,12 +68,12 @@ def test_sheet_rows_are_denser_on_phones(
     "viewport", [PORTRAIT, LANDSCAPE], ids=["portrait", "landscape"]
 )
 def test_sheet_runs_to_the_bottom_edge_on_phones(page, flask_server, viewport):
-    """With a home-indicator inset (the installed app) the sheet reaches the
-    screen's bottom edge. Its last pinned total row grows by the inset,
+    """In the installed app, with a home-indicator inset, the sheet reaches
+    the screen's bottom edge. Its last pinned total row grows by the inset,
     keeping its text in the top row's height, and the row above it still
     sits directly on top of it."""
     height = viewport[1]
-    if not _open(page, flask_server, viewport, inset_bottom=34):
+    if not _open(page, flask_server, viewport, inset_bottom=34, standalone=True):
         pytest.skip("this Chromium can't emulate a safe-area inset")
     frame = page.locator("[data-sheet-scroll]")
     fb = frame.bounding_box()
@@ -91,15 +98,33 @@ def test_sheet_runs_to_the_bottom_edge_on_phones(page, flask_server, viewport):
     "viewport", [PORTRAIT, LANDSCAPE], ids=["portrait", "landscape"]
 )
 def test_sheet_keeps_its_gutter_without_an_inset(page, flask_server, viewport):
-    """With no bottom inset (a Safari tab: its toolbar floats in its own
-    area, tinted from whatever touches the bottom edge) the sheet keeps its
-    8px gutter and bottom border, so the page background is what touches the
-    edge, not the sheet's grey footer."""
+    """In the installed app on a phone with no bottom inset (a home button)
+    the sheet keeps its 8px gutter and bottom border."""
     height = viewport[1]
-    _open(page, flask_server, viewport, inset_bottom=0)
+    _open(page, flask_server, viewport, inset_bottom=0, standalone=True)
     frame = page.locator("[data-sheet-scroll]")
     fb = frame.bounding_box()
     assert fb["y"] + fb["height"] == pytest.approx(height - 8, abs=1)
+    assert frame.evaluate("e => getComputedStyle(e).borderBottomWidth") == "1px"
+    last = page.locator("tr.total-row:not(.total-upper)")
+    assert last.bounding_box()["height"] == pytest.approx(24)
+
+
+@pytest.mark.parametrize(
+    "viewport", [PORTRAIT, LANDSCAPE], ids=["portrait", "landscape"]
+)
+def test_safari_tab_keeps_the_gutter_whatever_the_inset(page, flask_server, viewport):
+    """In a Safari tab the bottom inset comes and goes with the toolbar, so
+    the sheet never runs to the edge there: its footer stays one row tall,
+    the frame keeps its bottom border, and it ends above the inset (or the
+    8px gutter, whichever is larger) — as main's padding always did. iOS 26
+    also tints the area around its toolbar from whatever touches the edge."""
+    height = viewport[1]
+    emulated = _open(page, flask_server, viewport, inset_bottom=34)
+    frame = page.locator("[data-sheet-scroll]")
+    fb = frame.bounding_box()
+    gap = 34 if emulated else 8
+    assert fb["y"] + fb["height"] == pytest.approx(height - gap, abs=1)
     assert frame.evaluate("e => getComputedStyle(e).borderBottomWidth") == "1px"
     last = page.locator("tr.total-row:not(.total-upper)")
     assert last.bounding_box()["height"] == pytest.approx(24)
@@ -164,3 +189,25 @@ def test_scroller_is_isolated_on_touch_screens(browser, flask_server):
         scroller = page.locator(".table-scroll-container")
         assert scroller.evaluate("e => getComputedStyle(e).isolation") == expected
         ctx.close()
+
+
+@pytest.mark.parametrize(
+    "viewport, faded", [(PORTRAIT, True), (DESKTOP, False)], ids=["phone", "desktop"]
+)
+def test_overview_fades_out_at_the_bottom_on_phones(
+    page, flask_server, viewport, faded
+):
+    """On a phone, Overview's cards fade out over the last 1.5rem of their
+    scrolling box instead of being sliced off at its edge, and the content's
+    extra bottom padding lets the last card scroll clear of the fade."""
+    _open(page, flask_server, viewport, path="")
+    box = page.locator("[data-overview]")
+    mask = box.evaluate(
+        "e => getComputedStyle(e).maskImage || getComputedStyle(e).webkitMaskImage"
+    )
+    assert ("gradient" in mask) == faded
+    if faded:
+        box.evaluate("e => { e.scrollTop = e.scrollHeight; }")
+        last = page.locator("[data-overview-card]").last.bounding_box()
+        b = box.bounding_box()
+        assert last["y"] + last["height"] <= b["y"] + b["height"] - 24

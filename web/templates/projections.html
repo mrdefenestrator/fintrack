@@ -111,7 +111,7 @@
     /* The sheet takes the bottom edge: the grid ends above it, with no
        home-indicator space under its totals. */
     main:has([data-month-breakdown]) { padding-bottom: var(--breakdown-h, 0px); }
-    :root { --sheet-inset-b: 0px; }
+    :root, html[data-standalone] { --sheet-inset-b: 0px; }
 }
 @media (max-height: 500px) and (max-width: 1023px) {
     .month-breakdown { max-height: calc(100dvh - var(--header-h) - env(safe-area-inset-top)); }

@@ -1387,22 +1387,6 @@ repeats the same media queries; keep them in step. On a phone:
   headings and column headers follow, and `sheet-scroll.js` reads it for the
   grid canvas), table text is 13px, and cells have 4px side padding (the
   first cell keeps its accent-rail clearance).
-- **Bottom edge**: in the installed app (`html[data-standalone]`, flagged in
-  `<head>`), when there's a bottom safe-area inset to fill, a sheet runs to
-  the bottom of the screen, under the iOS home indicator — no gutter, no
-  bottom border or rounding. Its last pinned total row grows by the inset
-  (`--sheet-inset-b`), with its text in the top `--row-h`, so the totals sit
-  just above the indicator; a two-line footer's upper row offsets by the same
-  amount. CSS can't branch on `env()`, so the gutter, border and rounding are
-  each "base size minus 100× the inset", floored at 0 (a phone with a home
-  button keeps them). A Safari tab never does this: its insets come and go
-  with its toolbar (in landscape the inset shows only while the toolbar
-  does), so the footer grew and shrank as you scrolled; and iOS 26 tints the
-  area around its toolbar from whatever touches the bottom edge, so a grey
-  footer there turned it grey. There the sheet keeps `main`'s gutter
-  (`max(0.5rem, inset)`) and its border. When Projections' month breakdown is
-  docked at the bottom, the inset goes to the breakdown and the sheet ends
-  above it.
 - **Scroll indicator** (touch screens): the sheet's scroller is its own
   stacking context (`isolation: isolate`). Otherwise iOS composites its
   z-indexed sticky rows (band headings, column headers, footer, actions

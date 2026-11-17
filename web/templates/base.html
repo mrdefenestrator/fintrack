@@ -272,16 +272,25 @@
             .table-scroll-container td,
             .table-scroll-container th { padding-left: 0.25rem; padding-right: 0.25rem; }
             .table-scroll-container .sheet-group-heading > td { padding-top: 0.125rem; padding-bottom: 0.125rem; }
-            /* Run the sheet to the bottom edge: no gutter under it and no
-               bottom border/rounding on its frame. Its last pinned total row
-               grows by the bottom safe-area inset and keeps its text in the
-               top --row-h (padding shrinks the cell's content box, and
+            /* Run the sheet to the bottom edge — but only when there's a
+               bottom safe-area inset to fill (the installed app, landscape):
+               then no gutter under it and no bottom border/rounding on its
+               frame. With no inset (a Safari tab) it keeps its gutter and
+               border: iOS 26 Safari tints the area around its floating
+               toolbar from whatever touches the bottom edge, and a sheet's
+               grey footer there turned that whole area grey. CSS can't test
+               env() directly, so each value is "full size minus 100x the
+               inset", floored at 0: the base size with no inset, 0 with any.
+               The last pinned total row grows by the inset and keeps its text
+               in the top --row-h (padding shrinks the cell's content box, and
                vertical-align: middle centres within that). */
-            main:has([data-sheet-scroll]) { padding-bottom: 0; }
+            main:has([data-sheet-scroll]) {
+                padding-bottom: max(0px, calc(0.5rem - env(safe-area-inset-bottom, 0px) * 100));
+            }
             main [data-sheet-scroll] {
-                border-bottom-width: 0;
-                border-bottom-left-radius: 0;
-                border-bottom-right-radius: 0;
+                border-bottom-width: max(0px, calc(1px - env(safe-area-inset-bottom, 0px) * 100));
+                border-bottom-left-radius: max(0px, calc(0.5rem - env(safe-area-inset-bottom, 0px) * 100));
+                border-bottom-right-radius: max(0px, calc(0.5rem - env(safe-area-inset-bottom, 0px) * 100));
             }
             .table-scroll-container tr.total-row:not(.total-upper) {
                 height: calc(var(--row-h) + var(--sheet-inset-b));
@@ -289,6 +298,18 @@
             .table-scroll-container tr.total-row:not(.total-upper) > td {
                 padding-bottom: var(--sheet-inset-b);
             }
+        }
+        /* iOS draws a scroller's scroll indicator inside the scrolling view,
+           but z-indexed descendants of a scroller that isn't a stacking context
+           (the sticky band headings, column headers, footer, actions column
+           and accent rails) are composited outside it — over the indicator,
+           which then vanished behind every header row as it passed
+           (WebKit bug 313902). Isolating the scroller keeps them inside, under
+           the indicator. Touch screens only: on a desktop it would also lift
+           sheet-scroll.js's top shadow over the sticky chrome it is meant to
+           tuck under. */
+        @media (pointer: coarse) {
+            .table-scroll-container { isolation: isolate; }
         }
         /* A landscape phone has height to spare nowhere: a slimmer header. */
         @media (max-height: 500px) and (max-width: 1023px) {

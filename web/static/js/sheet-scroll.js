@@ -179,6 +179,28 @@
         }
     }
 
+    // On a touch screen the scroller is its own stacking context (base.html:
+    // it keeps iOS's scroll indicator above the sticky rows), so the top
+    // shadow paints over ALL of the sheet's content, its sticky chrome
+    // included, instead of tucking under it. That only shows while the next
+    // band's heading + column header slide up through the shadow's strip
+    // below the pinned header, so hide the shadow until that handoff is done.
+    // A desktop scroller isn't isolated and keeps the shadow as before.
+    function bandHandoff(frame, container, shadow) {
+        if (container.querySelector("thead")) return false; // flat sheet
+        if (getComputedStyle(container).isolation !== "isolate") return false;
+        var top = container.getBoundingClientRect().top;
+        var limit =
+            (parseFloat(frame.style.getPropertyValue("--sheet-header-h")) || 0) +
+            shadow.offsetHeight;
+        var bands = container.querySelectorAll("tbody.sheet-group");
+        for (var i = 1; i < bands.length; i++) {
+            var t = bands[i].getBoundingClientRect().top - top;
+            if (t > 0 && t < limit) return true;
+        }
+        return false;
+    }
+
     function update(container) {
         var frame = ensureFrame(container);
         var els = ensureShadowEls(frame);
@@ -200,7 +222,10 @@
         var isScrollableX =
             container.scrollWidth - container.clientWidth > TOLERANCE;
 
-        els.top.classList.toggle("is-visible", isScrollableY && !atTop);
+        els.top.classList.toggle(
+            "is-visible",
+            isScrollableY && !atTop && !bandHandoff(frame, container, els.top)
+        );
         els.bottom.classList.toggle("is-visible", isScrollableY && !atBottom);
         els.left.classList.toggle("is-visible", isScrollableX && !atLeft);
         els.right.classList.toggle("is-visible", isScrollableX && !atRight);

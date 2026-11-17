@@ -61,19 +61,22 @@ def test_sheet_rows_are_denser_on_phones(
     "viewport", [PORTRAIT, LANDSCAPE], ids=["portrait", "landscape"]
 )
 def test_sheet_runs_to_the_bottom_edge_on_phones(page, flask_server, viewport):
-    """On a phone the sheet reaches the screen's bottom edge. Its last pinned
-    total row grows by the home-indicator inset, keeping its text in the top
-    row's height, and the row above it still sits directly on top of it."""
+    """With a home-indicator inset (the installed app) the sheet reaches the
+    screen's bottom edge. Its last pinned total row grows by the inset,
+    keeping its text in the top row's height, and the row above it still
+    sits directly on top of it."""
     height = viewport[1]
-    emulated = _open(page, flask_server, viewport, inset_bottom=34)
-    frame = page.locator("[data-sheet-scroll]").bounding_box()
-    assert frame["y"] + frame["height"] == pytest.approx(height, abs=1)
+    if not _open(page, flask_server, viewport, inset_bottom=34):
+        pytest.skip("this Chromium can't emulate a safe-area inset")
+    frame = page.locator("[data-sheet-scroll]")
+    fb = frame.bounding_box()
+    assert fb["y"] + fb["height"] == pytest.approx(height, abs=1)
+    assert frame.evaluate("e => getComputedStyle(e).borderBottomWidth") == "0px"
 
-    inset = 34 if emulated else 0
     last = page.locator("tr.total-row:not(.total-upper)")
     upper = page.locator("tr.total-row.total-upper")
     lb, ub = last.bounding_box(), upper.bounding_box()
-    assert lb["height"] == pytest.approx(24 + inset)
+    assert lb["height"] == pytest.approx(24 + 34)
     assert lb["y"] + lb["height"] == pytest.approx(height, abs=1)
     assert ub["y"] + ub["height"] == pytest.approx(lb["y"], abs=1)
     label = last.locator("td", has_text="Net worth").first
@@ -82,6 +85,24 @@ def test_sheet_runs_to_the_bottom_edge_on_phones(page, flask_server, viewport):
         " const b = r.getBoundingClientRect(); return {top: b.top, bottom: b.bottom}; }"
     )
     assert text_box["bottom"] <= lb["y"] + 24 + 1
+
+
+@pytest.mark.parametrize(
+    "viewport", [PORTRAIT, LANDSCAPE], ids=["portrait", "landscape"]
+)
+def test_sheet_keeps_its_gutter_without_an_inset(page, flask_server, viewport):
+    """With no bottom inset (a Safari tab: its toolbar floats in its own
+    area, tinted from whatever touches the bottom edge) the sheet keeps its
+    8px gutter and bottom border, so the page background is what touches the
+    edge, not the sheet's grey footer."""
+    height = viewport[1]
+    _open(page, flask_server, viewport, inset_bottom=0)
+    frame = page.locator("[data-sheet-scroll]")
+    fb = frame.bounding_box()
+    assert fb["y"] + fb["height"] == pytest.approx(height - 8, abs=1)
+    assert frame.evaluate("e => getComputedStyle(e).borderBottomWidth") == "1px"
+    last = page.locator("tr.total-row:not(.total-upper)")
+    assert last.bounding_box()["height"] == pytest.approx(24)
 
 
 def test_sheet_keeps_its_gutter_on_desktop(page, flask_server):
@@ -127,3 +148,19 @@ def test_projections_summary_keeps_cents_on_desktop(page, flask_server):
     _open(page, flask_server, DESKTOP, path="projections")
     assert page.locator("[data-summary='line']").inner_text().startswith("By ")
     assert "." in page.locator("[data-summary='liquid']").inner_text()
+
+
+def test_scroller_is_isolated_on_touch_screens(browser, flask_server):
+    """iOS draws a scroller's indicator inside the scrolling view, and the
+    sticky header rows (z-indexed) covered it unless the scroller is its own
+    stacking context. Touch screens isolate it; a desktop doesn't (its top
+    scroll shadow tucks under the sticky chrome)."""
+    for touch, expected in ((True, "isolate"), (False, "auto")):
+        ctx = browser.new_context(
+            viewport={"width": 390, "height": 844}, has_touch=touch, is_mobile=touch
+        )
+        page = ctx.new_page()
+        page.goto(f"{flask_server}/s/test_finances/holdings")
+        scroller = page.locator(".table-scroll-container")
+        assert scroller.evaluate("e => getComputedStyle(e).isolation") == expected
+        ctx.close()

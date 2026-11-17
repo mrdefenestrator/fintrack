@@ -262,9 +262,12 @@ degrades to a warning without it).
   landscape phone). Use the `phone:` / `wide:` Tailwind screens, not `sm:`,
   for anything that should switch on phones, so landscape gets it too; the
   same queries are repeated in hand-written CSS — keep them in step. Phones
-  get 24px sheet rows (`--row-h`; never hard-code a row height), and sheets
-  run to the bottom edge with the last total row padded by the safe-area
-  inset (`--sheet-inset-b`).
+  get 24px sheet rows (`--row-h`; never hard-code a row height). When
+  there's a bottom safe-area inset, sheets run to the bottom edge with the
+  last total row padded by it (`--sheet-inset-b`); with none (a Safari tab)
+  they keep their gutter, since iOS 26 tints its toolbar from whatever
+  touches the edge. On touch screens the sheet scroller is isolated so
+  iOS's scroll indicator stays above the sticky rows.
 - **Overview is the landing page** (`/s/<snapshot>`, first nav item): a
   plain responsive stack of read-only cards, the one page that isn't a
   spreadsheet. Summary numbers go here, not on top of a sheet.

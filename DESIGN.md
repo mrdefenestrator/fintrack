@@ -1387,14 +1387,27 @@ repeats the same media queries; keep them in step. On a phone:
   headings and column headers follow, and `sheet-scroll.js` reads it for the
   grid canvas), table text is 13px, and cells have 4px side padding (the
   first cell keeps its accent-rail clearance).
-- **Bottom edge**: a sheet runs to the bottom of the screen, under the iOS
-  home indicator — no gutter, no bottom border or rounding. Its last pinned
-  total row grows by the bottom safe-area inset (`--sheet-inset-b`), with its
-  text in the top `--row-h`, so the totals sit just above the indicator; a
-  two-line footer's upper row offsets by the same amount. Where the inset is
-  0 (Android, a Safari tab with its toolbar) the sheet simply ends at the
-  edge. When Projections' month breakdown is docked there instead, the inset
-  goes to the breakdown and the sheet ends above it.
+- **Bottom edge**: when there's a bottom safe-area inset to fill (the
+  installed app; landscape), a sheet runs to the bottom of the screen, under
+  the iOS home indicator — no gutter, no bottom border or rounding. Its last
+  pinned total row grows by the inset (`--sheet-inset-b`), with its text in
+  the top `--row-h`, so the totals sit just above the indicator; a two-line
+  footer's upper row offsets by the same amount. With no inset (a Safari tab,
+  Android) the sheet keeps its 8px gutter and bottom border: iOS 26 Safari
+  tints the area around its floating toolbar from whatever touches the bottom
+  edge, so a sheet's grey footer there turned the whole area grey. CSS can't
+  branch on `env()`, so the gutter, border and rounding are each "base size
+  minus 100× the inset", floored at 0. When Projections' month breakdown is
+  docked at the bottom instead, the inset goes to the breakdown and the sheet
+  ends above it.
+- **Scroll indicator** (touch screens): the sheet's scroller is its own
+  stacking context (`isolation: isolate`). Otherwise iOS composites its
+  z-indexed sticky rows (band headings, column headers, footer, actions
+  column) outside the scrolling view, over the scroll indicator, which then
+  vanished behind every header row (WebKit bug 313902). The cost: the
+  frame's top scroll shadow now paints over the sticky chrome too, so
+  `sheet-scroll.js` hides it while the next band's heading slides up through
+  its strip.
 - **Landscape**: the app header is 40px instead of 48px (`--header-h`, which
   also places the nav drawer); Projections' summary drops its "By <month>:"
   lead and its cents so it fits beside the pager.

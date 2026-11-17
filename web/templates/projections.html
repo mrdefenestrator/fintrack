@@ -90,9 +90,20 @@
         padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
         box-shadow: 0 -8px 20px -6px rgb(0 0 0 / 0.2);
     }
-    .month-breakdown .breakdown-head { flex-shrink: 0; }
+    /* Title row as a grid, so the arrows + title and the buttons always share
+       one line (a flex-wrap row wrapped them on a 360px phone, or with a
+       wider fallback font); the title truncates instead, and the totals take
+       their own line below. */
+    .month-breakdown .breakdown-head {
+        flex-shrink: 0;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        column-gap: 0.5rem;
+    }
+    .month-breakdown .breakdown-head [data-proj-nav] { min-width: 0; }
+    .month-breakdown .breakdown-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .month-breakdown .breakdown-btn { width: 2rem; height: 2rem; }  /* finger-sized */
-    .month-breakdown .breakdown-totals { order: 3; flex-basis: 100%; }
+    .month-breakdown .breakdown-totals { order: 3; grid-column: 1 / -1; }
     .month-breakdown .breakdown-body { flex: 1 1 auto; min-height: 0; max-height: none; }
     .month-breakdown[data-collapsed="true"] .breakdown-totals,
     .month-breakdown[data-collapsed="true"] .breakdown-body { display: none; }
@@ -116,7 +127,7 @@
         <div class="flex items-center gap-1.5" data-proj-nav>
             {% set _arrow = 'breakdown-btn w-6 h-6 flex items-center justify-center rounded text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700' %}
             {% if breakdown_prev %}<a href="{{ proj_url(month=breakdown_prev) }}" title="Previous month" class="{{ _arrow }}">&#9664;</a>{% else %}<span class="{{ _arrow }} opacity-30">&#9664;</span>{% endif %}
-            <span class="font-semibold text-gray-800 dark:text-gray-100">What happens in {{ breakdown.label }}</span>
+            <span class="breakdown-title font-semibold text-gray-800 dark:text-gray-100">What happens in {{ breakdown.label }}</span>
             {% if breakdown_next %}<a href="{{ proj_url(month=breakdown_next) }}" title="Next month" class="{{ _arrow }}">&#9654;</a>{% else %}<span class="{{ _arrow }} opacity-30">&#9654;</span>{% endif %}
         </div>
         <div class="breakdown-totals flex flex-wrap gap-x-4 text-gray-600 dark:text-gray-300" data-breakdown-totals>

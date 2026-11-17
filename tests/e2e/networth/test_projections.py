@@ -156,8 +156,8 @@ def _month_key() -> str:
 
 @pytest.mark.parametrize(
     "viewport",
-    [(390, 844), (844, 390)],
-    ids=["phone-portrait", "phone-landscape"],
+    [(360, 780), (390, 844), (844, 390)],
+    ids=["phone-portrait-360", "phone-portrait", "phone-landscape"],
 )
 def test_projections_month_breakdown_on_phones(page, flask_server, viewport):
     """Issue #114: on a phone the month breakdown is a sheet docked to the

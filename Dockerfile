@@ -18,7 +18,7 @@ COPY web/ ./web/
 RUN npm run build
 
 
-FROM python:3.14.10-slim AS builder
+FROM python:3.15.2-slim AS builder
 
 WORKDIR /app
 
@@ -28,7 +28,7 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev
 
 
-FROM python:3.14.10-slim
+FROM python:3.15.2-slim
 
 WORKDIR /app
 

@@ -10,8 +10,8 @@
   },
   "devDependencies": {
     "alpinejs": "3.17.5",
-    "htmx.org": "2.0.4",
-    "sortablejs": "1.15.6",
+    "htmx.org": "2.0.11",
+    "sortablejs": "1.15.7",
     "tailwindcss": "3.4.19"
   }
 }

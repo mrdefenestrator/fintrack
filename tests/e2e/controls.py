@@ -2,10 +2,15 @@
 
 The time pager sits alone on its row (`nav.pager_row`) above the sheet; every
 other control leads the sheet's filter bar (`sheet_filter_bar.filter_bar`),
-which on a phone is a single row: lead toggles, the "Filters" trigger, Reset.
+which on a phone (portrait, or landscape) is a single row: lead toggles, the
+"Filters" trigger, Reset.
 """
 
-PHONE_WIDTHS = [360, 390, 430]
+# Phone viewports (width, height): portrait at common widths, plus a landscape
+# phone, which counts as a phone too (short, though wider than sm — the
+# `phone:` / `wide:` screens in tailwind.config.js, #146).
+PHONE_VIEWPORTS = [(360, 800), (390, 844), (430, 932), (844, 390)]
+PHONE_IDS = ["360", "390", "430", "landscape"]
 
 
 def assert_controls_layout(page, width: int) -> None:

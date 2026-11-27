@@ -258,6 +258,13 @@ degrades to a warning without it).
   every other control (view toggles via `nav.segmented`, filters, Reset) goes
   in the sheet's filter bar — toggles as its always-visible `lead`. On a phone
   the bar is one row (`tests/e2e/controls.py` checks it).
+- **Phones** (#146, DESIGN.md "Phones"): a phone is narrow **or short** (a
+  landscape phone). Use the `phone:` / `wide:` Tailwind screens, not `sm:`,
+  for anything that should switch on phones, so landscape gets it too; the
+  same queries are repeated in hand-written CSS — keep them in step. Phones
+  get 24px sheet rows (`--row-h`; never hard-code a row height). On touch
+  screens the sheet scroller is isolated so iOS's scroll indicator stays
+  above the sticky rows.
 - **Overview is the landing page** (`/s/<snapshot>`, first nav item): a
   plain responsive stack of read-only cards, the one page that isn't a
   spreadsheet. Summary numbers go here, not on top of a sheet.

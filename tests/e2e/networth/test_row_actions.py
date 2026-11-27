@@ -100,7 +100,9 @@ def test_choosing_an_item_closes_the_menu(page, flask_server):
 
 
 def test_scrolling_the_sheet_closes_the_menu(page, flask_server):
-    page.set_viewport_size({"width": 900, "height": 360})
+    # Short enough that the fixture's rows overflow even at a phone's denser
+    # 24px row height (900x300 is a landscape phone, #146).
+    page.set_viewport_size({"width": 900, "height": 300})
     page.goto(f"{flask_server}/s/test_finances/budget?group=none&edit=1")
     container = page.locator(".table-scroll-container")
     assert container.evaluate("c => c.scrollHeight > c.clientHeight")

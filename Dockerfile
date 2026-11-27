@@ -1,5 +1,5 @@
 # uv binary, as a named stage so Dependabot (which updates FROM lines) bumps it.
-FROM ghcr.io/astral-sh/uv:0.13.8 AS uv
+FROM ghcr.io/astral-sh/uv:0.13.10 AS uv
 
 # Front-end assets (Tailwind CSS + vendored JS). Output is plain CSS/JS that's
 # identical on every architecture, so build it once on the native build
